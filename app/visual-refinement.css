@@ -1,0 +1,120 @@
+/* Phase 2 visual refinement — Operations OS */
+:root{
+  --bg:#f6f7f6;
+  --canvas:#ffffff;
+  --sidebar:#f6f7f5;
+  --panel-2:#fafafa;
+  --panel-3:#f1f3f2;
+  --text:#1a1d1f;
+  --muted:#5f666a;
+  --soft:#7d8589;
+  --border:#e4e6e5;
+  --border-strong:#cfd4d1;
+  --radius-control:6px;
+  --radius-panel:8px;
+}
+html{font-size:14px;font-feature-settings:"tnum" 1,"cv02" 1,"cv03" 1;text-rendering:optimizeLegibility}
+.page-wrap{padding:30px 36px 64px}
+.breadcrumbs{font-size:11.5px;color:var(--soft);margin-bottom:9px}
+.eyebrow{font-size:11.5px;letter-spacing:.015em}
+.page-header{margin-bottom:24px}
+.page-header h1{font-size:25px;font-weight:730;letter-spacing:-.03em}
+.page-header p{font-size:13.5px;line-height:1.55;color:var(--muted)}
+.button{font-size:12.5px}
+
+/* Navigation: two visual levels, no nested accordion feel */
+.nav-section-button{height:38px;border-radius:5px}
+.nav-section-button span{font-size:13px;font-weight:680}
+.nav-section-body{margin:4px 0 10px 28px;padding-left:10px;border-left:1px solid var(--border)}
+.nav-subgroup{margin:9px 0 12px}
+.nav-subgroup-label{padding:0 7px 5px;color:var(--soft);font-size:10.5px;font-weight:720;letter-spacing:.045em;text-transform:uppercase}
+.nav-subgroup a{min-height:32px;padding:7px 8px;font-size:12.5px;line-height:18px;border-radius:4px}
+.nav-subgroup a.active{background:transparent;box-shadow:inset 2px 0 var(--accent);color:var(--text);font-weight:680}
+.nav-subgroup a:hover{background:var(--panel-3)}
+.nav-search{height:36px;margin-block:10px}
+.nav-search span{font-size:12.5px}
+.brand strong{font-size:13.5px}.brand small{font-size:11px}
+.who strong{font-size:11.5px}.who span{font-size:10.5px}
+
+/* Summary metrics are an operational strip, not dashboard cards */
+.metrics-grid{margin-bottom:20px;border:0;border-block:1px solid var(--border);border-radius:0;background:transparent;overflow:visible}
+.metric{min-height:74px;padding:12px 18px;border-right:1px solid var(--border);display:flex;flex-direction:column;justify-content:center}
+.metric>span{font-size:11.5px;font-weight:620}
+.metric strong{margin-top:6px;font-size:20px;letter-spacing:-.025em}
+.metric small{margin-top:5px;font-size:10.5px}
+.metric.tone-good:before,.metric.tone-warn:before,.metric.tone-bad:before{width:2px;inset:12px auto 12px 0}
+.summary-strip{min-height:46px;padding-inline:0;background:transparent;gap:26px;font-size:12.5px}
+
+/* Status semantics: workflow chips are compact rectangles; pills are reserved for tags/filters */
+.status{height:23px;padding:0 7px;border-radius:5px;font-size:10.5px;font-weight:700}
+.status i{width:5px;height:5px}
+
+/* Workspace rhythm: fewer boxed cards inside entity workspaces */
+.workspace-grid{gap:24px}
+.workspace-grid>div>.section,.workspace-grid>.section{border:0;border-top:1px solid var(--border);border-radius:0;background:transparent;overflow:visible}
+.workspace-grid>div>.section+.section,.workspace-grid>.section+.section{margin-top:24px}
+.workspace-grid .section-head{min-height:48px;padding:10px 0;border-bottom:1px solid var(--border)}
+.workspace-grid .section-head h2{font-size:14.5px}
+.workspace-grid .section-head p{font-size:11.5px}
+.workspace-grid .stack-item{padding-inline:0}
+.workspace-grid .key-value{font-size:12.5px}
+
+/* Object workspace itself is the page, not a card placed inside the page */
+.object-hero{margin:0 0 8px;padding:4px 0 18px;grid-template-columns:1fr auto;border:0;border-bottom:1px solid var(--border);border-radius:0;background:transparent}
+.object-meta{margin-top:14px;gap:30px}
+.object-meta div span{font-size:10.5px}
+.object-meta div strong{margin-top:5px;font-size:12.5px}
+.health{display:flex;flex-direction:column;justify-content:center;min-width:150px;padding-left:24px;border-left:1px solid var(--border)}
+.health strong{font-size:29px}.health span{font-size:10.5px}
+.entity-tabs{height:46px;margin-bottom:20px;gap:22px}
+.entity-tabs a{height:46px;padding-top:15px;font-size:12.5px}
+.entity-tabs a span{font-size:9.5px;border-radius:4px}
+
+/* Tables / grid: mature information density */
+.data-table th{height:38px;font-size:11.5px}
+.data-table td{height:47px;font-size:12.5px}
+.cell-sub,.cell-link span{font-size:10.5px}
+.grid-toolbar{min-height:52px;padding:8px 10px}
+.grid-search{height:35px}.grid-search input{font-size:12.5px}
+.grid-toolbar-meta{font-size:11.5px}
+.grid-selection{height:30px;padding:0 8px;display:flex;align-items:center;gap:8px;border-left:2px solid var(--accent);background:var(--accent-soft);color:var(--text)}
+.grid-selection button{border:0;background:transparent;color:var(--accent);font-size:11px;cursor:pointer}
+.density-comfortable .production-grid td{height:56px;padding-block:10px}
+.density-comfortable .production-grid th{height:42px}
+.production-grid tr.selected td{background:color-mix(in srgb,var(--accent-soft) 68%,var(--panel))}
+.production-grid tbody tr:hover td{background:color-mix(in srgb,var(--accent-soft) 26%,var(--panel))}
+.sticky-col{box-shadow:1px 0 0 var(--border)}
+
+/* Drawers should read as compact workspaces */
+.drawer{width:min(600px,92vw);padding:0;background:var(--canvas)}
+.drawer>.drawer-close{position:sticky;z-index:2;top:14px;float:right;margin:14px 16px 0 0;background:var(--panel)}
+.drawer>.eyebrow,.drawer>h2,.drawer>.status,.drawer>.key-value,.drawer>div:not(.drawer-actions):not(.section){margin-inline:22px}
+.drawer>.eyebrow{padding-top:20px;margin-bottom:0}
+.drawer h2{margin-top:8px;font-size:21px;letter-spacing:-.02em}
+.drawer .section{margin:22px 22px 0;border:0;border-top:1px solid var(--border);border-radius:0;background:transparent}
+.drawer .section-head{padding-inline:0}
+.drawer .stack-item{padding-inline:0}
+.drawer-actions{position:sticky;bottom:0;margin-top:24px;padding:14px 22px;border-top:1px solid var(--border);background:color-mix(in srgb,var(--canvas) 96%,transparent);backdrop-filter:blur(8px)}
+
+/* Kanban: hierarchy through spacing and typography, not heavy boxes */
+.kanban{gap:12px}
+.kanban-col{border-color:var(--border);border-radius:6px;background:var(--panel-2)}
+.kanban-head{height:42px;font-size:12.5px}
+.kanban-card{margin:8px;padding:11px;border-radius:5px;box-shadow:0 1px 0 rgba(20,24,26,.03)}
+.kanban-card:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--border));box-shadow:0 5px 18px rgba(20,24,26,.07)}
+.kanban-card strong{font-size:12.5px}.kanban-card span{font-size:10.5px;line-height:1.4}
+
+/* Small text floor: avoid a miniaturized admin-template feel */
+.section-head p,.stack-item small{font-size:11.5px}
+.activity-line,.key-value{font-size:12.5px}
+.calc-row,.calc-kv,.compliance-note,.compliance-panel,.margin-control,.form-message,.access-warning{font-size:11.5px}
+.topbar-context{font-size:12.5px}
+
+/* Dark remains a separately tuned equivalent, not an inversion */
+:root[data-theme=dark]{--canvas:#17191b;--sidebar:#131517;--panel:#1c1f21;--panel-2:#202326;--panel-3:#272b2e;--border:#303438;--border-strong:#444a4e;--text:#f2f3f3;--muted:#a9afb2;--soft:#848b8f}
+:root[data-theme=dark] .grid-selection{background:color-mix(in srgb,var(--accent-soft) 78%,var(--panel))}
+
+@media(max-width:1280px){
+  .page-wrap{padding-inline:26px}
+  .metric{min-height:78px}
+}
