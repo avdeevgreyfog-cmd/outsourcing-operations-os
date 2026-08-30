@@ -10,3 +10,4 @@ export async function POST(request: Request) {
   response.cookies.set(DEMO_COOKIE, role, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30 });
   return response;
 }
+

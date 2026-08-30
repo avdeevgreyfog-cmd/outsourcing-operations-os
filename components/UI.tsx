@@ -1,21 +1,17 @@
+import Link from "next/link";
+import { AlertTriangle, ChevronRight, CircleSlash2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/ui/format";
 
-export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow?: string; title: string; subtitle?: string; actions?: React.ReactNode }) {
-  return <div className="page-header"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>{actions && <div className="page-actions">{actions}</div>}</div>;
-}
-
-export function Metric({ label, value, note, tone }: { label: string; value: React.ReactNode; note?: string; tone?: "good" | "warn" | "bad" }) {
-  return <div className={cn("metric", tone && `tone-${tone}`)}><span>{label}</span><strong>{value}</strong>{note && <small>{note}</small>}</div>;
-}
-
-export function Status({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "bad" | "info" }) {
-  return <span className={`status status-${tone}`}>{children}</span>;
-}
-
-export function Section({ title, note, actions, children, className }: { title?: string; note?: string; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  return <section className={cn("section", className)}>{(title || actions) && <div className="section-head"><div>{title && <h2>{title}</h2>}{note && <p>{note}</p>}</div>{actions}</div>}{children}</section>;
-}
-
-export function Empty({ title, text }: { title: string; text: string }) {
-  return <div className="empty"><strong>{title}</strong><span>{text}</span></div>;
-}
+export type Crumb = { label: string; href?: string };
+export function Breadcrumbs({ items }: { items: Crumb[] }) { return <nav className="breadcrumbs" aria-label="Хлебные крошки">{items.map((item, index) => <span key={`${item.label}-${index}`}>{index > 0 && <ChevronRight size={12}/>} {item.href ? <Link href={item.href}>{item.label}</Link> : <span aria-current="page">{item.label}</span>}</span>)}</nav>; }
+export function PageHeader({ eyebrow, title, subtitle, actions, breadcrumbs }: { eyebrow?: string; title: string; subtitle?: string; actions?: React.ReactNode; breadcrumbs?: Crumb[] }) { return <>{breadcrumbs && <Breadcrumbs items={breadcrumbs}/>}<div className="page-header"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>{actions && <div className="page-actions">{actions}</div>}</div></>; }
+export function Metric({ label, value, note, tone }: { label: string; value: React.ReactNode; note?: string; tone?: "good" | "warn" | "bad" }) { return <div className={cn("metric", tone && `tone-${tone}`)}><span>{label}</span><strong>{value}</strong>{note && <small>{note}</small>}</div>; }
+const statusLabels:Record<string,string>={active:"Активен",open:"Открыто",launch:"Запуск",accepted:"Принято",draft:"Черновик",review:"На проверке",calculated:"Рассчитано",critical:"Критический",high:"Высокий",watch:"Наблюдение",normal:"Норма",closed:"Закрыто",approved:"Согласовано",planned:"Запланировано",in_progress:"В работе",done:"Выполнено",paid:"Выплачено",resolved:"Разрешено",new:"Новый"};
+export function Status({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "bad" | "info" }) { const label=typeof children==="string"?(statusLabels[children]??children):children;return <span className={`status status-${tone}`}><i/>{label}</span>; }
+export function Section({ title, note, actions, children, className, flush=false }: { title?: string; note?: string; actions?: React.ReactNode; children: React.ReactNode; className?: string; flush?: boolean }) { return <section className={cn("section", flush && "section-flush", className)}>{(title || actions) && <div className="section-head"><div>{title && <h2>{title}</h2>}{note && <p>{note}</p>}</div>{actions}</div>}{children}</section>; }
+export function Empty({ title, text, action }: { title: string; text: string; action?: React.ReactNode }) { return <div className="empty"><CircleSlash2 size={25}/><strong>{title}</strong><span>{text}</span>{action}</div>; }
+export function ErrorState({ title="Не удалось загрузить данные", text, retry }: { title?: string; text: string; retry?: React.ReactNode }) { return <div className="state-panel state-error"><AlertTriangle size={25}/><strong>{title}</strong><span>{text}</span>{retry ?? <button className="button"><RotateCcw size={14}/> Повторить</button>}</div>; }
+export function SkeletonTable({ rows=6 }: { rows?: number }) { return <div className="skeleton-table" aria-label="Загрузка">{Array.from({length: rows}).map((_,i)=><div key={i}><span/><span/><span/><span/></div>)}</div>; }
+export function SummaryStrip({ children }: { children: React.ReactNode }) { return <div className="summary-strip">{children}</div>; }
+export function KeyValue({ label, value, sensitive=false }: { label: string; value: React.ReactNode; sensitive?: boolean }) { return <div className="key-value"><span>{label}</span><strong className={sensitive ? "sensitive-value" : undefined}>{value}</strong></div>; }
+export function EntityTabs({ items, active }: { items: Array<{label:string;href:string;count?:number}>; active: string }) { return <nav className="entity-tabs" aria-label="Разделы карточки">{items.map((item)=><Link key={item.href} href={item.href} className={item.label===active?"active":""}>{item.label}{item.count!=null&&<span>{item.count}</span>}</Link>)}</nav>; }

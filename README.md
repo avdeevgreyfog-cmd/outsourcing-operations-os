@@ -1,37 +1,70 @@
 # Outsourcing Operations OS
 
-Production-oriented operations platform for staffing / production outsourcing.
+Единая операционная система компании кадрового и производственного аутсорсинга.
 
-Core lineage:
+Основной lineage:
 
-`Lead → Request → Calculation → Proposal → Object → Need → Candidate → Worker → Shift → Attendance → Timesheet → Accrual → Payment → P&L`
+`Client → Request → Calculation → Proposal → Object → Need → CandidateApplication → Candidate → Worker → Assignment → Shift → TimeEntry → Timesheet → Accrual → Payment → P&L`
 
-## Status
+## Текущий статус
 
-This repository contains the first platform/backbone pass. It is intentionally a new codebase: the legacy `r-kadry-os` UI/CSS/localStorage implementation is not reused.
+Phase 2 превращает архитектурный first pass в связанный рабочий интерфейс. Реализованы:
+
+- tenant-aware Next.js application с PostgreSQL RLS;
+- серверная авторизация: role template + capability + scope + individual allow/deny;
+- отдельные field capabilities для компенсации и платежей;
+- трёхуровневая навигация, compact mode и Ctrl+K;
+- reusable data-grid foundation;
+- карточки клиента, заявки, объекта, кандидата и сотрудника;
+- реальные contextual tabs объекта и профиля сотрудника;
+- recruiting Kanban и реестр кандидатов;
+- resource scheduler с detail drawer;
+- месячный клиентский/внутренний табель и workflow сверки;
+- grouped-cost calculator с моделями, bases и custom expenses;
+- предложения, база ставок, начисления, авансы и выплаты;
+- P&L, сравнение объектов и workforce view;
+- launch Gantt/WBS и incidents foundation;
+- серверный редактор индивидуальных access overrides;
+- audit для высокорисковых изменений.
+
+Phase 2 не объявлен production-ready: фактический PostgreSQL migration/RLS прогон и browser visual regression в deployment environment ещё обязательны. Подробности: `docs/PHASE_2_STATUS.md` и `docs/QA_REPORT.md`.
 
 ## Stack
 
-- Next.js 16.3.3 + React 19.2 + TypeScript
-- PostgreSQL via `postgres`
+- Next.js 16.3.3, React 19.2, TypeScript
+- PostgreSQL через `postgres`
 - Zod
-- TanStack Table v9
 - Apache ECharts 6
-- SQL migrations with PostgreSQL RLS tenant boundary
+- Lucide icons
+- Playwright QA harness
 
-## Start
+## Локальный запуск
 
 ```bash
 cp .env.example .env.local
 npm install
 npm run db:setup
-npm run dev
+npm run dev -- -H 127.0.0.1
 ```
 
-For a UI-only inspection without a database, keep `DEMO_MODE=true`. Read-only seeded snapshot data is used only as a local fallback; production writes are never persisted to localStorage.
+Для read-only UI-проверки без PostgreSQL установите `DEMO_MODE=true`. Demo snapshot синтетический и не сохраняет бизнес-данные в браузере.
 
-## Security boundary
+## Проверки
 
-Navigation hiding is convenience only. Server queries/actions call authorization helpers and database sessions set organization/user context. PostgreSQL RLS enforces organization isolation on protected business tables.
+```bash
+npm run test
+npm run typecheck
+npm run lint
+npm run build
+npm run test:browser
+```
 
-See `docs/ARCHITECTURE_DECISIONS.md` and `docs/FIRST_PASS_STATUS.md`.
+Browser QA требует запущенный dev-server на `http://127.0.0.1:3000`.
+
+## Документация
+
+- `docs/PHASE_2_ARCHITECTURE.md`
+- `docs/UI_SYSTEM.md`
+- `docs/ACCESS_MODEL.md`
+- `docs/SECURITY.md`
+- `docs/QA_REPORT.md`

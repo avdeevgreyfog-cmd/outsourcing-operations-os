@@ -89,3 +89,21 @@ export const activity = [
  {time:"28 авг · 16:30",actor:"Елена Котова",text:"Расчёт РЦ Север согласован и зафиксирован"},
  {time:"28 авг · 12:20",actor:"Ольга Новикова",text:"Сергей Волков переведён из кандидата в сотрудника"},
 ];
+
+export const proposals = [
+ {id:"7a000000-0000-4000-8000-000000000001",organizationId:ORG,requestId:requests[0].id,request:requests[0].title,client:"NordLog",clientId:clients[0].id,version:1,status:"accepted",scenarioCount:2,totalValue:4873632,createdAt:"28.08.2026",createdBy:"Иван Соколов",regionId:MOW,ownerUserId:sales,createdByUserId:sales,teamId:SALES},
+ {id:"7a000000-0000-4000-8000-000000000002",organizationId:ORG,requestId:requests[1].id,request:requests[1].title,client:"FormaBath",clientId:clients[1].id,version:1,status:"draft",scenarioCount:1,totalValue:0,createdAt:"30.08.2026",createdBy:"Елена Котова",regionId:KLG,ownerUserId:sales,createdByUserId:economist,teamId:SALES},
+];
+export const rateReferences = [
+ {id:"r1",organizationId:ORG,specialty:"Комплектовщик",region:"Москва и МО",regionId:MOW,employmentModel:"ТК",amountMin:360,amountMax:430,unit:"hour",grossNet:"net",source:"Synthetic demo benchmark",sourceDate:"20.08.2026",confidence:"demo",comment:"Требует подтверждения пользователем",createdByUserId:economist},
+ {id:"r2",organizationId:ORG,specialty:"Сборщик мебели",region:"Калужская область",regionId:KLG,employmentModel:"ГПХ",amountMin:380,amountMax:460,unit:"hour",grossNet:"net",source:"Synthetic demo benchmark",sourceDate:"20.08.2026",confidence:"demo",comment:"Не является рыночной рекомендацией",createdByUserId:economist},
+];
+export const launchTasks = [
+ {id:"lt1",organizationId:ORG,objectId:objects[0].id,object:"РЦ Север",title:"Подтвердить план запуска",level:0,owner:"Алексей Волков",start:"02.09",end:"03.09",baselineStart:"02.09",baselineEnd:"03.09",progress:100,status:"done",risk:"normal",milestone:false,critical:true,dependencyIds:[],regionId:MOW,ownerUserId:objectManager,createdByUserId:objectManager,assigneeUserIds:[objectManager,regional]},
+ {id:"lt2",organizationId:ORG,objectId:objects[0].id,object:"РЦ Север",title:"Закрыть потребность",level:0,owner:"Ольга Новикова",start:"03.09",end:"10.09",baselineStart:"03.09",baselineEnd:"09.09",progress:69,status:"in_progress",risk:"high",milestone:false,critical:true,dependencyIds:["lt1"],regionId:MOW,ownerUserId:recruiter,createdByUserId:objectManager,assigneeUserIds:[recruiter,objectManager,regional]},
+ {id:"lt3",organizationId:ORG,objectId:objects[0].id,object:"РЦ Север",title:"Проверить документы персонала",level:1,owner:"Ольга Новикова",start:"07.09",end:"12.09",baselineStart:"07.09",baselineEnd:"11.09",progress:45,status:"in_progress",risk:"watch",milestone:false,critical:false,dependencyIds:["lt2"],regionId:MOW,ownerUserId:recruiter,createdByUserId:objectManager,assigneeUserIds:[recruiter,objectManager]},
+ {id:"lt4",organizationId:ORG,objectId:objects[0].id,object:"РЦ Север",title:"Первый выход",level:0,owner:"Алексей Волков",start:"15.09",end:"15.09",baselineStart:"15.09",baselineEnd:"15.09",progress:0,status:"planned",risk:"normal",milestone:true,critical:true,dependencyIds:["lt2","lt3"],regionId:MOW,ownerUserId:objectManager,createdByUserId:objectManager,assigneeUserIds:[objectManager,regional]},
+];
+export const incidents = [
+ {id:"i1",organizationId:ORG,objectId:objects[3].id,object:"Склад Юг",title:"Невыход в ночную смену",type:"no_show",occurredAt:"29.08 · 20:00",severity:"high",status:"open",responsible:"Алексей Волков",worker:"Павел Ильин",description:"Назначение было подтверждено, фактический выход отсутствует.",regionId:MOW,ownerUserId:objectManager,createdByUserId:objectManager,assigneeUserIds:[objectManager,regional]},
+];
