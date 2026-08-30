@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Status } from "@/components/UI";
 
-type Candidate = { id:string; fullName:string; phone?:string; source?:string; stage:string; stageLabel?:string; need?:string; object?:string; nextAction?:string };
+type Candidate = { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; nextAction?:string|null };
 const columns = [["new","Новые"],["call","Созвон"],["documents","Документы"],["first_shift","Первый выход"]] as const;
 export function CandidateBoard({ rows }: { rows: Candidate[] }) {
   const [selected,setSelected]=useState<Candidate|null>(null);
