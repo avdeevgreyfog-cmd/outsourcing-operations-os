@@ -8,7 +8,7 @@ export default async function CommandCenter() {
   const actor = await requireActor();
   const data = await getCommandCenter(actor);
   const deficit = data.needs.reduce((s,n)=>s+Number(n.deficit||0),0);
-  const risky = data.objects.filter((o)=>["high","critical"].includes(o.risk)).length;
+  const risky = data.objects.filter((o)=>["high","critical"].includes(o.risk??"")).length;
   const contribution = data.finance.reduce((s,x)=>s+Number(x.contribution||0),0);
   const openCandidates = data.candidates.filter((x)=>x.stage!=="first_shift").length;
   return <>
