@@ -26,3 +26,11 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build
+      - name: Pack deployable source
+        run: tar --exclude='./node_modules' --exclude='./.git' --exclude='./.next' -czf /tmp/operations-os-source.tgz .
+      - name: Upload deployable source
+        uses: actions/upload-artifact@v4
+        with:
+          name: operations-os-source
+          path: /tmp/operations-os-source.tgz
+          retention-days: 1
