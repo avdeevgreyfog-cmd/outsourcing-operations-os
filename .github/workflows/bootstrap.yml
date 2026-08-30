@@ -1,8 +1,8 @@
 name: Bootstrap repository
 
 on:
-  push:
-    branches: [main]
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Restore repository tree
         shell: bash
