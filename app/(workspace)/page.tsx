@@ -28,7 +28,7 @@ export default async function CommandCenter() {
       </div>
       <div>
         <Section title="Требует действия" note="Только назначенные / доступные задачи"><div className="stack-list">{data.tasks.length?data.tasks.slice(0,6).map((t)=><div className="stack-item" key={t.id}><div><strong className={`priority-${t.priority}`}>{t.title}</strong><small>{t.entity}</small></div><div className="num"><strong>{t.due}</strong><small>{t.priority}</small></div></div>):<div className="empty"><strong>Очередь пуста</strong><span>Нет доступных открытых задач</span></div>}</div></Section>
-        {data.candidates.length>0 && <Section title="Подбор" note="Следующее действие по кандидатам"><div className="stack-list">{data.candidates.slice(0,5).map((c)=><div className="stack-item" key={c.id}><div><strong>{c.fullName}</strong><small>{c.object} · {c.need}</small></div><Status tone="info">{c.nextAction}</Status></div>)}</div></Section>}
+        {data.candidates.length>0 && <Section title="Подбор" note="Следующее действие по кандидатам"><div className="stack-list">{data.candidates.slice(0,5).map((c)=><div className="stack-item" key={c.id}><div><strong>{c.fullName}</strong><small>{c.object} · {c.need}</small></div><Status tone="info">{c.nextAction??"—"}</Status></div>)}</div></Section>}
       </div>
     </div>
   </>;
