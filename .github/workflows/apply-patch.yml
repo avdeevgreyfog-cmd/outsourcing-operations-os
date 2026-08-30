@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   apply:
-    if: startsWith(github.event.issue.title, 'patch: apply typed lint fixes')
+    if: "${{ startsWith(github.event.issue.title, 'patch: apply typed lint fixes') }}"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
