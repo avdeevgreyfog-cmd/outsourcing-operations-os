@@ -37,10 +37,10 @@ export function PortfolioChart({ rows }: { rows: PortfolioRow[] }) {
           formatter: (params: unknown) => {
             const items = params as Array<{ dataIndex: number; marker: string; seriesName: string; value: number }>;
             const index = items[0]?.dataIndex ?? 0;
-            return `<strong>${rows[index]?.object ?? ""}</strong><br/>Выручка: ${fullRub(rows[index]?.revenue ?? 0)}<br/>Contribution: ${fullRub(rows[index]?.contribution ?? 0)}<br/>Margin: ${margins[index]?.toFixed(1) ?? "0"}%`;
+            return `<strong>${rows[index]?.object ?? ""}</strong><br/>Выручка: ${fullRub(rows[index]?.revenue ?? 0)}<br/>Вклад в прибыль: ${fullRub(rows[index]?.contribution ?? 0)}<br/>Маржа: ${margins[index]?.toFixed(1) ?? "0"}%`;
           },
         },
-        legend: { top: 4, left: 4, itemWidth: 13, itemHeight: 7, textStyle: { color: muted, fontSize: 10 }, data: ["Выручка", "Contribution margin"] },
+        legend: { top: 4, left: 4, itemWidth: 13, itemHeight: 7, textStyle: { color: muted, fontSize: 10 }, data: ["Выручка", "Маржинальность"] },
         xAxis: { type: "category", data: rows.map((row) => row.object), axisLine: { lineStyle: { color: border } }, axisTick: { show: false }, axisLabel: { color: muted, fontSize: 10, interval: 0, width: 94, overflow: "truncate" } },
         yAxis: [
           { type: "value", name: "₽", nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { lineStyle: { color: border } }, axisLabel: { color: muted, fontSize: 9, formatter: (value: number) => compactRub(value).replace(" ₽", "") } },
@@ -48,7 +48,7 @@ export function PortfolioChart({ rows }: { rows: PortfolioRow[] }) {
         ],
         series: [
           { name: "Выручка", type: "bar", data: rows.map((row) => row.revenue), barMaxWidth: 30, itemStyle: { color: accent, borderRadius: [3, 3, 0, 0] } },
-          { name: "Contribution margin", type: "line", yAxisIndex: 1, smooth: 0.25, showSymbol: true, symbolSize: 6, data: margins.map((value) => Number(value.toFixed(2))), lineStyle: { color: good, width: 2 }, itemStyle: { color: good }, emphasis: { focus: "series" } },
+          { name: "Маржинальность", type: "line", yAxisIndex: 1, smooth: 0.25, showSymbol: true, symbolSize: 6, data: margins.map((value) => Number(value.toFixed(2))), lineStyle: { color: good, width: 2 }, itemStyle: { color: good }, emphasis: { focus: "series" } },
         ],
       }, true);
     };

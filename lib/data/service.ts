@@ -282,9 +282,9 @@ export async function listAccessUsers(actor: Actor): Promise<AccessUserRow[]> {
 export async function listAudit(actor: Actor, limit=20): Promise<AuditRow[]> {
   requireCapability(actor, "audit.read");
   if (actor.demo) return [
-    {id:"a1",createdAt:"30.08 · 12:12",actor:"Анна Лебедева",action:"permission.preview",record:"Finance",summary:"Preview системы глазами пользователя"},
-    {id:"a2",createdAt:"29.08 · 18:05",actor:"Елена Котова",action:"calculation.accept",record:"РЦ Север · Комплектовщик",summary:"Зафиксирован accepted scenario snapshot"},
-    {id:"a3",createdAt:"29.08 · 16:44",actor:"Алексей Волков",action:"time_entry.update",record:"Сергей Волков · 27.08",summary:"Исправлен факт с указанием причины"},
+    {id:"a1",createdAt:"30.08 · 12:12",actor:"Анна Лебедева",action:"Предпросмотр прав",record:"Финансы",summary:"Проверка системы глазами пользователя"},
+    {id:"a2",createdAt:"29.08 · 18:05",actor:"Елена Котова",action:"Принят расчёт",record:"РЦ Север · Комплектовщик",summary:"Зафиксирована принятая версия сценария"},
+    {id:"a3",createdAt:"29.08 · 16:44",actor:"Алексей Волков",action:"Изменён факт времени",record:"Сергей Волков · 27.08",summary:"Исправлен факт с указанием причины"},
   ];
   return withTenant(actor.organizationId,actor.userId,async(sql)=>sql<AuditRow[]>`
     SELECT a.id,to_char(a.created_at,'DD.MM HH24:MI') "createdAt",COALESCE(u.display_name,'System') actor,a.action,a.resource_type||' · '||COALESCE(a.resource_id::text,'—') record,a.reason summary

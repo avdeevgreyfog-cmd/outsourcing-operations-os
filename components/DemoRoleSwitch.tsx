@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const roles = [
-  ["director", "Director"], ["sales", "Sales"], ["regional", "Regional"], ["object", "Object Manager"],
-  ["recruiter", "Recruiter"], ["economist", "Economist"], ["finance", "Finance"],
+  ["director", "Директор"], ["sales", "Продажи"], ["regional", "Региональный менеджер"], ["object", "Менеджер объекта"],
+  ["recruiter", "Рекрутер"], ["economist", "Экономист"], ["finance", "Финансист"],
 ] as const;
 
 export function DemoRoleSwitch({ current }: { current: string }) {
@@ -20,7 +20,7 @@ export function DemoRoleSwitch({ current }: { current: string }) {
   }
   return (
     <label className="demo-role">
-      <span>Preview as</span>
+      <span>Роль</span>
       <select disabled={busy} value={current} onChange={(e) => change(e.target.value)}>
         {roles.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
       </select>

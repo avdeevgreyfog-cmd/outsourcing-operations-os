@@ -23,9 +23,9 @@ export const requests = [
 ];
 
 export const calculations = [
- {id:"79000000-0000-4000-8000-000000000001",organizationId:ORG,requestId:requests[0].id,request:"РЦ Север",role:"Комплектовщик",name:"Базовый TK",model:"Employment / TK",status:"accepted",ownerUserId:economist,createdByUserId:economist,teamId:SALES,regionId:MOW,workerNet:390,totalCost:550,clientRate:670.73,marginPct:18,monthlyContribution:701216},
- {id:"79000000-0000-4000-8000-000000000002",organizationId:ORG,requestId:requests[0].id,request:"РЦ Север",role:"Грузчик",name:"Грузчики TK",model:"Employment / TK",status:"accepted",ownerUserId:economist,createdByUserId:economist,teamId:SALES,regionId:MOW,workerNet:420,totalCost:592,clientRate:713.25,marginPct:17,monthlyContribution:234740},
- {id:"79000000-0000-4000-8000-000000000003",organizationId:ORG,requestId:requests[1].id,request:"Склад Калуга",role:"Сборщик мебели",name:"Сценарий GPH",model:"GPH",status:"review",ownerUserId:economist,createdByUserId:economist,teamId:SALES,regionId:KLG,workerNet:410,totalCost:566,clientRate:690,marginPct:17.97,monthlyContribution:324000},
+ {id:"79000000-0000-4000-8000-000000000001",organizationId:ORG,requestId:requests[0].id,request:"РЦ Север",role:"Комплектовщик",name:"Базовый трудовой договор",model:"Трудовой договор",status:"accepted",ownerUserId:economist,createdByUserId:economist,teamId:SALES,regionId:MOW,workerNet:390,totalCost:550,clientRate:670.73,marginPct:18,monthlyContribution:701216},
+ {id:"79000000-0000-4000-8000-000000000002",organizationId:ORG,requestId:requests[0].id,request:"РЦ Север",role:"Грузчик",name:"Грузчики · трудовой договор",model:"Трудовой договор",status:"accepted",ownerUserId:economist,createdByUserId:economist,teamId:SALES,regionId:MOW,workerNet:420,totalCost:592,clientRate:713.25,marginPct:17,monthlyContribution:234740},
+ {id:"79000000-0000-4000-8000-000000000003",organizationId:ORG,requestId:requests[1].id,request:"Склад Калуга",role:"Сборщик мебели",name:"Сценарий ГПХ",model:"Договор ГПХ",status:"review",ownerUserId:economist,createdByUserId:economist,teamId:SALES,regionId:KLG,workerNet:410,totalCost:566,clientRate:690,marginPct:17.97,monthlyContribution:324000},
 ];
 
 export const objects = [
@@ -44,14 +44,14 @@ export const needs = [
 
 export const candidates = [
  {id:"85000000-0000-4000-8000-000000000001",organizationId:ORG,fullName:"Алексей Орлов",phone:"+7 900 000-10-01",source:"Telegram",stage:"call",stageLabel:"Созвон",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 14:30"},
- {id:"85000000-0000-4000-8000-000000000002",organizationId:ORG,fullName:"Илья Котов",phone:"+7 900 000-10-02",source:"Referral",stage:"documents",stageLabel:"Документы",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 11:00"},
- {id:"85000000-0000-4000-8000-000000000003",organizationId:ORG,fullName:"Сергей Волков",phone:"+7 900 000-10-03",source:"Job board",stage:"first_shift",stageLabel:"Первый выход",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Подтверждён"},
+ {id:"85000000-0000-4000-8000-000000000002",organizationId:ORG,fullName:"Илья Котов",phone:"+7 900 000-10-02",source:"Рекомендация",stage:"documents",stageLabel:"Документы",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 11:00"},
+ {id:"85000000-0000-4000-8000-000000000003",organizationId:ORG,fullName:"Сергей Волков",phone:"+7 900 000-10-03",source:"Сайт вакансий",stage:"first_shift",stageLabel:"Первый выход",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Подтверждён"},
  {id:"85000000-0000-4000-8000-000000000004",organizationId:ORG,fullName:"Максим Титов",phone:"+7 900 000-10-04",source:"Telegram",stage:"new",stageLabel:"Новый",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:"Завтра"},
 ];
 
 export const workers = [
- {id:"88000000-0000-4000-8000-000000000001",organizationId:ORG,fullName:"Сергей Волков",status:"active",origin:"Сергей Волков · Job board",originalRecruiter:"Ольга Новикова",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,createdByUserId:recruiter,ownerUserId:objectManager,assigneeUserIds:[objectManager,recruiter,regional],employment:"ТК",rate:390,rateUnit:"₽/ч",monthHours:88,accrued:35820,paid:5000,payable:30820},
- {id:"88000000-0000-4000-8000-000000000002",organizationId:ORG,fullName:"Павел Ильин",status:"active",origin:"Legacy import",originalRecruiter:"—",object:"Склад Юг",objectId:objects[3].id,clientId:clients[2].id,regionId:MOW,createdByUserId:objectManager,ownerUserId:objectManager,assigneeUserIds:[objectManager,regional],employment:"ГПХ",rate:365,rateUnit:"₽/ч",monthHours:76,accrued:27740,paid:10000,payable:17740},
+ {id:"88000000-0000-4000-8000-000000000001",organizationId:ORG,fullName:"Сергей Волков",status:"active",origin:"Сергей Волков · сайт вакансий",originalRecruiter:"Ольга Новикова",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,createdByUserId:recruiter,ownerUserId:objectManager,assigneeUserIds:[objectManager,recruiter,regional],employment:"ТК",rate:390,rateUnit:"₽/ч",monthHours:88,accrued:35820,paid:5000,payable:30820},
+ {id:"88000000-0000-4000-8000-000000000002",organizationId:ORG,fullName:"Павел Ильин",status:"active",origin:"Импорт из прежней системы",originalRecruiter:"—",object:"Склад Юг",objectId:objects[3].id,clientId:clients[2].id,regionId:MOW,createdByUserId:objectManager,ownerUserId:objectManager,assigneeUserIds:[objectManager,regional],employment:"ГПХ",rate:365,rateUnit:"₽/ч",monthHours:76,accrued:27740,paid:10000,payable:17740},
 ];
 
 export const shifts = [
@@ -95,8 +95,8 @@ export const proposals = [
  {id:"7a000000-0000-4000-8000-000000000002",organizationId:ORG,requestId:requests[1].id,request:requests[1].title,client:"FormaBath",clientId:clients[1].id,version:1,status:"draft",scenarioCount:1,totalValue:0,createdAt:"30.08.2026",createdBy:"Елена Котова",regionId:KLG,ownerUserId:sales,createdByUserId:economist,teamId:SALES},
 ];
 export const rateReferences = [
- {id:"r1",organizationId:ORG,specialty:"Комплектовщик",region:"Москва и МО",regionId:MOW,employmentModel:"ТК",amountMin:360,amountMax:430,unit:"hour",grossNet:"net",source:"Synthetic demo benchmark",sourceDate:"20.08.2026",confidence:"demo",comment:"Требует подтверждения пользователем",createdByUserId:economist},
- {id:"r2",organizationId:ORG,specialty:"Сборщик мебели",region:"Калужская область",regionId:KLG,employmentModel:"ГПХ",amountMin:380,amountMax:460,unit:"hour",grossNet:"net",source:"Synthetic demo benchmark",sourceDate:"20.08.2026",confidence:"demo",comment:"Не является рыночной рекомендацией",createdByUserId:economist},
+ {id:"r1",organizationId:ORG,specialty:"Комплектовщик",region:"Москва и МО",regionId:MOW,employmentModel:"ТК",amountMin:360,amountMax:430,unit:"ч",grossNet:"На руки",source:"Демонстрационный ориентир",sourceDate:"20.08.2026",confidence:"demo",comment:"Требует подтверждения пользователем",createdByUserId:economist},
+ {id:"r2",organizationId:ORG,specialty:"Сборщик мебели",region:"Калужская область",regionId:KLG,employmentModel:"ГПХ",amountMin:380,amountMax:460,unit:"ч",grossNet:"На руки",source:"Демонстрационный ориентир",sourceDate:"20.08.2026",confidence:"demo",comment:"Не является рыночной рекомендацией",createdByUserId:economist},
 ];
 export const launchTasks = [
  {id:"lt1",organizationId:ORG,objectId:objects[0].id,object:"РЦ Север",title:"Подтвердить план запуска",level:0,owner:"Алексей Волков",start:"02.09",end:"03.09",baselineStart:"02.09",baselineEnd:"03.09",progress:100,status:"done",risk:"normal",milestone:false,critical:true,dependencyIds:[],regionId:MOW,ownerUserId:objectManager,createdByUserId:objectManager,assigneeUserIds:[objectManager,regional]},

@@ -20,11 +20,11 @@ export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
       <Metric label="Задачи" value={rows.length} note="в текущем плане"/>
       <Metric label="Общий прогресс" value={`${progress}%`}/>
       <Metric label="Критический путь" value={critical} tone={critical ? "bad" : "good"}/>
-      <Metric label="Milestones" value={milestones}/>
-      <Metric label="Отклонения baseline" value={baselineChanges} tone={baselineChanges ? "warn" : undefined}/>
+      <Metric label="Контрольные точки" value={milestones}/>
+      <Metric label="Отклонения от исходного плана" value={baselineChanges} tone={baselineChanges ? "warn" : undefined}/>
     </div>
     <section className="section gantt">
-      <div className="gantt-head"><div>WBS / задача</div><div className="gantt-dates">{days.map((value) => <span key={value}>{value}</span>)}</div></div>
+      <div className="gantt-head"><div>Структура работ / задача</div><div className="gantt-dates">{days.map((value) => <span key={value}>{value}</span>)}</div></div>
       {rows.map((task) => {
         const start = Math.max(1, day(task.start)), end = Math.min(20, day(task.end));
         const baselineStart = task.baselineStart ? Math.max(1, day(task.baselineStart)) : null;
@@ -38,8 +38,8 @@ export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
           </div>
         </div>;
       })}
-      <div className="gantt-legend"><span><i className="baseline"/> Baseline</span><span><i className="normal"/> План</span><span><i className="critical"/> Критический путь</span><span><i className="today"/> Сегодня</span></div>
+      <div className="gantt-legend"><span><i className="baseline"/> Исходный план</span><span><i className="normal"/> Текущий план</span><span><i className="critical"/> Критический путь</span><span><i className="today"/> Сегодня</span></div>
     </section>
-    {selected && <><div className="drawer-backdrop" onClick={() => setSelected(null)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={() => setSelected(null)} aria-label="Закрыть"><X size={17}/></button><div className="eyebrow">Задача запуска · {selected.object}</div><h2>{selected.title}</h2><Status tone={selected.risk === "high" ? "warn" : selected.status === "done" ? "good" : "info"}>{selected.status}</Status><div className="drawer-content"><KeyValue label="Ответственный" value={selected.owner}/><KeyValue label="План" value={`${selected.start}–${selected.end}`}/><KeyValue label="Baseline" value={`${selected.baselineStart ?? "—"}–${selected.baselineEnd ?? "—"}`}/><KeyValue label="Прогресс" value={`${selected.progress}%`}/><KeyValue label="Риск" value={selected.risk}/><KeyValue label="Критический путь" value={selected.critical ? "Да" : "Нет"}/><KeyValue label="Зависимости" value={selected.dependencyIds.length || "Нет"}/></div></aside></>}
+    {selected && <><div className="drawer-backdrop" onClick={() => setSelected(null)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={() => setSelected(null)} aria-label="Закрыть"><X size={17}/></button><div className="eyebrow">Задача запуска · {selected.object}</div><h2>{selected.title}</h2><Status tone={selected.risk === "high" ? "warn" : selected.status === "done" ? "good" : "info"}>{selected.status}</Status><div className="drawer-content"><KeyValue label="Ответственный" value={selected.owner}/><KeyValue label="Текущий план" value={`${selected.start}–${selected.end}`}/><KeyValue label="Исходный план" value={`${selected.baselineStart ?? "—"}–${selected.baselineEnd ?? "—"}`}/><KeyValue label="Прогресс" value={`${selected.progress}%`}/><KeyValue label="Риск" value={selected.risk}/><KeyValue label="Критический путь" value={selected.critical ? "Да" : "Нет"}/><KeyValue label="Зависимости" value={selected.dependencyIds.length || "Нет"}/></div></aside></>}
   </>;
 }

@@ -4,12 +4,12 @@ import { db, hasDatabase } from "@/lib/db/client";
 import { hashSessionToken, SESSION_COOKIE } from "@/lib/auth/server";
 
 export async function POST(request: Request) {
-  if (!hasDatabase()) return NextResponse.json({ error: "Database is not configured" }, { status: 503 });
+  if (!hasDatabase()) return NextResponse.json({ error: "База данных не настроена" }, { status: 503 });
   const body = await request.json().catch(() => ({}));
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "");
   const organization = String(body.organization ?? "operis-demo").trim().toLowerCase();
-  if (!email || !password || !organization) return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
+  if (!email || !password || !organization) return NextResponse.json({ error: "Заполните организацию, почту и пароль" }, { status: 400 });
   const sql = db();
   const [row] = await sql<{ user_id: string; organization_id: string; password_ok: boolean }[]>`
     SELECT u.id user_id, o.id organization_id, (u.password_hash IS NOT NULL AND u.password_hash = crypt(${password}, u.password_hash)) password_ok
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     WHERE lower(u.email::text)=lower(${email}) AND o.slug=${organization} AND u.is_active=true
     LIMIT 1
   `;
-  if (!row?.password_ok) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  if (!row?.password_ok) return NextResponse.json({ error: "Неверная почта или пароль" }, { status: 401 });
   const raw = crypto.randomBytes(32).toString("base64url");
   const hash = hashSessionToken(raw);
   await sql`INSERT INTO sessions (organization_id,user_id,token_hash,expires_at) VALUES (${row.organization_id}::uuid,${row.user_id}::uuid,${hash},now()+interval '12 hours')`;

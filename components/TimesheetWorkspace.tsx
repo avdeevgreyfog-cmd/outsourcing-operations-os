@@ -35,7 +35,7 @@ export function TimesheetWorkspace({ data, sensitive }: { data: TimesheetData; s
       <div className="segmented">{(["first", "second", "month"] as Mode[]).map((value) => <button type="button" key={value} className={mode === value ? "active" : ""} onClick={() => setMode(value)}>{value === "first" ? "1–15" : value === "second" ? "16–конец" : "Весь месяц"}</button>)}</div>
       <div className="page-actions">
         <div className="segmented"><button type="button" className={view === "client" ? "active" : ""} onClick={() => setView("client")}>Клиентский</button>{sensitive && <button type="button" className={view === "internal" ? "active" : ""} onClick={() => setView("internal")}>Внутренний</button>}</div>
-        <button className="button" type="button" onClick={exportCsv}><Download size={14}/> CSV</button>
+        <button className="button" type="button" onClick={exportCsv} title="Скачать в формате CSV"><Download size={14}/> Скачать таблицу</button>
       </div>
     </div>
     <div className="timesheet-summary">

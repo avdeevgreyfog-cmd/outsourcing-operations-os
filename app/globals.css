@@ -46,6 +46,9 @@ button,input,select,textarea{letter-spacing:inherit}
 .nav-subgroup>button span{font-size:10.5px;color:var(--soft)}
 .nav-subgroup a{min-height:29px;padding:6px 8px;font-size:11.5px}
 .nav-subgroup a.active{color:var(--accent);background:var(--panel);box-shadow:inset 2px 0 var(--accent)}
+.nav-direct-items a{display:block;min-height:29px;padding:6px 8px;border-radius:5px;color:var(--muted);font-size:11.5px;line-height:16px}
+.nav-direct-items a:hover{color:var(--text);background:var(--panel)}
+.nav-direct-items a.active{color:var(--accent);background:var(--panel);box-shadow:inset 2px 0 var(--accent)}
 .sidebar-foot{height:51px}
 
 .topbar{padding:0 22px;background:var(--canvas)}
