@@ -11,9 +11,9 @@ const roles = [
 export function DemoRoleSwitch({ current }: { current: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  async function change(code: string) {
+  function change(code: string) {
     setBusy(true);
-    await fetch("/api/demo-session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: code }) });
+    document.cookie = `oo_demo_role=${encodeURIComponent(code)}; Path=/; Max-Age=2592000; SameSite=Lax`;
     router.push("/");
     router.refresh();
     setBusy(false);
