@@ -5,13 +5,14 @@ import { db, hasDatabase, withTenant } from "@/lib/db/client";
 import { loadEffectiveAccess } from "@/lib/access/server";
 import type { Actor } from "@/lib/access/types";
 import { getDemoActor } from "@/lib/demo/access";
+import { isDemoMode } from "@/lib/demo/mode";
 
 export const SESSION_COOKIE = "oo_session";
 export const DEMO_COOKIE = "oo_demo_role";
 
 export async function getCurrentActor(): Promise<Actor | null> {
   const store = await cookies();
-  if (process.env.DEMO_MODE === "true") {
+  if (isDemoMode()) {
     return getDemoActor(store.get(DEMO_COOKIE)?.value ?? "director");
   }
   if (!hasDatabase()) return null;
