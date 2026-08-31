@@ -1,0 +1,7 @@
+import type { Actor } from "@/lib/access/types";
+import { requireCapability } from "@/lib/access/server";
+import { withTenant } from "@/lib/db/client";
+export type CommercialRateFact={id:string;specialty:string;region:string;employmentModel:string;staffingMode:string|null;scheduleType:string|null;housingIncluded:boolean|null;season:string|null;salaryMin:number|string;salaryMax:number|string|null;clientOfferRate:number|string|null;objectFactRate:number|string|null;objectFactMarginPct:number|string|null;source:string;sourceDate:string;confidence:string};
+export async function listCommercialRateFacts(actor:Actor):Promise<CommercialRateFact[]>{if(actor.demo)return[];requireCapability(actor,"calculation.rate_reference.read");return withTenant(actor.organizationId,actor.userId,async sql=>sql<CommercialRateFact[]>`
+SELECT e.id,s.name specialty,COALESCE(r.name,'Все регионы') region,e.employment_model "employmentModel",e.staffing_mode "staffingMode",e.schedule_type "scheduleType",e.housing_included "housingIncluded",e.season,e.amount_min "salaryMin",e.amount_max "salaryMax",e.client_offer_rate "clientOfferRate",e.object_fact_rate "objectFactRate",e.object_fact_margin_pct "objectFactMarginPct",e.source,to_char(e.source_date,'DD.MM.YYYY') "sourceDate",e.confidence
+FROM rate_reference_entries e JOIN specialties s ON s.id=e.specialty_id LEFT JOIN regions r ON r.id=e.region_id ORDER BY e.source_date DESC,s.name`)}
