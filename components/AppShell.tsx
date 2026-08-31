@@ -8,8 +8,8 @@ const navigation: NavigationSection[] = [
     { label: "Командный центр", href: "/", capability: "home.command.read", keywords: "главная внимание риски" }, { label: "Мои задачи", href: "/tasks", capability: "task.read", keywords: "дела сроки поручения" },
   ]}]},
   { id: "commerce", label: "Коммерция", icon: "briefcase", groups: [
-    { id: "sales", label: "Продажи", items: [{ label: "Клиенты", href: "/clients", capability: "sales.client.read" }, { label: "Заявки", href: "/requests", capability: "sales.request.read" }, { label: "Коммерческие предложения", href: "/proposals", capability: "sales.request.read", keywords: "кп предложение" }]},
-    { id: "economics", label: "Экономика", items: [{ label: "Расчёты", href: "/calculations", capability: "calculation.scenario.read" }, { label: "База ставок", href: "/rates", capability: "calculation.rate_reference.read" }]},
+    { id: "sales", label: "Продажи", items: [{ label: "Клиенты", href: "/clients", capability: "sales.client.read" }, { label: "Заявки", href: "/requests", capability: "sales.request.read" }, { label: "Коммерческие предложения", href: "/proposals", capability: "sales.proposal.read", keywords: "кп предложение версии" }]},
+    { id: "economics", label: "Экономика", items: [{ label: "Расчёты", href: "/calculations", capability: "calculation.scenario.read" }, { label: "База ставок", href: "/rates", capability: "calculation.rate_reference.read" }, { label: "Нормативы и правила", href: "/commercial-rules", capability: "calculation.rules.read", keywords: "налоги маржа правила ставки расходы" }]},
   ]},
   { id: "operations", label: "Операции", icon: "factory", groups: [{ id: "objects", label: "Объекты", items: [
     { label: "Реестр объектов", href: "/objects", capability: "operations.object.read" }, { label: "План запусков", href: "/launches", capability: "operations.object.read" }, { label: "Потребности", href: "/needs", capability: "operations.need.read" }, { label: "Смены", href: "/shifts", capability: "operations.shift.read" }, { label: "Табели и сверки", href: "/timesheets", capability: "time.timesheet.read" },
