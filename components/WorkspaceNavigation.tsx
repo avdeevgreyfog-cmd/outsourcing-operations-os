@@ -6,12 +6,12 @@ import type { Actor } from "@/lib/access/types";
 import { DemoRoleSwitch } from "@/components/DemoRoleSwitch";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { roleLabel } from "@/lib/ui/format";
-import { Activity, BriefcaseBusiness, ChartNoAxesCombined, ChevronDown, Factory, Home, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
+import { Activity, BriefcaseBusiness, Building2, ChartNoAxesCombined, ChevronDown, Factory, Home, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 
-export type NavigationItem = { label: string; href: string; capability?: string; keywords?: string };
+export type NavigationItem = { id?: string; label: string; href: string; capability?: string; keywords?: string };
 export type NavigationGroup = { id: string; label: string; items: NavigationItem[] };
 export type NavigationSection = { id: string; label: string; icon: string; groups: NavigationGroup[] };
-const icons = { home: Home, briefcase: BriefcaseBusiness, factory: Factory, users: Users, wallet: WalletCards, chart: ChartNoAxesCombined, shield: ShieldCheck, settings: Settings };
+const icons = { home: Home, briefcase: BriefcaseBusiness, factory: Factory, users: Users, wallet: WalletCards, chart: ChartNoAxesCombined, shield: ShieldCheck, building: Building2, settings: Settings };
 const routePath = (href: string) => href.split("?")[0];
 function sameRoute(pathname: string, href: string, currentView: string) { const path = routePath(href); const pathMatches = path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`); if (!pathMatches) return false; if (path === "/analytics") return (new URLSearchParams(href.split("?")[1] ?? "").get("view") ?? "portfolio") === currentView; return true; }
 
@@ -20,8 +20,8 @@ export function WorkspaceNavigation({ actor, sections }: { actor: Actor; section
   const activeSection = sections.find((section) => section.groups.some((group) => group.items.some((item) => sameRoute(pathname, item.href, currentView))))?.id ?? sections[0]?.id;
   const activeGroup = sections.flatMap((section) => section.groups).find((group) => group.items.some((item) => sameRoute(pathname, item.href, currentView)))?.id;
   const [openSections, setOpenSections] = useState<string[]>(() => sections.map((section) => section.id)); const [openGroups, setOpenGroups] = useState<string[]>(activeGroup ? [activeGroup] : []); const [compact, setCompact] = useState(false); const [palette, setPalette] = useState(false); const [query, setQuery] = useState("");
-  useEffect(() => { const timer=window.setTimeout(()=>{const saved=window.localStorage.getItem("operis.navigation.v2");if(!saved)return;try{const value=JSON.parse(saved) as {sections?:string[];groups?:string[];compact?:boolean};if(value.sections)setOpenSections(value.sections);if(value.groups)setOpenGroups(value.groups);if(typeof value.compact==="boolean")setCompact(value.compact)}catch{}},0);return()=>window.clearTimeout(timer)}, []);
-  useEffect(() => { window.localStorage.setItem("operis.navigation.v2", JSON.stringify({ sections: openSections, groups: openGroups, compact })); }, [openSections, openGroups, compact]);
+  useEffect(() => { const timer=window.setTimeout(()=>{const saved=window.localStorage.getItem("operis.navigation.v3");if(!saved)return;try{const value=JSON.parse(saved) as {sections?:string[];groups?:string[];compact?:boolean};if(value.sections)setOpenSections(value.sections);if(value.groups)setOpenGroups(value.groups);if(typeof value.compact==="boolean")setCompact(value.compact)}catch{}},0);return()=>window.clearTimeout(timer)}, []);
+  useEffect(() => { window.localStorage.setItem("operis.navigation.v3", JSON.stringify({ sections: openSections, groups: openGroups, compact })); }, [openSections, openGroups, compact]);
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPalette(true); } if (event.key === "Escape") setPalette(false); }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
   const items = useMemo(() => sections.flatMap((section) => section.groups.flatMap((group) => group.items.map((item) => ({ ...item, section: section.label, group: group.label })))), [sections]);
   const results = items.filter((item) => `${item.label} ${item.section} ${item.group} ${item.keywords ?? ""}`.toLowerCase().includes(query.toLowerCase())).slice(0, 10);
@@ -33,11 +33,9 @@ export function WorkspaceNavigation({ actor, sections }: { actor: Actor; section
     <aside className={`sidebar ${compact ? "sidebar-compact" : ""}`}>
       <div className="brand"><span className="brand-mark">O</span>{!compact && <div><strong>OPERIS</strong><small>Операционная система</small></div>}</div>
       <button className="nav-search" type="button" onClick={() => setPalette(true)} title="Быстрый переход (Ctrl+K)"><Search size={16}/>{!compact && <><span>Быстрый переход</span><kbd>Ctrl K</kbd></>}</button>
-      <nav className="nav-groups" aria-label="Основная навигация">{sections.map((section) => { const Icon = icons[section.icon as keyof typeof icons] ?? Activity; const expanded = openSections.includes(section.id); return <div className="nav-section" key={section.id}>
+      <nav className="nav-groups" aria-label="Основная навигация">{sections.map((section) => { const Icon = icons[section.icon as keyof typeof icons] ?? Activity; const expanded = openSections.includes(section.id) || activeSection === section.id; return <div className="nav-section" key={section.id}>
         <button type="button" className={`nav-section-button ${activeSection === section.id ? "is-current" : ""}`} onClick={() => compact ? setCompact(false) : toggleSection(section.id)} title={section.label} aria-expanded={expanded}><Icon size={17}/>{!compact && <><span>{section.label}</span><ChevronDown size={14} className={expanded ? "rotated" : ""}/></>}</button>
-        {!compact && expanded && <div className="nav-section-body">{section.groups.length === 1
-          ? <div className="nav-direct-items">{section.groups[0].items.map((item) => <Link key={item.href} href={item.href} className={sameRoute(pathname, item.href, currentView) ? "active" : ""}>{item.label}</Link>)}</div>
-          : section.groups.map((group) => { const groupOpen = openGroups.includes(group.id); return <div className="nav-subgroup" key={group.id}><button type="button" onClick={() => toggleGroup(group.id)} aria-expanded={groupOpen}><span>{group.label}</span><ChevronDown size={13} className={groupOpen ? "rotated" : ""}/></button>{groupOpen && <div>{group.items.map((item) => <Link key={item.href} href={item.href} className={sameRoute(pathname, item.href, currentView) ? "active" : ""}>{item.label}</Link>)}</div>}</div>})}</div>}
+        {!compact && expanded && <div className="nav-section-body">{section.groups.map((group) => { const groupOpen = openGroups.includes(group.id) || activeGroup === group.id; return <div className="nav-subgroup" key={group.id}><button type="button" onClick={() => toggleGroup(group.id)} aria-expanded={groupOpen}><span>{group.label}</span><ChevronDown size={13} className={groupOpen ? "rotated" : ""}/></button>{groupOpen && <div>{group.items.map((item) => { const active = sameRoute(pathname, item.href, currentView); return <Link key={item.id ?? item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>{item.label}</Link> })}</div>}</div>})}</div>}
       </div>})}</nav>
       <div className="sidebar-foot"><div className="avatar">{actor.displayName.split(" ").map((x) => x[0]).join("").slice(0,2)}</div>{!compact && <div className="who"><strong>{actor.displayName}</strong><span>{currentRole}</span></div>}<button type="button" className="sidebar-collapse" onClick={() => setCompact((x) => !x)} title={compact ? "Развернуть меню" : "Свернуть меню"}>{compact ? <PanelLeftOpen size={16}/> : <PanelLeftClose size={16}/>}</button></div>
     </aside>
