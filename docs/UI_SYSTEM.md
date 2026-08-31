@@ -12,7 +12,7 @@
 
 ## Navigation
 
-The target information architecture is declared once in `lib/core/navigation.mjs`. Every item has a canonical section, group and route. Modules marked `planned` document the roadmap but are excluded from the interface until a working route and capability exist; the sidebar must not lead to empty placeholder pages.
+The target information architecture is declared once in `lib/core/navigation.mjs`. Every item has a canonical section, group and route. Modules marked `foundation` have a real baseline workspace describing their purpose, process, core fields, relations and next implementation scope. They are visible in demo and platform-administration contexts, remain capability-safe in the production context and contain no fake operations or demo records.
 
 Level 1 and Level 2 are collapsible. Level 2 remains visible inside an expanded section even when only one group is available to the current role. Level 3 appears only in an open subgroup, while the active route and its parent hierarchy remain expanded. Contextual entity tabs own the long-lived third level inside clients, requests, objects and workers. Navigation items are filtered by server-provided effective access.
 
