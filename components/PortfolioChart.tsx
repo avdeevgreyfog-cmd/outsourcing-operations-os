@@ -1,4 +1,63 @@
 "use client";
+
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-export function PortfolioChart({ rows }: { rows: Array<{ object:string; revenue:number; contribution:number }> }){const ref=useRef<HTMLDivElement>(null);useEffect(()=>{if(!ref.current)return;const chart=echarts.init(ref.current);chart.setOption({animationDuration:350,grid:{left:55,right:18,top:30,bottom:44},tooltip:{trigger:"axis",axisPointer:{type:"cross"}},legend:{data:["Выручка","Contribution"],textStyle:{fontSize:10}},xAxis:{type:"category",data:rows.map(x=>x.object),axisLabel:{fontSize:9}},yAxis:{type:"value",axisLabel:{fontSize:9,formatter:(v:number)=>`${Math.round(v/1000)}k`}},series:[{name:"Выручка",type:"bar",data:rows.map(x=>x.revenue),barMaxWidth:32},{name:"Contribution",type:"line",smooth:true,data:rows.map(x=>x.contribution)}]});const resize=()=>chart.resize();window.addEventListener("resize",resize);return()=>{window.removeEventListener("resize",resize);chart.dispose()}},[rows]);return <div ref={ref} className="chart-box"/>}
+
+type PortfolioRow = { object: string; revenue: number; contribution: number };
+const compactRub = (value: number) => new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(value) + " ₽";
+const fullRub = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value) + " ₽";
+
+export function PortfolioChart({ rows }: { rows: PortfolioRow[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    const node = ref.current;
+    const chart = echarts.init(node, undefined, { renderer: "canvas" });
+    const draw = () => {
+      const css = getComputedStyle(document.documentElement);
+      const text = css.getPropertyValue("--text").trim();
+      const muted = css.getPropertyValue("--muted").trim();
+      const border = css.getPropertyValue("--border").trim();
+      const accent = css.getPropertyValue("--accent").trim();
+      const good = css.getPropertyValue("--good").trim();
+      const panel = css.getPropertyValue("--panel").trim();
+      const margins = rows.map((row) => row.revenue ? row.contribution / row.revenue * 100 : 0);
+      chart.setOption({
+        animationDuration: 280,
+        aria: { enabled: true, description: "Сравнение выручки и contribution margin по объектам" },
+        color: [accent, good],
+        grid: { left: 18, right: 28, top: 50, bottom: 18, containLabel: true },
+        tooltip: {
+          trigger: "axis",
+          backgroundColor: panel,
+          borderColor: border,
+          borderWidth: 1,
+          textStyle: { color: text, fontSize: 11 },
+          axisPointer: { type: "shadow", shadowStyle: { color: css.getPropertyValue("--panel-2").trim() } },
+          formatter: (params: unknown) => {
+            const items = params as Array<{ dataIndex: number; marker: string; seriesName: string; value: number }>;
+            const index = items[0]?.dataIndex ?? 0;
+            return `<strong>${rows[index]?.object ?? ""}</strong><br/>Выручка: ${fullRub(rows[index]?.revenue ?? 0)}<br/>Contribution: ${fullRub(rows[index]?.contribution ?? 0)}<br/>Margin: ${margins[index]?.toFixed(1) ?? "0"}%`;
+          },
+        },
+        legend: { top: 4, left: 4, itemWidth: 13, itemHeight: 7, textStyle: { color: muted, fontSize: 10 }, data: ["Выручка", "Contribution margin"] },
+        xAxis: { type: "category", data: rows.map((row) => row.object), axisLine: { lineStyle: { color: border } }, axisTick: { show: false }, axisLabel: { color: muted, fontSize: 10, interval: 0, width: 94, overflow: "truncate" } },
+        yAxis: [
+          { type: "value", name: "₽", nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { lineStyle: { color: border } }, axisLabel: { color: muted, fontSize: 9, formatter: (value: number) => compactRub(value).replace(" ₽", "") } },
+          { type: "value", name: "%", min: 0, max: Math.max(30, Math.ceil(Math.max(...margins, 0) / 5) * 5), nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { show: false }, axisLabel: { color: muted, fontSize: 9, formatter: "{value}%" } },
+        ],
+        series: [
+          { name: "Выручка", type: "bar", data: rows.map((row) => row.revenue), barMaxWidth: 30, itemStyle: { color: accent, borderRadius: [3, 3, 0, 0] } },
+          { name: "Contribution margin", type: "line", yAxisIndex: 1, smooth: 0.25, showSymbol: true, symbolSize: 6, data: margins.map((value) => Number(value.toFixed(2))), lineStyle: { color: good, width: 2 }, itemStyle: { color: good }, emphasis: { focus: "series" } },
+        ],
+      }, true);
+    };
+    draw();
+    const resize = () => chart.resize();
+    const themeObserver = new MutationObserver(draw);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    window.addEventListener("resize", resize);
+    return () => { window.removeEventListener("resize", resize); themeObserver.disconnect(); chart.dispose() };
+  }, [rows]);
+  return <div ref={ref} className="chart-box"/>;
+}
