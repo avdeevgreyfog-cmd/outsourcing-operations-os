@@ -3,8 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { closeReasonLabels, requestStageLabels } from "@/lib/ui/commercial";
 
-export function RequestCommercialActions({requestId,stage,archived,canEdit,canArchive,canCreateObject,canPublicLink}:{requestId:string;stage:string;archived:boolean;canEdit:boolean;canArchive:boolean;canCreateObject:boolean;canPublicLink:boolean}){
-  const router=useRouter();const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [closeReason,setCloseReason]=useState("client_declined");const [closeComment,setCloseComment]=useState("");const [closing,setClosing]=useState(false);const [publicUrl,setPublicUrl]=useState("");
+export function RequestCommercialActions({requestId,stage,archived,canEdit,canArchive,canCreateObject,canPublicLink}:{requestId:string;stage:string;archived:boolean;canEdit:boolean;canArchive:boolean;canCreateObject:boolean;canPublicLink?:boolean}){
+  const router=useRouter();const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [closeReason,setCloseReason]=useState("client_declined");const [closeComment,setCloseComment]=useState("");const [closing,setClosing]=useState(false);const [publicUrl,setPublicUrl]=useState("");const allowPublicLink=canPublicLink??canEdit;
   async function action(payload:Record<string,unknown>){setBusy(true);setError("");try{const response=await fetch(`/api/requests/${requestId}/commercial`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось выполнить действие");router.refresh();return data;}catch(e){setError(e instanceof Error?e.message:"Не удалось выполнить действие");}finally{setBusy(false)}}
   async function createPublicLink(){setBusy(true);setError("");try{const response=await fetch(`/api/requests/${requestId}/public-link`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({mode:"complete"})});const data=await response.json();if(!response.ok)throw new Error(data.error||"Не удалось создать ссылку");setPublicUrl(data.url);}catch(e){setError(e instanceof Error?e.message:"Не удалось создать ссылку")}finally{setBusy(false)}}
   return <div className="stack-list" style={{padding:12}}>
@@ -16,7 +16,7 @@ export function RequestCommercialActions({requestId,stage,archived,canEdit,canAr
       {canArchive&&!archived&&<button className="button" disabled={busy} onClick={()=>action({action:"archive"})}>В архив</button>}
       {canArchive&&archived&&<button className="button primary" disabled={busy} onClick={()=>action({action:"restore",stage:"clarification"})}>Вернуть в работу</button>}
       {canEdit&&!archived&&<button className="button" disabled={busy} onClick={async()=>{const data=await action({action:"duplicate"}) as {id?:string}|undefined;if(data?.id)router.push(`/requests/${data.id}`)}}>Создать похожую заявку</button>}
-      {canPublicLink&&!archived&&<button className="button" disabled={busy} onClick={createPublicLink}>Ссылка для заказчика</button>}
+      {allowPublicLink&&!archived&&<button className="button" disabled={busy} onClick={createPublicLink}>Ссылка для заказчика</button>}
       {canCreateObject&&stage==="accepted"&&<button className="button primary" disabled={busy} onClick={()=>{const name=window.prompt("Название объекта");const code=window.prompt("Код объекта");if(name&&code)action({action:"create_object",name,code})}}>Создать объект</button>}
     </div>
     {error&&<div className="compliance-note">{error}</div>}
