@@ -35,7 +35,7 @@ The complete suite was not completed in this runtime. The cloud browser blocks l
 
 ## Release gate
 
-Production release is blocked until PostgreSQL migration/RLS tests and browser QA pass in CI or deployment. The current result is a build-passing Phase 2 implementation, not a production-ready release.
+GitHub CI now provisions PostgreSQL 17, applies every migration and the demo seed, then verifies Organization Core RLS, tenant-reference integrity, assignment capacity/FTE rules, audit history and responsibility resolution. Production rollout still requires applying the same migrations to the target database and validating its credentials/configuration; the ephemeral CI database is not a substitute for a production migration.
 
 ## Organization Core verification — 2026-09-01
 

@@ -65,3 +65,5 @@ The module does not replace users, sessions, outsourced workers, teams, regions 
 - `POST/PATCH /api/organization/change-sets` creates packages and enforces lifecycle transitions. Applying supported unit changes is executed inside one tenant transaction and is idempotent at the lifecycle level.
 - `GET /api/organization/employees/:id/access` explains capability source, effect and scope.
 - `GET /api/organization/history` exposes the unified audited history for an allow-listed Organization Core entity type.
+
+Migration `0008_organization_tenant_integrity.sql` closes cross-tenant reference gaps across units, positions, grants, roles, change items and responsibility rules. It also resolves factual executors from process roles, staff positions, unit leads or explicit fallbacks. The `postgres-integration` CI job applies the full migration chain to PostgreSQL 17 and exercises these invariants under a non-superuser RLS role.
