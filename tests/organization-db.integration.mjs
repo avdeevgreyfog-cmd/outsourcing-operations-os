@@ -101,9 +101,9 @@ try {
     await tx`SELECT set_config('app.organization_id',${org1},true),set_config('app.user_id',${user1},true)`;
     const visible = await tx`SELECT DISTINCT organization_id FROM organization_units`;
     assert.deepEqual(visible.map((row) => row.organization_id), [org1]);
-    await rejectsConstraint(
+    await assert.rejects(
       () => tx`INSERT INTO organization_units(organization_id,code,name,kind) VALUES(${org2}::uuid,${`rls-${randomUUID()}`},'Blocked by RLS','team')`,
-      /row-level security/,
+      (error) => /row-level security/.test(error?.message ?? ""),
     );
   });
 
