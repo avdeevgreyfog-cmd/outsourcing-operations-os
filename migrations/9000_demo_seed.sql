@@ -121,7 +121,8 @@ INSERT INTO permission_definitions(capability,domain,resource,action,field_sensi
 ('analytics.portfolio.read','analytics','portfolio','read',false),('audit.read','admin','audit','read',true),('admin.permissions.manage','admin','permissions','manage',true),
 ('organization.read','organization','organization','read',false),('organization.manage','organization','organization','manage',true),
 ('organization.unit.manage','organization','unit','manage',true),('organization.position.manage','organization','position','manage',true),
-('organization.employee.manage','organization','employee','manage',true),('organization.access.manage','organization','access','manage',true);
+('organization.employee.manage','organization','employee','manage',true),('organization.access.manage','organization','access','manage',true)
+ON CONFLICT (capability) DO NOTHING;
 
 -- Director: organization wide access.
 INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_type)
