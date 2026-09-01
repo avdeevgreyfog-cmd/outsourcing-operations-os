@@ -1,4 +1,4 @@
-import type { CompanyEmployeeRow, CompanyProfile, OrganizationUnitRow, PositionRow, ProcessRoleRow } from "@/lib/organization/types";
+import type { CompanyEmployeeRow, CompanyProfile, OrganizationChangeSetRow, OrganizationUnitRow, PositionAssignmentRow, PositionRow, ProcessRoleRow, ResponsibilityRuleRow, StaffPositionRow } from "@/lib/organization/types";
 
 const ORG = "00000000-0000-4000-8000-000000000001";
 const MOW = "30000000-0000-4000-8000-000000000001";
@@ -53,3 +53,41 @@ export const companyEmployees: CompanyEmployeeRow[] = [
 ];
 
 function companyEmployeesId(index:number) { return `50000000-0000-4000-8000-${String(index).padStart(12,"0")}`; }
+
+export const staffPositions: StaffPositionRow[] = [
+  staffPosition(1,"CEO-01","Генеральный директор",0,1,1,null,"filled",0),
+  staffPosition(2,"SALES-01","Менеджер по продажам",1,2,1,1,"filled",1),
+  staffPosition(3,"REG-MOW-01","Региональный менеджер · Москва",2,5,1,1,"filled",1),
+  staffPosition(4,"OBJ-MOW-01","Менеджер объекта · Москва 1",3,7,1,3,"filled",2),
+  staffPosition(5,"OBJ-MOW-02","Менеджер объекта · Москва 2",3,7,1,3,"open",2),
+  staffPosition(6,"OBJ-KLG-01","Менеджер объекта · Калуга 1",3,6,2,3,"open",2),
+  staffPosition(7,"REC-01","Рекрутер",4,3,2,1,"open",1),
+  staffPosition(8,"ECON-01","Экономист",5,4,1,9,"filled",2),
+  staffPosition(9,"FIN-01","Финансовый менеджер",6,4,1,1,"filled",1),
+];
+
+function staffPosition(index:number,code:string,name:string,profileIndex:number,unitIndex:number,capacity:number,reportsToIndex:number|null,status:StaffPositionRow["status"],level:number):StaffPositionRow {
+  const id=`43000000-0000-4000-8000-${String(index).padStart(12,"0")}`;
+  const occupied=status==="filled"?1:0;
+  return {id,organizationId:ORG,code,name,jobProfileId:positions[profileIndex].id,jobProfile:positions[profileIndex].name,orgUnitId:organizationUnits[unitIndex].id,orgUnit:organizationUnits[unitIndex].name,regionId:organizationUnits[unitIndex].regionId,region:organizationUnits[unitIndex].region,reportsToPositionId:reportsToIndex?`43000000-0000-4000-8000-${String(reportsToIndex).padStart(12,"0")}`:null,reportsToPosition:null,capacity,occupied,open:Math.max(0,capacity-occupied),level,status,effectiveFrom:"2026-01-01",effectiveTo:null};
+}
+
+export const positionAssignments: PositionAssignmentRow[] = [1,2,3,4,8,9].map((positionIndex,offset)=>({
+  id:`44000000-0000-4000-8000-${String(offset+1).padStart(12,"0")}`,organizationId:ORG,staffPositionId:staffPositions[positionIndex-1].id,
+  membershipId:companyEmployees[offset<4?offset:offset+1].id,employeeName:companyEmployees[offset<4?offset:offset+1].name,
+  assignmentType:"primary",fte:1,status:"active",effectiveFrom:"2026-01-01",effectiveTo:null,
+}));
+
+export const responsibilityRules: ResponsibilityRuleRow[] = [
+  {id:"45000000-0000-4000-8000-000000000001",process:"Запуск объекта",step:"Передача заявки",responsibilityType:"owner",subjectType:"process_role",subjectName:"Куратор клиента",scopeLabel:"Закреплённые клиенты",fallbackName:"Руководитель коммерции"},
+  {id:"45000000-0000-4000-8000-000000000002",process:"Запуск объекта",step:"Расчёт ставки",responsibilityType:"executor",subjectType:"process_role",subjectName:"Экономист расчётов",scopeLabel:"Вся компания",fallbackName:"Финансовый менеджер"},
+  {id:"45000000-0000-4000-8000-000000000003",process:"Запуск объекта",step:"Операционный запуск",responsibilityType:"owner",subjectType:"process_role",subjectName:"Ответственный за объект",scopeLabel:"Назначенные объекты",fallbackName:"Региональный менеджер"},
+  {id:"45000000-0000-4000-8000-000000000004",process:"Закрытие табеля",step:"Проверка табеля",responsibilityType:"approver",subjectType:"process_role",subjectName:"Согласующий табелей",scopeLabel:"Назначенные объекты",fallbackName:"Региональный менеджер"},
+  {id:"45000000-0000-4000-8000-000000000005",process:"Выплаты",step:"Формирование реестра",responsibilityType:"executor",subjectType:"staff_position",subjectName:"Финансовый менеджер",scopeLabel:"Вся компания",fallbackName:"Генеральный директор"},
+];
+
+export const organizationChangeSets: OrganizationChangeSetRow[] = [
+  {id:"46000000-0000-4000-8000-000000000001",title:"Расширение операций в Калуге",status:"scheduled",effectiveDate:"2026-10-01",itemCount:4,createdBy:"Анна Лебедева"},
+  {id:"46000000-0000-4000-8000-000000000002",title:"Штат объектовых команд Москвы",status:"review",effectiveDate:"2026-09-15",itemCount:2,createdBy:"Мария Соколова"},
+  {id:"46000000-0000-4000-8000-000000000003",title:"Финансовый контур 2026",status:"applied",effectiveDate:"2026-01-01",itemCount:3,createdBy:"Анна Лебедева"},
+];

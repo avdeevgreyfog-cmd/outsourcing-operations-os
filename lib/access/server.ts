@@ -1,19 +1,18 @@
 import type { Sql } from "postgres";
 import type { Actor, EffectiveAccess, ScopeGrant } from "@/lib/access/types";
 
-export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTemplateId: string, positionId: string | null, membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
+export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTemplateId: string, positionIds: string[], membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
   const grants = await sql<{
     capability: string;
     effect: "allow" | "deny";
     scope_type: ScopeGrant["type"];
     scope_ids: string[];
   }[]>`
-    SELECT capability, effect, scope_type, scope_ids
     SELECT capability, effect, scope_type, scope_ids FROM permission_grants
     WHERE role_template_id=${roleTemplateId}::uuid
     UNION ALL
     SELECT capability, effect, scope_type, scope_ids FROM position_permission_grants
-    WHERE position_id=${positionId}::uuid
+    WHERE position_id=ANY(${positionIds}::uuid[])
     UNION ALL
     SELECT g.capability,g.effect,g.scope_type,g.scope_ids
     FROM membership_process_roles mr
@@ -32,6 +31,8 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
     SELECT capability, effect, scope_type, scope_ids
     FROM user_permission_overrides
     WHERE membership_id=${membershipId}::uuid
+      AND (effective_from IS NULL OR effective_from <= current_date)
+      AND (effective_to IS NULL OR effective_to >= current_date)
     ORDER BY created_at ASC
   `;
 

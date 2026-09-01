@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildOrganizationTree, inheritedAccessSources } from "../lib/core/organization.mjs";
+import { buildOrganizationTree, findStructureIssues, inheritedAccessSources, positionOccupancy } from "../lib/core/organization.mjs";
 
 test("organization tree keeps hierarchy and deterministic order", () => {
   const tree = buildOrganizationTree([
@@ -35,4 +35,22 @@ test("individual override replaces inherited access for one employee", () => {
     allow: [],
     denied: true,
   });
+});
+
+test("staff position capacity is independent from employee identity", () => {
+  const occupancy=positionOccupancy({id:"position",capacity:3},[
+    {staffPositionId:"position",status:"active",fte:1,effectiveFrom:"2026-01-01",effectiveTo:null},
+    {staffPositionId:"position",status:"active",fte:.5,effectiveFrom:"2026-01-01",effectiveTo:null},
+    {staffPositionId:"position",status:"planned",fte:1,effectiveFrom:"2027-01-01",effectiveTo:null},
+  ],"2026-09-01");
+  assert.deepEqual(occupancy,{occupied:1.5,open:1.5});
+});
+
+test("structure diagnostics expose unresolved routing gaps", () => {
+  const issues=findStructureIssues({
+    units:[{id:"ops",name:"Операции",kind:"department",active:true,managerMembershipId:null}],
+    staffPositions:[{id:"seat",name:"Менеджер объекта",capacity:2,status:"open",level:1,reportsToPositionId:null}],
+    assignments:[],
+  });
+  assert.deepEqual(issues.map(item=>item.id),["unit-manager-ops","position-open-seat","position-manager-seat"]);
 });

@@ -5,12 +5,16 @@ Organization Core is the canonical company structure and authorization foundatio
 ## Domain model
 
 - `organizations` stores the company and organization-level settings.
-- `organization_legal_entities` stores one or more legal entities.
+- `legal_entities` stores one or more legal entities.
 - `organization_units` stores a mutable hierarchy of departments, regions, branches, directions, teams and project groups.
-- `positions` stores reusable job templates: purpose, duties, responsibilities and process participation.
+- `positions` stores reusable job profiles: purpose, duties, responsibilities and process participation. The table name is retained for migration compatibility.
+- `staff_positions` stores concrete budgeted seats, capacity, hierarchy, open/filled state and effective dates.
+- `position_assignments` links employees to seats as primary, additional or acting assignments with FTE and effective dates.
 - `process_roles` stores functional roles independent of a person's primary position.
-- `organization_memberships` remains the employee identity inside a tenant and gains a primary position.
-- `membership_organization_units` and `membership_process_roles` support multiple assignments.
+- `organization_memberships` remains the corporate employee identity inside a tenant. It is separate from outsourced workers.
+- `membership_organization_units`, `organization_unit_leads` and `membership_process_roles` support multiple structural and functional assignments.
+- `organization_change_sets` and `organization_change_items` stage atomic, effective-dated reorganizations with impact payloads.
+- `responsibility_rules` resolve process owners, executors, approvers, observers and fallbacks by role, seat, unit or employee.
 - `position_permission_grants` and `process_role_permission_grants` feed effective access.
 - `user_permission_overrides` remains the final employee-level allow/deny exception.
 
@@ -19,7 +23,7 @@ Organization Core is the canonical company structure and authorization foundatio
 The server merges grants in this order:
 
 1. legacy role template grants;
-2. position grants;
+2. job-profile grants (legacy table `positions`);
 3. all assigned process-role grants;
 4. individual overrides.
 
@@ -36,4 +40,13 @@ Mutation endpoints require `organization.manage`, `organization.unit.manage`, `o
 
 ## Compatibility and migration
 
-The module does not replace users, sessions, teams, regions or legacy role templates. Existing installations can assign positions and process roles gradually. Business modules should reference stable organization-unit or role identifiers and must not encode fixed department names.
+The module does not replace users, sessions, outsourced workers, teams, regions or legacy role templates. Existing installations can introduce staff positions and effective-dated assignments gradually. Business modules should reference stable organization-unit, staff-position or process-role identifiers and must not encode fixed department names.
+
+## Invariants
+
+- Job profile, staff position, employee assignment, process role and capability are different concepts.
+- A staff position survives employee departure and can have capacity greater than one.
+- An employee can have one primary and several additional or acting assignments.
+- Organization hierarchy, position hierarchy, direct manager and responsibility routing are separate relations.
+- Significant future changes are staged as a change set; records are archived or ended, not hard-deleted.
+- Individual access exceptions must have a reason and may have effective dates and an approver.

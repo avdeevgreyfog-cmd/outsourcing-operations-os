@@ -288,3 +288,25 @@ button,input,select,textarea{letter-spacing:inherit}
 .template-panel{padding:12px}.template-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.template-grid article{padding:11px;border:1px solid var(--border);border-radius:6px;background:var(--panel-2)}.template-grid header{display:flex;align-items:center;justify-content:space-between;gap:8px}.template-grid header strong{font-size:11.5px}.template-grid header span{color:var(--soft);font-size:9px}.template-grid p{min-height:46px;margin:8px 0;color:var(--muted);font-size:9.5px;line-height:1.5}
 @media(max-width:1280px){.org-chart-toolbar,.registry-toolbar{flex-wrap:wrap}.toolbar-search{width:100%;max-width:none}.org-zoom{margin-left:0}.directory-layout:has(.directory-detail){grid-template-columns:1fr}.directory-detail{border-top:1px solid var(--border);border-left:0}.template-grid{grid-template-columns:1fr}.position-layout{grid-template-columns:320px minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){.org-chart-canvas{transition:none}}
+
+/* Organization operating model: profiles, concrete seats, dated assignments and responsibility. */
+.org-view-switch{height:32px;padding:2px;display:flex;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--panel)}
+.org-view-switch button{padding:0 9px;border:0;border-radius:4px;background:transparent;color:var(--muted);font-size:10.5px;cursor:pointer}
+.org-view-switch button.active{background:var(--panel-3);color:var(--text);font-weight:650}
+.org-view-switch button:focus-visible{position:relative;z-index:1}
+.org-card-metrics{margin-top:7px;display:flex;flex-wrap:wrap;gap:4px}
+.org-card-metrics b{padding:2px 4px;border:1px solid var(--border);border-radius:3px;background:var(--panel-2);color:var(--muted);font-size:8px;font-weight:600;line-height:1.3}
+.org-card-metrics b.warn{border-color:color-mix(in srgb,var(--warn) 24%,var(--border));background:var(--warn-bg);color:var(--warn)}
+.org-position-card{width:236px;min-height:76px;padding:9px 10px;display:flex;align-items:flex-start;gap:8px;border:1px solid var(--border-strong);border-radius:6px;background:var(--panel)}
+.org-position-card>svg{margin-top:2px;color:var(--muted)}
+.org-position-card>div{min-width:0;flex:1}.org-position-card span,.org-position-card strong,.org-position-card small{display:block}.org-position-card span{color:var(--accent);font-size:8.5px;font-weight:700}.org-position-card strong{margin-top:2px;font-size:11px}.org-position-card small{margin-top:3px;color:var(--muted);font-size:9px;line-height:1.35}
+.position-tree .org-tree-node{min-width:236px}
+.position-meta.capacity{min-width:48px;justify-content:flex-end}.position-meta .open-count{color:var(--warn);font-weight:700}
+.position-facts{max-width:760px;margin:18px 0 0;display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border);border-left:1px solid var(--border)}
+.position-facts>div{min-height:57px;padding:8px 10px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.position-facts dt{color:var(--muted);font-size:9.5px}.position-facts dd{margin:4px 0 0;font-size:11px;font-weight:620}
+.assignment-list{display:grid;gap:6px}.assignment-list>div{padding:8px 10px;display:flex;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:5px;background:var(--panel-2);font-size:10.5px}.assignment-list span{color:var(--muted)}
+.responsibility-matrix{min-height:560px}.responsibility-matrix .data-table{min-width:940px}
+.organization-admin-grid{margin-top:10px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:10px}.organization-admin-grid .section{margin-top:0}
+.structure-issues{max-height:340px;overflow:auto}.structure-issues>div{min-height:58px;padding:9px 12px;display:grid;grid-template-columns:auto 1fr;align-items:start;gap:9px;border-bottom:1px solid var(--border)}.structure-issues>div:last-child{border-bottom:0}.structure-issues strong,.structure-issues small{display:block}.structure-issues strong{font-size:11px}.structure-issues small{margin-top:3px;color:var(--muted);font-size:9.5px;line-height:1.4}
+@media(max-width:1280px){.org-view-switch{order:-2}.organization-admin-grid{grid-template-columns:1fr}.page-action-row{flex-wrap:wrap;justify-content:flex-end}}

@@ -61,6 +61,62 @@ export type PositionRow = {
   capabilityCount: number;
 };
 
+export type StaffPositionStatus = "planned" | "open" | "filled" | "frozen" | "closed";
+export type StaffPositionRow = {
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  jobProfileId: string;
+  jobProfile: string;
+  orgUnitId: string;
+  orgUnit: string;
+  regionId: string | null;
+  region: string | null;
+  reportsToPositionId: string | null;
+  reportsToPosition: string | null;
+  capacity: number;
+  occupied: number;
+  open: number;
+  level: number;
+  status: StaffPositionStatus;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+
+export type PositionAssignmentRow = {
+  id: string;
+  organizationId: string;
+  staffPositionId: string;
+  membershipId: string;
+  employeeName: string;
+  assignmentType: "primary" | "additional" | "acting";
+  fte: number;
+  status: "planned" | "active" | "ended";
+  effectiveFrom: string;
+  effectiveTo: string | null;
+};
+
+export type ResponsibilityRuleRow = {
+  id: string;
+  process: string;
+  step: string;
+  responsibilityType: "owner" | "executor" | "approver" | "observer" | "fallback";
+  subjectType: "process_role" | "staff_position" | "org_unit" | "membership";
+  subjectName: string;
+  scopeLabel: string;
+  fallbackName: string | null;
+};
+
+export type OrganizationChangeSetRow = {
+  id: string;
+  title: string;
+  status: "draft" | "review" | "approved" | "scheduled" | "applied" | "cancelled";
+  effectiveDate: string;
+  itemCount: number;
+  createdBy: string;
+};
+
 export type ProcessRoleRow = {
   id: string;
   organizationId: string;
@@ -72,4 +128,3 @@ export type ProcessRoleRow = {
   employeeCount: number;
   capabilityCount: number;
 };
-

@@ -25,6 +25,9 @@ await check("/organization/structure", "organization-structure", async () => {
   await page.getByPlaceholder("Сотрудник, роль или подразделение").fill("Москва");
   await page.getByRole("button", { name: "Сбросить масштаб" }).click();
   await page.getByPlaceholder("Сотрудник, роль или подразделение").fill("");
+  await page.getByRole("tab", { name: "Позиции" }).click();
+  await page.getByText("Менеджер объекта · Москва 1", { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "Подразделения" }).click();
   await page.locator(".org-person-card").first().click();
   await page.getByRole("dialog").waitFor();
 });
@@ -39,12 +42,18 @@ await check("/organization/staff", "organization-staff", async () => {
 });
 
 await check("/organization/positions", "organization-positions", async () => {
-  await page.getByRole("heading", { name: "Должности и роли" }).waitFor();
-  await page.getByText("Должность + роли + исключения", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Должности и обязанности" }).waitFor();
+  await page.getByRole("tab", { name: /Штатные позиции/ }).click();
+  await page.getByText("Менеджер объекта · Москва 2", { exact: true }).first().click();
+  await page.getByText("Позиция свободна", { exact: false }).waitFor();
+  await page.getByRole("tab", { name: /Ответственность/ }).click();
+  await page.getByText("Передача заявки", { exact: true }).waitFor();
 });
 
 await check("/organization/departments", "organization-departments", async () => {
   await page.getByRole("heading", { name: "Подразделения и регионы" }).waitFor();
+  await page.getByRole("heading", { name: "Изменения структуры" }).waitFor();
+  await page.getByRole("heading", { name: "Контроль структуры" }).waitFor();
   await page.getByRole("heading", { name: "Шаблоны структуры" }).waitFor();
 });
 

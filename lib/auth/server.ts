@@ -46,10 +46,19 @@ export async function getCurrentActor(): Promise<Actor | null> {
     if (!row) return null;
     const teams = await tx<{ team_id: string }[]>`SELECT team_id FROM membership_teams WHERE membership_id=${row.membership_id}::uuid`;
     const regions = await tx<{ region_id: string }[]>`SELECT region_id FROM membership_regions WHERE membership_id=${row.membership_id}::uuid`;
+    const assignedProfiles = await tx<{ job_profile_id: string }[]>`
+      SELECT DISTINCT sp.job_profile_id
+      FROM position_assignments pa
+      JOIN staff_positions sp ON sp.id=pa.staff_position_id
+      WHERE pa.membership_id=${row.membership_id}::uuid
+        AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+        AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
+    `;
     const teamIds = [...new Set([row.primary_team_id, ...teams.map((x) => x.team_id)].filter(Boolean) as string[])];
     const regionIds = regions.map((x) => x.region_id);
     const orgUnitIds = row.primary_org_unit_id ? [row.primary_org_unit_id] : [];
-    const access = await loadEffectiveAccess(tx, row.membership_id, row.role_template_id, row.position_id, regionIds, orgUnitIds);
+    const positionIds=[...new Set([row.position_id,...assignedProfiles.map(item=>item.job_profile_id)].filter(Boolean) as string[])];
+    const access = await loadEffectiveAccess(tx, row.membership_id, row.role_template_id, positionIds, regionIds, orgUnitIds);
     return {
       userId: row.user_id, organizationId: row.organization_id, membershipId: row.membership_id,
       displayName: row.display_name, email: row.email, roleCode: row.role_code, roleName: row.role_name,

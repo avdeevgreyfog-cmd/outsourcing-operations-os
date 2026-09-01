@@ -1,7 +1,7 @@
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
-import type { CompanyEmployeeRow, CompanyProfile, OrganizationUnitRow, PositionRow, ProcessRoleRow } from "@/lib/organization/types";
+import type { CompanyEmployeeRow, CompanyProfile, OrganizationChangeSetRow, OrganizationUnitRow, PositionAssignmentRow, PositionRow, ProcessRoleRow, ResponsibilityRuleRow, StaffPositionRow } from "@/lib/organization/types";
 import * as demo from "@/lib/demo/organization";
 
 export async function getCompanyProfile(actor: Actor): Promise<CompanyProfile> {
@@ -23,8 +23,8 @@ export async function getCompanyProfile(actor: Actor): Promise<CompanyProfile> {
 
 export async function listOrganizationUnits(actor: Actor): Promise<OrganizationUnitRow[]> {
   requireCapability(actor, "organization.read");
-  if (actor.demo) return demo.organizationUnits;
-  return withTenant(actor.organizationId, actor.userId, async (sql) => sql<OrganizationUnitRow[]>`
+  if (actor.demo) return filterUnits(actor,demo.organizationUnits);
+  const rows=await withTenant(actor.organizationId, actor.userId, async (sql) => sql<OrganizationUnitRow[]>`
     SELECT ou.id,ou.organization_id "organizationId",ou.parent_id "parentId",ou.region_id "regionId",rg.name region,
       ou.code,ou.name,ou.kind,ou.description,ou.active,ou.sort_order "sortOrder",
       ou.manager_membership_id "managerMembershipId",manager_user.display_name manager,
@@ -36,13 +36,13 @@ export async function listOrganizationUnits(actor: Actor): Promise<OrganizationU
     LEFT JOIN organization_memberships m ON m.primary_org_unit_id=ou.id AND m.status='active'
     GROUP BY ou.id,rg.name,manager_user.display_name
     ORDER BY ou.sort_order,ou.name
-  `);
+  `);return filterUnits(actor,rows);
 }
 
 export async function listCompanyEmployees(actor: Actor): Promise<CompanyEmployeeRow[]> {
   requireCapability(actor, "organization.read");
-  if (actor.demo) return demo.companyEmployees;
-  return withTenant(actor.organizationId, actor.userId, async (sql) => sql<CompanyEmployeeRow[]>`
+  if (actor.demo) return filterEmployees(actor,demo.companyEmployees);
+  const rows=await withTenant(actor.organizationId, actor.userId, async (sql) => sql<CompanyEmployeeRow[]>`
     SELECT m.id,u.id "userId",m.organization_id "organizationId",u.display_name name,u.email,m.phone,m.status,
       m.position_id "positionId",p.name position,m.primary_org_unit_id "orgUnitId",ou.name "orgUnit",
       ou.region_id "regionId",rg.name region,m.manager_membership_id "managerMembershipId",manager_user.display_name manager,
@@ -60,7 +60,7 @@ export async function listCompanyEmployees(actor: Actor): Promise<CompanyEmploye
     LEFT JOIN app_users manager_user ON manager_user.id=manager_membership.user_id
     WHERE m.organization_id=${actor.organizationId}::uuid
     ORDER BY u.display_name
-  `);
+  `);return filterEmployees(actor,rows);
 }
 
 export async function listPositions(actor: Actor): Promise<PositionRow[]> {
@@ -88,3 +88,86 @@ export async function listProcessRoles(actor: Actor): Promise<ProcessRoleRow[]> 
     GROUP BY pr.id ORDER BY pr.active DESC,pr.name
   `);
 }
+
+export async function listStaffPositions(actor: Actor): Promise<StaffPositionRow[]> {
+  requireCapability(actor, "organization.read");
+  if (actor.demo) return filterStaffPositions(actor,demo.staffPositions);
+  const rows=await withTenant(actor.organizationId, actor.userId, async (sql) => sql<StaffPositionRow[]>`
+    SELECT sp.id,sp.organization_id "organizationId",sp.code,sp.name,sp.job_profile_id "jobProfileId",p.name "jobProfile",
+      sp.organization_unit_id "orgUnitId",ou.name "orgUnit",sp.region_id "regionId",rg.name region,
+      sp.reports_to_position_id "reportsToPositionId",manager_position.name "reportsToPosition",
+      sp.capacity::float8 capacity,sp.level,sp.status,sp.effective_from::text "effectiveFrom",sp.effective_to::text "effectiveTo",
+      COALESCE(sum(pa.fte) FILTER (WHERE pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)),0)::float8 occupied,
+      GREATEST(0,sp.capacity-COALESCE(sum(pa.fte) FILTER (WHERE pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)),0))::float8 open
+    FROM staff_positions sp
+    JOIN positions p ON p.id=sp.job_profile_id
+    JOIN organization_units ou ON ou.id=sp.organization_unit_id
+    LEFT JOIN regions rg ON rg.id=sp.region_id
+    LEFT JOIN staff_positions manager_position ON manager_position.id=sp.reports_to_position_id
+    LEFT JOIN position_assignments pa ON pa.staff_position_id=sp.id
+    WHERE sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
+    GROUP BY sp.id,p.name,ou.name,rg.name,manager_position.name
+    ORDER BY sp.level,ou.sort_order,sp.name
+  `);return filterStaffPositions(actor,rows);
+}
+
+export async function listPositionAssignments(actor: Actor): Promise<PositionAssignmentRow[]> {
+  requireCapability(actor, "organization.read");
+  if (actor.demo) return demo.positionAssignments;
+  return withTenant(actor.organizationId, actor.userId, async (sql) => sql<PositionAssignmentRow[]>`
+    SELECT pa.id,pa.organization_id "organizationId",pa.staff_position_id "staffPositionId",pa.membership_id "membershipId",
+      u.display_name "employeeName",pa.assignment_type "assignmentType",pa.fte::float8 fte,pa.status,
+      pa.effective_from::text "effectiveFrom",pa.effective_to::text "effectiveTo"
+    FROM position_assignments pa
+    JOIN organization_memberships m ON m.id=pa.membership_id
+    JOIN app_users u ON u.id=m.user_id
+    ORDER BY pa.effective_from DESC,u.display_name
+  `);
+}
+
+export async function listResponsibilityRules(actor: Actor): Promise<ResponsibilityRuleRow[]> {
+  requireCapability(actor, "organization.read");
+  if (actor.demo) return demo.responsibilityRules;
+  return withTenant(actor.organizationId, actor.userId, async (sql) => sql<ResponsibilityRuleRow[]>`
+    SELECT rr.id,rr.process_name process,rr.step_name step,rr.responsibility_type "responsibilityType",rr.subject_type "subjectType",
+      CASE rr.subject_type
+        WHEN 'process_role' THEN (SELECT name FROM process_roles WHERE id=rr.subject_id)
+        WHEN 'staff_position' THEN (SELECT name FROM staff_positions WHERE id=rr.subject_id)
+        WHEN 'org_unit' THEN (SELECT name FROM organization_units WHERE id=rr.subject_id)
+        WHEN 'membership' THEN (SELECT u.display_name FROM organization_memberships m JOIN app_users u ON u.id=m.user_id WHERE m.id=rr.subject_id)
+      END "subjectName",
+      CASE rr.scope_type WHEN 'all_org' THEN 'Вся компания' WHEN 'org_unit' THEN 'Подразделение' WHEN 'region' THEN 'Регион' WHEN 'objects' THEN 'Назначенные объекты' WHEN 'clients' THEN 'Назначенные клиенты' ELSE 'Собственная зона' END "scopeLabel",
+      CASE rr.fallback_subject_type
+        WHEN 'process_role' THEN (SELECT name FROM process_roles WHERE id=rr.fallback_subject_id)
+        WHEN 'staff_position' THEN (SELECT name FROM staff_positions WHERE id=rr.fallback_subject_id)
+        WHEN 'org_unit' THEN (SELECT name FROM organization_units WHERE id=rr.fallback_subject_id)
+        WHEN 'membership' THEN (SELECT u.display_name FROM organization_memberships m JOIN app_users u ON u.id=m.user_id WHERE m.id=rr.fallback_subject_id)
+      END "fallbackName"
+    FROM responsibility_rules rr
+    WHERE rr.active AND rr.effective_from<=current_date AND (rr.effective_to IS NULL OR rr.effective_to>=current_date)
+    ORDER BY rr.process_name,rr.step_name,rr.responsibility_type
+  `);
+}
+
+export async function listOrganizationChangeSets(actor: Actor): Promise<OrganizationChangeSetRow[]> {
+  requireCapability(actor, "organization.read");
+  if (actor.demo) return demo.organizationChangeSets;
+  return withTenant(actor.organizationId, actor.userId, async (sql) => sql<OrganizationChangeSetRow[]>`
+    SELECT cs.id,cs.title,cs.status,cs.effective_date::text "effectiveDate",count(ci.id)::int "itemCount",u.display_name "createdBy"
+    FROM organization_change_sets cs
+    JOIN app_users u ON u.id=cs.created_by_user_id
+    LEFT JOIN organization_change_items ci ON ci.change_set_id=cs.id
+    GROUP BY cs.id,u.display_name
+    ORDER BY cs.effective_date DESC,cs.created_at DESC
+  `);
+}
+
+function organizationReadScopes(actor:Actor){return actor.access.scopes["organization.read"]??[]}
+function hasAllOrganizationScope(actor:Actor){return actor.access.capabilities.includes("*")||organizationReadScopes(actor).some(scope=>scope.type==="all_org")}
+function resolvedIds(actor:Actor,type:"org_unit"|"region"){
+  const ids=organizationReadScopes(actor).filter(scope=>scope.type===type).flatMap(scope=>scope.ids);
+  return new Set(ids.length?ids:type==="org_unit"?actor.orgUnitIds:actor.regionIds);
+}
+function filterEmployees(actor:Actor,rows:CompanyEmployeeRow[]){if(hasAllOrganizationScope(actor))return rows;const units=resolvedIds(actor,"org_unit"),regions=resolvedIds(actor,"region"),self=organizationReadScopes(actor).some(scope=>scope.type==="self");return rows.filter(row=>(self&&row.id===actor.membershipId)||(row.orgUnitId&&units.has(row.orgUnitId))||(row.regionId&&regions.has(row.regionId)))}
+function filterStaffPositions(actor:Actor,rows:StaffPositionRow[]){if(hasAllOrganizationScope(actor))return rows;const units=resolvedIds(actor,"org_unit"),regions=resolvedIds(actor,"region");return rows.filter(row=>units.has(row.orgUnitId)||(row.regionId&&regions.has(row.regionId)))}
+function filterUnits(actor:Actor,rows:OrganizationUnitRow[]){if(hasAllOrganizationScope(actor))return rows;const units=resolvedIds(actor,"org_unit"),regions=resolvedIds(actor,"region"),keep=new Set<string>();for(const row of rows)if(units.has(row.id)||(row.regionId&&regions.has(row.regionId)))keep.add(row.id);let changed=true;while(changed){changed=false;for(const row of rows)if(keep.has(row.id)&&row.parentId&&!keep.has(row.parentId)){keep.add(row.parentId);changed=true}}return rows.filter(row=>keep.has(row.id))}
