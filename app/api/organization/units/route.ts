@@ -4,7 +4,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
-const kind = z.enum(["company","department","region","branch","direction","team","project_group"]);
+const kind = z.enum(["company","department","region","branch","direction","team","project_group","object_team","other"]);
 const createSchema = z.object({ name:z.string().trim().min(2).max(160),code:z.string().trim().min(2).max(80).regex(/^[a-z0-9-]+$/),kind,parentId:z.string().uuid().nullable().optional(),regionId:z.string().uuid().nullable().optional(),description:z.string().trim().max(1000).optional(),managerMembershipId:z.string().uuid().nullable().optional() });
 const updateSchema = createSchema.partial().extend({ id:z.string().uuid(),active:z.boolean().optional(),sortOrder:z.number().int().min(0).max(10000).optional() });
 

@@ -1,4 +1,4 @@
-export type OrganizationUnitKind = "company" | "department" | "region" | "branch" | "direction" | "team" | "project_group";
+export type OrganizationUnitKind = "company" | "department" | "region" | "branch" | "direction" | "team" | "project_group" | "object_team" | "other";
 
 export type CompanyProfile = {
   id: string;
@@ -22,6 +22,9 @@ export type OrganizationUnitRow = {
   active: boolean;
   sortOrder: number;
   employeeCount: number;
+  staffPositionCount?: number;
+  vacancyCount?: number;
+  childCount?: number;
   managerMembershipId?: string | null;
   manager?: string | null;
 };
@@ -44,6 +47,10 @@ export type CompanyEmployeeRow = {
   manager: string | null;
   roles: Array<{ id: string; name: string; code: string }>;
   responsibilities: string[];
+  primaryStaffPositionId?: string | null;
+  primaryStaffPosition?: string | null;
+  additionalAssignments?: number;
+  objectCount?: number;
 };
 
 export type PositionRow = {
@@ -82,6 +89,17 @@ export type StaffPositionRow = {
   status: StaffPositionStatus;
   effectiveFrom: string;
   effectiveTo: string | null;
+  allowOverallocation?: boolean;
+};
+
+export type AccessSourceRow = {
+  capability: string;
+  label: string;
+  effect: "allow" | "deny";
+  scopeType: string | null;
+  scopeIds: string[];
+  sourceType: "role_template" | "job_profile" | "process_role" | "individual";
+  sourceName: string;
 };
 
 export type PositionAssignmentRow = {

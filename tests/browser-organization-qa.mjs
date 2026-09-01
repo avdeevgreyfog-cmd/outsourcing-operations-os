@@ -1,7 +1,17 @@
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
+import { spawn } from "node:child_process";
 
 const baseURL = process.env.BASE_URL ?? "http://127.0.0.1:3000";
+let server;
+if (process.env.START_SERVER === "1") {
+  server = spawn("./node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", "3000"], { stdio: "inherit", env: { ...process.env, DEMO_MODE: "true" } });
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try { const response = await fetch(baseURL); if (response.ok || response.status < 500) break; }
+    catch { await new Promise((resolve) => setTimeout(resolve, 250)); }
+  }
+  process.on("exit", () => server?.kill("SIGTERM"));
+}
 const output = "artifacts/screenshots";
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
@@ -22,23 +32,23 @@ async function check(path, name, assertion) {
 
 await check("/organization/structure", "organization-structure", async () => {
   await page.getByRole("heading", { name: "Оргструктура" }).waitFor();
-  await page.getByPlaceholder("Сотрудник, роль или подразделение").fill("Москва");
-  await page.getByRole("button", { name: "Сбросить масштаб" }).click();
-  await page.getByPlaceholder("Сотрудник, роль или подразделение").fill("");
-  await page.getByRole("tab", { name: "Позиции" }).click();
+  await page.getByPlaceholder("Подразделение, сотрудник или роль").fill("Москва");
+  await page.getByRole("button", { name: "Вместить в экран" }).click();
+  await page.getByPlaceholder("Подразделение, сотрудник или роль").fill("");
+  await page.getByRole("tab", { name: "Штатные позиции" }).click();
   await page.getByText("Менеджер объекта · Москва 1", { exact: true }).waitFor();
-  await page.getByRole("tab", { name: "Подразделения" }).click();
-  await page.locator(".org-person-card").first().click();
-  await page.getByRole("dialog").waitFor();
+  await page.getByRole("tab", { name: "Организационные единицы" }).click();
+  await page.locator(".org-node-main").first().click();
+  await page.locator(".org-detail-drawer").waitFor();
 });
-await page.getByRole("button", { name: "Закрыть" }).click();
+await page.getByRole("button", { name: "Закрыть панель" }).click();
 
 await check("/organization/staff", "organization-staff", async () => {
   await page.getByRole("heading", { name: "Сотрудники компании" }).waitFor();
-  await page.getByPlaceholder("Имя, должность, роль или ответственность").fill("операции");
+  await page.getByPlaceholder("ФИО, позиция, email или руководитель").fill("Анна");
   const row = page.locator(".employee-table tbody tr").first();
   await row.press("Enter");
-  await page.locator(".directory-detail").waitFor();
+  await page.locator(".employee-drawer").waitFor();
 });
 
 await check("/organization/positions", "organization-positions", async () => {
@@ -62,6 +72,13 @@ await page.locator(".topbar .icon-button").first().click();
 await page.waitForTimeout(150);
 await page.screenshot({ path: `${output}/organization-structure-1440-dark.png`, fullPage: true });
 
+for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+  await page.setViewportSize(viewport);
+  await page.goto(`${baseURL}/organization/structure`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Оргструктура" }).waitFor();
+  await page.screenshot({ path: `${output}/organization-structure-${viewport.width}-light.png`, fullPage: true });
+}
+
 const compact = await browser.newContext({ viewport: { width: 820, height: 900 }, colorScheme: "light" });
 const compactPage = await compact.newPage();
 await compactPage.goto(`${baseURL}/organization/staff`, { waitUntil: "networkidle" });
@@ -71,5 +88,6 @@ await compactPage.screenshot({ path: `${output}/organization-staff-820-light.png
 await compact.close();
 await context.close();
 await browser.close();
+server?.kill("SIGTERM");
 if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
 console.log("Organization Core browser QA passed: 4 routes, interactions, dark theme, compact viewport, no console errors.");

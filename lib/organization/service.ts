@@ -28,7 +28,10 @@ export async function listOrganizationUnits(actor: Actor): Promise<OrganizationU
     SELECT ou.id,ou.organization_id "organizationId",ou.parent_id "parentId",ou.region_id "regionId",rg.name region,
       ou.code,ou.name,ou.kind,ou.description,ou.active,ou.sort_order "sortOrder",
       ou.manager_membership_id "managerMembershipId",manager_user.display_name manager,
-      count(m.id)::int "employeeCount"
+      count(m.id)::int "employeeCount",
+      (SELECT count(*)::int FROM staff_positions sp WHERE sp.organization_unit_id=ou.id AND sp.status<>'closed' AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)) "staffPositionCount",
+      (SELECT COALESCE(sum(GREATEST(0,sp.capacity-COALESCE((SELECT sum(pa.fte) FROM position_assignments pa WHERE pa.staff_position_id=sp.id AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)),0))),0)::float8 FROM staff_positions sp WHERE sp.organization_unit_id=ou.id AND sp.status<>'closed' AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)) "vacancyCount",
+      (SELECT count(*)::int FROM organization_units child WHERE child.parent_id=ou.id AND child.active) "childCount"
     FROM organization_units ou
     LEFT JOIN regions rg ON rg.id=ou.region_id
     LEFT JOIN organization_memberships manager_membership ON manager_membership.id=ou.manager_membership_id
@@ -51,6 +54,13 @@ export async function listCompanyEmployees(actor: Actor): Promise<CompanyEmploye
         WHERE mr.membership_id=m.id AND mr.effective_from<=current_date AND (mr.effective_to IS NULL OR mr.effective_to>=current_date)),'[]'::jsonb) roles,
       COALESCE((SELECT array_agg(ra.resource_label ORDER BY ra.resource_label)
         FROM responsibility_assignments ra WHERE ra.membership_id=m.id AND (ra.effective_to IS NULL OR ra.effective_to>=current_date)),'{}'::text[]) responsibilities
+      ,(SELECT sp.id FROM position_assignments pa JOIN staff_positions sp ON sp.id=pa.staff_position_id
+        WHERE pa.membership_id=m.id AND pa.assignment_type='primary' AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+        ORDER BY pa.effective_from DESC LIMIT 1) "primaryStaffPositionId"
+      ,(SELECT sp.name FROM position_assignments pa JOIN staff_positions sp ON sp.id=pa.staff_position_id
+        WHERE pa.membership_id=m.id AND pa.assignment_type='primary' AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+        ORDER BY pa.effective_from DESC LIMIT 1) "primaryStaffPosition"
+      ,(SELECT count(*)::int FROM position_assignments pa WHERE pa.membership_id=m.id AND pa.assignment_type<>'primary' AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)) "additionalAssignments"
     FROM organization_memberships m
     JOIN app_users u ON u.id=m.user_id
     LEFT JOIN positions p ON p.id=m.position_id
@@ -117,7 +127,7 @@ export async function listPositionAssignments(actor: Actor): Promise<PositionAss
   return withTenant(actor.organizationId, actor.userId, async (sql) => sql<PositionAssignmentRow[]>`
     SELECT pa.id,pa.organization_id "organizationId",pa.staff_position_id "staffPositionId",pa.membership_id "membershipId",
       u.display_name "employeeName",pa.assignment_type "assignmentType",pa.fte::float8 fte,pa.status,
-      pa.effective_from::text "effectiveFrom",pa.effective_to::text "effectiveTo"
+      pa.effective_from::text "effectiveFrom",pa.effective_to::text "effectiveTo",pa.allow_overallocation "allowOverallocation"
     FROM position_assignments pa
     JOIN organization_memberships m ON m.id=pa.membership_id
     JOIN app_users u ON u.id=m.user_id

@@ -59,11 +59,14 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
     if (row.effect === "deny") {
       denies.add(row.capability);
       capabilities.delete(row.capability);
+      delete scopes[row.capability];
       continue;
     }
     denies.delete(row.capability);
     capabilities.add(row.capability);
-    if (row.scope_type) (scopes[row.capability] ??= []).push({ type: row.scope_type, ids: row.scope_ids });
+    // An individual allow is an exception, not another inherited grant. Its
+    // scope therefore replaces inherited scopes for this capability.
+    scopes[row.capability] = row.scope_type ? [{ type: row.scope_type, ids: row.scope_ids }] : [];
   }
 
   return {

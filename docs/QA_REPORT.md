@@ -36,3 +36,12 @@ The complete suite was not completed in this runtime. The cloud browser blocks l
 ## Release gate
 
 Production release is blocked until PostgreSQL migration/RLS tests and browser QA pass in CI or deployment. The current result is a build-passing Phase 2 implementation, not a production-ready release.
+
+## Organization Core verification — 2026-09-01
+
+- 22 domain/access/navigation tests passed.
+- TypeScript, ESLint and the optimized Next.js production build passed.
+- Organization browser harness passed all four canonical routes with search, tree modes, zoom/fit, contextual drawers, position vacancy view, responsibility matrix, dark theme and console-error capture.
+- Rendered output was captured and visually inspected at 1366×768, 1440×900 and 1920×1080; the dense desktop layout keeps controlled horizontal scrolling at the narrow breakpoint.
+- The anti-template scanner found no deterministic generic-design signals.
+- Migration `0007_organization_production.sql` adds tenant-reference and assignment-capacity invariants, but was not applied to a live PostgreSQL instance in this workspace because no database credential is available here. The public Vercel URL runs demo data and does not exercise production persistence.

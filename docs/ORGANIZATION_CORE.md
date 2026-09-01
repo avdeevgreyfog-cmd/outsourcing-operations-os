@@ -50,3 +50,18 @@ The module does not replace users, sessions, outsourced workers, teams, regions 
 - Organization hierarchy, position hierarchy, direct manager and responsibility routing are separate relations.
 - Significant future changes are staged as a change set; records are archived or ended, not hard-deleted.
 - Individual access exceptions must have a reason and may have effective dates and an approver.
+
+## Production hardening (migration 0007)
+
+- Cross-tenant references for staff positions, assignments and process roles are rejected in PostgreSQL in addition to RLS.
+- Active assignment intervals are validated under a row lock: one primary assignment cannot overlap another, staff-position capacity cannot be exceeded, and total employee allocation cannot exceed `1 FTE` unless `allow_overallocation` is explicitly stored.
+- Ending an assignment records the business reason, author and timestamp; audit triggers retain the before/after payload.
+- `resolve_organization_responsibility(...)` is the stable database resolver entry point for workflow and task modules.
+- Organization-unit taxonomy includes object teams and a neutral extension type without hard-coding one outsourcing model.
+
+## Mutation API
+
+- `POST/PATCH /api/organization/assignments` creates dated primary/additional/acting assignments and releases positions.
+- `POST/PATCH /api/organization/change-sets` creates packages and enforces lifecycle transitions. Applying supported unit changes is executed inside one tenant transaction and is idempotent at the lifecycle level.
+- `GET /api/organization/employees/:id/access` explains capability source, effect and scope.
+- `GET /api/organization/history` exposes the unified audited history for an allow-listed Organization Core entity type.
