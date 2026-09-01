@@ -67,3 +67,12 @@ The module does not replace users, sessions, outsourced workers, teams, regions 
 - `GET /api/organization/history` exposes the unified audited history for an allow-listed Organization Core entity type.
 
 Migration `0008_organization_tenant_integrity.sql` closes cross-tenant reference gaps across units, positions, grants, roles, change items and responsibility rules. It also resolves factual executors from process roles, staff positions, unit leads or explicit fallbacks. The `postgres-integration` CI job applies the full migration chain to PostgreSQL 17 and exercises these invariants under a non-superuser RLS role.
+
+## Visual direction
+
+- **Thesis:** the structure page is an operational map, not a decorative HR chart; hierarchy, vacancies and responsibility must be readable at a glance.
+- **Signature:** a pannable dotted canvas with typed compact nodes, explicit connectors, highlighted selection path and a persistent context drawer.
+- **Palette and surfaces:** existing OPERIS neutrals and orange accent; solid panels, thin structural lines, role-based borders and restrained overlay elevation.
+- **Typography and density:** existing Cyrillic UI type system, compact enterprise labels and tabular metrics; no marketing-sized text or decorative KPI cards.
+- **Layout:** toolbar above a horizontally and vertically scrollable hierarchy; employees appear only in the selected/search branch, while the staff mode follows unit → job profile → staff position → assignment/vacancy.
+- **Motion:** only zoom, focus scrolling and direct hover/selection feedback; reduced-motion disables spatial transitions.

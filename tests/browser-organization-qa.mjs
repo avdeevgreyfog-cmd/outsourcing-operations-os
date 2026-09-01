@@ -33,12 +33,13 @@ async function check(path, name, assertion) {
 await check("/organization/structure", "organization-structure", async () => {
   await page.getByRole("heading", { name: "Оргструктура" }).waitFor();
   await page.getByPlaceholder("Подразделение, сотрудник или роль").fill("Москва");
-  await page.getByRole("button", { name: "Вместить в экран" }).click();
+  await page.getByRole("button", { name: "Вместить структуру в экран" }).click();
   await page.getByPlaceholder("Подразделение, сотрудник или роль").fill("");
-  await page.getByRole("tab", { name: "Штатные позиции" }).click();
-  await page.getByText("Менеджер объекта · Москва 1", { exact: true }).waitFor();
-  await page.getByRole("tab", { name: "Организационные единицы" }).click();
-  await page.locator(".org-node-main").first().click();
+  await page.getByRole("tab", { name: "Штат и назначения" }).click();
+  await page.locator(".org-position-card").first().waitFor();
+  await page.screenshot({ path: `${output}/organization-structure-positions-1440-light.png`, fullPage: true });
+  await page.getByRole("tab", { name: "Подразделения" }).click();
+  await page.locator(".org-node-title").first().click();
   await page.locator(".org-detail-drawer").waitFor();
 });
 await page.getByRole("button", { name: "Закрыть панель" }).click();
