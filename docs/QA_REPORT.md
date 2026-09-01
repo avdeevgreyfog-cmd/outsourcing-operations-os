@@ -24,14 +24,12 @@
 
 The complete suite was not completed in this runtime. The cloud browser blocks loopback URLs, while the local tool environment stopped the combined dev-server/headless-browser operation partway through. Four real 1440×900 light screenshots were created and visually reviewed: command center, object needs, recruiting drawer and worker profile. Scheduler, timesheet, calculator, permissions, Gantt, 1920 and dark-theme captures remain unverified.
 
-## Not executed
+## Outside the current automated scope
 
-- migrations `0001–0004` against a real PostgreSQL instance;
-- RLS cross-tenant integration tests;
-- accepted-scenario and worker-rate triggers against PostgreSQL;
-- complete browser visual regression set (partial 1440 light review only);
+- migration against the actual production database and its rollback/runbook;
+- accepted-scenario and worker-rate trigger assertions beyond Organization Core;
 - file storage/document upload security;
-- deployment preview.
+- authenticated browser QA against a persistent production tenant.
 
 ## Release gate
 
@@ -45,3 +43,4 @@ GitHub CI now provisions PostgreSQL 17, applies every migration and the demo see
 - Rendered output was captured and visually inspected at 1366×768, 1440×900 and 1920×1080; the dense desktop layout keeps controlled horizontal scrolling at the narrow breakpoint.
 - The anti-template scanner found no deterministic generic-design signals.
 - Migration `0007_organization_production.sql` adds tenant-reference and assignment-capacity invariants, but was not applied to a live PostgreSQL instance in this workspace because no database credential is available here. The public Vercel URL runs demo data and does not exercise production persistence.
+- Migrations `0001–0008`, the demo seed, Organization Core RLS, cross-tenant rejection, assignment constraints, audit and responsibility fallback resolution passed against the PostgreSQL 17 CI service.
