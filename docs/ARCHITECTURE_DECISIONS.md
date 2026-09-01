@@ -25,7 +25,7 @@ Rejected from legacy implementation:
 
 There is one product shell. Effective access is computed from:
 
-`role template grants + individual allow/deny overrides + capability-specific data scope + field-sensitive permissions`.
+`legacy role template grants + position grants + process role grants + individual allow/deny overrides + capability-specific data scope + field-sensitive permissions`.
 
 Explicit deny wins. Scope is evaluated per capability; an `all_org` scope on one capability never widens another capability. This invariant has a regression test.
 
@@ -94,3 +94,9 @@ The UI follows the handoff V6 implementation contract rather than the legacy don
 - compact Kanban cards opening a detail drawer;
 - resource scheduler semantics;
 - full chart axes/tooltips/legend through Apache ECharts.
+
+## 10. Organization Core
+
+Organization Core extends the existing tenant, membership and capability model instead of introducing a second user system. `organization_units` form a mutable hierarchy whose node type can be company, department, region, branch, direction, team or project group. Positions are reusable job templates; process roles are independent functional assignments. Memberships connect a person to a primary position and one or more organizational units and process roles.
+
+The existing `teams`, `regions` and `role_templates` remain operationally compatible. New authorization is additive and can be adopted gradually. Other modules consume stable membership, unit, position, role and capability identifiers rather than hard-coded department names.

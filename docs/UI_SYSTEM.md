@@ -18,6 +18,10 @@ Level 1 and Level 2 are collapsible. Level 2 remains visible inside an expanded 
 
 An available route must appear only once in global navigation. Cross-cutting access from another context belongs in entity links, command search or a summary, not in a second equal sidebar destination.
 
+## Organization Core
+
+Organization Core uses two complementary working modes inside the existing shell: a compact hierarchical chart for understanding reporting structure and an employee directory for finding responsibility and contacts. The chart favors branch density, explicit connectors, collapse controls and a bounded zoom range; it does not introduce a separate diagramming visual language. Catalogs for positions, roles and units reuse the existing panels, controls, tables and status treatments.
+
 ## Data grid
 
 Current foundation supports sticky headings and identity column, search, sorting, selection, show/hide columns and row navigation. Column resize/reorder, saved views, grouping and virtualization remain Phase 3.

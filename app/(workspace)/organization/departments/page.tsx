@@ -1,0 +1,13 @@
+import { requireActor } from "@/lib/auth/server";
+import { getCompanyProfile, listCompanyEmployees, listOrganizationUnits } from "@/lib/organization/service";
+import { PageHeader, Section, Status, SummaryStrip } from "@/components/UI";
+import { OrganizationTabs } from "@/components/OrganizationTabs";
+import { OrganizationCreatePanel } from "@/components/OrganizationCreatePanel";
+import { OrganizationTemplatePanel } from "@/components/OrganizationTemplatePanel";
+import { organizationUnitLabels } from "@/lib/core/organization.mjs";
+import { hasCapability } from "@/lib/core/access.mjs";
+
+export default async function DepartmentsPage(){
+  const actor=await requireActor();const [company,units,employees]=await Promise.all([getCompanyProfile(actor),listOrganizationUnits(actor),listCompanyEmployees(actor)]);const canManage=hasCapability(actor.access,"organization.unit.manage");
+  return <><PageHeader eyebrow="Организация" title="Подразделения и регионы" subtitle="Изменяемая структура компании без фиксированного набора отделов." breadcrumbs={[{label:"Организация"},{label:"Структура"},{label:"Подразделения и регионы"}]} actions={<OrganizationCreatePanel kind="unit" canManage={canManage} demo={actor.demo} units={units} employees={employees}/>}/><OrganizationTabs active="/organization/departments"/><SummaryStrip><span>Компания <strong>{company.name}</strong></span><span>Юридические лица <strong>{company.legalEntities.length}</strong></span><span>Регионы <strong>{company.regions.length}</strong></span><span>Направления <strong>{company.directions.length}</strong></span></SummaryStrip><Section title="Структурные единицы" note="Родительская единица задаёт иерархию; регион определяет область данных и ответственности" flush><div className="grid-scroll"><table className="data-table"><thead><tr><th>Подразделение</th><th>Тип</th><th>Родитель</th><th>Регион</th><th>Руководитель</th><th>Сотрудники</th><th>Статус</th></tr></thead><tbody>{units.map(item=><tr key={item.id}><td><span className="cell-title">{item.name}</span><span className="cell-sub">{item.code}</span></td><td>{organizationUnitLabels[item.kind]??item.kind}</td><td>{units.find(parent=>parent.id===item.parentId)?.name??"—"}</td><td>{item.region??"—"}</td><td>{item.manager??"Не назначен"}</td><td className="num">{item.employeeCount}</td><td><Status tone={item.active?"good":"warn"}>{item.active?"active":"suspended"}</Status></td></tr>)}</tbody></table></div></Section><Section title="Шаблоны структуры" note="Шаблон добавляет только недостающие подразделения и не удаляет текущую структуру"><OrganizationTemplatePanel canManage={canManage}/></Section></>;
+}

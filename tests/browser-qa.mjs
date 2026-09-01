@@ -39,7 +39,7 @@ await check("/workers/88000000-0000-4000-8000-000000000001", "worker-profile", a
   await page.getByRole("navigation", { name: "Разделы карточки" }).waitFor();
 });
 await check("/shifts", "scheduler", async () => {
-  await page.getByRole("button", { name: "День" }).click();
+  await page.getByRole("button", { name: "День", exact: true }).click();
   await page.locator(".cell-link").first().click();
   await page.locator(".drawer").waitFor();
 });
@@ -61,6 +61,30 @@ await check("/launches", "gantt", async () => {
   await page.locator(".gantt-task-name").nth(1).click();
   await page.locator(".drawer").waitFor();
 });
+await page.keyboard.press("Escape");
+await check("/organization/structure", "organization-structure", async () => {
+  await page.getByRole("heading", { name: "Оргструктура" }).waitFor();
+  await page.getByPlaceholder("Сотрудник, роль или подразделение").fill("Москва");
+  await page.getByRole("button", { name: "Сбросить масштаб" }).click();
+  await page.getByPlaceholder("Сотрудник, роль или подразделение").fill("");
+  await page.locator(".org-person-card").first().click();
+  await page.getByRole("dialog").waitFor();
+});
+await page.getByRole("button", { name: "Закрыть" }).click();
+await check("/organization/staff", "organization-staff", async () => {
+  await page.getByRole("heading", { name: "Сотрудники компании" }).waitFor();
+  await page.getByPlaceholder("Имя, должность, роль или ответственность").fill("операции");
+  await page.locator(".employee-table tbody tr").first().press("Enter");
+  await page.locator(".directory-detail").waitFor();
+});
+await check("/organization/positions", "organization-positions", async () => {
+  await page.getByRole("heading", { name: "Должности и роли" }).waitFor();
+  await page.getByText("Наследование", { exact: true }).waitFor();
+});
+await check("/organization/departments", "organization-departments", async () => {
+  await page.getByRole("heading", { name: "Подразделения и регионы" }).waitFor();
+  await page.getByRole("heading", { name: "Шаблоны структуры" }).waitFor();
+});
 
 await page.goto(`${baseURL}/objects/80000000-0000-4000-8000-000000000001`, { waitUntil: "networkidle" });
 await page.locator(".topbar .icon-button").first().click();
@@ -75,4 +99,4 @@ await wide.close();
 await context.close();
 await browser.close();
 if (errors.length) throw new Error(`Browser errors:\n${errors.join("\n")}`);
-console.log("Browser QA passed: 9 light routes, interactive controls, representative dark theme, 1920 comparison view.");
+console.log("Browser QA passed: 13 light routes, Organization Core interactions, representative dark theme, 1920 comparison view.");

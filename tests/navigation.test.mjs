@@ -26,6 +26,19 @@ test("navigation keeps each available route in one canonical place", () => {
   assert.equal(hrefs.filter((href) => href === "/tasks").length, 1);
 });
 
+test("organization core routes are active and capability protected", () => {
+  const permitted = visibleItems(filterNavigation(navigationManifest, access(["organization.read"])));
+  const organizationRoutes = permitted.filter((item) => item.href.startsWith("/organization/"));
+  assert.deepEqual(organizationRoutes.map((item) => item.href), [
+    "/organization/structure",
+    "/organization/staff",
+    "/organization/positions",
+    "/organization/departments",
+  ]);
+  assert.equal(organizationRoutes.every((item) => item.status !== "foundation"), true);
+  assert.equal(visibleItems(filterNavigation(navigationManifest, access([]))).some((item) => item.href === "/organization/structure"), false);
+});
+
 test("capabilities remove unavailable items and their empty groups", () => {
   const result = filterNavigation(navigationManifest, access(["task.read"]));
   assert.deepEqual(result.map((section) => section.id), ["home"]);

@@ -31,12 +31,15 @@ export async function getCurrentActor(): Promise<Actor | null> {
     const [row] = await tx<{
       membership_id: string; user_id: string; organization_id: string; display_name: string; email: string;
       role_template_id: string; role_code: string; role_name: string; primary_team_id: string | null;
+      position_id: string | null; position_name: string | null; primary_org_unit_id: string | null;
     }[]>`
       SELECT m.id membership_id, u.id user_id, m.organization_id, u.display_name, u.email,
-             r.id role_template_id, r.code role_code, r.name role_name, m.primary_team_id
+             r.id role_template_id, r.code role_code, r.name role_name, m.primary_team_id,
+             m.position_id,p.name position_name,m.primary_org_unit_id
       FROM organization_memberships m
       JOIN app_users u ON u.id=m.user_id
       JOIN role_templates r ON r.id=m.role_template_id
+      LEFT JOIN positions p ON p.id=m.position_id
       WHERE m.user_id=${session.user_id}::uuid AND m.organization_id=${session.organization_id}::uuid AND m.status='active'
       LIMIT 1
     `;
@@ -45,11 +48,12 @@ export async function getCurrentActor(): Promise<Actor | null> {
     const regions = await tx<{ region_id: string }[]>`SELECT region_id FROM membership_regions WHERE membership_id=${row.membership_id}::uuid`;
     const teamIds = [...new Set([row.primary_team_id, ...teams.map((x) => x.team_id)].filter(Boolean) as string[])];
     const regionIds = regions.map((x) => x.region_id);
-    const access = await loadEffectiveAccess(tx, row.membership_id, row.role_template_id, regionIds);
+    const orgUnitIds = row.primary_org_unit_id ? [row.primary_org_unit_id] : [];
+    const access = await loadEffectiveAccess(tx, row.membership_id, row.role_template_id, row.position_id, regionIds, orgUnitIds);
     return {
       userId: row.user_id, organizationId: row.organization_id, membershipId: row.membership_id,
       displayName: row.display_name, email: row.email, roleCode: row.role_code, roleName: row.role_name,
-      teamIds, regionIds, access, demo: false,
+      positionId: row.position_id, positionName: row.position_name, teamIds, orgUnitIds, regionIds, access, demo: false,
     } satisfies Actor;
   });
 }

@@ -3,6 +3,7 @@ import { requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 import { canReadRow } from "@/lib/core/access.mjs";
 import * as demo from "@/lib/demo/data";
+import * as demoOrg from "@/lib/demo/organization";
 
 type ScopedRow = {
   id?: string; organizationId: string; createdByUserId?: string; ownerUserId?: string; assigneeUserIds?: string[];
@@ -22,7 +23,7 @@ export type ReconciliationIssue = { id?:string; difference:number|string; worker
 export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; clientHours:number; internalHours:number; discrepancy:number; status:string; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null };
 export type FinanceRow = ScopedRow & { id:string; objectId:string; object:string; revenue:number|string; workerCost:number|string; expenses:number|string; contribution:number|string; marginPct:number|string; planMarginPct?:number|string|null };
 export type TaskRow = ScopedRow & { id:string; title:string; status:string; priority:string; due?:string|null; entity?:string|null };
-export type AccessUserRow = { id:string; membershipId:string; name:string; email:string|null; role:string; roleCode:string; teams:number; regions:number; scopes:string[]; capabilities:number };
+export type AccessUserRow = { id:string; membershipId:string; name:string; email:string|null; role:string; roleCode:string; processRoles:string[]; teams:number; regions:number; scopes:string[]; capabilities:number };
 export type AuditRow = { id:string; createdAt:string; actor:string; action:string; record:string; summary?:string|null };
 export type ProposalRow = ScopedRow & { id:string; requestId:string; request:string; client:string; version:number; status:string; scenarioCount:number; totalValue:number|string; createdAt:string; createdBy:string };
 export type RateReferenceRow = ScopedRow & { id:string; specialty:string; region:string; employmentModel:string; amountMin:number|string; amountMax:number|string; unit:string; grossNet:string; source:string; sourceDate:string; confidence:string; comment?:string|null };
@@ -265,16 +266,26 @@ export async function listAccessUsers(actor: Actor): Promise<AccessUserRow[]> {
     return demoActors().map((u) => {
       const a = getDemoActor(u.code);
       const scopeSet = [...new Set(Object.values(a.access.scopes).flat().map((s) => s.type))];
-      return { id:a.userId, membershipId:`demo-${a.userId}`, name:a.displayName, email:a.email, role:a.roleName, roleCode:a.roleCode, teams:a.teamIds.length, regions:a.regionIds.length, scopes:scopeSet, capabilities:a.access.capabilities.length };
+      const employee=demoOrg.companyEmployees.find(item=>item.userId===a.userId);
+      return { id:a.userId, membershipId:`demo-${a.userId}`, name:a.displayName, email:a.email, role:a.positionName??a.roleName, roleCode:a.roleCode, processRoles:employee?.roles.map(item=>item.name)??[], teams:a.teamIds.length, regions:a.regionIds.length, scopes:scopeSet, capabilities:a.access.capabilities.length };
     });
   }
   return withTenant(actor.organizationId,actor.userId,async(sql)=>sql<AccessUserRow[]>`
-    SELECT u.id,m.id "membershipId",u.display_name name,u.email,r.name role,r.code "roleCode",
+    SELECT u.id,m.id "membershipId",u.display_name name,u.email,COALESCE(p.name,r.name) role,r.code "roleCode",
+      ARRAY(SELECT pr.name FROM membership_process_roles mpr JOIN process_roles pr ON pr.id=mpr.process_role_id WHERE mpr.membership_id=m.id AND (mpr.effective_to IS NULL OR mpr.effective_to>=current_date) ORDER BY pr.name) "processRoles",
       (SELECT count(*)::int FROM membership_teams mt WHERE mt.membership_id=m.id) teams,
       (SELECT count(*)::int FROM membership_regions mr WHERE mr.membership_id=m.id) regions,
-      (SELECT count(*)::int FROM permission_grants pg WHERE pg.role_template_id=m.role_template_id AND pg.effect='allow') capabilities,
-      ARRAY(SELECT DISTINCT pg.scope_type FROM permission_grants pg WHERE pg.role_template_id=m.role_template_id AND pg.effect='allow') scopes
-    FROM organization_memberships m JOIN app_users u ON u.id=m.user_id JOIN role_templates r ON r.id=m.role_template_id
+      (SELECT count(DISTINCT x.capability)::int FROM (
+        SELECT capability FROM permission_grants WHERE role_template_id=m.role_template_id AND effect='allow'
+        UNION ALL SELECT capability FROM position_permission_grants WHERE position_id=m.position_id AND effect='allow'
+        UNION ALL SELECT g.capability FROM membership_process_roles mr JOIN process_role_permission_grants g ON g.process_role_id=mr.process_role_id WHERE mr.membership_id=m.id AND g.effect='allow'
+      ) x) capabilities,
+      ARRAY(SELECT DISTINCT x.scope_type FROM (
+        SELECT scope_type FROM permission_grants WHERE role_template_id=m.role_template_id AND effect='allow'
+        UNION ALL SELECT scope_type FROM position_permission_grants WHERE position_id=m.position_id AND effect='allow'
+        UNION ALL SELECT g.scope_type FROM membership_process_roles mr JOIN process_role_permission_grants g ON g.process_role_id=mr.process_role_id WHERE mr.membership_id=m.id AND g.effect='allow'
+      ) x) scopes
+    FROM organization_memberships m JOIN app_users u ON u.id=m.user_id JOIN role_templates r ON r.id=m.role_template_id LEFT JOIN positions p ON p.id=m.position_id
     WHERE m.organization_id=${actor.organizationId}::uuid ORDER BY u.display_name
   `);
 }

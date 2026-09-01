@@ -27,4 +27,10 @@ export const capabilities = {
   analyticsRead: "analytics.portfolio.read",
   permissionsManage: "admin.permissions.manage",
   auditRead: "audit.read",
+  organizationRead: "organization.read",
+  organizationManage: "organization.manage",
+  organizationUnitManage: "organization.unit.manage",
+  organizationPositionManage: "organization.position.manage",
+  organizationEmployeeManage: "organization.employee.manage",
+  organizationAccessManage: "organization.access.manage",
 } as const;

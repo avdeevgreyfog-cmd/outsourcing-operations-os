@@ -1,7 +1,7 @@
 import type { Sql } from "postgres";
 import type { Actor, EffectiveAccess, ScopeGrant } from "@/lib/access/types";
 
-export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTemplateId: string, membershipRegionIds: string[]): Promise<EffectiveAccess> {
+export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTemplateId: string, positionId: string | null, membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
   const grants = await sql<{
     capability: string;
     effect: "allow" | "deny";
@@ -9,8 +9,18 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
     scope_ids: string[];
   }[]>`
     SELECT capability, effect, scope_type, scope_ids
-    FROM permission_grants
+    SELECT capability, effect, scope_type, scope_ids FROM permission_grants
     WHERE role_template_id=${roleTemplateId}::uuid
+    UNION ALL
+    SELECT capability, effect, scope_type, scope_ids FROM position_permission_grants
+    WHERE position_id=${positionId}::uuid
+    UNION ALL
+    SELECT g.capability,g.effect,g.scope_type,g.scope_ids
+    FROM membership_process_roles mr
+    JOIN process_role_permission_grants g ON g.process_role_id=mr.process_role_id
+    WHERE mr.membership_id=${membershipId}::uuid
+      AND mr.effective_from <= current_date
+      AND (mr.effective_to IS NULL OR mr.effective_to >= current_date)
   `;
 
   const overrides = await sql<{
@@ -36,7 +46,11 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
       continue;
     }
     capabilities.add(row.capability);
-    const ids = row.scope_type === "region" && row.scope_ids.length === 0 ? membershipRegionIds : row.scope_ids;
+    const ids = row.scope_type === "region" && row.scope_ids.length === 0
+      ? membershipRegionIds
+      : row.scope_type === "org_unit" && row.scope_ids.length === 0
+        ? membershipOrgUnitIds
+        : row.scope_ids;
     (scopes[row.capability] ??= []).push({ type: row.scope_type, ids });
   }
 
