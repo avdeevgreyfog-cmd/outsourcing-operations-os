@@ -32,6 +32,11 @@ async function check(path, name, assertion) {
 
 await check("/organization/structure", "organization-structure", async () => {
   await page.getByRole("heading", { name: "Оргструктура" }).waitFor();
+  const layoutToggle = page.getByRole("button", { name: "Компактно" });
+  if (await layoutToggle.getAttribute("aria-pressed") !== "true") throw new Error("Compact org layout is not active by default");
+  await layoutToggle.click();
+  if (!page.url().includes("layout=wide")) throw new Error("Org layout state was not persisted in URL");
+  await page.getByRole("button", { name: "Широко" }).click();
   await page.getByPlaceholder("Подразделение, сотрудник или роль").fill("Москва");
   await page.getByRole("button", { name: "Вместить структуру в экран" }).click();
   await page.getByPlaceholder("Подразделение, сотрудник или роль").fill("");

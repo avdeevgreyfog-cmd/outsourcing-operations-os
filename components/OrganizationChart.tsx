@@ -26,6 +26,7 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
   const [kind, setKind] = useState("all");
   const [region, setRegion] = useState(() => typeof window === "undefined" ? "all" : new URL(window.location.href).searchParams.get("region") ?? "all");
   const [issuesOnly, setIssuesOnly] = useState(false);
+  const [layout, setLayout] = useState<"compact" | "wide">(() => typeof window !== "undefined" && new URL(window.location.href).searchParams.get("layout") === "wide" ? "wide" : "compact");
   const [zoom, setZoom] = useState(1);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [selection, setSelection] = useState<Selection | null>(() => {
@@ -42,9 +43,10 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
     const url = new URL(window.location.href); url.searchParams.set("mode", view);
     if (query) url.searchParams.set("q", query); else url.searchParams.delete("q");
     if (region !== "all") url.searchParams.set("region", region); else url.searchParams.delete("region");
+    if (layout === "wide") url.searchParams.set("layout", "wide"); else url.searchParams.delete("layout");
     if (selection) { url.searchParams.set("selected", selection.id); url.searchParams.set("selectedType", selection.type); } else { url.searchParams.delete("selected"); url.searchParams.delete("selectedType"); }
     window.history.replaceState(null, "", url);
-  }, [view, query, region, selection]);
+  }, [view, query, region, layout, selection]);
 
   const employeeMatches = (employee: CompanyEmployeeRow) => !normalized || [employee.name, employee.position, employee.primaryStaffPosition, employee.orgUnit, ...employee.roles.map((role) => role.name), ...employee.responsibilities].join(" ").toLowerCase().includes(normalized);
   const unitHasIssue = (unit: OrganizationUnitRow) => unit.kind !== "company" && (!unit.managerMembershipId || Number(unit.vacancyCount ?? 0) > 0);
@@ -63,6 +65,7 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
     setSelection(next); setDetailTab("overview");
     const unitId = next.type === "unit" ? next.id : next.type === "employee" ? employees.find((item) => item.id === next.id)?.orgUnitId : staffPositions.find((item) => item.id === next.id)?.orgUnitId;
     if (unitId) { const ancestors = new Set<string>(); let current = units.find((item) => item.id === unitId); while (current) { ancestors.add(current.id); current = units.find((item) => item.id === current?.parentId); } setCollapsed((value) => new Set([...value].filter((id) => !ancestors.has(id)))); }
+    requestAnimationFrame(() => requestAnimationFrame(() => document.querySelector(`[data-node-id="${next.id}"]`)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" })));
   }
   function toggle(id: string) { setCollapsed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }); }
   function fitToScreen() {
@@ -82,16 +85,16 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
 
   function renderUnit(unit: TreeUnit): React.ReactNode {
     if (!unitVisible(unit)) return null;
-    const members = employees.filter((item) => item.orgUnitId === unit.id && employeeMatches(item)); const unitPositions = staffPositions.filter((item) => item.orgUnitId === unit.id); const vacancy = unitPositions.reduce((sum, item) => sum + item.open, 0); const closed = collapsed.has(unit.id); const selected = selection?.type === "unit" && selection.id === unit.id; const showEmployees = selected || (selection?.type === "employee" && members.some((item) => item.id === selection.id)) || Boolean(normalized);
+    const members = employees.filter((item) => item.orgUnitId === unit.id && employeeMatches(item)); const unitPositions = staffPositions.filter((item) => item.orgUnitId === unit.id); const vacancy = unitPositions.reduce((sum, item) => sum + item.open, 0); const closed = collapsed.has(unit.id); const selected = selection?.type === "unit" && selection.id === unit.id; const showEmployees = selected || (selection?.type === "employee" && members.some((item) => item.id === selection.id)) || Boolean(normalized); const visibleChildren = unit.children.filter(unitVisible); const compactChildren = layout === "compact" && visibleChildren.length > 4;
     return <li key={unit.id} className={`org-tree-node ${selectedPath.has(unit.id) ? "on-path" : ""}`}>
       <article className={`org-unit-card kind-${unit.kind} ${selected ? "selected" : ""} ${selectedPath.has(unit.id) && !selected ? "path-card" : ""}`} data-node-id={unit.id}>
         <div className="org-node-heading"><span className="org-node-symbol"><UnitIcon kind={unit.kind} /></span><div><span className="org-node-type">{organizationUnitLabels[unit.kind] ?? unit.kind}</span><button type="button" className="org-node-title" onClick={() => select({ type: "unit", id: unit.id })}>{unit.name}</button></div>{unitHasIssue(unit) && <AlertTriangle className="org-node-issue" size={14} aria-label="Есть структурная проблема" />}</div>
-        <button type="button" className="org-node-manager" onClick={() => select({ type: "unit", id: unit.id })}><CircleUserRound size={13} /><span>{unit.manager ?? "Руководитель не назначен"}</span></button>
-        <footer><span><strong>{unit.employeeCount}</strong> сотрудников</span><span><strong>{unitPositions.length}</strong> позиций</span><span className={vacancy ? "warn" : ""}><strong>{vacancy}</strong> вакансий</span></footer>
+        <button type="button" className="org-node-manager" onClick={() => select({ type: "unit", id: unit.id })}>{unit.manager ? <span className="org-manager-avatar" aria-hidden="true">{initials(unit.manager)}</span> : <CircleUserRound size={18} />}<span><small>Руководитель</small>{unit.manager ?? "Не назначен"}</span></button>
+        <footer><span><strong>{unit.employeeCount}</strong> человек</span><span><strong>{unitPositions.length}</strong> в штате</span><span className={vacancy ? "warn" : ""}><strong>{vacancy}</strong> вакантно</span></footer>
         {(unit.children.length > 0 || members.length > 0) && <button type="button" className="org-branch-toggle" onClick={() => toggle(unit.id)} aria-label={`${closed ? "Развернуть" : "Свернуть"} ${unit.name}`} aria-expanded={!closed}>{closed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}{closed && <span>{unit.children.length + members.length}</span>}</button>}
       </article>
       {!closed && showEmployees && members.length > 0 && <div className="org-unit-employees">{members.map((employee) => <button type="button" data-node-id={employee.id} className={`org-person-card ${selection?.type === "employee" && selection.id === employee.id ? "selected" : ""}`} key={employee.id} onClick={() => select({ type: "employee", id: employee.id })}><span className="avatar">{initials(employee.name)}</span><span><strong>{employee.name}</strong><small>{employee.primaryStaffPosition ?? employee.position ?? "Позиция не назначена"}</small></span>{(employee.additionalAssignments ?? employee.roles.length) > 0 && <i title="Дополнительные назначения и роли">{(employee.additionalAssignments ?? 0) + employee.roles.length}</i>}</button>)}</div>}
-      {!closed && unit.children.some(unitVisible) && <ul>{unit.children.map(renderUnit)}</ul>}
+      {!closed && visibleChildren.length > 0 && <ul className={compactChildren ? "org-compact-children" : ""} data-children={visibleChildren.length}>{visibleChildren.map(renderUnit)}</ul>}
     </li>;
   }
 
@@ -104,6 +107,7 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
       <select value={kind} onChange={(event) => setKind(event.target.value)} aria-label="Тип узла" disabled={view === "positions"}><option value="all">Все типы</option>{Object.entries(organizationUnitLabels).filter(([key]) => key !== "company").map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
       <select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Регион"><option value="all">Все регионы</option>{regions.map((item) => <option key={item}>{item}</option>)}</select>
       <button type="button" className={`button compact ${issuesOnly ? "active-filter" : ""}`} onClick={() => setIssuesOnly((value) => !value)} aria-pressed={issuesOnly}><AlertTriangle size={14} />Проблемы</button>
+      {view === "units" && <button type="button" className="button compact org-layout-toggle" onClick={() => setLayout((value) => value === "compact" ? "wide" : "compact")} aria-pressed={layout === "compact"} title={layout === "compact" ? "Показать классическую широкую схему" : "Собрать крупные ветки компактно"}><Network size={14} />{layout === "compact" ? "Компактно" : "Широко"}</button>}
       <div className="org-zoom" aria-label="Масштаб"><button type="button" onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.1).toFixed(2))))} aria-label="Уменьшить"><Minus size={14} /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(1.5, Number((value + 0.1).toFixed(2))))} aria-label="Увеличить"><Plus size={14} /></button></div>
       <button type="button" className="icon-button" onClick={fitToScreen} aria-label="Вместить структуру в экран" title="Вместить в экран"><Maximize2 size={15} /></button><button type="button" className="icon-button" onClick={() => setCollapsed(new Set(units.filter((unit) => unit.parentId).map((unit) => unit.id)))} aria-label="Свернуть все ветки" title="Свернуть все"><Network size={15} /></button><button type="button" className="icon-button" onClick={() => { setCollapsed(new Set()); if (selection) requestAnimationFrame(() => document.querySelector(`[data-node-id="${selection.id}"]`)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" })); }} aria-label="Развернуть и показать выбранный узел" title="Показать выбранное"><Focus size={15} /></button>
     </div>

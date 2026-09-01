@@ -71,8 +71,8 @@ Migration `0008_organization_tenant_integrity.sql` closes cross-tenant reference
 ## Visual direction
 
 - **Thesis:** the structure page is an operational map, not a decorative HR chart; hierarchy, vacancies and responsibility must be readable at a glance.
-- **Signature:** a pannable dotted canvas with typed compact nodes, explicit connectors, highlighted selection path and a persistent context drawer.
+- **Signature:** a pannable dotted canvas with typed compact nodes, explicit connectors, highlighted selection path and a persistent context drawer. Large spans of control use a two-sided hanging layout so labels remain readable without shrinking the whole chart.
 - **Palette and surfaces:** existing OPERIS neutrals and orange accent; solid panels, thin structural lines, role-based borders and restrained overlay elevation.
 - **Typography and density:** existing Cyrillic UI type system, compact enterprise labels and tabular metrics; no marketing-sized text or decorative KPI cards.
-- **Layout:** toolbar above a horizontally and vertically scrollable hierarchy; employees appear only in the selected/search branch, while the staff mode follows unit → job profile → staff position → assignment/vacancy.
+- **Layout:** toolbar above a horizontally and vertically scrollable hierarchy; the default compact arrangement follows the focused-team and collapsible-branch patterns used by current ChartHop, Miro and Creately org-chart products, while a wide classical layout remains available and is persisted in the URL. Employees appear only in the selected/search branch, while the staff mode follows unit → job profile → staff position → assignment/vacancy.
 - **Motion:** only zoom, focus scrolling and direct hover/selection feedback; reduced-motion disables spatial transitions.
