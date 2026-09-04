@@ -1,7 +1,7 @@
 BEGIN;
 
--- This migration is intentionally no-op for non-demo tenants. It runs after 9000_demo_seed.sql
--- on fresh CI/demo databases and mirrors the commercial permissions introduced in 0011.
+-- Demo-only extension applied after 9000_demo_seed.sql. It mirrors the commercial
+-- permissions and responsibility rules introduced by the production migration.
 INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_type)
 SELECT r.organization_id,r.id,p.capability,'team'
 FROM role_templates r CROSS JOIN (VALUES
@@ -21,6 +21,14 @@ INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_
 SELECT r.organization_id,r.id,p.capability,'region'
 FROM role_templates r CROSS JOIN (VALUES ('approval.read'),('approval.decide')) p(capability)
 WHERE r.organization_id='00000000-0000-4000-8000-000000000001'::uuid AND r.code='regional_manager'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO responsibility_rules(
+  organization_id,process_code,process_name,step_code,step_name,responsibility_type,subject_type,subject_id,scope_type,scope_ids,created_by_user_id
+) VALUES
+('00000000-0000-4000-8000-000000000001','commercial_calculation','Коммерческий расчёт','calculation_approval','Согласование расчёта','approver','membership','50000000-0000-4000-8000-000000000001','all_org','{}','10000000-0000-4000-8000-000000000001'),
+('00000000-0000-4000-8000-000000000001','commercial_proposal','Коммерческое предложение','proposal_approval','Согласование КП','approver','membership','50000000-0000-4000-8000-000000000001','all_org','{}','10000000-0000-4000-8000-000000000001'),
+('00000000-0000-4000-8000-000000000001','object_launch','Запуск объекта','owner','Ответственный за запуск','owner','membership','50000000-0000-4000-8000-000000000003','region',ARRAY['30000000-0000-4000-8000-000000000001'::uuid,'30000000-0000-4000-8000-000000000002'::uuid],'10000000-0000-4000-8000-000000000001')
 ON CONFLICT DO NOTHING;
 
 UPDATE proposals SET
