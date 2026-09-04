@@ -123,6 +123,39 @@ test("unit and mixed billing normalize monthly economics", () => {
     costs: [],
   });
   assert.equal(mixed.fixedMonthlyNet, 100000);
-  assert.equal(mixed.monthlyRevenueNet, 363000);
+  assert.equal(mixed.monthlyRevenueNet, 363005.6);
   assert.equal(mixed.marginPct, 20);
+});
+
+test("target-margin rounding never rounds rate below target and client-limit rounding never exceeds cap", () => {
+  const target = calculateCommercialScenario({
+    workers: 1,
+    hoursPerWorker: 173,
+    workerPayAmount: 333,
+    workerPayUnit: "hour",
+    pricingMode: "target_margin",
+    targetMarginPct: 19,
+    billingUnit: "hour",
+    vatMode: "without_vat",
+    ruleVersionId: "rule-round",
+    rules: { mandatoryChargePct: 0, roundingStep: 1, legalParametersVerified: true },
+    costs: [],
+  });
+  assert.ok(target.marginPct >= 19);
+
+  const limit = calculateCommercialScenario({
+    workers: 1,
+    hoursPerWorker: 173,
+    workerPayAmount: 250,
+    workerPayUnit: "hour",
+    pricingMode: "client_limit",
+    clientLimit: 499.99,
+    clientLimitVatMode: "without_vat",
+    billingUnit: "hour",
+    vatMode: "without_vat",
+    ruleVersionId: "rule-round",
+    rules: { mandatoryChargePct: 0, roundingStep: 1, legalParametersVerified: true },
+    costs: [],
+  });
+  assert.ok(limit.clientRateNet <= 499.99);
 });
