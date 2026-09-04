@@ -34,11 +34,13 @@ export async function POST(request:Request){
         requestId=calc.requestId;
       }
       if(!requestId)throw new Error("Не удалось определить заявку");
-      const [requestRow]=await tx<Array<{organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null}>>`
-        SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId"
+      const [requestRow]=await tx<Array<{organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;status:string;archivedAt:string|null}>>`
+        SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",status,archived_at::text "archivedAt"
         FROM requests WHERE id=${requestId}::uuid
       `;
       if(!requestRow||!canReadRow(actor.access,"calculation.scenario.create",requestRow,actor))throw new AccessDeniedError("calculation.scenario.create");
+      if(requestRow.archivedAt)throw new Error("Сначала восстановите заявку из архива");
+      if(["accepted","launched","lost"].includes(requestRow.status))throw new Error("Коммерческий цикл заявки закрыт; новый расчёт нельзя добавить в зафиксированный результат");
       const [role]=await tx<Array<{id:string;specialtyId:string}>>`SELECT id,specialty_id "specialtyId" FROM request_roles WHERE id=${b.requestRoleId}::uuid AND request_id=${requestId}::uuid`;
       if(!role)throw new Error("Позиция не относится к выбранной заявке");
       const [model]=await tx<Array<{id:string}>>`SELECT id FROM calculation_models WHERE id=${b.modelId}::uuid AND active`;
@@ -86,7 +88,7 @@ export async function POST(request:Request){
         VALUES (${actor.organizationId}::uuid,${calculationId}::uuid,${b.requestRoleId}::uuid,${b.modelId}::uuid,${ruleVersionId}::uuid,${b.name},'draft',${sql.json(b.inputs)},${sql.json(b.costs)},${sql.json(b.result)},${referenceSnapshot?sql.json(referenceSnapshot):null},${actor.userId}::uuid)
         RETURNING id,name,status,created_at "createdAt"
       `;
-      await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${requestId}::uuid AND status NOT IN ('archived','accepted','launched')`;
+      await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${requestId}::uuid`;
       return {...created,calculationId,requestId,ruleVersionId};
     }));
     return NextResponse.json(row,{status:201});
