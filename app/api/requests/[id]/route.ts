@@ -54,19 +54,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const result = await withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
       if (body.action === "archive") {
-        const [row] = await tx<Array<{ id: string; status: string }>>`
-          UPDATE requests SET status='archived',archived_at=now(),archived_by_user_id=${actor.userId}::uuid,updated_at=now()
-          WHERE id=${id}::uuid RETURNING id,status
-        `;
-        return row;
+        if (current.archivedAt) return { id, status: current.status, archived: true };
+        await tx`UPDATE requests SET archived_at=now(),archived_by_user_id=${actor.userId}::uuid,updated_at=now() WHERE id=${id}::uuid`;
+        return { id, status: current.status, archived: true };
       }
       if (body.action === "restore") {
-        const [row] = await tx<Array<{ id: string; status: string }>>`
-          UPDATE requests SET status='draft',archived_at=NULL,archived_by_user_id=NULL,updated_at=now()
-          WHERE id=${id}::uuid RETURNING id,status
-        `;
-        return row;
+        await tx`UPDATE requests SET archived_at=NULL,archived_by_user_id=NULL,updated_at=now() WHERE id=${id}::uuid`;
+        return { id, status: current.status, archived: false };
       }
+
+      if (current.archivedAt) throw new Error("Сначала восстановите заявку из архива");
+      if (["accepted","launched"].includes(current.status)) throw new Error("Принятая клиентом или переданная в запуск заявка зафиксирована. Для изменения коммерческих условий создайте новый цикл/версию до принятия КП");
 
       const nextClientId = body.clientId === undefined ? current.clientId : body.clientId;
       await tx`
@@ -116,7 +114,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           await tx`DELETE FROM request_roles WHERE id=${oldRole.id}::uuid AND request_id=${id}::uuid`;
         }
       }
-      return { id, status: current.status };
+      return { id, status: current.status, archived: false };
     }));
     return NextResponse.json(result);
   } catch (error) {
