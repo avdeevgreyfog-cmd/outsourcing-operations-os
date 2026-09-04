@@ -18,6 +18,7 @@ const region="30000000-0000-4000-8000-000000000001";
 try{
   const migrations=await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
   assert.ok(migrations.some(row=>row.filename==="0011_commercial_golden_path.sql"),"commercial migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0012_calculation_proposal_integrity.sql"),"calculation/proposal integrity migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const clientlessRequest=randomUUID();
@@ -47,17 +48,26 @@ try{
     ()=>sql`UPDATE calculation_scenarios SET result_snapshot='{"clientRateHourly":1}'::jsonb WHERE id=${scenario}::uuid`,
     error=>/immutable/.test(error?.message??""),
   );
+  await assert.rejects(
+    ()=>sql`UPDATE calculation_rule_versions SET rules_json='{"mandatoryChargePct":99}'::jsonb WHERE id=${rule}::uuid`,
+    error=>/immutable/.test(error?.message??""),
+  );
 
   const proposal=randomUUID();
-  const proposalContent={requestId:request,roles:[{role:"Комплектовщик",count:24,rate:700,unit:"hour",scenarioId:scenario}]};
+  const proposalContent={requestId:request,roles:[{role:"Комплектовщик",count:24,rateNet:700,rateGross:854,unit:"hour",scenarioId:scenario}]};
   await sql`
     INSERT INTO proposals(id,organization_id,request_id,version,status,scenario_ids,total_value,content_snapshot,created_by_user_id)
     VALUES(${proposal}::uuid,${org}::uuid,${request}::uuid,99,'draft',ARRAY[${scenario}::uuid],4065600,${sql.json(proposalContent)},${director}::uuid)
   `;
+  await sql`UPDATE proposals SET content_snapshot=content_snapshot||'{"terms":"Client-safe draft text"}'::jsonb WHERE id=${proposal}::uuid`;
   await sql`UPDATE proposals SET status='approved',approved_by_user_id=${director}::uuid,approved_at=now() WHERE id=${proposal}::uuid`;
   await assert.rejects(
     ()=>sql`UPDATE proposals SET total_value=1 WHERE id=${proposal}::uuid`,
     error=>/immutable/.test(error?.message??""),
+  );
+  await assert.rejects(
+    ()=>sql`UPDATE proposals SET status='accepted' WHERE id=${proposal}::uuid`,
+    error=>error?.code==="23505",
   );
 
   const approval=randomUUID();
@@ -98,7 +108,7 @@ try{
     assert.deepEqual(visible.map(row=>row.organization_id),[org]);
   });
 
-  console.log("Commercial Golden Path PostgreSQL integration passed: clientless request, calculation history, immutable proposal, approval audit, responsibility resolver and source-proposal uniqueness.");
+  console.log("Commercial Golden Path PostgreSQL integration passed: clientless request, calculation history/rule immutability, proposal immutability/uniqueness, approval audit, responsibility resolver and source-proposal uniqueness.");
 }finally{
   await sql.end();
 }

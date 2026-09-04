@@ -31,9 +31,21 @@ INSERT INTO responsibility_rules(
 ('00000000-0000-4000-8000-000000000001','object_launch','Запуск объекта','owner','Ответственный за запуск','owner','membership','50000000-0000-4000-8000-000000000003','region',ARRAY['30000000-0000-4000-8000-000000000001'::uuid,'30000000-0000-4000-8000-000000000002'::uuid],'10000000-0000-4000-8000-000000000001')
 ON CONFLICT DO NOTHING;
 
+-- Demonstration calculation models use explicit versioned company rules. Values are
+-- synthetic and intentionally marked unverified; the UI must never present them as law.
+INSERT INTO calculation_models(id,organization_id,code,name,model_type,created_by_user_id) VALUES
+('76000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000001','custom','Модель компании','custom','10000000-0000-4000-8000-000000000001')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO calculation_rule_versions(id,organization_id,calculation_model_id,version,effective_from,rules_json,source,created_by_user_id) VALUES
+('77000000-0000-4000-8000-000000000011','00000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000001',2,'2026-09-01','{"mandatoryChargePct":30,"riskReservePct":2,"minimumMarginPct":15,"recommendedMarginPct":18,"vatPct":22,"roundingStep":1,"legalParametersVerified":false}','Synthetic demo company rules; verify before production use','10000000-0000-4000-8000-000000000001'),
+('77000000-0000-4000-8000-000000000012','00000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000002',1,'2026-09-01','{"mandatoryChargePct":18,"riskReservePct":3,"minimumMarginPct":16,"recommendedMarginPct":20,"vatPct":22,"roundingStep":1,"legalParametersVerified":false}','Synthetic demo company rules; verify before production use','10000000-0000-4000-8000-000000000001'),
+('77000000-0000-4000-8000-000000000013','00000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000003',1,'2026-09-01','{"mandatoryChargePct":7,"riskReservePct":5,"minimumMarginPct":18,"recommendedMarginPct":22,"vatPct":22,"roundingStep":1,"legalParametersVerified":false}','Synthetic demo company rules; verify before production use','10000000-0000-4000-8000-000000000001'),
+('77000000-0000-4000-8000-000000000014','00000000-0000-4000-8000-000000000001','76000000-0000-4000-8000-000000000004',1,'2026-09-01','{"mandatoryChargePct":12,"riskReservePct":4,"minimumMarginPct":17,"recommendedMarginPct":20,"vatPct":22,"roundingStep":1,"legalParametersVerified":false}','Synthetic demo custom model','10000000-0000-4000-8000-000000000001')
+ON CONFLICT DO NOTHING;
+
 -- 9000 contains the legacy accepted demo proposal. On a fresh demo database we first
--- return it to draft, populate the immutable content snapshot, and only then accept it.
--- This keeps the seed compatible with the same immutability trigger used in production.
+-- return it to draft, populate the immutable client-safe content snapshot, and only then accept it.
 UPDATE proposals SET status='draft'
 WHERE id='7a000000-0000-4000-8000-000000000001'::uuid;
 
@@ -41,13 +53,22 @@ UPDATE proposals SET
   content_snapshot=jsonb_build_object(
     'requestId','73000000-0000-4000-8000-000000000001',
     'title','РЦ Север — запуск 15 сентября',
+    'objectName','РЦ Север',
+    'description','Предоставление производственного персонала для складских операций на площадке заказчика.',
     'clientId','70000000-0000-4000-8000-000000000001',
     'vatMode','with_vat',
+    'vatPct',22,
     'location','Москва, Дмитровское шоссе',
     'expectedStartDate','2026-09-15',
+    'validUntil','2026-09-10',
+    'schedule','6/1, оплачиваемая смена 11 часов',
+    'included',jsonb_build_array('Организация выхода персонала','Оперативная замена','Координация работы на объекте'),
+    'clientProvides',jsonb_build_array('СИЗ и спецодежда','Медицинские требования согласно заявке'),
+    'terms','Оплата производится по фактически подтверждённому объёму оказанных услуг.',
+    'additionalConditions','Финальные условия запуска фиксируются после принятия коммерческого предложения.',
     'roles',jsonb_build_array(
-      jsonb_build_object('role','Комплектовщик','specialtyId','60000000-0000-4000-8000-000000000001','count',24,'rate',670.73,'unit','hour','scenarioId','79000000-0000-4000-8000-000000000001'),
-      jsonb_build_object('role','Грузчик','specialtyId','60000000-0000-4000-8000-000000000002','count',8,'rate',713.25,'unit','hour','scenarioId','79000000-0000-4000-8000-000000000002')
+      jsonb_build_object('role','Комплектовщик','specialtyId','60000000-0000-4000-8000-000000000001','count',24,'rateNet',670.73,'rateGross',818.29,'unit','hour','scenarioId','79000000-0000-4000-8000-000000000001'),
+      jsonb_build_object('role','Грузчик','specialtyId','60000000-0000-4000-8000-000000000002','count',8,'rateNet',713.25,'rateGross',870.17,'unit','hour','scenarioId','79000000-0000-4000-8000-000000000002')
     )
   )
 WHERE id='7a000000-0000-4000-8000-000000000001'::uuid;

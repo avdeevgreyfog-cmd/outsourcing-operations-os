@@ -17,7 +17,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const [source]=await tx<Array<{proposalId:string;requestId:string;proposalStatus:string;scenarioIds:string[];organizationId:string;clientId:string|null;regionId:string|null;ownerUserId:string|null;createdByUserId:string;teamId:string|null;title:string;location:string|null;startDate:string|null}>>`
         SELECT p.id "proposalId",p.request_id "requestId",p.status "proposalStatus",p.scenario_ids "scenarioIds",r.organization_id "organizationId",r.client_company_id "clientId",
           r.region_id "regionId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",
-          COALESCE(NULLIF(p.content_snapshot->>'title',''),r.title) title,
+          COALESCE(NULLIF(p.content_snapshot->>'objectName',''),NULLIF(p.content_snapshot->>'title',''),r.title) title,
           COALESCE(NULLIF(p.content_snapshot->>'location',''),r.location_text) location,
           COALESCE(NULLIF(p.content_snapshot->>'expectedStartDate',''),r.expected_start_date::text) "startDate"
         FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${id}::uuid FOR UPDATE
@@ -56,9 +56,30 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM request_roles rr WHERE rr.request_id=${source.requestId}::uuid
       `;
       await tx`
-        INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,effective_from,created_by_user_id)
+        INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,pricing_snapshot,effective_from,created_by_user_id)
         SELECT ${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,rr.specialty_id,cs.id,
-          COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,rr.target_client_rate,0),'hour',COALESCE(${source.startDate??null}::date,current_date),${actor.userId}::uuid
+          COALESCE((cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric,rr.target_client_rate,0),
+          CASE COALESCE(cs.result_snapshot->>'billingUnit','hour')
+            WHEN 'hour' THEN 'hour'
+            WHEN 'shift' THEN 'shift'
+            WHEN 'worker_month' THEN 'month'
+            WHEN 'project_month' THEN 'month'
+            WHEN 'mixed' THEN CASE COALESCE(cs.result_snapshot->>'variableBillingUnit','hour') WHEN 'hour' THEN 'hour' WHEN 'shift' THEN 'shift' ELSE 'service' END
+            ELSE 'service'
+          END,
+          jsonb_build_object(
+            'scenarioId',cs.id,
+            'billingUnit',COALESCE(cs.result_snapshot->>'billingUnit','hour'),
+            'variableBillingUnit',cs.result_snapshot->'variableBillingUnit',
+            'clientRateNet',COALESCE(cs.result_snapshot->'clientRateNet',cs.result_snapshot->'clientRateHourly'),
+            'clientRateGross',cs.result_snapshot->'clientRateGross',
+            'vatPct',cs.result_snapshot->'vatPct',
+            'fixedMonthlyNet',cs.result_snapshot->'fixedMonthlyNet',
+            'minimumMonthlyNet',cs.result_snapshot->'minimumMonthlyNet',
+            'monthlyRevenueNet',COALESCE(cs.result_snapshot->'monthlyRevenueNet',to_jsonb(COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,0)*COALESCE((cs.inputs_snapshot->>'workers')::numeric,rr.count_required)*COALESCE((cs.inputs_snapshot->>'hoursPerWorker')::numeric,0))),
+            'projectMonths',cs.result_snapshot->'projectMonths'
+          ),
+          COALESCE(${source.startDate??null}::date,current_date),${actor.userId}::uuid
         FROM calculation_scenarios cs
         JOIN calculations c ON c.id=cs.calculation_id
         JOIN request_roles rr ON rr.id=cs.request_role_id
