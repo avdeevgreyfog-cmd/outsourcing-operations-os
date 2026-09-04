@@ -1,2 +1,18 @@
-import Link from "next/link";import {requireActor} from "@/lib/auth/server";import {listRequests} from "@/lib/data/service";import {PageHeader,Section,Status} from "@/components/UI";
-export default async function Requests(){const actor=await requireActor();const rows=await listRequests(actor);return <><PageHeader eyebrow="Продажи" title="Заявки" subtitle="Условия клиента, позиции, график, логистика и статус расчёта." breadcrumbs={[{label:"Коммерция"},{label:"Заявки"}]}/><Section><table className="data-table"><thead><tr><th>Заявка</th><th>Клиент</th><th>Позиции</th><th>График</th><th>Старт</th><th>Статус</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td><Link className="cell-title" href={`/requests/${x.id}`}>{x.title}</Link><span className="cell-sub">{x.location}</span></td><td>{x.client}</td><td>{x.roles.map(r=>`${r.name} × ${r.count}`).join(" · ")}</td><td>{typeof x.schedule==="string"?x.schedule:"См. условия"}</td><td>{x.start}</td><td><Status tone={x.status==="calculated"?"good":"warn"}>{x.status}</Status></td></tr>)}</tbody></table></Section></>}
+import Link from "next/link";
+import {requireActor} from "@/lib/auth/server";
+import {hasCapability} from "@/lib/core/access.mjs";
+import {listCommercialRequests} from "@/lib/commercial/requests";
+import {getCommercialOptions} from "@/lib/commercial/service";
+import {RequestCreateButton} from "@/components/CommercialRequestForms";
+import {PageHeader,Section,Status} from "@/components/UI";
+
+function tone(status:string){if(["accepted","launched"].includes(status))return "good" as const;if(["lost","archived"].includes(status))return "bad" as const;if(["draft","calculation","proposal_draft"].includes(status))return "neutral" as const;return "warn" as const}
+
+export default async function Requests(){
+  const actor=await requireActor();
+  const [rows,options]=await Promise.all([listCommercialRequests(actor),getCommercialOptions(actor)]);
+  return <>
+    <PageHeader eyebrow="Продажи" title="Заявки" subtitle="Единая коммерческая сущность: условия клиента, расчёты, версии КП, переговоры и передача в запуск." breadcrumbs={[{label:"Коммерция"},{label:"Заявки"}]} actions={hasCapability(actor.access,"sales.request.create")?<RequestCreateButton options={options}/>:undefined}/>
+    <Section><div className="grid-scroll"><table className="data-table"><thead><tr><th>Заявка</th><th>Клиент</th><th>Позиции</th><th>Старт</th><th>Источник</th><th>Этап</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td><Link className="cell-title" href={`/requests/${x.id}`}>{x.title}</Link><span className="cell-sub">{x.location}</span></td><td>{x.client}</td><td>{x.roles.map(r=>`${r.name} × ${r.count}`).join(" · ")}</td><td>{x.start??"—"}</td><td>{x.source}</td><td><Status tone={tone(x.status)}>{x.status}</Status></td></tr>)}</tbody></table></div></Section>
+  </>;
+}
