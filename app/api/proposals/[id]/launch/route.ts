@@ -31,7 +31,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const [resolved]=await tx<Array<{userId:string}>>`
         SELECT user_id "userId" FROM resolve_organization_responsibility('object_launch','owner','region',${source.regionId}::uuid,current_date) LIMIT 1
       `;
-      const ownerUserId=resolved?.userId??actor.userId;
+      if(!resolved?.userId)throw new Error("Не определён ответственный за запуск объекта. Настройте правило ответственности object_launch / owner для региона заявки");
+      const ownerUserId=resolved.userId;
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`
         INSERT INTO objects(organization_id,client_company_id,source_request_id,source_proposal_id,name,code,status,region_id,address_text,target_start_date,owner_user_id,created_by_user_id)
