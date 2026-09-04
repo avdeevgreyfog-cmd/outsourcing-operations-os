@@ -31,6 +31,12 @@ INSERT INTO responsibility_rules(
 ('00000000-0000-4000-8000-000000000001','object_launch','Запуск объекта','owner','Ответственный за запуск','owner','membership','50000000-0000-4000-8000-000000000003','region',ARRAY['30000000-0000-4000-8000-000000000001'::uuid,'30000000-0000-4000-8000-000000000002'::uuid],'10000000-0000-4000-8000-000000000001')
 ON CONFLICT DO NOTHING;
 
+-- 9000 contains the legacy accepted demo proposal. On a fresh demo database we first
+-- return it to draft, populate the immutable content snapshot, and only then accept it.
+-- This keeps the seed compatible with the same immutability trigger used in production.
+UPDATE proposals SET status='draft'
+WHERE id='7a000000-0000-4000-8000-000000000001'::uuid;
+
 UPDATE proposals SET
   content_snapshot=jsonb_build_object(
     'requestId','73000000-0000-4000-8000-000000000001',
@@ -43,7 +49,11 @@ UPDATE proposals SET
       jsonb_build_object('role','Комплектовщик','specialtyId','60000000-0000-4000-8000-000000000001','count',24,'rate',670.73,'unit','hour','scenarioId','79000000-0000-4000-8000-000000000001'),
       jsonb_build_object('role','Грузчик','specialtyId','60000000-0000-4000-8000-000000000002','count',8,'rate',713.25,'unit','hour','scenarioId','79000000-0000-4000-8000-000000000002')
     )
-  ),approved_at='2026-08-28 16:30+03',sent_at='2026-08-28 17:00+03',accepted_at='2026-08-29 10:00+03',launched_at='2026-08-29 12:00+03'
+  )
+WHERE id='7a000000-0000-4000-8000-000000000001'::uuid;
+
+UPDATE proposals SET
+  status='accepted',approved_at='2026-08-28 16:30+03',sent_at='2026-08-28 17:00+03',accepted_at='2026-08-29 10:00+03',launched_at='2026-08-29 12:00+03'
 WHERE id='7a000000-0000-4000-8000-000000000001'::uuid;
 
 UPDATE objects SET source_proposal_id='7a000000-0000-4000-8000-000000000001'::uuid
