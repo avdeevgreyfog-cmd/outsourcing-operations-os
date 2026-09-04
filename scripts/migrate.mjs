@@ -17,7 +17,7 @@ await sql.unsafe(`
 
 const dir = path.resolve("migrations");
 const files = (await fs.readdir(dir))
-  .filter((name) => /^\d{4}_.+\.sql$/.test(name) && !name.startsWith("9000_"))
+  .filter((name) => /^\d{4}_.+\.sql$/.test(name) && !/^9\d{3}_/.test(name))
   .sort();
 
 for (const filename of files) {
