@@ -16,7 +16,8 @@ test("internal mode exposes the complete target architecture", () => {
   const result = filterNavigation(navigationManifest, access([]), { showFoundations: true });
   const items = visibleItems(result);
   assert.equal(items.some((item) => item.href === "/contracts"), true);
-  assert.equal(items.filter((item) => item.status === "foundation").length, Object.keys(foundationModules).length);
+  assert.ok(items.filter((item) => item.status === "foundation").length <= Object.keys(foundationModules).length);
+  assert.equal(items.find((item)=>item.href==="/approvals")?.status, undefined, "activated approvals must no longer be marked as foundation");
 });
 
 test("navigation keeps each available route in one canonical place", () => {

@@ -35,6 +35,19 @@ const models: Record<string, string> = {
   net: "На руки",
 };
 
+const vatModes: Record<string, string> = {
+  with_vat: "С НДС",
+  without_vat: "Без НДС",
+  not_applicable: "Не применяется",
+};
+
+const requestSources: Record<string, string> = {
+  manual: "Вручную",
+  lead: "Из лида",
+  public_form: "Публичная форма",
+  calculation: "Из самостоятельного расчёта",
+};
+
 export function roleLabel(code: string, fallback?: string) {
   return roles[code] ?? fallback ?? code;
 }
@@ -44,3 +57,12 @@ export function modelLabel(value: unknown) {
   return models[key] ?? key;
 }
 
+export function vatModeLabel(value: unknown) {
+  const key = String(value ?? "");
+  return vatModes[key] ?? key;
+}
+
+export function requestSourceLabel(value: unknown) {
+  const key = String(value ?? "");
+  return requestSources[key] ?? key;
+}
