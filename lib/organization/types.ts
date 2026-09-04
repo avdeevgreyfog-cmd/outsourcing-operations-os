@@ -117,13 +117,18 @@ export type PositionAssignmentRow = {
 
 export type ResponsibilityRuleRow = {
   id: string;
+  processCode?: string;
   process: string;
+  stepCode?: string;
   step: string;
   responsibilityType: "owner" | "executor" | "approver" | "observer" | "fallback";
   subjectType: "process_role" | "staff_position" | "org_unit" | "membership";
   subjectName: string;
   scopeLabel: string;
   fallbackName: string | null;
+  resolvedMembershipId?: string | null;
+  resolvedEmployee?: string | null;
+  resolutionStatus?: "resolved" | "missing" | "fallback" | "conflict";
 };
 
 export type OrganizationChangeSetRow = {

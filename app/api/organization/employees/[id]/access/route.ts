@@ -36,7 +36,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         ORDER BY capability,"sourceType"
       `;
     });
-    return NextResponse.json({ items });
+    const effective=[...new Set(items.map(item=>item.capability))].map(capability=>{const sources=items.filter(item=>item.capability===capability);const denied=sources.some(item=>item.effect==="deny");return {capability,label:sources[0]?.label??capability,effect:denied?"deny":"allow",scopeTypes:[...new Set(sources.filter(item=>item.effect==="allow").map(item=>item.scopeType).filter(Boolean))],scopeIds:[...new Set(sources.filter(item=>item.effect==="allow").flatMap(item=>item.scopeIds))],sources:sources.length}});
+    return NextResponse.json({ items, effective });
   } catch (error) {
     if (error instanceof AccessDeniedError) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     if (error instanceof Error && error.message === "NOT_FOUND") return NextResponse.json({ error: "Сотрудник не найден" }, { status: 404 });

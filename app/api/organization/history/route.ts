@@ -3,7 +3,7 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { getCurrentActor } from "@/lib/auth/server";
 import { withTenant } from "@/lib/db/client";
 
-const allowed = new Set(["organization_units", "positions", "staff_positions", "position_assignments", "process_roles", "membership_process_roles", "responsibility_rules", "organization_change_sets"]);
+const allowed = new Set(["organization_memberships", "organization_units", "positions", "staff_positions", "position_assignments", "process_roles", "membership_process_roles", "responsibility_rules", "organization_change_sets"]);
 
 export async function GET(request: Request) {
   try {

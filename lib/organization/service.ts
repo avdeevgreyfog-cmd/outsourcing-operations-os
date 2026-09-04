@@ -47,22 +47,33 @@ export async function listCompanyEmployees(actor: Actor): Promise<CompanyEmploye
   if (actor.demo) return filterEmployees(actor,demo.companyEmployees);
   const rows=await withTenant(actor.organizationId, actor.userId, async (sql) => sql<CompanyEmployeeRow[]>`
     SELECT m.id,u.id "userId",m.organization_id "organizationId",u.display_name name,u.email,m.phone,m.status,
-      m.position_id "positionId",p.name position,m.primary_org_unit_id "orgUnitId",ou.name "orgUnit",
-      ou.region_id "regionId",rg.name region,m.manager_membership_id "managerMembershipId",manager_user.display_name manager,
+      COALESCE(primary_seat.job_profile_id,m.position_id) "positionId",COALESCE(primary_seat.job_profile,p.name) position,
+      COALESCE(primary_seat.org_unit_id,m.primary_org_unit_id) "orgUnitId",COALESCE(primary_seat.org_unit,ou.name) "orgUnit",
+      COALESCE(primary_seat.region_id,ou.region_id) "regionId",COALESCE(primary_seat.region,rg.name) region,
+      COALESCE(primary_seat.manager_membership_id,m.manager_membership_id) "managerMembershipId",
+      COALESCE(primary_seat.manager,manager_user.display_name) manager,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('id',pr.id,'name',pr.name,'code',pr.code) ORDER BY pr.name)
         FROM membership_process_roles mr JOIN process_roles pr ON pr.id=mr.process_role_id
         WHERE mr.membership_id=m.id AND mr.effective_from<=current_date AND (mr.effective_to IS NULL OR mr.effective_to>=current_date)),'[]'::jsonb) roles,
       COALESCE((SELECT array_agg(ra.resource_label ORDER BY ra.resource_label)
         FROM responsibility_assignments ra WHERE ra.membership_id=m.id AND (ra.effective_to IS NULL OR ra.effective_to>=current_date)),'{}'::text[]) responsibilities
-      ,(SELECT sp.id FROM position_assignments pa JOIN staff_positions sp ON sp.id=pa.staff_position_id
-        WHERE pa.membership_id=m.id AND pa.assignment_type='primary' AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-        ORDER BY pa.effective_from DESC LIMIT 1) "primaryStaffPositionId"
-      ,(SELECT sp.name FROM position_assignments pa JOIN staff_positions sp ON sp.id=pa.staff_position_id
-        WHERE pa.membership_id=m.id AND pa.assignment_type='primary' AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-        ORDER BY pa.effective_from DESC LIMIT 1) "primaryStaffPosition"
+      ,primary_seat.staff_position_id "primaryStaffPositionId",primary_seat.staff_position "primaryStaffPosition"
       ,(SELECT count(*)::int FROM position_assignments pa WHERE pa.membership_id=m.id AND pa.assignment_type<>'primary' AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)) "additionalAssignments"
     FROM organization_memberships m
     JOIN app_users u ON u.id=m.user_id
+    LEFT JOIN LATERAL (
+      SELECT sp.id staff_position_id,sp.name staff_position,sp.job_profile_id,p2.name job_profile,
+        sp.organization_unit_id org_unit_id,ou2.name org_unit,COALESCE(sp.region_id,ou2.region_id) region_id,
+        COALESCE(rg2.name,rg3.name) region,resolve_employee_manager(m.id,current_date) manager_membership_id,mu.display_name manager
+      FROM position_assignments pa JOIN staff_positions sp ON sp.id=pa.staff_position_id
+      JOIN positions p2 ON p2.id=sp.job_profile_id JOIN organization_units ou2 ON ou2.id=sp.organization_unit_id
+      LEFT JOIN regions rg2 ON rg2.id=sp.region_id LEFT JOIN regions rg3 ON rg3.id=ou2.region_id
+      LEFT JOIN organization_memberships mm ON mm.id=resolve_employee_manager(m.id,current_date)
+      LEFT JOIN app_users mu ON mu.id=mm.user_id
+      WHERE pa.membership_id=m.id AND pa.assignment_type='primary' AND pa.status<>'ended'
+        AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+      ORDER BY pa.effective_from DESC,pa.created_at DESC LIMIT 1
+    ) primary_seat ON true
     LEFT JOIN positions p ON p.id=m.position_id
     LEFT JOIN organization_units ou ON ou.id=m.primary_org_unit_id
     LEFT JOIN regions rg ON rg.id=ou.region_id
@@ -78,9 +89,10 @@ export async function listPositions(actor: Actor): Promise<PositionRow[]> {
   if (actor.demo) return demo.positions;
   return withTenant(actor.organizationId, actor.userId, async (sql) => sql<PositionRow[]>`
     SELECT p.id,p.organization_id "organizationId",p.code,p.name,p.description,p.purpose,p.duties,p.responsibilities,
-      p.process_participation processes,p.active,count(DISTINCT m.id)::int "employeeCount",count(DISTINCT g.id)::int "capabilityCount"
+      p.process_participation processes,p.active,count(DISTINCT pa.membership_id)::int "employeeCount",count(DISTINCT g.id)::int "capabilityCount"
     FROM positions p
-    LEFT JOIN organization_memberships m ON m.position_id=p.id AND m.status='active'
+    LEFT JOIN staff_positions sp ON sp.job_profile_id=p.id AND sp.status<>'closed' AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
+    LEFT JOIN position_assignments pa ON pa.staff_position_id=sp.id AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
     LEFT JOIN position_permission_grants g ON g.position_id=p.id AND g.effect='allow'
     GROUP BY p.id ORDER BY p.active DESC,p.name
   `);
@@ -106,7 +118,10 @@ export async function listStaffPositions(actor: Actor): Promise<StaffPositionRow
     SELECT sp.id,sp.organization_id "organizationId",sp.code,sp.name,sp.job_profile_id "jobProfileId",p.name "jobProfile",
       sp.organization_unit_id "orgUnitId",ou.name "orgUnit",sp.region_id "regionId",rg.name region,
       sp.reports_to_position_id "reportsToPositionId",manager_position.name "reportsToPosition",
-      sp.capacity::float8 capacity,sp.level,sp.status,sp.effective_from::text "effectiveFrom",sp.effective_to::text "effectiveTo",
+      sp.capacity::float8 capacity,sp.level,
+      CASE WHEN sp.status IN ('planned','frozen','closed') THEN sp.status
+        WHEN COALESCE(sum(pa.fte) FILTER (WHERE pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)),0)>=sp.capacity THEN 'filled' ELSE 'open' END status,
+      sp.effective_from::text "effectiveFrom",sp.effective_to::text "effectiveTo",
       COALESCE(sum(pa.fte) FILTER (WHERE pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)),0)::float8 occupied,
       GREATEST(0,sp.capacity-COALESCE(sum(pa.fte) FILTER (WHERE pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)),0))::float8 open
     FROM staff_positions sp
@@ -139,7 +154,7 @@ export async function listResponsibilityRules(actor: Actor): Promise<Responsibil
   requireCapability(actor, "organization.read");
   if (actor.demo) return demo.responsibilityRules;
   return withTenant(actor.organizationId, actor.userId, async (sql) => sql<ResponsibilityRuleRow[]>`
-    SELECT rr.id,rr.process_name process,rr.step_name step,rr.responsibility_type "responsibilityType",rr.subject_type "subjectType",
+    SELECT rr.id,rr.process_code "processCode",rr.process_name process,rr.step_code "stepCode",rr.step_name step,rr.responsibility_type "responsibilityType",rr.subject_type "subjectType",
       CASE rr.subject_type
         WHEN 'process_role' THEN (SELECT name FROM process_roles WHERE id=rr.subject_id)
         WHEN 'staff_position' THEN (SELECT name FROM staff_positions WHERE id=rr.subject_id)
@@ -152,8 +167,12 @@ export async function listResponsibilityRules(actor: Actor): Promise<Responsibil
         WHEN 'staff_position' THEN (SELECT name FROM staff_positions WHERE id=rr.fallback_subject_id)
         WHEN 'org_unit' THEN (SELECT name FROM organization_units WHERE id=rr.fallback_subject_id)
         WHEN 'membership' THEN (SELECT u.display_name FROM organization_memberships m JOIN app_users u ON u.id=m.user_id WHERE m.id=rr.fallback_subject_id)
-      END "fallbackName"
+      END "fallbackName",resolved.membership_id "resolvedMembershipId",resolved_user.display_name "resolvedEmployee",
+      CASE WHEN resolved.membership_id IS NULL THEN 'missing' WHEN resolved.is_fallback THEN 'fallback' ELSE 'resolved' END "resolutionStatus"
     FROM responsibility_rules rr
+    LEFT JOIN LATERAL resolve_organization_responsibility(rr.process_code,rr.step_code,rr.scope_type,rr.scope_ids[1],current_date) resolved ON true
+    LEFT JOIN organization_memberships resolved_membership ON resolved_membership.id=resolved.membership_id
+    LEFT JOIN app_users resolved_user ON resolved_user.id=resolved_membership.user_id
     WHERE rr.active AND rr.effective_from<=current_date AND (rr.effective_to IS NULL OR rr.effective_to>=current_date)
     ORDER BY rr.process_name,rr.step_name,rr.responsibility_type
   `);

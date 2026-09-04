@@ -13,6 +13,19 @@ const schema=z.object({
   scopeIds:z.array(z.string().uuid()).max(200).default([]),
 });
 
+export async function GET(request:Request){
+  try{
+    const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется вход в систему"},{status:401});requireCapability(actor,"organization.read");
+    const url=new URL(request.url);const targetType=url.searchParams.get("targetType");const targetId=url.searchParams.get("targetId");
+    if(!["position","process_role"].includes(targetType??"")||!targetId||!/^[0-9a-f-]{36}$/i.test(targetId))return NextResponse.json({error:"Некорректная цель"},{status:400});
+    if(actor.demo)return NextResponse.json({items:[]});
+    const items=await withTenant(actor.organizationId,actor.userId,async sql=>{
+      const table=targetType==="position"?"position_permission_grants":"process_role_permission_grants";const column=targetType==="position"?"position_id":"process_role_id";
+      return sql.unsafe<Array<{capability:string;description:string;domain:string;effect:string;scopeType:string|null;scopeIds:string[]}>>(`SELECT d.capability,d.description,d.domain,COALESCE(g.effect,'inherit') effect,g.scope_type "scopeType",COALESCE(g.scope_ids,'{}'::uuid[]) "scopeIds" FROM permission_definitions d LEFT JOIN ${table} g ON g.capability=d.capability AND g.${column}=$1::uuid ORDER BY d.domain,d.capability`,[targetId]);
+    });return NextResponse.json({items});
+  }catch(error){if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});console.error(error);return NextResponse.json({error:"Не удалось загрузить права"},{status:500})}
+}
+
 export async function PATCH(request:Request){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется вход в систему"},{status:401});
