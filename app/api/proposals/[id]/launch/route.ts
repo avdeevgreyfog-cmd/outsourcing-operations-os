@@ -14,10 +14,12 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [source]=await tx<Array<{proposalId:string;requestId:string;proposalStatus:string;organizationId:string;clientId:string|null;regionId:string|null;ownerUserId:string|null;createdByUserId:string;teamId:string|null;title:string;location:string|null;startDate:string|null}>>`
-        SELECT p.id "proposalId",p.request_id "requestId",p.status "proposalStatus",r.organization_id "organizationId",r.client_company_id "clientId",
-          r.region_id "regionId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",r.title,
-          r.location_text location,r.expected_start_date::text "startDate"
+      const [source]=await tx<Array<{proposalId:string;requestId:string;proposalStatus:string;scenarioIds:string[];organizationId:string;clientId:string|null;regionId:string|null;ownerUserId:string|null;createdByUserId:string;teamId:string|null;title:string;location:string|null;startDate:string|null}>>`
+        SELECT p.id "proposalId",p.request_id "requestId",p.status "proposalStatus",p.scenario_ids "scenarioIds",r.organization_id "organizationId",r.client_company_id "clientId",
+          r.region_id "regionId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",
+          COALESCE(NULLIF(p.content_snapshot->>'title',''),r.title) title,
+          COALESCE(NULLIF(p.content_snapshot->>'location',''),r.location_text) location,
+          COALESCE(NULLIF(p.content_snapshot->>'expectedStartDate',''),r.expected_start_date::text) "startDate"
         FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${id}::uuid FOR UPDATE
       `;
       if(!source)throw new Error("КП не найдено");
@@ -25,6 +27,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(source.proposalStatus!=="accepted")throw new Error("Объект создаётся только из принятого клиентом КП");
       if(!source.clientId)throw new Error("Перед запуском привяжите заявку к клиенту");
       if(!source.regionId)throw new Error("Перед запуском укажите регион заявки");
+      if(!source.scenarioIds.length)throw new Error("В принятой версии КП нет зафиксированных сценариев расчёта");
       const [existing]=await tx<Array<{id:string;name:string;code:string}>>`SELECT id,name,code FROM objects WHERE source_proposal_id=${id}::uuid`;
       if(existing)return {...existing,alreadyExists:true};
 
@@ -56,14 +59,14 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,effective_from,created_by_user_id)
         SELECT ${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,rr.specialty_id,cs.id,
           COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,rr.target_client_rate,0),'hour',COALESCE(${source.startDate??null}::date,current_date),${actor.userId}::uuid
-        FROM request_roles rr
-        JOIN LATERAL (
-          SELECT cs.* FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id
-          WHERE c.request_id=rr.request_id AND cs.request_role_id=rr.id AND cs.status='accepted'
-          ORDER BY cs.accepted_at DESC NULLS LAST,cs.created_at DESC LIMIT 1
-        ) cs ON true
-        WHERE rr.request_id=${source.requestId}::uuid
+        FROM calculation_scenarios cs
+        JOIN calculations c ON c.id=cs.calculation_id
+        JOIN request_roles rr ON rr.id=cs.request_role_id
+        WHERE cs.id=ANY(${source.scenarioIds}::uuid[]) AND c.request_id=${source.requestId}::uuid AND rr.request_id=${source.requestId}::uuid
       `;
+      const [rateCount]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM client_rates WHERE object_id=${object.id}::uuid`;
+      const [needCount]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM needs WHERE object_id=${object.id}::uuid`;
+      if((rateCount?.count??0)!==(needCount?.count??0))throw new Error("Принятая версия КП не покрывает все позиции заявки; запуск отменён");
       await tx`UPDATE proposals SET launched_at=now() WHERE id=${id}::uuid`;
       await tx`UPDATE requests SET status='launched',updated_at=now() WHERE id=${source.requestId}::uuid`;
       return {...object,alreadyExists:false};
