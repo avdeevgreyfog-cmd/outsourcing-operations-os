@@ -51,22 +51,47 @@ export async function POST(request:Request){
           FROM resolve_organization_responsibility(${processCode},${stepCode},${context.regionId?"region":"all_org"},${context.regionId}::uuid,current_date)
         ), manager AS (
           SELECT m.id "membershipId",m.user_id "userId",2 priority
-          FROM organization_memberships m WHERE m.id=resolve_employee_manager(${actor.membershipId}::uuid,current_date)
+          FROM organization_memberships m
+          WHERE m.id=resolve_employee_manager(${actor.membershipId}::uuid,current_date)
+            AND (
+              EXISTS (
+                SELECT 1 FROM permission_grants pg
+                WHERE pg.role_template_id=m.role_template_id AND pg.capability='approval.decide' AND pg.effect='allow'
+              )
+              OR EXISTS (
+                SELECT 1 FROM user_permission_overrides upo
+                WHERE upo.membership_id=m.id AND upo.capability='approval.decide' AND upo.effect='allow'
+                  AND (upo.effective_from IS NULL OR upo.effective_from<=current_date)
+                  AND (upo.effective_to IS NULL OR upo.effective_to>=current_date)
+              )
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM user_permission_overrides upo
+              WHERE upo.membership_id=m.id AND upo.capability='approval.decide' AND upo.effect='deny'
+                AND (upo.effective_from IS NULL OR upo.effective_from<=current_date)
+                AND (upo.effective_to IS NULL OR upo.effective_to>=current_date)
+            )
         ), fallback AS (
           SELECT m.id "membershipId",m.user_id "userId",3 priority
           FROM organization_memberships m JOIN role_templates rt ON rt.id=m.role_template_id
           JOIN permission_grants pg ON pg.role_template_id=rt.id AND pg.capability='approval.decide' AND pg.effect='allow'
           WHERE m.status='active' AND m.user_id<>${actor.userId}::uuid
+            AND NOT EXISTS (
+              SELECT 1 FROM user_permission_overrides upo
+              WHERE upo.membership_id=m.id AND upo.capability='approval.decide' AND upo.effect='deny'
+                AND (upo.effective_from IS NULL OR upo.effective_from<=current_date)
+                AND (upo.effective_to IS NULL OR upo.effective_to>=current_date)
+            )
           ORDER BY rt.code='director' DESC,m.created_at LIMIT 1
         ), self_fallback AS (
           SELECT ${actor.membershipId}::uuid "membershipId",${actor.userId}::uuid "userId",4 priority
-          WHERE ${actor.access.capabilities.includes("approval.decide")}
+          WHERE ${actor.access.capabilities.includes("approval.decide")&&!actor.access.denies.includes("approval.decide")}
         )
         SELECT "membershipId","userId" FROM (
           SELECT * FROM direct_rule UNION ALL SELECT * FROM manager UNION ALL SELECT * FROM fallback UNION ALL SELECT * FROM self_fallback
         ) x WHERE "userId" IS NOT NULL ORDER BY priority LIMIT 1
       `;
-      if(!approver)throw new Error("Не удалось определить согласующего. Настройте правило ответственности или руководителя");
+      if(!approver)throw new Error("Не удалось определить согласующего. Настройте правило ответственности или пользователя с правом согласования");
 
       const [approval]=await tx<Array<{id:string}>>`
         INSERT INTO approval_instances(organization_id,subject_type,subject_id,process_code,status,requested_by_user_id,metadata)
