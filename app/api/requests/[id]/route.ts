@@ -38,6 +38,10 @@ const schema = z.object({
   roles: z.array(roleSchema).min(1).max(40).optional(),
 });
 
+function asJsonValue(value: unknown) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const actor = await getCurrentActor();
@@ -74,7 +78,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           location_text=${body.location ?? current.location},region_id=${body.regionId === undefined ? current.regionId : body.regionId}::uuid,
           expected_start_date=${body.startDate === undefined ? current.startDate : body.startDate}::date,
           duration_text=${body.durationText === undefined ? current.durationText : body.durationText},
-          schedule_json=${sql.json(body.schedule ?? current.schedule)},lunch_paid=${body.lunchPaid === undefined ? current.lunchPaid : body.lunchPaid},
+          schedule_json=${sql.json(asJsonValue(body.schedule ?? current.schedule))},lunch_paid=${body.lunchPaid === undefined ? current.lunchPaid : body.lunchPaid},
           vat_mode=${body.vatMode === undefined ? current.vatMode : body.vatMode},housing_rule=${body.housingRule === undefined ? current.housingRule : body.housingRule},
           travel_rule=${body.travelRule === undefined ? current.travelRule : body.travelRule},shuttle_rule=${body.shuttleRule === undefined ? current.shuttleRule : body.shuttleRule},
           ppe_rule=${body.ppeRule === undefined ? current.ppeRule : body.ppeRule},medical_rule=${body.medicalRule === undefined ? current.medicalRule : body.medicalRule},
