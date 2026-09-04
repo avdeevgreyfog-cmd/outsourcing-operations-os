@@ -264,7 +264,13 @@ export async function listApprovals(actor: Actor): Promise<ApprovalRow[]> {
 
 export async function listCommercialProposals(actor: Actor): Promise<CommercialProposalRow[]> {
   requireCapability(actor, actor.access.capabilities.includes("sales.proposal.read") ? "sales.proposal.read" : "sales.request.read");
-  if (actor.demo) return demo.proposals as CommercialProposalRow[];
+  if (actor.demo) return demo.proposals.map((item) => ({
+    ...item,
+    approvedAt: null,
+    sentAt: null,
+    acceptedAt: item.status === "accepted" ? item.createdAt : null,
+    launchedAt: null,
+  })) as CommercialProposalRow[];
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<CommercialProposalRow[]>`
       SELECT p.id,p.organization_id "organizationId",p.request_id "requestId",r.title request,COALESCE(c.name,'Без клиента') client,
