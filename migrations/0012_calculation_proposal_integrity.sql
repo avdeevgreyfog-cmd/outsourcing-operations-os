@@ -5,6 +5,12 @@ BEGIN;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_proposal_one_accepted_per_request
   ON proposals(request_id) WHERE status='accepted';
 
+-- client_rates keeps its legacy unit column for downstream compatibility. Rich
+-- commercial pricing (mixed/fixed/unit/minimum guarantee/VAT) is preserved in a
+-- snapshot so the launch handoff does not flatten accepted economics.
+ALTER TABLE client_rates
+  ADD COLUMN IF NOT EXISTS pricing_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb;
+
 -- Calculation scenarios point to a concrete rule version. Once a rule version was
 -- used by any scenario its economic content becomes historical evidence. Closing
 -- the effective period is still allowed; rewriting the actual rules is not.
