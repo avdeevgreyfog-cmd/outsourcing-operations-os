@@ -7,7 +7,7 @@ import { withTenant } from "@/lib/db/client";
 
 const schema=z.object({requestId:z.string().uuid()});
 
-type RequestScope={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;title:string;vatMode:string|null;location:string|null;startDate:string|null};
+type RequestScope={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;title:string;vatMode:string|null;location:string|null;startDate:string|null;status:string;archivedAt:string|null};
 type ScenarioSnapshot={scenarioId:string;requestRoleId:string;specialtyId:string;role:string;count:number;rate:number;workers:number;hoursPerWorker:number};
 
 export async function POST(request:Request){
@@ -19,11 +19,14 @@ export async function POST(request:Request){
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [scope]=await tx<Array<RequestScope>>`
         SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",
-          region_id "regionId",client_company_id "clientId",title,vat_mode "vatMode",location_text location,expected_start_date::text "startDate"
+          region_id "regionId",client_company_id "clientId",title,vat_mode "vatMode",location_text location,expected_start_date::text "startDate",
+          status,archived_at::text "archivedAt"
         FROM requests WHERE id=${body.requestId}::uuid
       `;
       if(!scope)throw new Error("Заявка не найдена");
       if(!canReadRow(actor.access,"sales.proposal.create",scope,actor))throw new AccessDeniedError("sales.proposal.create");
+      if(scope.archivedAt)throw new Error("Сначала восстановите заявку из архива");
+      if(["accepted","launched","lost"].includes(scope.status))throw new Error("Коммерческий цикл этой заявки уже закрыт");
       const scenarios=await tx<ScenarioSnapshot[]>`
         SELECT cs.id "scenarioId",rr.id "requestRoleId",rr.specialty_id "specialtyId",s.name role,rr.count_required count,
           COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,0)::float8 rate,
