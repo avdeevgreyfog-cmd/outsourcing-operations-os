@@ -68,9 +68,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return row;
       }
 
+      const nextClientId = body.clientId === undefined ? current.clientId : body.clientId;
       await tx`
         UPDATE requests SET
-          client_company_id=COALESCE(${body.clientId === undefined ? current.clientId : body.clientId}::uuid,client_company_id),
+          client_company_id=${nextClientId}::uuid,
           title=${body.title ?? current.title},source=${body.source ?? current.source},
           location_text=${body.location ?? current.location},region_id=${body.regionId === undefined ? current.regionId : body.regionId}::uuid,
           expected_start_date=${body.startDate === undefined ? current.startDate : body.startDate}::date,
@@ -91,6 +92,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         `;
         for (const role of body.roles) {
           if (role.id) {
+            const oldRole=current.roles.find((item)=>item.id===role.id);
+            if(oldRole&&linkedIds.some((item)=>item.id===role.id)&&oldRole.specialtyId!==role.specialtyId){
+              throw new Error("Нельзя менять профессию позиции после создания расчёта. Добавьте новую позицию, чтобы сохранить историю");
+            }
             await tx`
               UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${sql.json(role.schedule)},
                 requirements_json=${sql.json(role.requirements)},target_client_rate=${role.targetClientRate ?? null}
