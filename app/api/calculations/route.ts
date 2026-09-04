@@ -7,6 +7,7 @@ import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
 import { withTenant } from "@/lib/db/client";
 
 const jsonObject=z.record(z.string(),z.json());
+type JsonRecord=z.infer<typeof jsonObject>;
 const schema=z.object({
   calculationId:z.string().uuid().optional(),
   requestId:z.string().uuid().optional(),
@@ -19,7 +20,7 @@ const schema=z.object({
   result:jsonObject.optional(),
 }).refine((value)=>value.calculationId||value.requestId,{message:"Нужна заявка или расчёт"});
 
-type RuleRow={id:string;rules:Record<string,unknown>};
+type RuleRow={id:string;rules:JsonRecord};
 
 export async function POST(request:Request){
   try{
@@ -66,10 +67,10 @@ export async function POST(request:Request){
       }
       const ruleVersionId=rule?.id??null;
 
-      const inputs={...b.inputs,ruleVersionId};
+      const inputs:JsonRecord={...b.inputs,ruleVersionId};
       const isCommercialScenario="workerPayAmount" in b.inputs||"billingUnit" in b.inputs||"pricingMode" in b.inputs;
-      const serverResult=isCommercialScenario
-        ? calculateCommercialScenario({...inputs,costs:b.costs,rules:rule?.rules??{}}) as Record<string,unknown>
+      const serverResult:JsonRecord=isCommercialScenario
+        ? calculateCommercialScenario({...inputs,costs:b.costs,rules:rule?.rules??{}}) as JsonRecord
         : b.result??{};
       if(isCommercialScenario&&Object.keys(serverResult).length===0)throw new Error("Не удалось рассчитать экономику сценария");
 
