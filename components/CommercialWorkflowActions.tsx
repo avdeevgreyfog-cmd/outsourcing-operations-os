@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -25,18 +26,21 @@ export function CreateProposalButton({requestId}:{requestId:string}){
   return <div className="inline-action"><button className="button primary" disabled={busy} onClick={create}>{busy?"Создание…":"Создать новую версию КП"}</button>{error&&<small className="form-error">{error}</small>}</div>;
 }
 
-export function ProposalWorkflowActions({proposalId,status,objectId}:{proposalId:string;status:string;objectId?:string|null}){
+export function ProposalWorkflowActions({proposalId,status,objectId,canSubmit,canClientDecision,canLaunch}:{proposalId:string;status:string;objectId?:string|null;canSubmit:boolean;canClientDecision:boolean;canLaunch:boolean}){
   const [busy,setBusy]=useState(false);const [error,setError]=useState("");const [note,setNote]=useState("");const [launchOpen,setLaunchOpen]=useState(false);const [name,setName]=useState("");const [code,setCode]=useState("");const router=useRouter();
   async function action(value:"send"|"negotiate"|"accept"|"revise"|"reject"){try{setBusy(true);setError("");await api(`/api/proposals/${proposalId}`,"PATCH",{action:value,note:note||undefined});router.refresh()}catch(e){setError(e instanceof Error?e.message:"Ошибка")}finally{setBusy(false)}}
   async function launch(){try{setBusy(true);setError("");const result=await api(`/api/proposals/${proposalId}/launch`,"POST",{name:name||undefined,code:code||undefined});setLaunchOpen(false);router.push(`/objects/${result.id}`);router.refresh()}catch(e){setError(e instanceof Error?e.message:"Ошибка запуска")}finally{setBusy(false)}}
-  if(objectId)return <a className="button primary" href={`/objects/${objectId}`}>Открыть созданный объект</a>;
+  if(objectId)return <Link className="button primary" href={`/objects/${objectId}`}>Открыть созданный объект</Link>;
+  const mayComment=canClientDecision&&(status==="approved"||status==="sent"||status==="negotiation");
+  const hasActions=(status==="draft"&&canSubmit)||(canClientDecision&&["approved","sent","negotiation"].includes(status))||(status==="accepted"&&canLaunch);
+  if(!hasActions)return <span className="cell-sub">Доступных действий на этом этапе нет.</span>;
   return <div className="proposal-actions">
-    {(status==="approved"||status==="sent"||status==="negotiation")&&<textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Комментарий по переговорам / решению клиента" rows={2}/>} 
+    {mayComment&&<textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Комментарий по переговорам / решению клиента" rows={2}/>} 
     <div className="page-actions">
-      {status==="draft"&&<SubmitApprovalButton subjectType="proposal" subjectId={proposalId} label="На внутреннее согласование"/>}
-      {status==="approved"&&<button className="button primary" disabled={busy} onClick={()=>action("send")}>Отметить как отправленное</button>}
-      {(status==="sent"||status==="negotiation")&&<><button className="button" disabled={busy} onClick={()=>action("negotiate")}>Переговоры</button><button className="button primary" disabled={busy} onClick={()=>action("accept")}>Клиент принял</button><button className="button" disabled={busy} onClick={()=>action("revise")}>Вернуть на пересчёт</button><button className="button" disabled={busy} onClick={()=>action("reject")}>Отказ клиента</button></>}
-      {status==="accepted"&&<button className="button primary" onClick={()=>setLaunchOpen(true)}>Перейти к запуску объекта</button>}
+      {status==="draft"&&canSubmit&&<SubmitApprovalButton subjectType="proposal" subjectId={proposalId} label="На внутреннее согласование"/>}
+      {status==="approved"&&canClientDecision&&<button className="button primary" disabled={busy} onClick={()=>action("send")}>Отметить как отправленное</button>}
+      {(status==="sent"||status==="negotiation")&&canClientDecision&&<><button className="button" disabled={busy} onClick={()=>action("negotiate")}>Переговоры</button><button className="button primary" disabled={busy} onClick={()=>action("accept")}>Клиент принял</button><button className="button" disabled={busy} onClick={()=>action("revise")}>Вернуть на пересчёт</button><button className="button" disabled={busy} onClick={()=>action("reject")}>Отказ клиента</button></>}
+      {status==="accepted"&&canLaunch&&<button className="button primary" onClick={()=>setLaunchOpen(true)}>Перейти к запуску объекта</button>}
     </div>
     {error&&<div className="form-error">{error}</div>}
     {launchOpen&&<><div className="drawer-backdrop" onClick={()=>setLaunchOpen(false)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={()=>setLaunchOpen(false)}>×</button><span className="eyebrow">Передача в операции</span><h2>Создать объект</h2><div className="login-form" style={{marginTop:18}}><label>Название объекта<input value={name} onChange={e=>setName(e.target.value)} placeholder="По умолчанию — название заявки"/></label><label>Код объекта<input value={code} onChange={e=>setCode(e.target.value)} placeholder="Автоматически, если пусто"/></label><p className="form-hint">Будут созданы объект, план запуска, потребности по позициям заявки и клиентские ставки из принятой экономики.</p><button className="button primary" disabled={busy} onClick={launch}>{busy?"Создание…":"Создать объект и запуск"}</button>{error&&<div className="form-error">{error}</div>}</div></aside></>}
