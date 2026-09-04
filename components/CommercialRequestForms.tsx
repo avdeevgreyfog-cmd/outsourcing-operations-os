@@ -5,6 +5,8 @@ import type { CommercialOptions, CommercialRequestDetail } from "@/lib/commercia
 
 type RoleDraft={id?:string;specialtyId:string;count:number};
 
+const knownSources=["manual","lead","public_form","calculation"] as const;
+
 function text(fd:FormData,key:string){const value=String(fd.get(key)??"").trim();return value||undefined}
 function nullable(fd:FormData,key:string){const value=String(fd.get(key)??"").trim();return value||null}
 
@@ -48,10 +50,11 @@ export function RequestEditButton({request,options,canArchive}:{request:Commerci
 
 function RequestForm({options,request,roles,setRoles,onSubmit,error}:{options:CommercialOptions;request?:CommercialRequestDetail;roles:RoleDraft[];setRoles:(roles:RoleDraft[])=>void;onSubmit:(event:React.FormEvent<HTMLFormElement>)=>void;error:string}){
   const schedule=request?.schedule??{};const schedulePattern=String(schedule.pattern??"");const presenceHours=Number(schedule.presenceHours??0);const paidHours=Number(schedule.paidHours??0);
+  const customSource=request?.source&&!knownSources.includes(request.source as typeof knownSources[number])?request.source:null;
   return <form className="login-form commercial-form" onSubmit={onSubmit} style={{marginTop:18}}>
     <label className="span-2">Название<input name="title" required defaultValue={request?.title??""}/></label>
     <label>Клиент<select name="clientId" defaultValue={request?.clientId??""}><option value="">Без привязанного клиента</option>{options.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-    <label>Источник<input name="source" defaultValue={request?.source??"manual"}/></label>
+    <label>Источник<select name="source" defaultValue={request?.source??"manual"}><option value="manual">Вручную</option><option value="lead">Из лида</option><option value="public_form">Публичная форма</option><option value="calculation">Из самостоятельного расчёта</option>{customSource&&<option value={customSource}>{customSource}</option>}</select></label>
     <label className="span-2">Локация<input name="location" required defaultValue={request?.location??""}/></label>
     <label>Регион<select name="regionId" required defaultValue={request?.regionId??options.regions[0]?.id}>{options.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
     <label>Плановый старт<input type="date" name="startDate" defaultValue={request?.startDate??""}/></label>
