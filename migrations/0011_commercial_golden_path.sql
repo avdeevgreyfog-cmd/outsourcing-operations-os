@@ -74,6 +74,107 @@ CREATE POLICY tenant_isolation ON approval_instances
 CREATE POLICY tenant_isolation ON approval_steps
   USING (organization_id=app_current_organization_id()) WITH CHECK (organization_id=app_current_organization_id());
 
+-- RLS protects rows from another tenant. These triggers additionally prevent a row
+-- belonging to one tenant from pointing at related entities of another tenant.
+CREATE OR REPLACE FUNCTION commercial_user_belongs_to_org(p_org uuid,p_user uuid)
+RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT p_user IS NULL OR EXISTS(
+    SELECT 1 FROM organization_memberships m
+    WHERE m.organization_id=p_org AND m.user_id=p_user
+  )
+$$;
+
+CREATE OR REPLACE FUNCTION validate_commercial_reference_integrity() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  request_org uuid;
+  role_request uuid;
+  calculation_request uuid;
+  proposal_request uuid;
+  scenario_id uuid;
+BEGIN
+  IF TG_TABLE_NAME='requests' THEN
+    IF NEW.client_company_id IS NOT NULL AND organization_reference_org('client_companies',NEW.client_company_id) IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'request client belongs to another organization' USING ERRCODE='23514';
+    END IF;
+    IF NEW.contact_id IS NOT NULL AND organization_reference_org('contacts',NEW.contact_id) IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'request contact belongs to another organization' USING ERRCODE='23514';
+    END IF;
+    IF NEW.lead_id IS NOT NULL AND organization_reference_org('leads',NEW.lead_id) IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'request lead belongs to another organization' USING ERRCODE='23514';
+    END IF;
+    IF NEW.region_id IS NOT NULL AND organization_reference_org('regions',NEW.region_id) IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'request region belongs to another organization' USING ERRCODE='23514';
+    END IF;
+    IF NEW.assigned_team_id IS NOT NULL AND organization_reference_org('teams',NEW.assigned_team_id) IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'request team belongs to another organization' USING ERRCODE='23514';
+    END IF;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.owner_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.created_by_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.archived_by_user_id) THEN
+      RAISE EXCEPTION 'request user reference belongs to another organization' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME='request_roles' THEN
+    IF organization_reference_org('requests',NEW.request_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'request role request belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF organization_reference_org('specialties',NEW.specialty_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'request role specialty belongs to another organization' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='calculations' THEN
+    IF organization_reference_org('requests',NEW.request_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'calculation request belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.owner_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.created_by_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.approved_by_user_id) THEN
+      RAISE EXCEPTION 'calculation user reference belongs to another organization' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME='calculation_scenarios' THEN
+    IF organization_reference_org('calculations',NEW.calculation_id) IS DISTINCT FROM NEW.organization_id OR organization_reference_org('request_roles',NEW.request_role_id) IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'calculation scenario relation belongs to another organization' USING ERRCODE='23514';
+    END IF;
+    IF organization_reference_org('calculation_models',NEW.model_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'calculation model belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.rule_version_id IS NOT NULL AND organization_reference_org('calculation_rule_versions',NEW.rule_version_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'calculation rule version belongs to another organization' USING ERRCODE='23514'; END IF;
+    SELECT request_id INTO calculation_request FROM calculations WHERE id=NEW.calculation_id;
+    SELECT request_id INTO role_request FROM request_roles WHERE id=NEW.request_role_id;
+    IF calculation_request IS DISTINCT FROM role_request THEN RAISE EXCEPTION 'calculation scenario role belongs to another request' USING ERRCODE='23514'; END IF;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.created_by_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.accepted_by_user_id) THEN RAISE EXCEPTION 'calculation scenario user belongs to another organization' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='proposals' THEN
+    IF organization_reference_org('requests',NEW.request_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'proposal request belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.supersedes_proposal_id IS NOT NULL THEN
+      IF organization_reference_org('proposals',NEW.supersedes_proposal_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'superseded proposal belongs to another organization' USING ERRCODE='23514'; END IF;
+      SELECT request_id INTO proposal_request FROM proposals WHERE id=NEW.supersedes_proposal_id;
+      IF proposal_request IS DISTINCT FROM NEW.request_id THEN RAISE EXCEPTION 'proposal version supersedes another request' USING ERRCODE='23514'; END IF;
+    END IF;
+    FOREACH scenario_id IN ARRAY NEW.scenario_ids LOOP
+      IF organization_reference_org('calculation_scenarios',scenario_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'proposal scenario belongs to another organization' USING ERRCODE='23514'; END IF;
+      SELECT c.request_id INTO calculation_request FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id WHERE cs.id=scenario_id;
+      IF calculation_request IS DISTINCT FROM NEW.request_id THEN RAISE EXCEPTION 'proposal scenario belongs to another request' USING ERRCODE='23514'; END IF;
+    END LOOP;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.created_by_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.approved_by_user_id) THEN RAISE EXCEPTION 'proposal user belongs to another organization' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='objects' THEN
+    IF organization_reference_org('client_companies',NEW.client_company_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'object client belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.source_request_id IS NOT NULL AND organization_reference_org('requests',NEW.source_request_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'object request belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.source_proposal_id IS NOT NULL THEN
+      IF organization_reference_org('proposals',NEW.source_proposal_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'object proposal belongs to another organization' USING ERRCODE='23514'; END IF;
+      SELECT request_id INTO proposal_request FROM proposals WHERE id=NEW.source_proposal_id;
+      IF NEW.source_request_id IS NOT NULL AND proposal_request IS DISTINCT FROM NEW.source_request_id THEN RAISE EXCEPTION 'object proposal belongs to another request' USING ERRCODE='23514'; END IF;
+    END IF;
+    IF organization_reference_org('regions',NEW.region_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'object region belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.owner_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.created_by_user_id) THEN RAISE EXCEPTION 'object user belongs to another organization' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='approval_instances' THEN
+    IF NEW.subject_type='calculation_scenario' AND organization_reference_org('calculation_scenarios',NEW.subject_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'approval subject belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.subject_type='proposal' AND organization_reference_org('proposals',NEW.subject_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'approval subject belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.requested_by_user_id) THEN RAISE EXCEPTION 'approval requester belongs to another organization' USING ERRCODE='23514'; END IF;
+  ELSIF TG_TABLE_NAME='approval_steps' THEN
+    IF organization_reference_org('approval_instances',NEW.approval_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'approval step belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.approver_membership_id IS NOT NULL AND organization_reference_org('organization_memberships',NEW.approver_membership_id) IS DISTINCT FROM NEW.organization_id THEN RAISE EXCEPTION 'approval membership belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.approver_user_id) OR NOT commercial_user_belongs_to_org(NEW.organization_id,NEW.decided_by_user_id) THEN RAISE EXCEPTION 'approval user belongs to another organization' USING ERRCODE='23514'; END IF;
+    IF NEW.approver_membership_id IS NOT NULL AND NEW.approver_user_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM organization_memberships m WHERE m.id=NEW.approver_membership_id AND m.user_id=NEW.approver_user_id) THEN RAISE EXCEPTION 'approval membership and user do not match' USING ERRCODE='23514'; END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER requests_tenant_integrity BEFORE INSERT OR UPDATE ON requests FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER request_roles_tenant_integrity BEFORE INSERT OR UPDATE ON request_roles FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER calculations_tenant_integrity BEFORE INSERT OR UPDATE ON calculations FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER calculation_scenarios_tenant_integrity BEFORE INSERT OR UPDATE ON calculation_scenarios FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER proposals_tenant_integrity BEFORE INSERT OR UPDATE ON proposals FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER objects_tenant_integrity BEFORE INSERT OR UPDATE ON objects FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER approval_instances_tenant_integrity BEFORE INSERT OR UPDATE ON approval_instances FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+CREATE TRIGGER approval_steps_tenant_integrity BEFORE INSERT OR UPDATE ON approval_steps FOR EACH ROW EXECUTE FUNCTION validate_commercial_reference_integrity();
+
 -- Commercial records are auditable from creation through launch.
 CREATE TRIGGER audit_requests AFTER INSERT OR UPDATE OR DELETE ON requests FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 CREATE TRIGGER audit_proposals AFTER INSERT OR UPDATE OR DELETE ON proposals FOR EACH ROW EXECUTE FUNCTION audit_row_change();
