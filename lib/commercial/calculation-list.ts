@@ -23,6 +23,7 @@ export type CommercialCalculationRow = {
   pricingMode: string;
   marginPct: number | string;
   monthlyContribution: number | string;
+  warnings: string[];
   ruleVersion: number | null;
   ruleSource: string | null;
   createdByUserId?: string;
@@ -41,6 +42,7 @@ export async function listCommercialCalculations(actor: Actor): Promise<Commerci
       clientRateGross: Number(item.clientRate) * 1.22,
       billingUnit: "hour",
       pricingMode: "target_margin",
+      warnings: [],
       ruleVersion: 1,
       ruleSource: "Демонстрационная версия правил",
     })) as CommercialCalculationRow[];
@@ -58,6 +60,7 @@ export async function listCommercialCalculations(actor: Actor): Promise<Commerci
         COALESCE(cs.result_snapshot->>'pricingMode','target_margin') "pricingMode",
         COALESCE((cs.result_snapshot->>'marginPct')::numeric,0) "marginPct",
         COALESCE((cs.result_snapshot->>'monthlyContribution')::numeric,0) "monthlyContribution",
+        COALESCE(ARRAY(SELECT jsonb_array_elements_text(COALESCE(cs.result_snapshot->'warnings','[]'::jsonb))),ARRAY[]::text[]) warnings,
         rv.version "ruleVersion",rv.source "ruleSource"
       FROM calculation_scenarios cs
       JOIN calculations c ON c.id=cs.calculation_id
