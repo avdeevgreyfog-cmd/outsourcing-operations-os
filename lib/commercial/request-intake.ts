@@ -174,6 +174,9 @@ function numberOrNull(value: unknown): number | null {
 }
 function bool(value: unknown, fallback = false) { return typeof value === "boolean" ? value : fallback; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
+function toJson(value: unknown): JsonValue {
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
+}
 
 export function normalizeRequestIntake(value: unknown): RequestIntake {
   const base = emptyRequestIntake();
@@ -334,7 +337,7 @@ export async function submitPublicRequest(token: string, payload: PublicRequestS
   if (!link) throw new Error("Ссылка недействительна или срок её действия истёк");
   const [row] = await sql<Array<{id:string}>>`
     INSERT INTO request_public_submissions(organization_id,request_id,public_link_id,payload)
-    VALUES (${link.organizationId}::uuid,${link.requestId}::uuid,${link.id}::uuid,${sql.json(payload)}) RETURNING id
+    VALUES (${link.organizationId}::uuid,${link.requestId}::uuid,${link.id}::uuid,${sql.json(toJson(payload))}) RETURNING id
   `;
   await sql`UPDATE request_public_links SET submitted_at=now() WHERE id=${link.id}::uuid`;
   return row;
@@ -367,10 +370,10 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
 
     await tx`
       UPDATE requests SET title=${payload.title},location_text=${payload.location},region_id=${payload.regionId}::uuid,
-        expected_start_date=${payload.startDate}::date,duration_text=${payload.durationText},schedule_json=${sql.json(payload.schedule)},lunch_paid=${payload.lunchPaid},
+        expected_start_date=${payload.startDate}::date,duration_text=${payload.durationText},schedule_json=${sql.json(toJson(payload.schedule))},lunch_paid=${payload.lunchPaid},
         vat_mode=${payload.vatMode},housing_rule=${payload.housingRule},travel_rule=${payload.travelRule},shuttle_rule=${payload.shuttleRule},ppe_rule=${payload.ppeRule},
         medical_rule=${payload.medicalRule},citizenship_rule=${payload.citizenshipRule},tools_rule=${payload.toolsRule},comments=${payload.comments},
-        intake_json=${sql.json(payload.intake)},updated_at=now()
+        intake_json=${sql.json(toJson(payload.intake))},updated_at=now()
       WHERE id=${requestId}::uuid
     `;
 
@@ -385,14 +388,14 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
           throw new Error("Нельзя менять специальность позиции, по которой уже создан расчёт");
         }
         await tx`
-          UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${sql.json(role.schedule)},
-            requirements_json=${sql.json(role.requirements)},target_client_rate=${role.targetClientRate}
+          UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${sql.json(toJson(role.schedule))},
+            requirements_json=${sql.json(toJson(role.requirements))},target_client_rate=${role.targetClientRate}
           WHERE id=${role.id}::uuid AND request_id=${requestId}::uuid
         `;
       } else {
         await tx`
           INSERT INTO request_roles(organization_id,request_id,specialty_id,count_required,schedule_json,requirements_json,target_client_rate)
-          VALUES (${actor.organizationId}::uuid,${requestId}::uuid,${role.specialtyId}::uuid,${role.count},${sql.json(role.schedule)},${sql.json(role.requirements)},${role.targetClientRate})
+          VALUES (${actor.organizationId}::uuid,${requestId}::uuid,${role.specialtyId}::uuid,${role.count},${sql.json(toJson(role.schedule))},${sql.json(toJson(role.requirements))},${role.targetClientRate})
         `;
       }
     }
