@@ -1,0 +1,106 @@
+/* OPERIS request baseline: final readability and modern enterprise refinement. */
+
+/* Lighter management summary */
+.request-baseline-registry .request-final-command-strip{gap:18px;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:visible}
+.request-baseline-registry .request-final-command-strip>div{min-height:58px;padding:4px 18px 4px 0;border-right:1px solid var(--border);background:transparent}
+.request-baseline-registry .request-final-command-strip>div:last-child{border-right:0}
+.request-baseline-registry .request-final-command-strip span{font-size:11px;font-weight:650}
+.request-baseline-registry .request-final-command-strip strong{margin-top:4px;font-size:24px;font-weight:700}
+.request-baseline-registry .request-final-command-strip small{margin-top:4px;font-size:10.5px}
+
+/* Toolbar and registry: fewer boxes, more whitespace hierarchy */
+.request-baseline-workspace{gap:14px}
+.request-baseline-workspace .requests-toolbar-polished{min-height:44px;padding:4px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.request-baseline-workspace .request-view-switcher,.request-baseline-workspace .request-bucket-switcher{border:0;background:var(--panel-2)}
+.request-baseline-workspace .request-view-switcher button,.request-baseline-workspace .request-bucket-switcher button{min-height:30px;padding:0 10px;font-size:11.5px}
+.request-baseline-workspace .request-search{height:34px;font-size:12px}
+.request-baseline-workspace .request-table-wrap{border:0;border-radius:10px;box-shadow:0 5px 20px rgba(31,47,60,.035)}
+.request-baseline-workspace .request-registry-table th{height:38px;font-size:11px}
+.request-baseline-workspace .request-registry-table td{height:54px;font-size:12px}
+.request-baseline-workspace .request-registry-table .cell-title{font-size:12.5px;font-weight:680}
+.request-baseline-workspace .request-registry-table .cell-sub{font-size:10.5px;line-height:1.35}
+.request-baseline-workspace .request-stage-badge-polished{font-size:11px}
+.request-activity-text{color:var(--muted);font-size:10.5px}
+
+/* Board: clean operational cards */
+.request-baseline-board{gap:14px}
+.request-baseline-board .request-board-column{width:292px;min-width:292px}
+.request-baseline-board .request-board-column>header{min-height:38px;padding-bottom:8px}
+.request-baseline-card{padding:12px;border:0;border-radius:9px;box-shadow:0 2px 9px rgba(31,47,60,.055)}
+.request-baseline-card:hover{box-shadow:0 8px 24px rgba(31,47,60,.08)}
+.request-baseline-card .request-board-card-head strong{font-size:13px;line-height:1.35}
+.request-baseline-card .request-board-card-head>span{color:var(--soft);font-size:15px;line-height:1}
+.request-baseline-card .request-board-client{margin-top:6px;font-size:11.5px}
+.request-baseline-card .request-board-client small{margin-top:2px;font-size:10.5px}
+.request-baseline-card .request-board-facts{margin-top:9px}
+.request-baseline-card .request-board-facts span{padding:3px 6px;border:0;background:var(--panel-2);font-size:10px}
+.request-baseline-activity{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding-top:9px;border-top:1px solid var(--border);font-size:10.5px}
+.request-baseline-activity span{color:var(--text);font-weight:620;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.request-baseline-activity strong{flex:none;color:var(--muted);font-size:10px;font-weight:560}
+.request-baseline-card .request-board-note{margin-top:7px;border:0;background:var(--panel-2);font-size:10px}
+.request-baseline-drag-hint{display:block;margin-top:7px;color:var(--soft);font-size:9.5px;opacity:0;transition:opacity .15s ease}
+.request-baseline-card:hover .request-baseline-drag-hint{opacity:1}
+
+/* Modern proportional funnel: no PowerPoint trapezoids */
+.request-baseline-analytics .request-funnel-panel,.request-baseline-analytics .request-analytics-panel{border:0;box-shadow:0 5px 20px rgba(31,47,60,.035)}
+.request-baseline-funnel{gap:12px;padding:16px 8% 18px}
+.request-baseline-funnel .request-funnel-stage-wrap{gap:5px}
+.request-baseline-funnel .request-funnel-meta{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;color:var(--muted);font-size:11.5px}
+.request-baseline-funnel .request-funnel-meta span{font-weight:620;color:var(--text)}
+.request-baseline-funnel .request-funnel-meta strong{font-size:11px;font-weight:650}
+.request-baseline-funnel .request-funnel-stage{min-height:12px;padding:0;border:0;border-radius:999px;clip-path:none;background:color-mix(in srgb,var(--accent) 19%,var(--panel-3));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 9%,transparent)}
+.request-baseline-analytics .request-analytics-kpis div{border:0;background:var(--panel-2)}
+
+/* Editor readability: modern density, not tiny density */
+.request-baseline-editor .request-final-editor-main .request-v2-section{padding:18px 20px;border:0;border-radius:10px;box-shadow:0 5px 20px rgba(31,47,60,.035)}
+.request-baseline-editor .request-final-editor-main .request-v2-section>header h2{font-size:16px}
+.request-baseline-editor .request-final-editor-main .request-v2-section>header p{font-size:11.5px;line-height:1.45}
+.request-baseline-editor .request-final-editor-main .request-v2-nav{border:0;box-shadow:0 5px 20px rgba(31,47,60,.035)}
+.request-baseline-editor .request-final-editor-main .request-v2-nav-summary strong{font-size:12.5px}
+.request-baseline-editor .request-final-editor-main .request-v2-nav-summary span{font-size:10.5px}
+.request-baseline-editor .request-final-editor-main .request-v2-nav button{min-height:40px;font-size:11.5px}
+.request-baseline-editor .request-final-editor-main label{font-size:11.5px}
+.request-baseline-editor .request-final-editor-main label>small{font-size:10px}
+.request-baseline-editor .request-final-editor-main input,.request-baseline-editor .request-final-editor-main select{height:36px;font-size:12px}
+.request-baseline-editor .request-final-editor-main textarea{font-size:12px}
+.request-baseline-editor .request-final-editor-main input,.request-baseline-editor .request-final-editor-main select,.request-baseline-editor .request-final-editor-main textarea{border-color:var(--border);background:var(--panel-2)}
+.request-baseline-editor .request-final-editor-main .request-address-card{border:0;background:var(--panel-2)}
+.request-baseline-editor .request-final-editor-main .request-address-meta{font-size:10.5px}
+.request-baseline-editor .request-final-editor-main .request-access-choice{min-height:30px;font-size:10.5px}
+.request-baseline-editor .request-final-editor-main .request-role-card{border-color:var(--border)}
+.request-baseline-editor .request-final-editor-main .request-role-summary{min-height:58px;padding:11px 13px}
+.request-baseline-editor .request-final-editor-main .request-role-summary strong{font-size:12.5px}
+.request-baseline-editor .request-final-editor-main .request-role-summary span{font-size:10.5px}
+.request-baseline-editor .request-final-editor-main .request-role-summary em{font-size:10px}
+.request-baseline-editor .request-final-editor-main .request-role-body{padding:14px}
+.request-baseline-editor .request-final-editor-main .provision-matrix-polished{border:0}
+.request-baseline-editor .request-final-editor-main .provision-matrix-polished .provision-matrix-head{font-size:10px}
+.request-baseline-editor .request-final-editor-main .provision-matrix-polished .provision-matrix-row{min-height:48px;border-bottom:1px solid var(--border)}
+.request-baseline-editor .request-final-editor-main .provision-matrix-polished .provision-matrix-row:last-child{border-bottom:0}
+.request-baseline-editor .request-final-editor-main .provision-matrix-polished .provision-matrix-row>strong{font-size:11.5px}
+.request-baseline-editor .request-final-editor-main .request-provider-options{border:0;background:var(--panel-2)}
+.request-baseline-editor .request-final-editor-main .request-provider-option{min-height:30px;font-size:10.5px}
+.request-baseline-editor .request-final-editor-main .request-compliance-group{border:0;background:var(--panel-2)}
+.request-baseline-editor .request-final-editor-main .request-compliance-group h3{font-size:12.5px}
+.request-baseline-editor .request-final-editor-main .request-compliance-group p{font-size:10.5px}
+.request-baseline-editor .request-final-editor-main .request-check-row{min-height:38px;font-size:11px}
+.request-baseline-editor .request-final-editor-main .historical-rate-grid article{border:0}
+
+/* Live context rail */
+.request-baseline-editor .request-final-context{border:0;border-radius:10px;box-shadow:0 7px 24px rgba(31,47,60,.055)}
+.request-baseline-editor .request-final-context-head{padding:14px 15px}
+.request-baseline-editor .request-final-context-head>span{font-size:9.5px}
+.request-baseline-editor .request-final-context-head strong{font-size:13px}
+.request-baseline-editor .request-final-context-metrics span,.request-baseline-editor .request-final-context-block>span{font-size:9.5px}
+.request-baseline-editor .request-final-context-metrics strong,.request-baseline-editor .request-final-context-block>strong{font-size:11.5px}
+.request-baseline-provision-summary{line-height:1.45;font-weight:620!important}
+.request-baseline-editor .request-final-context-note{font-size:10.5px}
+
+/* Reduce explanatory noise inside mature workflow */
+.request-baseline-editor .request-v2-section>header p{max-width:620px}
+.request-baseline-editor .request-roles-head p{font-size:10.5px}
+
+/* Responsive composition: context rail is a large-screen enhancement, never a squeeze. */
+@media(max-width:1380px){.request-baseline-editor{grid-template-columns:minmax(0,1fr)}.request-baseline-editor .request-final-context{display:none}}
+@media(max-width:1050px){.request-baseline-editor .request-final-editor-main .request-v2-layout{grid-template-columns:1fr}.request-baseline-editor .request-final-editor-main .request-v2-nav{position:static;display:flex;overflow:auto}.request-baseline-editor .request-final-editor-main .request-v2-nav-summary{min-width:170px}.request-baseline-editor .request-final-editor-main .request-v2-nav button{width:auto;min-width:max-content}}
+@media(max-width:780px){.request-baseline-registry .request-final-command-strip{grid-template-columns:1fr 1fr;gap:10px}.request-baseline-registry .request-final-command-strip>div{border-right:0;border-bottom:1px solid var(--border);padding-bottom:10px}.request-baseline-workspace .requests-toolbar-polished{align-items:stretch}.request-baseline-funnel{padding-inline:2%}}

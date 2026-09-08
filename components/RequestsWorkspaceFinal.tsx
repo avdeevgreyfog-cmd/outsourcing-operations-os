@@ -1,5 +1,5 @@
 import { requestBucket, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
-import { RequestsWorkspacePolished } from "@/components/RequestsWorkspacePolished";
+import { RequestsWorkspaceBaseline } from "@/components/RequestsWorkspaceBaseline";
 
 type Props = {
   rows: RequestBoardRow[];
@@ -17,13 +17,13 @@ export function RequestsWorkspaceFinal(props: Props) {
   const conversionBase = agreed.length + completed.filter((row) => row.workflowStageCode === "not_agreed").length;
   const conversion = conversionBase ? Math.round((agreed.length / conversionBase) * 100) : 0;
 
-  return <div className="request-final-registry">
+  return <div className="request-final-registry request-baseline-registry">
     <div className="request-final-command-strip" aria-label="Сводка по заявкам">
-      <div><span>Активные заявки</span><strong>{active.length}</strong><small>в текущей работе</small></div>
+      <div><span>Активные заявки</span><strong>{active.length}</strong><small>сейчас в работе</small></div>
       <div><span>Потребность</span><strong>{activeHeadcount}</strong><small>человек по активным заявкам</small></div>
-      <div><span>Отправки КП</span><strong>{sent}</strong><small>за всё время в текущей выборке</small></div>
-      <div><span>Согласование</span><strong>{conversion}%</strong><small>из завершённых коммерческих исходов</small></div>
+      <div><span>Отправки КП</span><strong>{sent}</strong><small>за всё время</small></div>
+      <div><span>Согласовано</span><strong>{conversion}%</strong><small>из завершённых исходов</small></div>
     </div>
-    <RequestsWorkspacePolished {...props}/>
+    <RequestsWorkspaceBaseline {...props}/>
   </div>;
 }
