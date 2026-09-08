@@ -19,7 +19,10 @@ async function rejectsConstraint(action, pattern) {
 
 try {
   const migrations = await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
-  assert.equal(migrations.at(-1)?.filename, "0012_calculation_proposal_integrity.sql");
+  assert.ok(
+    migrations.some((row) => row.filename === "0013_request_intake_public_form.sql"),
+    "request intake migration must be applied",
+  );
 
   await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
 
