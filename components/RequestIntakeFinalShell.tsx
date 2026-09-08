@@ -41,28 +41,30 @@ export function RequestIntakeFinalShell(props: Props) {
 
   useEffect(()=>{
     const root=rootRef.current; if(!root)return;
+    const main=root.querySelector<HTMLElement>(".request-final-editor-main"); if(!main)return;
     const replacements:Array<[string,string]>=[["Клиент в CRM","Клиент в системе"],["Скачать Excel-шаблон","Скачать шаблон таблицы"],["Импорт из Excel","Загрузить из таблицы"]];
     const replaceCopy=()=>{
-      for(const element of root.querySelectorAll("label,button")) for(const node of element.childNodes) if(node.nodeType===Node.TEXT_NODE&&node.textContent){let next=node.textContent;for(const [from,to] of replacements)next=next.replace(from,to);if(next!==node.textContent)node.textContent=next;}
+      for(const element of main.querySelectorAll("label,button")) for(const node of element.childNodes) if(node.nodeType===Node.TEXT_NODE&&node.textContent){let next=node.textContent;for(const [from,to] of replacements)next=next.replace(from,to);if(next!==node.textContent)node.textContent=next;}
     };
     const sync=()=>{
       replaceCopy();
       setSummary(current=>{
         let next={...current};
-        const navText=root.querySelector(".request-v2-nav-summary span")?.textContent??"";
+        const navText=main.querySelector(".request-v2-nav-summary span")?.textContent??"";
         const match=navText.match(/(\d+)\s*чел\..*?(\d+)\s*позиц/i); if(match)next={...next,headcount:Number(match[1]),positions:Number(match[2])};
-        const dateInput=root.querySelector<HTMLInputElement>('input[type="date"]'); if(dateInput)next={...next,start:dateInput.value};
+        const dateInput=main.querySelector<HTMLInputElement>('input[type="date"]'); if(dateInput)next={...next,start:dateInput.value};
         const scheduleValues=new Set(["5/2","6/1","7/0","2/2","3/3","rotation","on_demand","custom"]);
-        const scheduleSelect=Array.from(root.querySelectorAll<HTMLSelectElement>("select")).find(select=>scheduleValues.has(select.value)); if(scheduleSelect)next={...next,schedule:scheduleSelect.value};
-        const ownerLabel=Array.from(root.querySelectorAll<HTMLLabelElement>("label")).find(label=>label.textContent?.trim().startsWith("Ответственный")); const ownerSelect=ownerLabel?.querySelector("select"); if(ownerSelect)next={...next,owner:(ownerSelect.selectedOptions[0]?.textContent??current.owner).trim()};
-        const provisionRows=Array.from(root.querySelectorAll<HTMLElement>(".provision-matrix-row")); if(provisionRows.length){const us=provisionRows.filter(row=>Array.from(row.querySelectorAll("button.active")).some(button=>button.textContent?.trim()==="Мы")).map(row=>row.querySelector("strong")?.textContent?.trim()??"").filter(Boolean);next={...next,providedByUs:us};}
-        return next;
+        const scheduleSelect=Array.from(main.querySelectorAll<HTMLSelectElement>("select")).find(select=>scheduleValues.has(select.value)); if(scheduleSelect)next={...next,schedule:scheduleSelect.value};
+        const ownerLabel=Array.from(main.querySelectorAll<HTMLLabelElement>("label")).find(label=>label.textContent?.trim().startsWith("Ответственный")); const ownerSelect=ownerLabel?.querySelector("select"); if(ownerSelect)next={...next,owner:(ownerSelect.selectedOptions[0]?.textContent??current.owner).trim()};
+        const provisionRows=Array.from(main.querySelectorAll<HTMLElement>(".provision-matrix-row")); if(provisionRows.length){const us=provisionRows.filter(row=>Array.from(row.querySelectorAll("button.active")).some(button=>button.textContent?.trim()==="Мы")).map(row=>row.querySelector("strong")?.textContent?.trim()??"").filter(Boolean);next={...next,providedByUs:us};}
+        const same=current.headcount===next.headcount&&current.positions===next.positions&&current.start===next.start&&current.schedule===next.schedule&&current.owner===next.owner&&current.providedByUs.join("|")===next.providedByUs.join("|");
+        return same?current:next;
       });
     };
     const scheduleSync=()=>window.setTimeout(sync,0);
-    root.addEventListener("input",scheduleSync,true); root.addEventListener("change",scheduleSync,true); root.addEventListener("click",scheduleSync,true);
-    const observer=new MutationObserver(scheduleSync); observer.observe(root,{subtree:true,childList:true,characterData:true}); sync();
-    return()=>{root.removeEventListener("input",scheduleSync,true);root.removeEventListener("change",scheduleSync,true);root.removeEventListener("click",scheduleSync,true);observer.disconnect();};
+    main.addEventListener("input",scheduleSync,true); main.addEventListener("change",scheduleSync,true); main.addEventListener("click",scheduleSync,true);
+    const observer=new MutationObserver(scheduleSync); observer.observe(main,{subtree:true,childList:true,characterData:true}); sync();
+    return()=>{main.removeEventListener("input",scheduleSync,true);main.removeEventListener("change",scheduleSync,true);main.removeEventListener("click",scheduleSync,true);observer.disconnect();};
   },[]);
 
   return <div className="request-final-editor-shell request-baseline-editor" ref={rootRef}>
