@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { getCommercialOptions, getCommercialRequest } from "@/lib/commercial/service";
-import { getRequestIntake } from "@/lib/commercial/request-intake";
+import { getRequestIntake } from "@/lib/commercial/request-intake-server";
 import { RequestEditWorkspace } from "@/components/CommercialRequestForms";
 import { PageHeader } from "@/components/UI";
 
