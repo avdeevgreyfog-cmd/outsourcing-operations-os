@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS request_public_submissions (
 
 CREATE INDEX IF NOT EXISTS idx_request_public_submission_queue
   ON request_public_submissions(organization_id,request_id,status,submitted_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_request_public_one_pending_submission
+  ON request_public_submissions(public_link_id)
+  WHERE status='pending';
 
 ALTER TABLE request_public_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE request_public_submissions ENABLE ROW LEVEL SECURITY;
