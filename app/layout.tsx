@@ -4,6 +4,7 @@ import "./request-intake.css";
 import "./request-workflow.css";
 import "./request-polish.css";
 import "./request-final.css";
+import "./request-baseline.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
