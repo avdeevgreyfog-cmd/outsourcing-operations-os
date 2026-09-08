@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "./request-intake.css";
 import "./request-workflow.css";
+import "./request-polish.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
-  description: "Operations OS для кадрового и производственного аутсорсинга",
+  description: "Операционная система для кадрового и производственного аутсорсинга",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
