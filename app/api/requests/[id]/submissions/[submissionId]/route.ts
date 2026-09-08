@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError } from "@/lib/access/server";
-import { reviewPublicSubmission } from "@/lib/commercial/request-intake";
+import { reviewPublicSubmission } from "@/lib/commercial/request-intake-server";
 
 const schema = z.object({
   decision: z.enum(["accept", "reject"]),
