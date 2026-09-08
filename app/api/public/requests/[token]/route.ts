@@ -3,7 +3,7 @@ import { z } from "zod";
 import { normalizeRequestIntake, submitPublicRequest } from "@/lib/commercial/request-intake";
 
 const roleSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z.union([z.string().uuid(), z.literal("")]).optional().transform((value) => value || undefined),
   specialtyId: z.string().uuid(),
   count: z.number().int().positive().max(5000),
   schedule: z.record(z.string(), z.json()).default({}),
