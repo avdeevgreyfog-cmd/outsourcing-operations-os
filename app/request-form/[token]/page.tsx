@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getPublicRequestContext } from "@/lib/commercial/request-intake";
+import { getPublicRequestContext } from "@/lib/commercial/request-intake-server";
 import { PublicRequestForm } from "@/components/PublicRequestForm";
 
 export const dynamic = "force-dynamic";
