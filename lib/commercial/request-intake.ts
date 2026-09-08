@@ -8,6 +8,9 @@ import { getCommercialRequest, type CommercialRequestDetail } from "@/lib/commer
 export const provisionKeys = ["housing","travel","shuttle","meals","workwear","ppe","tools","consumables","medical","medbook","training"] as const;
 export type ProvisionKey = typeof provisionKeys[number];
 export type ProvisionItem = { provider: string; cost: number | null; unit: string; comment: string };
+type JsonScalar = string | number | boolean | null;
+type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
+type JsonObject = { [key: string]: JsonValue };
 
 export type RequestIntake = {
   companyName: string;
@@ -59,8 +62,8 @@ export type PublicRolePayload = {
   id?: string;
   specialtyId: string;
   count: number;
-  schedule: Record<string, unknown>;
-  requirements: Record<string, unknown>;
+  schedule: JsonObject;
+  requirements: JsonObject;
   targetClientRate: number | null;
 };
 
@@ -70,7 +73,7 @@ export type PublicRequestSubmissionPayload = {
   regionId: string | null;
   startDate: string | null;
   durationText: string | null;
-  schedule: Record<string, unknown>;
+  schedule: JsonObject;
   lunchPaid: boolean;
   vatMode: string | null;
   housingRule: string | null;
