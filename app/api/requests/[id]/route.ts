@@ -20,11 +20,12 @@ const schema = z.object({
   clientId: z.string().uuid().nullable().optional(),
   title: z.string().trim().min(3).max(240).optional(),
   source: z.string().trim().min(1).max(80).optional(),
-  location: z.string().trim().min(2).max(300).optional(),
+  location: z.string().trim().max(300).optional(),
   regionId: z.string().uuid().nullable().optional(),
   startDate: z.string().date().nullable().optional(),
   durationText: z.string().trim().max(120).nullable().optional(),
   schedule: z.record(z.string(), z.json()).optional(),
+  intake: z.record(z.string(), z.json()).optional(),
   lunchPaid: z.boolean().nullable().optional(),
   vatMode: z.string().trim().max(40).nullable().optional(),
   housingRule: z.string().trim().max(120).nullable().optional(),
@@ -35,7 +36,7 @@ const schema = z.object({
   citizenshipRule: z.string().trim().max(120).nullable().optional(),
   toolsRule: z.string().trim().max(120).nullable().optional(),
   comments: z.string().trim().max(3000).nullable().optional(),
-  roles: z.array(roleSchema).min(1).max(40).optional(),
+  roles: z.array(roleSchema).max(40).optional(),
 });
 
 function asJsonValue(value: unknown) {
@@ -71,6 +72,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (["accepted","launched"].includes(current.status)) throw new Error("Принятая клиентом или переданная в запуск заявка зафиксирована. Для изменения коммерческих условий создайте новый цикл/версию до принятия КП");
 
       const nextClientId = body.clientId === undefined ? current.clientId : body.clientId;
+      if (nextClientId) {
+        const [client] = await tx<Array<{ id: string }>>`SELECT id FROM client_companies WHERE id=${nextClientId}::uuid`;
+        if (!client) throw new Error("Клиент не найден в текущей организации");
+      }
+      if (body.regionId) {
+        const [region] = await tx<Array<{ id: string }>>`SELECT id FROM regions WHERE id=${body.regionId}::uuid`;
+        if (!region) throw new Error("Регион не найден в текущей организации");
+      }
+
       await tx`
         UPDATE requests SET
           client_company_id=${nextClientId}::uuid,
@@ -78,7 +88,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           location_text=${body.location ?? current.location},region_id=${body.regionId === undefined ? current.regionId : body.regionId}::uuid,
           expected_start_date=${body.startDate === undefined ? current.startDate : body.startDate}::date,
           duration_text=${body.durationText === undefined ? current.durationText : body.durationText},
-          schedule_json=${sql.json(asJsonValue(body.schedule ?? current.schedule))},lunch_paid=${body.lunchPaid === undefined ? current.lunchPaid : body.lunchPaid},
+          schedule_json=${sql.json(asJsonValue(body.schedule ?? current.schedule))},
+          intake_json=CASE WHEN ${body.intake === undefined} THEN intake_json ELSE ${sql.json(asJsonValue(body.intake ?? {}))} END,
+          lunch_paid=${body.lunchPaid === undefined ? current.lunchPaid : body.lunchPaid},
           vat_mode=${body.vatMode === undefined ? current.vatMode : body.vatMode},housing_rule=${body.housingRule === undefined ? current.housingRule : body.housingRule},
           travel_rule=${body.travelRule === undefined ? current.travelRule : body.travelRule},shuttle_rule=${body.shuttleRule === undefined ? current.shuttleRule : body.shuttleRule},
           ppe_rule=${body.ppeRule === undefined ? current.ppeRule : body.ppeRule},medical_rule=${body.medicalRule === undefined ? current.medicalRule : body.medicalRule},
