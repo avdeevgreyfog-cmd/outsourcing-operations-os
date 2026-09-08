@@ -88,7 +88,7 @@ function billingLabel(value: string) {
 
 function scheduleLabel(value: string) {
   const known = ({ rotation: "Вахта", on_demand: "По заявке", custom: "Другой" } as Record<string, string>)[value];
-  return known ?? value || "Уточняется";
+  return known || value || "Уточняется";
 }
 
 function statusLabel(value: string) {
