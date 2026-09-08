@@ -6,7 +6,7 @@ import "./request-polish.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
-  description: "Операционная система для кадрового и производственного аутсорсинга",
+  description: "Управление кадровым и производственным аутсорсингом: заявки, расчёты, объекты и персонал",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
