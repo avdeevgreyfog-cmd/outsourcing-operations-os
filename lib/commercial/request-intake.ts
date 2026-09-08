@@ -1,14 +1,29 @@
 export const provisionKeys = ["housing","travel","shuttle","meals","workwear","ppe","tools","consumables","medical","medbook","training"] as const;
 export type ProvisionKey = typeof provisionKeys[number];
 export type ProvisionItem = { provider: string; cost: number | null; unit: string; comment: string };
+export type MessengerItem = { type: string; value: string };
 export type JsonScalar = string | number | boolean | null;
 export type JsonValue = JsonScalar | JsonValue[] | { [key: string]: JsonValue };
 export type JsonObject = { [key: string]: JsonValue };
 
 export type RequestIntake = {
   companyName: string;
-  object: { siteName: string; city: string; landmark: string; objectType: string };
-  contact: { name: string; phone: string; email: string; messengerType: string; messenger: string };
+  object: {
+    siteName: string;
+    city: string;
+    landmark: string;
+    objectType: string;
+    accessType: string;
+    accessComment: string;
+  };
+  contact: {
+    name: string;
+    phone: string;
+    email: string;
+    messengerType: string;
+    messenger: string;
+    messengers: MessengerItem[];
+  };
   volume: {
     launchMode: string;
     startHeadcount: number | null;
@@ -31,6 +46,10 @@ export type RequestIntake = {
     overtimeNotes: string;
   };
   provision: Record<ProvisionKey, ProvisionItem>;
+  logistics: {
+    housingScope: string;
+    brigadierProvider: string;
+  };
   compliance: {
     securityCheck: string;
     workerCategories: string[];
@@ -146,11 +165,12 @@ const emptyProvision = (): Record<ProvisionKey, ProvisionItem> => Object.fromEnt
 
 export const emptyRequestIntake = (): RequestIntake => ({
   companyName: "",
-  object: { siteName: "", city: "", landmark: "", objectType: "" },
-  contact: { name: "", phone: "", email: "", messengerType: "", messenger: "" },
+  object: { siteName: "", city: "", landmark: "", objectType: "", accessType: "unknown", accessComment: "" },
+  contact: { name: "", phone: "", email: "", messengerType: "", messenger: "", messengers: [] },
   volume: { launchMode: "once", startHeadcount: null, demandType: "fixed", guaranteedHours: null, guaranteedShifts: null, comment: "" },
   schedule: { pattern: "", customPattern: "", shiftStart: "", shiftEnd: "", presenceHours: null, paidHours: null, lunchMinutes: 60, lunchPaid: false, shiftType: "day", rotationDays: null, overtimeNotes: "" },
   provision: emptyProvision(),
+  logistics: { housingScope: "as_needed", brigadierProvider: "not_required" },
   compliance: { securityCheck: "unknown", workerCategories: [], documentChecks: [], comment: "" },
   commercial: { billingUnit: "unknown", clientLimit: null, clientLimitVatMode: "with_vat", desiredWorkerNet: null, desiredWorkerNetUnit: "month", competitorRate: null, competitorRateVatMode: "with_vat", competitorComment: "", paymentTerms: "" },
   sectionComments: {},
@@ -167,6 +187,15 @@ function numberOrNull(value: unknown): number | null {
 }
 function bool(value: unknown, fallback = false) { return typeof value === "boolean" ? value : fallback; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
+function messengers(value: unknown): MessengerItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const row = object(item);
+    const type = text(row.type);
+    const messengerValue = text(row.value);
+    return type || messengerValue ? [{ type, value: messengerValue }] : [];
+  });
+}
 
 export function toJsonValue(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue;
@@ -180,6 +209,7 @@ export function normalizeRequestIntake(value: unknown): RequestIntake {
   const volume = object(root.volume);
   const schedule = object(root.schedule);
   const provision = object(root.provision);
+  const logistics = object(root.logistics);
   const compliance = object(root.compliance);
   const commercial = object(root.commercial);
   const sectionComments = object(root.sectionComments);
@@ -194,13 +224,24 @@ export function normalizeRequestIntake(value: unknown): RequestIntake {
     };
   }
 
+  const normalizedMessengers = messengers(contact.messengers);
+  const legacyType = text(contact.messengerType);
+  const legacyValue = text(contact.messenger);
+  if (normalizedMessengers.length === 0 && (legacyType || legacyValue)) normalizedMessengers.push({ type: legacyType, value: legacyValue });
+
   return {
     companyName: text(root.companyName),
     object: {
-      siteName: text(objectData.siteName), city: text(objectData.city), landmark: text(objectData.landmark), objectType: text(objectData.objectType),
+      siteName: text(objectData.siteName),
+      city: text(objectData.city),
+      landmark: text(objectData.landmark),
+      objectType: text(objectData.objectType),
+      accessType: text(objectData.accessType, base.object.accessType),
+      accessComment: text(objectData.accessComment),
     },
     contact: {
-      name: text(contact.name), phone: text(contact.phone), email: text(contact.email), messengerType: text(contact.messengerType), messenger: text(contact.messenger),
+      name: text(contact.name), phone: text(contact.phone), email: text(contact.email),
+      messengerType: legacyType, messenger: legacyValue, messengers: normalizedMessengers,
     },
     volume: {
       launchMode: text(volume.launchMode, base.volume.launchMode), startHeadcount: numberOrNull(volume.startHeadcount), demandType: text(volume.demandType, base.volume.demandType),
@@ -212,6 +253,10 @@ export function normalizeRequestIntake(value: unknown): RequestIntake {
       lunchPaid: bool(schedule.lunchPaid), shiftType: text(schedule.shiftType, base.schedule.shiftType), rotationDays: numberOrNull(schedule.rotationDays), overtimeNotes: text(schedule.overtimeNotes),
     },
     provision: base.provision,
+    logistics: {
+      housingScope: text(logistics.housingScope, base.logistics.housingScope),
+      brigadierProvider: text(logistics.brigadierProvider, base.logistics.brigadierProvider),
+    },
     compliance: {
       securityCheck: text(compliance.securityCheck, base.compliance.securityCheck), workerCategories: strings(compliance.workerCategories),
       documentChecks: strings(compliance.documentChecks), comment: text(compliance.comment),
@@ -237,10 +282,11 @@ type RequestCompletenessSource = {
 };
 
 export function calculateRequestCompleteness(request: RequestCompletenessSource, intake: RequestIntake) {
+  const hasMessenger = intake.contact.messengers.some((item) => item.value.trim()) || Boolean(intake.contact.messenger);
   const checks = [
     { ok: Boolean(request.title.trim()), label: "название заявки" },
-    { ok: Boolean(request.location.trim() || intake.object.city || request.regionId), label: "локация / регион" },
-    { ok: Boolean(intake.contact.name && (intake.contact.phone || intake.contact.email || intake.contact.messenger)), label: "контакт заказчика" },
+    { ok: Boolean(request.location.trim() || intake.object.city || request.regionId), label: "адрес / локация" },
+    { ok: Boolean(intake.contact.name && (intake.contact.phone || intake.contact.email || hasMessenger)), label: "контакт заказчика" },
     { ok: Boolean(request.startDate || request.durationText), label: "сроки / дата старта" },
     { ok: request.roles.length > 0, label: "хотя бы одна позиция" },
     { ok: Boolean(intake.schedule.pattern || object(request.schedule).pattern), label: "график работы" },
