@@ -13,9 +13,29 @@ import {
   type RequestIntake,
 } from "@/lib/commercial/request-intake";
 
+function demoIntake(request: NonNullable<Awaited<ReturnType<typeof getCommercialRequest>>>): RequestIntake {
+  const schedule = request.schedule ?? {};
+  const pattern = typeof schedule.pattern === "string"
+    ? schedule.pattern
+    : typeof schedule.label === "string"
+      ? schedule.label
+      : "";
+  return normalizeRequestIntake({
+    companyName: request.client,
+    object: { siteName: request.location, city: request.location },
+    schedule: {
+      pattern,
+      presenceHours: typeof schedule.presenceHours === "number" ? schedule.presenceHours : null,
+      paidHours: typeof schedule.paidHours === "number" ? schedule.paidHours : null,
+      lunchPaid: request.lunchPaid ?? false,
+    },
+  });
+}
+
 export async function getRequestIntake(actor: Actor, requestId: string): Promise<RequestIntake> {
   const request = await getCommercialRequest(actor, requestId);
   if (!request) throw new Error("Заявка не найдена");
+  if (actor.demo) return demoIntake(request);
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [row] = await sql<Array<{ intake: unknown }>>`SELECT intake_json intake FROM requests WHERE id=${requestId}::uuid`;
     return normalizeRequestIntake(row?.intake);
@@ -25,6 +45,7 @@ export async function getRequestIntake(actor: Actor, requestId: string): Promise
 export async function getRequestExternalState(actor: Actor, requestId: string): Promise<RequestExternalState> {
   const request = await getCommercialRequest(actor, requestId);
   if (!request) throw new Error("Заявка не найдена");
+  if (actor.demo) return { links: [], submissions: [] };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [links, submissions] = await Promise.all([
       sql<Array<{id:string;token:string;createdAt:string;expiresAt:string|null;revokedAt:string|null;lastOpenedAt:string|null;submittedAt:string|null}>>`
@@ -46,6 +67,7 @@ export async function getRequestExternalState(actor: Actor, requestId: string): 
 
 export async function createRequestPublicLink(actor: Actor, requestId: string, expiresInDays: number | null) {
   requireCapability(actor, "sales.request.edit");
+  if (actor.demo) throw new Error("В демонстрационном режиме внешние ссылки доступны только для просмотра интерфейса");
   const request = await getCommercialRequest(actor, requestId);
   if (!request) throw new Error("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", request, actor)) throw new AccessDeniedError("sales.request.edit");
@@ -64,6 +86,7 @@ export async function createRequestPublicLink(actor: Actor, requestId: string, e
 
 export async function revokeRequestPublicLink(actor: Actor, requestId: string, linkId: string) {
   requireCapability(actor, "sales.request.edit");
+  if (actor.demo) throw new Error("В демонстрационном режиме внешние ссылки доступны только для просмотра интерфейса");
   const request = await getCommercialRequest(actor, requestId);
   if (!request) throw new Error("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", request, actor)) throw new AccessDeniedError("sales.request.edit");
@@ -126,6 +149,7 @@ export async function submitPublicRequest(token: string, payload: PublicRequestS
 
 export async function reviewPublicSubmission(actor: Actor, requestId: string, submissionId: string, decision: "accept" | "reject", comment: string | null) {
   requireCapability(actor, "sales.request.edit");
+  if (actor.demo) throw new Error("В демонстрационном режиме изменения доступны только для просмотра интерфейса");
   const current = await getCommercialRequest(actor, requestId);
   if (!current) throw new Error("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", current, actor)) throw new AccessDeniedError("sales.request.edit");
