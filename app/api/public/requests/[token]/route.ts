@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { normalizeRequestIntake, submitPublicRequest } from "@/lib/commercial/request-intake";
+import { normalizeRequestIntake } from "@/lib/commercial/request-intake";
+import { submitPublicRequest } from "@/lib/commercial/request-intake-server";
 
 const roleSchema = z.object({
   id: z.union([z.string().uuid(), z.literal("")]).optional().transform((value) => value || undefined),
