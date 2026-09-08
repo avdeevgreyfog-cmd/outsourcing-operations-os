@@ -12,10 +12,10 @@ type PublicRole = PublicRequestContext["roles"][number] & { scheduleOverride: bo
 
 const provisionLabels: Record<ProvisionKey, string> = {
   housing: "Проживание", travel: "Проезд до региона", shuttle: "Развозка до объекта", meals: "Питание",
-  workwear: "Спецодежда", ppe: "СИЗ", tools: "Инструмент", consumables: "Расходные материалы",
+  workwear: "Спецодежда", ppe: "СИЗ", tools: "Инструмент", consumables: "Расходняк",
   medical: "Медосмотр", medbook: "Медицинская книжка", training: "Обучение / допуски",
 };
-const providerOptions = [["client","Заказчик"],["us","Исполнитель"],["worker","Работник"],["not_required","Не требуется"],["unknown","Нужно уточнить"]] as const;
+const providerOptions = [["client","Заказчик"],["us","Исполнитель"],["not_required","Не требуется"],["unknown","Нужно уточнить"]] as const;
 const workerCategories = [["rf","Граждане РФ"],["eaeu","ЕАЭС"],["foreign_with_docs","Иностранные граждане с разрешительными документами"],["client_rules","Другие согласованные категории"]] as const;
 const documentChecks = [["security","Проверка СБ"],["medical","Медосмотр"],["medbook","Медкнижка"],["labor_safety","Охрана труда"],["industrial_safety","Промышленная безопасность"],["certificates","Удостоверения / допуски"],["pass_docs","Документы для проходной"]] as const;
 
@@ -95,7 +95,7 @@ export function PublicRequestForm({ token, context }: { token: string; context: 
     <section className="request-section"><div className="request-section-head"><span>02</span><div><h2>Контакт</h2><p>Кого менеджер может быстро уточнить по условиям заявки.</p></div></div><div className="request-grid cols-2">
       <label className="request-field"><span>Имя</span><input value={intake.contact.name} onChange={(event) => setIntake((current) => ({ ...current, contact: patch(current.contact, { name: event.target.value }) }))} /></label>
       <label className="request-field"><span>Телефон</span><input value={intake.contact.phone} onChange={(event) => setIntake((current) => ({ ...current, contact: patch(current.contact, { phone: event.target.value }) }))} /></label>
-      <label className="request-field"><span>Email</span><input type="email" value={intake.contact.email} onChange={(event) => setIntake((current) => ({ ...current, contact: patch(current.contact, { email: event.target.value }) }))} /></label>
+      <label className="request-field"><span>Эл. почта</span><input type="email" value={intake.contact.email} onChange={(event) => setIntake((current) => ({ ...current, contact: patch(current.contact, { email: event.target.value }) }))} /></label>
       <label className="request-field"><span>Мессенджер</span><input value={intake.contact.messenger} onChange={(event) => setIntake((current) => ({ ...current, contact: patch(current.contact, { messenger: event.target.value }) }))} /></label>
     </div></section>
 

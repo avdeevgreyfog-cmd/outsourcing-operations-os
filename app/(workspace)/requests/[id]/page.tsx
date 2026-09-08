@@ -100,6 +100,15 @@ function lossLabel(value: string | null | undefined) {
   return lossLabels[value] ?? (/[A-Za-z_]/.test(value) ? "Другая причина" : value);
 }
 
+function timelineText(value: string) {
+  const replacements: Record<string, string> = {
+    new: "Новая", clarification: "Уточнение условий", ready_calc: "Готова к расчёту", calculation: "Расчёт", proposal_prep: "Подготовка КП", proposal_client: "КП у заказчика", negotiation: "Переговоры / доработка", agreed: "Согласовано", not_agreed: "Не согласовано", draft: "Черновик", pending: "На согласовании", accepted: "Принято", rejected: "Отклонено", sent: "Отправлено", approved: "Согласовано"
+  };
+  let result = value;
+  for (const [code, label] of Object.entries(replacements)) result = result.replaceAll(code, label);
+  return result.replace(/\bv(\d+)\b/g, "№$1");
+}
+
 function fmtDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
@@ -217,7 +226,7 @@ export default async function RequestPage({ params }: { params: Promise<{ id: st
         {canEdit && <div id="share"><Section title="Поделиться и получить уточнения" note="Получатель видит только клиентскую форму. Внутренние ставки, история расчётов и маржа не раскрываются."><div style={{ padding: 14 }}><RequestExternalWorkflow requestId={id} state={external} canEdit={!archived && !locked}/></div></Section></div>}
 
         <Section title="История заявки" note="События хранятся в журнале изменений и истории коммерческих версий.">
-          <details className="request-history"><summary>Показать историю · {workflow.timeline.length} событий</summary><div className="request-timeline">{workflow.timeline.length ? workflow.timeline.slice().reverse().map((item) => <article key={item.id}><i/><div><header><strong>{item.title}</strong><span>{fmtDate(item.at)}</span></header><p>{item.detail}</p><small>{item.actor}</small></div></article>) : <div className="empty-inline">История пока пуста</div>}</div></details>
+          <details className="request-history"><summary>Показать историю · {workflow.timeline.length} событий</summary><div className="request-timeline">{workflow.timeline.length ? workflow.timeline.slice().reverse().map((item) => <article key={item.id}><i/><div><header><strong>{timelineText(item.title)}</strong><span>{fmtDate(item.at)}</span></header><p>{timelineText(item.detail)}</p><small>{item.actor}</small></div></article>) : <div className="empty-inline">История пока пуста</div>}</div></details>
         </Section>
       </div>
 
