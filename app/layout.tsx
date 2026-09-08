@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./request-intake.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
