@@ -1,0 +1,47 @@
+name: Request polish source correction
+
+on:
+  push:
+    branches:
+      - feat/request-visual-polish-ru
+
+permissions:
+  contents: write
+
+jobs:
+  correct-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/request-visual-polish-ru
+          fetch-depth: 0
+      - name: Apply exact source corrections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          editor = Path('components/RequestIntakeWorkspacePolished.tsx')
+          text = editor.read_text()
+          old = 'options.assignableUsers'
+          if old not in text:
+              raise SystemExit('Expected assignableUsers token was not found')
+          editor.write_text(text.replace(old, 'options.members'))
+
+          detail = Path('app/(workspace)/requests/[id]/page.tsx')
+          text = detail.read_text()
+          old = 'return known ?? value || "Уточняется";'
+          if old not in text:
+              raise SystemExit('Expected scheduleLabel expression was not found')
+          detail.write_text(text.replace(old, 'return known || value || "Уточняется";'))
+
+          workflow = Path('.github/workflows/request-polish-source-fix.yml')
+          workflow.unlink()
+          PY
+      - name: Commit corrections
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/RequestIntakeWorkspacePolished.tsx 'app/(workspace)/requests/[id]/page.tsx' .github/workflows/request-polish-source-fix.yml
+          git commit -m "fix: resolve request polish type issues"
+          git push origin HEAD:feat/request-visual-polish-ru
