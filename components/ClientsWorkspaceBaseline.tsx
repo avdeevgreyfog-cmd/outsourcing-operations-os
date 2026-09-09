@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ClientRow } from "@/lib/data/service";
 import { CreateClientButton } from "@/components/forms/CreateClientButton";
+import { SalesMetrics, SalesSearch, SalesSegments, SalesEmpty } from "@/components/sales/SalesUI";
 import { Status } from "@/components/UI";
 
 type Filter = "all" | "active";
@@ -18,7 +19,7 @@ function clientStatusLabel(value: string) {
   return labels[value] ?? (/[A-Za-z_]/.test(value) ? "Другой статус" : value);
 }
 
-export function ClientsWorkspaceBaseline({ rows }: { rows: ClientRow[] }) {
+export function ClientsWorkspaceBaseline({ rows, canCreate = false }: { rows: ClientRow[]; canCreate?: boolean }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
@@ -35,38 +36,29 @@ export function ClientsWorkspaceBaseline({ rows }: { rows: ClientRow[] }) {
   }), [rows, filter, query]);
 
   return <div className="request-final-registry request-baseline-registry client-baseline-registry">
-    <div className="request-final-command-strip" aria-label="Сводка по клиентам">
-      <div><span>Клиенты</span><strong>{rows.length}</strong><small>в доступном контуре</small></div>
-      <div><span>Активные</span><strong>{active.length}</strong><small>сейчас в работе</small></div>
-      <div><span>Заявки</span><strong>{requestCount}</strong><small>по всем клиентам</small></div>
-      <div><span>Объекты</span><strong>{objectCount}</strong><small>{contactCount} контактов в базе</small></div>
-    </div>
+    <SalesMetrics label="Сводка по клиентам" items={[
+      {label:"Клиенты",value:rows.length,note:"в доступном контуре"},
+      {label:"Активные",value:active.length,note:"сейчас в работе"},
+      {label:"Заявки",value:requestCount,note:"доступные заявки клиентов"},
+      {label:"Контакты",value:contactCount,note:`Объектов в доступном контуре: ${objectCount}`},
+    ]}/>
 
-    <div className="requests-workspace requests-workspace-polished request-baseline-workspace client-baseline-workspace">
-      <div className="requests-toolbar requests-toolbar-polished">
-        <div className="requests-toolbar-left">
-          <div className="segmented-control request-bucket-switcher">
-            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Все</button>
-            <button className={filter === "active" ? "active" : ""} onClick={() => setFilter("active")}>Активные</button>
-          </div>
-        </div>
-        <div className="requests-toolbar-actions">
-          <input className="request-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по клиентам" />
-          <CreateClientButton />
-        </div>
+    <div className="sales-registry">
+      <div className="sales-toolbar">
+        <SalesSegments<Filter> label="Статус клиентов" value={filter} onChange={setFilter} items={[{value:"all",label:"Все"},{value:"active",label:"Активные"}]}/>
+        <div className="sales-toolbar-actions"><SalesSearch value={query} onChange={setQuery} placeholder="Поиск по клиентам"/>{canCreate && <CreateClientButton/>}</div>
       </div>
-
+      <div className="sales-results" aria-live="polite">Показано {filtered.length} из {rows.length}</div>
       <div className="request-table-wrap">
-        <table className="data-table request-registry-table">
-          <thead><tr><th>Клиент</th><th>Статус</th><th>Контакты</th><th>Заявки</th><th>Объекты</th><th>Контур</th></tr></thead>
+        <table className="data-table sales-client-table">
+          <thead><tr><th>Клиент</th><th>Статус</th><th>Контакты</th><th>Заявки</th><th>Объекты</th></tr></thead>
           <tbody>{filtered.length ? filtered.map((row) => <tr key={row.id}>
             <td><Link className="cell-title" href={`/clients/${row.id}`}>{row.name}</Link><span className="cell-sub">{row.legalName || "Юридическое лицо не указано"}</span></td>
             <td><Status tone={row.status === "active" ? "good" : "neutral"}>{clientStatusLabel(row.status)}</Status></td>
-            <td><strong>{row.contacts}</strong><span className="cell-sub">контактов</span></td>
-            <td><strong>{row.requests}</strong><span className="cell-sub">коммерческих заявок</span></td>
-            <td><strong>{row.objects}</strong><span className="cell-sub">действующих и завершённых</span></td>
-            <td><span className="cell-sub">{row.requests ? `${row.requests} заявок` : "Без заявок"} · {row.objects ? `${row.objects} объектов` : "без объектов"}</span></td>
-          </tr>) : <tr><td colSpan={6}><div className="empty-inline">Клиентов по выбранному фильтру нет</div></td></tr>}</tbody>
+            <td><Link href={`/clients/${row.id}?tab=contacts`}>{row.contacts}</Link></td>
+            <td><Link href={`/clients/${row.id}?tab=requests`}>{row.requests}</Link></td>
+            <td><Link href={`/clients/${row.id}?tab=objects`}>{row.objects}</Link></td>
+          </tr>) : <tr><td colSpan={5}><SalesEmpty onReset={() => { setQuery(""); setFilter("all"); }}/></td></tr>}</tbody>
         </table>
       </div>
     </div>

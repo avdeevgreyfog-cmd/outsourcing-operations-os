@@ -1,4 +1,5 @@
 import { requestBucket, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
+import { SalesMetrics } from "@/components/sales/SalesUI";
 import { RequestsWorkspaceBaseline } from "@/components/RequestsWorkspaceBaseline";
 
 type Props = {
@@ -6,6 +7,8 @@ type Props = {
   stages: RequestStageDefinition[];
   canCreate: boolean;
   canConfigure: boolean;
+  canEdit: boolean;
+  now: number;
 };
 
 export function RequestsWorkspaceFinal(props: Props) {
@@ -18,12 +21,12 @@ export function RequestsWorkspaceFinal(props: Props) {
   const conversion = conversionBase ? Math.round((agreed.length / conversionBase) * 100) : 0;
 
   return <div className="request-final-registry request-baseline-registry">
-    <div className="request-final-command-strip" aria-label="Сводка по заявкам">
-      <div><span>Активные заявки</span><strong>{active.length}</strong><small>сейчас в работе</small></div>
-      <div><span>Потребность</span><strong>{activeHeadcount}</strong><small>человек по активным заявкам</small></div>
-      <div><span>Отправки КП</span><strong>{sent}</strong><small>за всё время</small></div>
-      <div><span>Согласовано</span><strong>{conversion}%</strong><small>из завершённых исходов</small></div>
-    </div>
+    <SalesMetrics label="Сводка по заявкам" items={[
+      {label:"Активные заявки",value:active.length,note:"сейчас в работе"},
+      {label:"Потребность",value:activeHeadcount,note:"человек по активным заявкам"},
+      {label:"Отправки КП",value:sent,note:"за всё время"},
+      {label:"Согласовано",value:conversionBase ? `${conversion}%` : "—",note:conversionBase ? `из ${conversionBase} завершённых заявок` : "нет завершённых заявок"},
+    ]}/>
     <RequestsWorkspaceBaseline {...props}/>
   </div>;
 }

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { SalesMetrics, SalesSearch, SalesSegments } from "@/components/sales/SalesUI";
 import {useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import * as XLSX from "xlsx";
-import {CalendarClock,Columns3,Download,LayoutList,Plus,Search,X} from "lucide-react";
+import {CalendarClock,Columns3,Download,LayoutList,Plus,X} from "lucide-react";
 import type {TenderRow} from "@/lib/tenders/service";
 import {tenderBillingLabels,tenderDeadlineState,tenderDecisionLabels,tenderResultLabels,tenderStageLabel,tenderStages} from "@/lib/tenders/model";
 import {rub} from "@/lib/ui/format";
@@ -164,25 +165,29 @@ export function TendersWorkspace({rows,demo,canCreate,canImport,canEdit}:{rows:T
   }
 
   return <div className="request-baseline-registry tender-registry">
-    <div className="request-final-command-strip tender-command-strip">
-      <div><span>Новые</span><strong>{newRows.length}</strong><small>ещё не разобраны</small></div>
-      <div><span>На анализе</span><strong>{analysisRows.length}</strong><small>изучаем условия</small></div>
-      <div><span>Участвуем</span><strong>{participating.length}</strong><small>решение принято</small></div>
-      <div className={urgent.length?"attention":""}><span>Срок ≤ 3 дней</span><strong>{urgent.length}</strong><small>требуют внимания</small></div>
-    </div>
+    <SalesMetrics label="Сводка по тендерам" items={[
+      {label:"Новые",value:newRows.length,note:"ещё не разобраны"},
+      {label:"На анализе",value:analysisRows.length,note:"изучаем условия"},
+      {label:"Участвуем",value:participating.length,note:"решение принято"},
+      {label:"Срок до 3 дней",value:urgent.length,note:"требуют внимания"},
+    ]}/>
 
     {demo&&<div className="tender-demo-note"><strong>Демо-режим.</strong><span>В реестр добавлены примеры из вашей таблицы «Тендеры». Новые тендеры и импорт Excel в демо сохраняются только в этом браузере, чтобы можно было проверить сценарий без записи в рабочую базу.</span></div>}
 
-    <div className="requests-toolbar tender-toolbar">
-      <div className="segmented"><button className={bucket==="active"?"active":""} onClick={()=>setBucket("active")}>Активные</button><button className={bucket==="completed"?"active":""} onClick={()=>setBucket("completed")}>Завершённые</button></div>
-      <div className="segmented"><button className={view==="list"?"active":""} onClick={()=>setView("list")}><LayoutList size={14}/> Список</button><button className={view==="board"?"active":""} onClick={()=>setView("board")}><Columns3 size={14}/> Доска</button></div>
-      <label className="request-search"><Search size={14}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Поиск по тендерам"/></label>
-      <select value={deadline} onChange={event=>setDeadline(event.target.value as DeadlineFilter)}><option value="all">Все сроки</option><option value="today">Сегодня / просрочено</option><option value="3d">До 3 дней</option><option value="7d">До 7 дней</option></select>
+    <div className="sales-toolbar">
+      <SalesSegments<View> label="Вид тендеров" value={view} onChange={setView} items={[{value:"list",label:"Список",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>}]}/>
+      <div className="sales-toolbar-actions">
       <div className="toolbar-spacer"/>
       <button className="button" type="button" onClick={exportExcel}><Download size={14}/> Выгрузить Excel</button>
       {canImport&&<TenderImportPanel canImport={canImport} demo={demo} onDemoImport={addDemoRows}/>} 
       {canCreate&&(demo?<button className="button primary" type="button" onClick={()=>setDemoCreateOpen(true)}><Plus size={14}/> Добавить тендер</button>:<Link className="button primary" href="/tenders/new"><Plus size={14}/> Добавить тендер</Link>)}
+    </div></div>
+    <div className="sales-filterbar">
+      <SalesSegments<Bucket> label="Раздел тендеров" value={bucket} onChange={setBucket} items={[{value:"active",label:"Активные"},{value:"completed",label:"Завершённые"}]}/>
+      <select aria-label="Срок подачи" value={deadline} onChange={event=>setDeadline(event.target.value as DeadlineFilter)}><option value="all">Все сроки</option><option value="today">Сегодня / просрочено</option><option value="3d">До 3 дней</option><option value="7d">До 7 дней</option></select>
+      <SalesSearch value={query} onChange={setQuery} placeholder="Поиск по тендерам"/>
     </div>
+    <div className="sales-results" aria-live="polite">Показано {filtered.length}</div>
 
     {view==="list"?<TenderList rows={filtered}/>:<TenderBoard rows={filtered} bucket={bucket} canEdit={canEdit} busyId={busyId} dragId={dragId} setDragId={setDragId} onMove={move}/>} 
     {demo&&demoCreateOpen&&<DemoTenderCreateDrawer onClose={()=>setDemoCreateOpen(false)} onCreate={item=>{addDemoRows([item]);setDemoCreateOpen(false);}}/>}

@@ -109,10 +109,10 @@ export default async function ClientPage({
         <div className="request-entity-overview-grid">
           <Section title="Коммерческий контур">
             <div className="request-entity-side-body">
-              <KeyValue label="Статус" value={<Status tone={tone(client.status)}>{statusLabel(client.status)}</Status>}/>
+              <KeyValue label="Клиент" value={client.legalName || client.name}/>
               <KeyValue label="Последняя заявка" value={latestRequest ? <Link href={`/requests/${latestRequest.id}`}>{latestRequest.title}</Link> : "—"}/>
               <KeyValue label="Принятые расчёты" value={acceptedCalculations}/>
-              <KeyValue label="Заявок всего" value={<Link href={`/clients/${id}?tab=requests`}>{clientRequests.length}</Link>}/>
+              <KeyValue label="Заявки клиента" value={<Link href={`/clients/${id}?tab=requests`}>Открыть список →</Link>}/>
               {canReadFinance && <KeyValue label="Вклад в прибыль" value={rub(contribution)} sensitive/>}
             </div>
           </Section>
@@ -121,7 +121,7 @@ export default async function ClientPage({
             <div className="stack-list request-entity-stack">{clientObjects.length ? clientObjects.map((item) => <Link className="stack-item" href={`/objects/${item.id}`} key={item.id}>
               <div><strong>{item.name}</strong><small>{item.region} · укомплектованность {item.coverage}%</small></div>
               <Status tone={item.risk === "critical" ? "bad" : item.risk === "high" ? "warn" : tone(item.status)}>{statusLabel(item.status)}</Status>
-            </Link>) : <div className="empty-inline">Объектов пока нет</div>}</div>
+            </Link>) : <Empty title="Нет доступных объектов" text="Связанные с клиентом объекты появятся здесь, когда будут доступны в вашей зоне ответственности."/>}</div>
           </Section>
         </div>
       </div>
@@ -152,7 +152,7 @@ export default async function ClientPage({
         <div className="stack-list request-entity-stack">{clientObjects.length ? clientObjects.map((item) => <Link className="stack-item" href={`/objects/${item.id}`} key={item.id}>
           <div><strong>{item.name}</strong><small>{item.region} · {item.code}</small></div>
           <Status tone={item.risk === "critical" ? "bad" : item.risk === "high" ? "warn" : tone(item.status)}>{statusLabel(item.status)}</Status>
-        </Link>) : <div className="empty-inline">Объектов пока нет</div>}</div>
+        </Link>) : <Empty title="Нет доступных объектов" text="Связанные с клиентом объекты появятся здесь, когда будут доступны в вашей зоне ответственности."/>}</div>
       </Section>
     </div>}
 

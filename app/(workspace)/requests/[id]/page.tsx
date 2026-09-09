@@ -218,6 +218,11 @@ export default async function RequestPage({
     {hasCapability(actor.access, "calculation.scenario.create") && !archived && !locked && <Link href={`/calculations?request=${id}`} className="button primary">Открыть расчёт</Link>}
   </>;
 
+  const provisionKeys = ["housing", "travel", "shuttle", "meals", "workwear", "ppe", "tools", "consumables"] as const;
+  const provisionLabels = {housing:"Проживание",travel:"Билеты / проезд",shuttle:"Развозка",meals:"Питание",workwear:"Спецодежда",ppe:"СИЗ",tools:"Инструмент",consumables:"Расходные материалы"};
+  const knownProvision = provisionKeys.filter(key => intake.provision[key].provider !== "unknown" || intake.provision[key].comment);
+  const unknownProvision = provisionKeys.filter(key => intake.provision[key].provider === "unknown" && !intake.provision[key].comment);
+
   const stagePanel = <Section title="Этап и ответственность">
     <div className="request-entity-side-body">
       {canEdit && !archived
@@ -242,15 +247,16 @@ export default async function RequestPage({
 
     {tab === "overview" && <>
       <SummaryStrip>
-        <span>Этап <strong>{stage.label}</strong></span>
+        <span>Старт <strong>{fmtDay(request.startDate)}</strong></span>
         <span>Потребность <strong>{total} чел.</strong></span>
         <span>Позиции <strong>{request.roles.length}</strong></span>
-        <span>Полнота <strong>{completeness.percent}%</strong></span>
+        <span>Данные для расчёта <strong>{completeness.ready ? "Собраны" : "Есть уточнения"}</strong></span>
         <span>КП <strong>{boardRow?.proposalVersion ? `№${boardRow.proposalVersion}` : "—"}</strong></span>
       </SummaryStrip>
 
-      {!completeness.ready && !archived && !locked && <div className="request-warning request-entity-warning">
-        <strong>Желательно уточнить до расчёта:</strong> {completeness.missing.join(" · ")}
+      {!completeness.ready && !archived && !locked && <div className="request-warning request-entity-warning" role="status">
+        <div><strong>Что уточнить для расчёта</strong><p>{completeness.missing.join(" · ")}</p><p>Предварительный расчёт доступен. Уточните эти условия перед согласованием.</p></div>
+        {canEdit && <Link className="button" href={`/requests/${id}/edit`}>Уточнить условия</Link>}
       </div>}
 
       <div className="request-entity-overview">
@@ -295,11 +301,12 @@ export default async function RequestPage({
           <div className="request-entity-overview-grid">
             <Section title="Обеспечение и логистика">
               <div className="request-entity-condition-list">
-                {(["housing", "travel", "shuttle", "meals", "workwear", "ppe", "tools", "consumables"] as const).map((key) => <div key={key}>
-                  <span>{({ housing: "Проживание", travel: "Билеты / проезд", shuttle: "Развозка", meals: "Питание", workwear: "Спецодежда", ppe: "СИЗ", tools: "Инструмент", consumables: "Расходняк" } as const)[key]}</span>
+                {knownProvision.map((key) => <div key={key}>
+                  <span>{provisionLabels[key]}</span>
                   <strong>{providerLabel(intake.provision[key].provider)}</strong>
                   {intake.provision[key].comment && <small>{intake.provision[key].comment}</small>}
                 </div>)}
+                {unknownProvision.length > 0 && <details className="sales-missing-provision"><summary>Не уточнено условий: {unknownProvision.length}</summary><ul>{unknownProvision.map(key => <li key={key}>{provisionLabels[key]}</li>)}</ul></details>}
                 <div><span>Бригадир</span><strong>{providerLabel(intake.logistics.brigadierProvider)}</strong></div>
               </div>
             </Section>

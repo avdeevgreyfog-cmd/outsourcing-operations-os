@@ -33,3 +33,68 @@ Reusable primitives exist for loading skeleton, empty result, error and permissi
 ## Dark theme
 
 Dark tokens define distinct surface, border, status and chart hierarchy. It is not CSS inversion. Browser screenshot verification is still required before release.
+
+## Sales reference implementation (September 2026)
+
+The reference is the existing `/requests`, `/clients`, `/proposals`, and `/tenders`
+workspaces, not a separate demo page. Their nested layouts compose `SalesLayout`.
+`app/sales-system.css` is the final scoped theme layer after legacy styles. Extend
+this layer and `components/sales/` rather than adding another `final/polish` file.
+Other modules adopt this system deliberately, after checking their working density.
+The command center remains a personal cross-module queue; sales analysis stays in
+Requests → Analytics. No second command center has been introduced.
+
+### Contract
+
+- Existing Segoe UI family and Cyrillic content. Page title 28 px, entity title / main
+  table identity 14 px, working controls 13 px, supporting metadata 12 px.
+- Existing canvas, panel and semantic tokens. Light-theme primary button uses dark
+  orange with white text; dark-theme primary uses orange with near-black text.
+- Four unboxed metrics with quiet separators, consistent across the sales registries.
+  No outcomes means “—”, not a fabricated 0% success rate.
+- A view/action toolbar, followed by filters when needed. Search has a visible icon,
+  accessible name and clear action. Segment buttons expose `aria-pressed`.
+- Panels 10 px, controls 7 px, spaces 12 / 18 / 20 px. Border-only default panels.
+  Data rows fit content, numerical columns use tabular figures; overflow belongs to
+  the table or board, not the page.
+- One entity heading, contextual tabs, compact summary, conditions and responsibility.
+  Missing provision data is expandable rather than eight equally prominent empty rows.
+- Warning/error surfaces use semantic theme tokens. Focus has a visible outline;
+  reduced motion is respected.
+
+### Reusable pieces
+
+| Component | Responsibility |
+| --- | --- |
+| `SalesLayout` | Opt-in scope for registry, entity, form and responsive styles |
+| `SalesMetrics` | Label / value / explanatory denominator or period |
+| `SalesSegments` | Accessible view or filter choice, with optional icons |
+| `SalesSearch` | Labelled search with a clear button |
+| `SalesEmpty` | Helpful empty or filtered state with optional reset |
+| `SalesDrawer` | Native modal, focus containment/return, Escape, scroll isolation |
+| `RequestInsights` | Current distribution, recorded outcomes, inactivity by update date |
+
+The request drawer reuses already-authorized list data and existing stage API;
+capabilities and server validations still govern writes. It is not a second editor.
+Charts are real HTML controls, keyboard-accessible and proportional. The distribution
+is a snapshot, not historical conversion. Inactivity measures last record update,
+not a customer contact or stage-entry timestamp. Counts for client requests/objects
+are derived from the same scoped lists as the client detail page.
+
+At narrow widths sales uses a compact navigation rail with an expandable menu,
+stacked filters, two-column metrics, single-column detail panels and bounded table
+scrolling. Preserve the document preview's separate white print surface.
+
+### Adoption checklist
+
+1. Use the existing authorization-aware loader and actual records.
+2. Compose common components instead of copying their markup/styles.
+3. Retain entity links, domain-specific actions and semantic status labels.
+4. Verify light/dark, filters and reset, empty states, keyboard dismissal/focus,
+   long Russian labels, table overflow and the module's primary form.
+5. Record the limits of verification. Do not equate a visual pass with database,
+   permissions or transaction validation.
+
+Development remains Next.js. `scripts/dev.mjs` translates the supervised preview's
+host flag, retaining native Next behavior; `terminal.local` is an allowed development
+origin only. Local demo environment settings are ignored, never published as secrets.

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { CommercialProposalRow } from "@/lib/commercial/service";
+import { SalesMetrics, SalesSearch, SalesSegments, SalesEmpty } from "@/components/sales/SalesUI";
 import { Status } from "@/components/UI";
 import { rub } from "@/lib/ui/format";
 
@@ -70,23 +71,17 @@ export function ProposalsWorkspace({ rows }: { rows: CommercialProposalRow[] }) 
   const activeValue = inWork.reduce((sum, row) => sum + Number(row.totalValue || 0), 0);
 
   return <div className="proposal-registry">
-    <div className="commercial-command-strip" aria-label="Сводка по коммерческим предложениям">
-      <div><span>КП в работе</span><strong>{inWork.length}</strong><small>активных версий</small></div>
-      <div><span>У клиента</span><strong>{atClient.length}</strong><small>ожидают решения</small></div>
-      <div><span>Принято</span><strong>{accepted.length}</strong><small>клиентских решений</small></div>
-      <div><span>Активный объём</span><strong>{activeValue ? rub(activeValue) : "—"}</strong><small>по текущим версиям</small></div>
+    <SalesMetrics label="Сводка по коммерческим предложениям" items={[
+      {label:"КП в работе",value:inWork.length,note:"активных версий"},
+      {label:"У клиента",value:atClient.length,note:"ожидают решения"},
+      {label:"Принято",value:accepted.length,note:"клиентских решений"},
+      {label:"Активный объём",value:activeValue ? rub(activeValue) : "—",note:"по текущим версиям"},
+    ]}/>
+    <div className="sales-toolbar">
+      <SalesSegments<Filter> label="Статус КП" value={filter} onChange={setFilter} items={[{value:"all",label:"Все"},{value:"draft",label:"Черновики"},{value:"approval",label:"Согласование"},{value:"client",label:"У клиента"},{value:"completed",label:"Завершённые"}]}/>
+      <SalesSearch value={query} onChange={setQuery} placeholder="Поиск по КП, клиенту или заявке"/>
     </div>
-
-    <div className="commercial-toolbar">
-      <div className="segmented-control commercial-filter">
-        <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Все</button>
-        <button className={filter === "draft" ? "active" : ""} onClick={() => setFilter("draft")}>Черновики</button>
-        <button className={filter === "approval" ? "active" : ""} onClick={() => setFilter("approval")}>Согласование</button>
-        <button className={filter === "client" ? "active" : ""} onClick={() => setFilter("client")}>У клиента</button>
-        <button className={filter === "completed" ? "active" : ""} onClick={() => setFilter("completed")}>Завершённые</button>
-      </div>
-      <input className="commercial-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по КП, клиенту или заявке" />
-    </div>
+    <div className="sales-results" aria-live="polite">Показано {visible.length} из {rows.length}</div>
 
     <div className="commercial-table-wrap">
       <table className="data-table proposal-registry-table">
@@ -99,7 +94,7 @@ export function ProposalsWorkspace({ rows }: { rows: CommercialProposalRow[] }) 
           <td className="num">{row.scenarioCount}</td>
           <td>{row.createdAt}</td>
           <td><span className="proposal-activity">{activity(row)}</span></td>
-        </tr>) : <tr><td colSpan={7}><div className="commercial-empty">Коммерческих предложений по выбранному фильтру нет</div></td></tr>}</tbody>
+        </tr>) : <tr><td colSpan={7}><SalesEmpty onReset={() => { setQuery(""); setFilter("all"); }}/></td></tr>}</tbody>
       </table>
     </div>
   </div>;
