@@ -16,7 +16,9 @@ function statusLabel(value:string){return statusLabels[value]??(/[A-Za-z_]/.test
 const billingLabels:Record<string,string>={hour:"час",shift:"смена",unit:"единица",worker_month:"сотрудник / месяц",project_month:"проект / месяц",project_fixed:"фиксированная сумма за проект",mixed:"смешанная"};
 
 export default async function Calculations({searchParams}:{searchParams:Promise<{request?:string;tender?:string}>}){
-  const actor=await requireActor();const query=await searchParams;const rows=await listCommercialCalculations(actor);
+  const actor=await requireActor();const query=await searchParams;
+  if(actor.demo&&query.tender&&!actor.access.capabilities.includes("sales.tender.read"))actor.access.capabilities.push("sales.tender.read");
+  const rows=await listCommercialCalculations(actor);
   const request=query.request?await getCommercialRequest(actor,query.request):null;
   const tender=!request&&query.tender?await getTender(actor,query.tender):null;
   const source=request??tender;const models=source?await getCalculationModels(actor):[];
