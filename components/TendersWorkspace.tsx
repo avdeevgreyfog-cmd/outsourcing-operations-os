@@ -21,7 +21,6 @@ function formatDate(value:string|null){
   return Number.isNaN(date.getTime())?value:date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
 }
 function deadlineClass(key:string){return key==="overdue"||key==="today"?"danger":key==="urgent"?"warn":"neutral";}
-function activity(value:string){const date=new Date(value);if(Number.isNaN(date.getTime()))return "—";const diff=Math.floor((Date.now()-date.getTime())/86400000);return diff<=0?"Сегодня":diff===1?"Вчера":`${diff} дн. назад`;}
 function isClientDemoRow(row:TenderRow){return row.id.startsWith("sample-user-")||row.id.startsWith("demo-local-");}
 function uniqueKey(row:Pick<TenderRow,"platform"|"procedureNumber"|"sourceUrl"|"title"|"customer">){
   if(row.sourceUrl)return `url:${row.sourceUrl.toLowerCase()}`;
@@ -118,7 +117,8 @@ export function TendersWorkspace({rows,demo,canCreate,canImport,canEdit}:{rows:T
   const now=new Date();
   const activeRows=items.filter(row=>row.stage!=="completed");
   const urgent=activeRows.filter(row=>["overdue","today","urgent"].includes(tenderDeadlineState(row.submissionDeadline,now).key));
-  const analysis=activeRows.filter(row=>["new","analysis","clarification"].includes(row.stage));
+  const newRows=activeRows.filter(row=>row.stage==="new");
+  const analysisRows=activeRows.filter(row=>["analysis","clarification"].includes(row.stage));
   const participating=activeRows.filter(row=>row.decision==="participate");
 
   const filtered=useMemo(()=>items
@@ -165,8 +165,8 @@ export function TendersWorkspace({rows,demo,canCreate,canImport,canEdit}:{rows:T
 
   return <div className="request-baseline-registry tender-registry">
     <div className="request-final-command-strip tender-command-strip">
-      <div><span>В работе</span><strong>{activeRows.length}</strong><small>активных тендеров</small></div>
-      <div><span>Требуют анализа</span><strong>{analysis.length}</strong><small>новые и уточнения</small></div>
+      <div><span>Новые</span><strong>{newRows.length}</strong><small>ещё не разобраны</small></div>
+      <div><span>На анализе</span><strong>{analysisRows.length}</strong><small>изучаем условия</small></div>
       <div><span>Участвуем</span><strong>{participating.length}</strong><small>решение принято</small></div>
       <div className={urgent.length?"attention":""}><span>Срок ≤ 3 дней</span><strong>{urgent.length}</strong><small>требуют внимания</small></div>
     </div>
@@ -195,16 +195,16 @@ function TenderTitle({row}:{row:TenderRow}){
 }
 
 function TenderList({rows}:{rows:TenderRow[]}){
-  return <div className="request-table-wrap"><table className="data-table request-registry-table tender-table"><thead><tr><th>Тендер</th><th>Заказчик</th><th>Подача до</th><th>Осталось</th><th>Этап</th><th>Блокеры</th><th>Ответственный</th><th>Активность</th></tr></thead><tbody>
+  return <div className="request-table-wrap"><table className="data-table request-registry-table tender-table"><thead><tr><th>Тендер</th><th>Заказчик</th><th>Коммерция</th><th>Подача до</th><th>Осталось</th><th>Этап / решение</th><th>Блокеры</th><th>Ответственный</th></tr></thead><tbody>
     {rows.length?rows.map(row=>{const deadline=tenderDeadlineState(row.submissionDeadline);return <tr key={row.id}>
-      <td><TenderTitle row={row}/><span className="cell-sub">{[row.platform,row.procedureNumber].filter(Boolean).join(" · ")||"Площадка не указана"}{row.initialPrice?` · ${rub(row.initialPrice)}`:""}</span></td>
+      <td><TenderTitle row={row}/><span className="cell-sub">{[row.platform,row.procedureNumber].filter(Boolean).join(" · ")||"Площадка не указана"}</span></td>
       <td>{row.customer}<span className="cell-sub">{row.sourceName??"Источник не указан"}</span></td>
-      <td><strong>{formatDate(row.submissionDeadline)}</strong><span className="cell-sub">{row.billingUnit!=="unknown"?tenderBillingLabels[row.billingUnit]:"Формат цены не определён"}</span></td>
+      <td><strong>{row.initialPrice?rub(row.initialPrice):"Цена не указана"}</strong><span className="cell-sub">{row.billingUnit!=="unknown"?tenderBillingLabels[row.billingUnit]:"Формат цены не определён"} · Потенциал: {row.potential==="high"?"высокий":row.potential==="low"?"низкий":"средний"}</span></td>
+      <td><strong>{formatDate(row.submissionDeadline)}</strong><span className="cell-sub">{row.roleCount?`Позиции: ${row.roleCount}`:"Позиции не разобраны"}{row.calculationCount?` · расчётов: ${row.calculationCount}`:""}</span></td>
       <td><span className={`tender-deadline ${deadlineClass(deadline.key)}`}><CalendarClock size={13}/>{deadline.label}</span></td>
       <td><span className="status status-neutral"><i/>{row.stage==="completed"?(row.result?tenderResultLabels[row.result]:"Завершён"):tenderStageLabel(row.stage)}</span><span className="cell-sub">{tenderDecisionLabels[row.decision]}</span></td>
       <td>{row.blockerCount>0?<><strong className="tender-blocker-count">{row.blockerCount}</strong><span className="cell-sub">по документам</span></>:"—"}</td>
       <td>{row.owner??"Не назначен"}<span className="cell-sub">{row.nextActionText??"Нет следующего действия"}</span></td>
-      <td>{activity(row.updatedAt)}</td>
     </tr>}):<tr><td colSpan={8}><div className="commercial-empty">По выбранным фильтрам тендеров нет</div></td></tr>}
   </tbody></table></div>;
 }
@@ -215,7 +215,7 @@ function TenderBoard({rows,bucket,canEdit,busyId,dragId,setDragId,onMove}:{rows:
     const stageItems=rows.filter(row=>row.stage===stage.code);
     return <section className="tender-board-column" key={stage.code} onDragOver={event=>{if(canEdit&&stage.code!=="completed")event.preventDefault();}} onDrop={()=>{if(dragId)void onMove(dragId,stage.code);setDragId(null);}}>
       <header><strong>{stage.label}</strong><span>{stageItems.length}</span></header>
-      <div className="tender-board-stack">{stageItems.map(row=>{const state=tenderDeadlineState(row.submissionDeadline);const content=<><strong>{row.title}</strong><span>{row.customer}</span><div className="tender-card-meta"><span className={`tender-deadline ${deadlineClass(state.key)}`}>{state.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<small>{row.nextActionText}</small>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<b>{row.blockerCount} блок.</b>}</footer></>;
+      <div className="tender-board-stack">{stageItems.map(row=>{const state=tenderDeadlineState(row.submissionDeadline);const content=<><strong>{row.title}</strong><span>{row.customer}</span><div className="tender-card-finance"><span>{row.initialPrice?rub(row.initialPrice):"Цена не указана"}</span><small>{tenderDecisionLabels[row.decision]}</small></div><div className="tender-card-meta"><span className={`tender-deadline ${deadlineClass(state.key)}`}>{state.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<small>{row.nextActionText}</small>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<b>{row.blockerCount} блок.</b>}</footer></>;
         return <article key={row.id} draggable={canEdit&&!isClientDemoRow(row)&&row.stage!=="completed"} onDragStart={()=>setDragId(row.id)} onDragEnd={()=>setDragId(null)} className={busyId===row.id?"busy":""}>{isClientDemoRow(row)?(row.sourceUrl?<a href={row.sourceUrl} target="_blank" rel="noreferrer">{content}</a>:<div className="tender-board-static">{content}</div>):<Link href={`/tenders/${row.id}`}>{content}</Link>}</article>;
       })}{!stageItems.length&&<div className="tender-board-empty">Нет тендеров</div>}</div>
     </section>;
