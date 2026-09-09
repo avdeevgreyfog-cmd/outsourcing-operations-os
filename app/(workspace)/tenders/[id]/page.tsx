@@ -4,7 +4,7 @@ import {requireActor} from "@/lib/auth/server";
 import {hasCapability} from "@/lib/core/access.mjs";
 import {getTender,getTenderOptions} from "@/lib/tenders/service";
 import {listTenderActivity} from "@/lib/tenders/activity";
-import {tenderAssignmentLabels,tenderBillingLabels,tenderDecisionLabels,tenderDeadlineState,tenderResultLabels,tenderStageLabel} from "@/lib/tenders/model";
+import {tenderBillingLabels,tenderDecisionLabels,tenderDeadlineState,tenderResultLabels,tenderStageLabel} from "@/lib/tenders/model";
 import {EntityTabs,KeyValue,PageHeader,Section,Status,SummaryStrip} from "@/components/UI";
 import {TenderAnalysisEditor,TenderApprovalActions,TenderComments,TenderCoreEditor,TenderDocumentsPanel,TenderSubmissionEditor,TenderTeamEditor} from "@/components/TenderEntityPanels";
 
@@ -15,6 +15,7 @@ function tone(stage:string){if(stage==="completed")return "neutral" as const;if(
 
 export default async function TenderPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
   const {id}=await params;const query=await searchParams;const actor=await requireActor();
+  if(actor.demo&&!actor.access.capabilities.includes("sales.tender.read"))actor.access.capabilities.push("sales.tender.read");
   const tender=await getTender(actor,id);if(!tender)notFound();
   const active=query.tab&&query.tab in tabs?query.tab as keyof typeof tabs:"overview";
   const canEdit=hasCapability(actor.access,"sales.tender.edit");const canResult=hasCapability(actor.access,"sales.tender.result");const canSubmit=hasCapability(actor.access,"sales.tender.submit");
