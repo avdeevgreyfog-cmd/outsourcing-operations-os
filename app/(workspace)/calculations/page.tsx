@@ -16,13 +16,26 @@ function tone(status: string) {
   return "warn" as const;
 }
 
+const statusLabels: Record<string, string> = {
+  draft: "Черновик",
+  pending: "На согласовании",
+  accepted: "Принято",
+  rejected: "Отклонено",
+  superseded: "Заменено новой версией",
+  approved: "Согласовано",
+};
+
+function statusLabel(value: string) {
+  return statusLabels[value] ?? (/[A-Za-z_]/.test(value) ? "Другой статус" : value);
+}
+
 const billingLabels: Record<string, string> = {
   hour: "час",
   shift: "смена",
   unit: "единица",
   worker_month: "сотрудник / месяц",
   project_month: "проект / месяц",
-  project_fixed: "фикс за проект",
+  project_fixed: "фиксированная сумма за проект",
   mixed: "смешанная",
 };
 
@@ -42,14 +55,14 @@ export default async function Calculations({ searchParams }: { searchParams: Pro
       actions={request ? <Link className="button" href={`/requests/${request.id}`}>Вернуться к заявке</Link> : undefined}
     />
     <Section title="Сценарии по заявкам">
-      <div className="grid-scroll"><table className="data-table"><thead><tr><th>Заявка / роль</th><th>Модель</th><th>Сотруднику</th><th>Себестоимость / ч</th><th>Клиентская ставка</th><th>Маржа</th><th>Статус</th><th></th></tr></thead><tbody>{filtered.map((x) => <tr key={x.id}>
-        <td><strong className="cell-title">{x.request} · {x.role}</strong><span className="cell-sub">{x.name} · {billingLabels[x.billingUnit] ?? x.billingUnit}</span></td>
-        <td>{x.model}<span className="cell-sub">{x.ruleVersion ? `Правила v${x.ruleVersion}` : "Без версии правил"}</span></td>
+      <div className="grid-scroll"><table className="data-table"><thead><tr><th>Заявка / роль</th><th>Модель</th><th>Сотруднику</th><th>Себестоимость / ч</th><th>Клиентская ставка</th><th>Маржа</th><th>Статус</th><th></th></tr></thead><tbody>{filtered.map((x) => <tr key={x.id} id={`scenario-${x.id}`} className="calculation-scenario-row">
+        <td><strong className="cell-title">{x.request} · {x.role}</strong><span className="cell-sub">{x.name} · {billingLabels[x.billingUnit] ?? "другая схема"}</span></td>
+        <td>{x.model}<span className="cell-sub">{x.ruleVersion ? `Правила №${x.ruleVersion}` : "Без версии правил"}</span></td>
         <td className="num">{rub(x.workerNet)}</td>
         <td className="num">{rub(x.totalCost)}</td>
         <td className="num">{rub(x.clientRate)}<span className="cell-sub">без НДС</span></td>
         <td className="num">{pct(x.marginPct)}</td>
-        <td><Status tone={tone(x.status)}>{x.status}</Status></td>
+        <td><Status tone={tone(x.status)}>{statusLabel(x.status)}</Status></td>
         <td>{hasCapability(actor.access, "calculation.scenario.edit") && ["draft", "rejected"].includes(x.status) && <SubmitApprovalButton subjectType="calculation_scenario" subjectId={x.id} />}</td>
       </tr>)}</tbody></table></div>
     </Section>
