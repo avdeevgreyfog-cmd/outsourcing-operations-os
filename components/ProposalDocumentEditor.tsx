@@ -3,86 +3,43 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CommercialProposalContent } from "@/lib/commercial/proposal-document";
+import type { ProposalTemplateConfig, ProposalTemplateRow } from "@/lib/commercial/proposal-template";
 
-function lines(value: string[] | undefined) { return (value ?? []).join("\n"); }
-function splitLines(value: string) { return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean); }
+function lines(value:string[]|undefined){return(value??[]).join("\n");}
+function splitLines(value:string){return value.split(/\r?\n/).map(item=>item.trim()).filter(Boolean);}
+const fallback:ProposalTemplateConfig={documentTitle:"Предоставление линейного персонала",intro:"Предлагаем ставки на предоставление персонала. Условия объекта, график, численность и дата запуска согласовываются отдельно.",priceDisplay:"both",showIncluded:false,showClientProvides:false,showTerms:false,showManager:true,showCta:true,cta:"Готовы приступить к выводу персонала после согласования условий.",accent:"#183D34"};
+type TemplateOption=Pick<ProposalTemplateRow,"id"|"name"|"kind"|"version"|"config">;
 
-export function ProposalDocumentEditor({ proposalId, content }: { proposalId: string; content: CommercialProposalContent }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+export function ProposalDocumentEditor({proposalId,content,templates=[]}:{proposalId:string;content:CommercialProposalContent;templates?:TemplateOption[]}){
+  const router=useRouter();const [open,setOpen]=useState(false);const [error,setError]=useState("");const [busy,setBusy]=useState(false);
+  const initial={...fallback,...(content.presentation??{})};
+  const [templateId,setTemplateId]=useState(content.template?.id??templates.find(item=>item.id)?.id??"");
+  const [presentation,setPresentation]=useState<ProposalTemplateConfig>(initial);
 
-  async function save(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    const fd = new FormData(event.currentTarget);
-    const payload = {
-      action: "edit",
-      objectName: String(fd.get("objectName") ?? "").trim(),
-      description: String(fd.get("description") ?? "").trim() || null,
-      validUntil: String(fd.get("validUntil") ?? "").trim() || null,
-      schedule: String(fd.get("schedule") ?? "").trim() || null,
-      included: splitLines(String(fd.get("included") ?? "")),
-      clientProvides: splitLines(String(fd.get("clientProvides") ?? "")),
-      terms: String(fd.get("terms") ?? "").trim() || null,
-      additionalConditions: String(fd.get("additionalConditions") ?? "").trim() || null,
-      comment: String(fd.get("comment") ?? "").trim() || null,
-    };
+  function selectTemplate(id:string){setTemplateId(id);const template=templates.find(item=>item.id===id);if(template)setPresentation({...fallback,...template.config});}
+  function toggle(key:keyof Pick<ProposalTemplateConfig,"showIncluded"|"showClientProvides"|"showTerms"|"showManager"|"showCta">){setPresentation(current=>({...current,[key]:!current[key]}));}
 
-    try {
-      const response = await fetch(`/api/proposals/${proposalId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error ?? "Не удалось сохранить КП");
-      setOpen(false);
-      router.refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Не удалось сохранить КП");
-    } finally {
-      setBusy(false);
-    }
+  async function save(event:React.FormEvent<HTMLFormElement>){
+    event.preventDefault();setBusy(true);setError("");const fd=new FormData(event.currentTarget);
+    const payload={action:"edit",templateId:templateId||null,objectName:String(fd.get("objectName")??"").trim(),description:String(fd.get("description")??"").trim()||null,schedule:String(fd.get("schedule")??"").trim()||null,
+      included:splitLines(String(fd.get("included")??"")),clientProvides:splitLines(String(fd.get("clientProvides")??"")),terms:String(fd.get("terms")??"").trim()||null,additionalConditions:String(fd.get("additionalConditions")??"").trim()||null,comment:String(fd.get("comment")??"").trim()||null,
+      documentTitle:presentation.documentTitle,intro:presentation.intro,priceDisplay:presentation.priceDisplay,showIncluded:presentation.showIncluded,showClientProvides:presentation.showClientProvides,showTerms:presentation.showTerms,showManager:presentation.showManager,showCta:presentation.showCta,cta:presentation.cta,
+      managerName:String(fd.get("managerName")??"").trim(),managerPhone:String(fd.get("managerPhone")??"").trim()||null,managerEmail:String(fd.get("managerEmail")??"").trim()||null,managerTelegram:String(fd.get("managerTelegram")??"").trim()||null};
+    try{const response=await fetch(`/api/proposals/${proposalId}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить КП");setOpen(false);router.refresh();}
+    catch(cause){setError(cause instanceof Error?cause.message:"Не удалось сохранить КП");}finally{setBusy(false);}
   }
 
   return <>
-    <button className="button" type="button" onClick={() => setOpen(true)}>Редактировать</button>
-    {open && <>
-      <div className="drawer-backdrop" onClick={() => !busy && setOpen(false)}/>
-      <aside className="drawer proposal-editor-drawer" role="dialog" aria-modal="true" aria-label="Редактирование коммерческого предложения">
-        <header className="proposal-editor-head">
-          <div><span className="eyebrow">Коммерческое предложение</span><h2>Редактирование документа</h2><p>Меняется только клиентская часть. Ставки и позиции берутся из согласованных расчётов.</p></div>
-          <button className="icon-button" type="button" onClick={() => !busy && setOpen(false)} aria-label="Закрыть">×</button>
-        </header>
-
-        <form className="proposal-editor-form" onSubmit={save}>
-          <section>
-            <header><strong>Основная информация</strong><span>Название, описание и срок действия</span></header>
-            <label>Объект / название предложения<input name="objectName" required defaultValue={content.objectName ?? content.title ?? ""}/></label>
-            <label>Описание<textarea name="description" rows={4} defaultValue={content.description ?? ""}/></label>
-            <div className="proposal-editor-grid"><label>Срок действия<input type="date" name="validUntil" defaultValue={content.validUntil ?? ""}/></label><label>График / объём<input name="schedule" defaultValue={content.schedule ?? ""}/></label></div>
-          </section>
-
-          <section>
-            <header><strong>Состав ставки</strong><span>Одна позиция на строку</span></header>
-            <label>В стоимость включено<textarea name="included" rows={5} defaultValue={lines(content.included)} placeholder="Например: проживание\nбилеты\nкоординация"/></label>
-            <label>Предоставляет заказчик<textarea name="clientProvides" rows={5} defaultValue={lines(content.clientProvides)} placeholder="Например: спецодежда\nинструмент"/></label>
-          </section>
-
-          <section>
-            <header><strong>Условия</strong><span>Текст, который будет виден заказчику</span></header>
-            <label>Условия сотрудничества<textarea name="terms" rows={5} defaultValue={content.terms ?? ""}/></label>
-            <label>Дополнительные условия<textarea name="additionalConditions" rows={4} defaultValue={content.additionalConditions ?? ""}/></label>
-            <label>Комментарий в документ<textarea name="comment" rows={3} defaultValue={content.comment ?? ""}/></label>
-          </section>
-
-          {error && <div className="form-error proposal-editor-error">{error}</div>}
-          <footer className="proposal-editor-actions"><button className="button" type="button" disabled={busy} onClick={() => setOpen(false)}>Отмена</button><button className="button primary" disabled={busy}>{busy ? "Сохранение…" : "Сохранить"}</button></footer>
-        </form>
-      </aside>
-    </>}
+    <button className="button" type="button" onClick={()=>setOpen(true)}>Настроить документ</button>
+    {open&&<><div className="drawer-backdrop" onClick={()=>!busy&&setOpen(false)}/><aside className="drawer proposal-editor-drawer" role="dialog" aria-modal="true" aria-label="Настройка коммерческого предложения">
+      <header className="proposal-editor-head"><div><span className="eyebrow">Коммерческое предложение</span><h2>Настройка документа</h2><p>Ставки и позиции остаются связанными с согласованными расчётами. Здесь настраивается только клиентское представление.</p></div><button className="icon-button" type="button" onClick={()=>!busy&&setOpen(false)} aria-label="Закрыть">×</button></header>
+      <form className="proposal-editor-form" onSubmit={save}>
+        <section><header><strong>Шаблон и цены</strong><span>Главный блок КП — таблица ставок</span></header>{templates.length>0&&<label>Шаблон<select value={templateId} onChange={event=>selectTemplate(event.target.value)}>{templates.map(template=><option key={template.id} value={template.id}>{template.name}{template.kind==="docx"?" · Word":""}</option>)}</select></label>}<label>Как показывать цену<select value={presentation.priceDisplay} onChange={event=>setPresentation(current=>({...current,priceDisplay:event.target.value as ProposalTemplateConfig["priceDisplay"]}))}><option value="both">Без НДС + с НДС</option><option value="gross_only">Только итоговая ставка с НДС</option><option value="net_only">Только ставка без НДС</option></select></label></section>
+        <section><header><strong>Основная информация</strong><span>Коротко, без перегрузки документа</span></header><label>Заголовок<input value={presentation.documentTitle} onChange={event=>setPresentation(current=>({...current,documentTitle:event.target.value}))}/></label><label>Вступление<textarea rows={3} value={presentation.intro} onChange={event=>setPresentation(current=>({...current,intro:event.target.value}))}/></label><label>Объект / внутреннее название<input name="objectName" required defaultValue={content.objectName??content.title??""}/></label><label>График / объём, если нужно<textarea name="schedule" rows={2} defaultValue={content.schedule??""}/></label><label>Дополнительное описание, если нужно<textarea name="description" rows={3} defaultValue={content.description??""}/></label></section>
+        <section><header><strong>Дополнительные блоки</strong><span>Включайте только то, что действительно нужно отправить заказчику</span></header><div className="proposal-block-toggles"><button type="button" className={presentation.showIncluded?"active":""} onClick={()=>toggle("showIncluded")}>В стоимость включено</button><button type="button" className={presentation.showClientProvides?"active":""} onClick={()=>toggle("showClientProvides")}>Предоставляет заказчик</button><button type="button" className={presentation.showTerms?"active":""} onClick={()=>toggle("showTerms")}>Условия</button></div>{presentation.showIncluded&&<label>В стоимость включено<textarea name="included" rows={4} defaultValue={lines(content.included)} placeholder="Одна позиция на строку"/></label>}{!presentation.showIncluded&&<input type="hidden" name="included" value={lines(content.included)}/>} {presentation.showClientProvides&&<label>Предоставляет заказчик<textarea name="clientProvides" rows={4} defaultValue={lines(content.clientProvides)} placeholder="Одна позиция на строку"/></label>}{!presentation.showClientProvides&&<input type="hidden" name="clientProvides" value={lines(content.clientProvides)}/>} {presentation.showTerms&&<><label>Условия сотрудничества<textarea name="terms" rows={4} defaultValue={content.terms??""}/></label><label>Дополнительные условия<textarea name="additionalConditions" rows={3} defaultValue={content.additionalConditions??""}/></label><label>Комментарий в документ<textarea name="comment" rows={2} defaultValue={content.comment??""}/></label></>}{!presentation.showTerms&&<><input type="hidden" name="terms" value={content.terms??""}/><input type="hidden" name="additionalConditions" value={content.additionalConditions??""}/><input type="hidden" name="comment" value={content.comment??""}/></>}</section>
+        <section><header><strong>Контакт и завершение</strong><span>Чтобы заказчик сразу понимал, с кем связаться</span></header><label className="proposal-switch-line"><input type="checkbox" checked={presentation.showManager} onChange={()=>toggle("showManager")}/><span>Показывать ответственного менеджера</span></label>{presentation.showManager&&<div className="proposal-editor-grid"><label>Имя<input name="managerName" required defaultValue={content.manager?.name??""}/></label><label>Телефон<input name="managerPhone" defaultValue={content.manager?.phone??""}/></label><label>Эл. почта<input type="email" name="managerEmail" defaultValue={content.manager?.email??""}/></label><label>Telegram<input name="managerTelegram" defaultValue={content.manager?.telegram??""}/></label></div>}{!presentation.showManager&&<><input type="hidden" name="managerName" value={content.manager?.name||"Ответственный менеджер"}/><input type="hidden" name="managerPhone" value={content.manager?.phone??""}/><input type="hidden" name="managerEmail" value={content.manager?.email??""}/><input type="hidden" name="managerTelegram" value={content.manager?.telegram??""}/></>}<label className="proposal-switch-line"><input type="checkbox" checked={presentation.showCta} onChange={()=>toggle("showCta")}/><span>Показывать финальную фразу</span></label>{presentation.showCta&&<label>Финальная фраза<textarea rows={2} value={presentation.cta} onChange={event=>setPresentation(current=>({...current,cta:event.target.value}))}/></label>}</section>
+        {error&&<div className="form-error proposal-editor-error">{error}</div>}<footer className="proposal-editor-actions"><button className="button" type="button" disabled={busy} onClick={()=>setOpen(false)}>Отмена</button><button className="button primary" disabled={busy}>{busy?"Сохранение…":"Сохранить и обновить предпросмотр"}</button></footer>
+      </form>
+    </aside></>}
   </>;
 }
