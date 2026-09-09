@@ -1,72 +1,26 @@
 import { ProposalDocumentEditor } from "@/components/ProposalDocumentEditor";
 import { KeyValue, Section } from "@/components/UI";
-import type { CommercialProposalDetail } from "@/lib/commercial/proposal-document";
-import { proposalDay, proposalUnitLabels } from "@/lib/commercial/proposal-ui";
+import { proposalPresentation, type CommercialProposalDetail } from "@/lib/commercial/proposal-document";
+import type { ProposalTemplateRow } from "@/lib/commercial/proposal-template";
 import { rub } from "@/lib/ui/format";
 
-export function ProposalDocumentView({ proposal, canEdit }: { proposal: CommercialProposalDetail; canEdit: boolean }) {
-  const roles = proposal.content.roles ?? [];
-  return <div className="proposal-document-workspace">
-    <article className="proposal-sheet">
-      <header className="proposal-sheet-head">
-        <div><span>Коммерческое предложение</span><strong>КП №{proposal.version}</strong></div>
-        <small>{proposal.createdAt}</small>
-      </header>
+const unitLabels:Record<string,string>={hour:"чел./час",shift:"чел./смена",unit:"единица",worker_month:"чел./месяц",project_month:"проект/месяц",project_fixed:"проект",mixed:"сдельно",piece:"за единицу",piecework:"сдельно"};
+type TemplateOption=Pick<ProposalTemplateRow,"id"|"name"|"kind"|"version"|"config">;
 
-      <div className="proposal-sheet-title">
-        <span>Для компании</span>
-        <h2>{proposal.content.company ?? proposal.client}</h2>
-        <p>{proposal.content.objectName ?? proposal.request}</p>
-      </div>
-
-      {proposal.content.description && <p className="proposal-sheet-description">{proposal.content.description}</p>}
-
-      <div className="proposal-sheet-meta">
-        <div><span>Локация</span><strong>{proposal.content.location ?? "—"}</strong></div>
-        <div><span>Старт</span><strong>{proposalDay(proposal.content.expectedStartDate)}</strong></div>
-        <div><span>График</span><strong>{proposal.content.schedule ?? "—"}</strong></div>
-        <div><span>Действует до</span><strong>{proposalDay(proposal.content.validUntil)}</strong></div>
-      </div>
-
-      <table className="proposal-sheet-table">
-        <thead><tr><th>Позиция</th><th>Кол-во</th><th>Без НДС</th><th>С НДС</th><th>Единица</th></tr></thead>
-        <tbody>{roles.map((item) => <tr key={item.scenarioId}><td>{item.role}</td><td>{item.count}</td><td>{rub(item.rateNet)}</td><td>{rub(item.rateGross)}</td><td>{proposalUnitLabels[item.unit] ?? "единица"}</td></tr>)}</tbody>
-      </table>
-
-      <div className="proposal-sheet-columns">
-        <section>
-          <h3>В стоимость включено</h3>
-          {proposal.content.included?.length ? <ul>{proposal.content.included.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p>Отдельные условия не указаны.</p>}
-        </section>
-        <section>
-          <h3>Предоставляет заказчик</h3>
-          {proposal.content.clientProvides?.length ? <ul>{proposal.content.clientProvides.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul> : <p>Отдельные условия не указаны.</p>}
-        </section>
-      </div>
-
-      <section className="proposal-sheet-terms">
-        <h3>Условия сотрудничества</h3>
-        <p>{proposal.content.terms ?? "Основные условия не указаны."}</p>
-        {proposal.content.additionalConditions && <p>{proposal.content.additionalConditions}</p>}
-        {proposal.content.comment && <p><strong>Комментарий:</strong> {proposal.content.comment}</p>}
-      </section>
+export function ProposalDocumentView({proposal,canEdit,templates=[]}:{proposal:CommercialProposalDetail;canEdit:boolean;templates?:TemplateOption[]}){
+  const roles=proposal.content.roles??[];const presentation=proposalPresentation(proposal.content);const manager=proposal.content.manager;
+  const showNet=presentation.priceDisplay!=="gross_only";const showGross=presentation.priceDisplay!=="net_only";
+  return <div className="proposal-document-workspace proposal-document-price-led">
+    <article className="proposal-sheet proposal-sheet-commercial" style={{"--proposal-accent":presentation.accent} as React.CSSProperties}>
+      <header className="proposal-commercial-head"><div className="proposal-commercial-brand"><strong>{proposal.content.company??proposal.client}</strong><span>Коммерческое предложение</span></div><div><strong>КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</strong><span>{proposal.createdAt}</span></div></header>
+      <div className="proposal-commercial-title"><h2>{presentation.documentTitle}</h2>{presentation.intro&&<p>{presentation.intro}</p>}</div>
+      <section className="proposal-price-section"><h3>СТОИМОСТЬ УСЛУГ</h3><div className="proposal-price-rule"/><table className="proposal-sheet-table proposal-price-table"><thead><tr><th>Специальность</th><th>Количество</th><th>Единица расчёта</th>{showNet&&<th>Без НДС</th>}{showGross&&<th>С НДС</th>}</tr></thead><tbody>{roles.map(item=><tr key={item.scenarioId}><td>{item.role}</td><td>{item.count}</td><td>{unitLabels[item.unit]??item.unit}</td>{showNet&&<td>{rub(item.rateNet)}</td>}{showGross&&<td>{rub(item.rateGross)}</td>}</tr>)}</tbody></table><p className="proposal-vat-note">{showGross&&proposal.content.vatPct?`Ставка с НДС рассчитана по ставке ${proposal.content.vatPct}%. `:""}Количество и единица расчёта зафиксированы в текущей версии предложения.</p></section>
+      {presentation.showIncluded&&!!proposal.content.included?.length&&<section className="proposal-optional-section"><h3>В СТОИМОСТЬ ВКЛЮЧЕНО</h3><div className="proposal-included-grid">{proposal.content.included.map((item,index)=><div key={`${item}-${index}`}><b>{String(index+1).padStart(2,"0")}</b><span>{item}</span></div>)}</div></section>}
+      {presentation.showClientProvides&&!!proposal.content.clientProvides?.length&&<section className="proposal-optional-section"><h3>ПРЕДОСТАВЛЯЕТ ЗАКАЗЧИК</h3><div className="proposal-included-grid">{proposal.content.clientProvides.map((item,index)=><div key={`${item}-${index}`}><b>{String(index+1).padStart(2,"0")}</b><span>{item}</span></div>)}</div></section>}
+      {presentation.showTerms&&proposal.content.terms&&<section className="proposal-optional-section proposal-terms-simple"><h3>УСЛОВИЯ СОТРУДНИЧЕСТВА</h3><p>{proposal.content.terms}</p>{proposal.content.additionalConditions&&<p>{proposal.content.additionalConditions}</p>}{proposal.content.comment&&<p>{proposal.content.comment}</p>}</section>}
+      {presentation.showCta&&presentation.cta&&<div className="proposal-cta">{presentation.cta}</div>}
+      {presentation.showManager&&manager&&<footer className="proposal-manager-footer"><span>Ответственный менеджер: <strong>{manager.name}</strong></span>{manager.phone&&<span>Телефон: <strong>{manager.phone}</strong></span>}{manager.email&&<span>Эл. почта: <strong>{manager.email}</strong></span>}{manager.telegram&&<span>Telegram: <strong>{manager.telegram}</strong></span>}</footer>}
     </article>
-
-    <aside className="proposal-document-side">
-      <Section title="Документ">
-        <div className="proposal-side-body">
-          <KeyValue label="Состояние" value={canEdit ? "Можно редактировать" : "Версия зафиксирована"}/>
-          <KeyValue label="Позиций" value={roles.length}/>
-          <KeyValue label="Сумма" value={Number(proposal.totalValue) ? rub(proposal.totalValue) : "—"}/>
-          <KeyValue label="Срок действия" value={proposalDay(proposal.content.validUntil)}/>
-          {canEdit && <div className="proposal-document-edit"><ProposalDocumentEditor proposalId={proposal.id} content={proposal.content}/></div>}
-        </div>
-      </Section>
-      <Section title="Состав документа">
-        <div className="proposal-document-outline">
-          <span>Основная информация</span><span>Позиции и ставки</span><span>Что включено в ставку</span><span>Предоставляет заказчик</span><span>Условия сотрудничества</span>
-        </div>
-      </Section>
-    </aside>
+    <aside className="proposal-document-side"><Section title="Документ"><div className="proposal-side-body"><KeyValue label="Шаблон" value={proposal.content.template?.name??"Стандарт OPERIS"}/><KeyValue label="Цены" value={presentation.priceDisplay==="gross_only"?"Только с НДС":presentation.priceDisplay==="net_only"?"Только без НДС":"Без НДС + с НДС"}/><KeyValue label="Позиций" value={roles.length}/><KeyValue label="Доп. блоки" value={[presentation.showIncluded&&"Состав ставки",presentation.showClientProvides&&"Заказчик",presentation.showTerms&&"Условия"].filter(Boolean).join(" · ")||"Скрыты"}/>{canEdit&&<div className="proposal-document-edit"><ProposalDocumentEditor proposalId={proposal.id} content={proposal.content} templates={templates}/></div>}</div></Section><Section title="Клиентский результат"><div className="proposal-document-outline"><span>Главный акцент: ставки</span><span>Количество и единица расчёта</span><span>{presentation.showManager?"Контакт менеджера":"Контакт скрыт"}</span><span>Финальный формат: PDF</span></div></Section></aside>
   </div>;
 }
