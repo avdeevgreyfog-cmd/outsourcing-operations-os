@@ -34,8 +34,8 @@ type ProposalRow={
   id:string;requestId:string;status:string;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;
   content:Record<string,unknown>;
 };
-
-type TemplateRow={id:string;name:string;kind:"operis"|"docx";version:number;config:unknown};
+type TemplateSnapshot={id:string;name:string;kind:"operis"|"docx";version:number};
+type TemplateRow=TemplateSnapshot&{config:unknown};
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -55,7 +55,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
 
       if(body.action==="edit"){
         if(row.status!=="draft")throw new Error("Редактировать клиентские условия можно только в черновике КП. После отправки на согласование создайте новую версию");
-        let template=(row.content.template??null) as Record<string,unknown>|null;
+        let template=(row.content.template??null) as TemplateSnapshot|null;
         let basePresentation=normalizeTemplateConfig(row.content.presentation);
         if(body.templateId){
           const [selected]=await tx<Array<TemplateRow>>`
@@ -76,7 +76,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           additionalConditions:body.additionalConditions??null,comment:body.comment??null,template,presentation,
           manager:{name:body.managerName,phone:body.managerPhone??null,email:body.managerEmail??null,telegram:body.managerTelegram??null},
         };
-        await tx`UPDATE proposals SET content_snapshot=${sql.json(content)} WHERE id=${id}::uuid`;
+        await tx`UPDATE proposals SET content_snapshot=${sql.json(JSON.parse(JSON.stringify(content)))} WHERE id=${id}::uuid`;
         return {id,action:body.action,requestId:row.requestId,status:row.status};
       }
 
