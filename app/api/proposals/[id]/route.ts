@@ -4,18 +4,28 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import { normalizeTemplateConfig } from "@/lib/commercial/proposal-template";
 
 const editSchema=z.object({
   action:z.literal("edit"),
+  templateId:z.string().uuid().nullable().optional(),
   objectName:z.string().trim().min(2).max(240),
   description:z.string().trim().max(4000).nullable().optional(),
-  validUntil:z.string().date().nullable().optional(),
   schedule:z.string().trim().max(1000).nullable().optional(),
   included:z.array(z.string().trim().min(1).max(300)).max(30),
   clientProvides:z.array(z.string().trim().min(1).max(300)).max(30),
   terms:z.string().trim().max(4000).nullable().optional(),
   additionalConditions:z.string().trim().max(4000).nullable().optional(),
   comment:z.string().trim().max(2000).nullable().optional(),
+  documentTitle:z.string().trim().min(2).max(240),
+  intro:z.string().trim().max(2500),
+  priceDisplay:z.enum(["both","gross_only","net_only"]),
+  showIncluded:z.boolean(),showClientProvides:z.boolean(),showTerms:z.boolean(),showManager:z.boolean(),showCta:z.boolean(),
+  cta:z.string().trim().max(1000),
+  managerName:z.string().trim().min(2).max(180),
+  managerPhone:z.string().trim().max(80).nullable().optional(),
+  managerEmail:z.string().trim().email().max(240).nullable().optional(),
+  managerTelegram:z.string().trim().max(160).nullable().optional(),
 });
 const lifecycleSchema=z.object({action:z.enum(["send","negotiate","accept","revise","reject"]),note:z.string().trim().max(2000).optional()});
 const schema=z.discriminatedUnion("action",[editSchema,lifecycleSchema]);
@@ -24,6 +34,8 @@ type ProposalRow={
   id:string;requestId:string;status:string;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;
   content:Record<string,unknown>;
 };
+
+type TemplateRow={id:string;name:string;kind:"operis"|"docx";version:number;config:unknown};
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -43,17 +55,26 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
 
       if(body.action==="edit"){
         if(row.status!=="draft")throw new Error("Редактировать клиентские условия можно только в черновике КП. После отправки на согласование создайте новую версию");
+        let template=(row.content.template??null) as Record<string,unknown>|null;
+        let basePresentation=normalizeTemplateConfig(row.content.presentation);
+        if(body.templateId){
+          const [selected]=await tx<Array<TemplateRow>>`
+            SELECT id,name,kind,version,config_json config FROM proposal_templates WHERE id=${body.templateId}::uuid AND status='active'
+          `;
+          if(!selected)throw new Error("Выбранный шаблон КП не найден");
+          template={id:selected.id,name:selected.name,kind:selected.kind,version:selected.version};
+          basePresentation=normalizeTemplateConfig(selected.config);
+        }
+        const presentation=normalizeTemplateConfig({
+          ...basePresentation,documentTitle:body.documentTitle,intro:body.intro,priceDisplay:body.priceDisplay,
+          showIncluded:body.showIncluded,showClientProvides:body.showClientProvides,showTerms:body.showTerms,
+          showManager:body.showManager,showCta:body.showCta,cta:body.cta,
+        });
         const content={
-          ...row.content,
-          objectName:body.objectName,
-          description:body.description??null,
-          validUntil:body.validUntil??null,
-          schedule:body.schedule??null,
-          included:body.included,
-          clientProvides:body.clientProvides,
-          terms:body.terms??null,
-          additionalConditions:body.additionalConditions??null,
-          comment:body.comment??null,
+          ...row.content,objectName:body.objectName,description:body.description??null,schedule:body.schedule??null,
+          included:body.included,clientProvides:body.clientProvides,terms:body.terms??null,
+          additionalConditions:body.additionalConditions??null,comment:body.comment??null,template,presentation,
+          manager:{name:body.managerName,phone:body.managerPhone??null,email:body.managerEmail??null,telegram:body.managerTelegram??null},
         };
         await tx`UPDATE proposals SET content_snapshot=${sql.json(content)} WHERE id=${id}::uuid`;
         return {id,action:body.action,requestId:row.requestId,status:row.status};
