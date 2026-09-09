@@ -44,7 +44,7 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
       />
       <CalculationsRegistryWorkspace rows={rows} canEdit={canEdit}/>
       <div style={{height:20}}/>
-      <Section title="Быстрый расчёт" subtitle="Моделирование без привязки к заявке или тендеру. Такой результат не попадает в коммерческий workflow.">
+      <Section title="Быстрый расчёт" note="Моделирование без привязки к заявке или тендеру. Такой результат не попадает в коммерческий workflow.">
         <div style={{padding:16}}><CalculatorWorkspaceOperis/></div>
       </Section>
     </>;
@@ -67,13 +67,13 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
       <span>Принято <strong>{filtered.filter((item) => item.status === "accepted").length}</strong></span>
     </div>
 
-    <Section title="Сценарии расчёта" subtitle="Сохранённые версии по всем позициям. Выберите несколько сценариев в представлении «Все сценарии», чтобы сравнить экономику.">
+    <Section title="Сценарии расчёта" note="Сохранённые версии по всем позициям. Выберите несколько сценариев в представлении «Все сценарии», чтобы сравнить экономику.">
       <div style={{padding:16}}><CalculationsRegistryWorkspace rows={filtered} canEdit={canEdit} compact/></div>
     </Section>
 
     {canCreate && roles.length > 0 && <>
       <div style={{height:20}}/>
-      <Section title="Новый сценарий" subtitle={`${sourceKind}: ${sourceTitle}. Позиция и рабочие параметры подставляются из источника; общепроектные статьи распределяются между позициями по численности.`}>
+      <Section title="Новый сценарий" note={`${sourceKind}: ${sourceTitle}. Позиция и рабочие параметры подставляются из источника; общепроектные статьи распределяются между позициями по численности.`}>
         <div style={{padding:16}}>
           <CalculatorWorkspaceOperis context={{
             sourceType: request ? "request" : "tender",
