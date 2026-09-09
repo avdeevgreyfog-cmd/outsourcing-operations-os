@@ -1,10 +1,11 @@
-name: Deploy OPERIS Tender Preview to GitHub Pages
+name: Deploy OPERIS Preview to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
       - 'preview/**'
+      - 'app/*.css'
       - '.github/workflows/deploy-tender-preview-pages.yml'
   workflow_dispatch:
 
@@ -28,10 +29,24 @@ jobs:
         uses: actions/checkout@v6
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Assemble preview from production styles
+        run: |
+          rm -rf .pages-site
+          mkdir -p .pages-site
+          cp preview/index.html .pages-site/index.html
+          cp app/globals.css .pages-site/globals.css
+          cp app/request-baseline.css .pages-site/request-baseline.css
+          cp app/request-final.css .pages-site/request-final.css
+          cp app/request-entity.css .pages-site/request-entity.css
+          cp app/commercial-baseline.css .pages-site/commercial-baseline.css
+          cp app/tender-core.css .pages-site/tender-core.css
+          cp app/tender-demo.css .pages-site/tender-demo.css
+          cp app/proposal-template.css .pages-site/proposal-template.css
+          touch .pages-site/.nojekyll
       - name: Upload preview artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: preview
+          path: .pages-site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
