@@ -1,6 +1,7 @@
 import type { Actor } from "@/lib/access/types";
 import { withTenant } from "@/lib/db/client";
 import { listCommercialProposals } from "@/lib/commercial/service";
+import { defaultProposalTemplateConfig, normalizeTemplateConfig, type ProposalTemplateConfig } from "@/lib/commercial/proposal-template";
 import * as demo from "@/lib/demo/data";
 
 export type ProposalRoleLine = {
@@ -11,6 +12,20 @@ export type ProposalRoleLine = {
   rateGross: number;
   unit: string;
   scenarioId: string;
+};
+
+export type ProposalManagerContact = {
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  telegram?: string | null;
+};
+
+export type ProposalTemplateSnapshot = {
+  id: string;
+  name: string;
+  kind: "operis" | "docx";
+  version: number;
 };
 
 export type CommercialProposalContent = {
@@ -33,6 +48,9 @@ export type CommercialProposalContent = {
   additionalConditions?: string | null;
   comment?: string | null;
   roles?: ProposalRoleLine[];
+  template?: ProposalTemplateSnapshot | null;
+  presentation?: ProposalTemplateConfig;
+  manager?: ProposalManagerContact | null;
 };
 
 export type CommercialProposalDetail = Awaited<ReturnType<typeof listCommercialProposals>>[number] & {
@@ -40,6 +58,10 @@ export type CommercialProposalDetail = Awaited<ReturnType<typeof listCommercialP
   clientDecisionNote: string | null;
   sourceObjectId: string | null;
 };
+
+export function proposalPresentation(content: CommercialProposalContent): ProposalTemplateConfig {
+  return normalizeTemplateConfig(content.presentation ?? defaultProposalTemplateConfig);
+}
 
 export async function getCommercialProposalDetail(actor: Actor, id: string): Promise<CommercialProposalDetail | null> {
   const rows = await listCommercialProposals(actor);
@@ -55,7 +77,7 @@ export async function getCommercialProposalDetail(actor: Actor, id: string): Pro
         title: request?.title ?? summary.request,
         objectName: request?.title ?? summary.request,
         company: summary.client,
-        description: "Предоставление персонала по согласованной заявке и коммерческим условиям.",
+        description: defaultProposalTemplateConfig.intro,
         vatMode: request?.vat ?? "with_vat",
         vatPct: 22,
         location: request?.location ?? null,
@@ -64,9 +86,12 @@ export async function getCommercialProposalDetail(actor: Actor, id: string): Pro
         schedule: typeof request?.schedule === "string" ? request.schedule : null,
         included: ["Организация выхода персонала", "Оперативная замена", "Координация работы"],
         clientProvides: [],
-        terms: "Оплата производится по фактически подтверждённому объёму оказанных услуг.",
+        terms: "Условия проекта согласовываются индивидуально и фиксируются в договоре и приложении.",
         additionalConditions: null,
         comment: null,
+        template: {id:"demo-operis-template",name:"Стандартное КП OPERIS",kind:"operis",version:1},
+        presentation: defaultProposalTemplateConfig,
+        manager: {name: actor.displayName, email: actor.email, phone:null, telegram:null},
         roles: scenarios.map((item) => ({
           role: item.role,
           count: request?.roles.find((role) => role.name === item.role)?.count ?? 0,
