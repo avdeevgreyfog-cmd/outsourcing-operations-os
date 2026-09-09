@@ -84,13 +84,16 @@ export function TendersWorkspace({rows,demo,canCreate,canImport,canEdit}:{rows:T
   const [demoCreateOpen,setDemoCreateOpen]=useState(false);
 
   useEffect(()=>{
-    if(!demo){setItems(rows);return;}
-    try{
-      const stored=JSON.parse(window.localStorage.getItem(DEMO_STORAGE)||"[]") as TenderRow[];
-      const valid=Array.isArray(stored)?stored.filter(item=>item&&typeof item.id==="string"&&item.id.startsWith("demo-local-")&&typeof item.title==="string"):[];
-      const ids=new Set(valid.map(item=>item.id));
-      setItems([...valid,...rows.filter(item=>!ids.has(item.id))]);
-    }catch{setItems(rows);}
+    const timer=window.setTimeout(()=>{
+      if(!demo){setItems(rows);return;}
+      try{
+        const stored=JSON.parse(window.localStorage.getItem(DEMO_STORAGE)||"[]") as TenderRow[];
+        const valid=Array.isArray(stored)?stored.filter(item=>item&&typeof item.id==="string"&&item.id.startsWith("demo-local-")&&typeof item.title==="string"):[];
+        const ids=new Set(valid.map(item=>item.id));
+        setItems([...valid,...rows.filter(item=>!ids.has(item.id))]);
+      }catch{setItems(rows);}
+    },0);
+    return()=>window.clearTimeout(timer);
   },[rows,demo]);
 
   function saveDemoLocal(next:TenderRow[]){
@@ -100,18 +103,16 @@ export function TendersWorkspace({rows,demo,canCreate,canImport,canEdit}:{rows:T
   }
 
   function addDemoRows(imported:TenderImportRow[]):TenderImportResult{
-    let result:TenderImportResult={imported:0,skipped:0};
-    setItems(current=>{
-      const keys=new Set(current.map(uniqueKey));
-      const created:TenderRow[]=[];
-      for(const item of imported){
-        const candidate=toDemoRow(item);const key=uniqueKey(candidate);
-        if(keys.has(key)){result.skipped++;continue;}
-        keys.add(key);created.push(candidate);result.imported++;
-      }
-      const next=[...created,...current];saveDemoLocal(next);return next;
-    });
-    return result;
+    const keys=new Set(items.map(uniqueKey));
+    const created:TenderRow[]=[];
+    let skipped=0;
+    for(const item of imported){
+      const candidate=toDemoRow(item);const key=uniqueKey(candidate);
+      if(keys.has(key)){skipped++;continue;}
+      keys.add(key);created.push(candidate);
+    }
+    const next=[...created,...items];setItems(next);saveDemoLocal(next);
+    return {imported:created.length,skipped};
   }
 
   const now=new Date();
