@@ -1,2 +1,19 @@
-import { requireActor } from "@/lib/auth/server"; import { listClients } from "@/lib/data/service"; import { PageHeader,Section } from "@/components/UI"; import { CreateClientButton } from "@/components/forms/CreateClientButton"; import { ClientsGrid } from "@/components/RegistryGrids";
-export default async function Clients(){const actor=await requireActor();const rows=await listClients(actor);return <><PageHeader eyebrow="Продажи" title="Клиенты" subtitle="Компании, контакты и связанный коммерческий контур." breadcrumbs={[{label:"Коммерция"},{label:"Клиенты"}]} actions={<CreateClientButton/>}/><Section><ClientsGrid rows={rows}/></Section></>}
+import { requireActor } from "@/lib/auth/server";
+import { listClients } from "@/lib/data/service";
+import { PageHeader } from "@/components/UI";
+import { ClientsWorkspaceBaseline } from "@/components/ClientsWorkspaceBaseline";
+
+export default async function Clients() {
+  const actor = await requireActor();
+  const rows = await listClients(actor);
+
+  return <>
+    <PageHeader
+      eyebrow="Коммерция"
+      title="Клиенты"
+      subtitle="Компании, контакты и связанный коммерческий контур."
+      breadcrumbs={[{ label: "Коммерция" }, { label: "Клиенты" }]}
+    />
+    <ClientsWorkspaceBaseline rows={rows}/>
+  </>;
+}
