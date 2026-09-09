@@ -10,6 +10,7 @@ import "./commercial-baseline.css";
 import "./proposal-template.css";
 import "./tender-core.css";
 import "./tender-demo.css";
+import "./tender-final.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
