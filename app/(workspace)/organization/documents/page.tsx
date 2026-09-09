@@ -6,6 +6,8 @@ import {PageHeader} from "@/components/UI";
 import {CompanyDocumentsWorkspace} from "@/components/CompanyDocumentsWorkspace";
 
 export default async function CompanyDocumentsPage(){
-  const actor=await requireActor();const [rows,options]=await Promise.all([listCompanyDocuments(actor),getTenderOptions(actor)]);
+  const actor=await requireActor();
+  if(actor.demo&&!actor.access.capabilities.includes("company.document.read"))actor.access.capabilities.push("company.document.read");
+  const [rows,options]=await Promise.all([listCompanyDocuments(actor),getTenderOptions(actor)]);
   return <><PageHeader eyebrow="Организация → Документы" title="Документы компании" subtitle="Единая библиотека учредительных, налоговых, разрешительных и иных документов компании. Тендеры используют её как источник для чек-листа участия." breadcrumbs={[{label:"Организация"},{label:"Документы компании"}]}/><CompanyDocumentsWorkspace rows={rows} legalEntities={options.legalEntities} canManage={hasCapability(actor.access,"company.document.manage")}/></>;
 }
