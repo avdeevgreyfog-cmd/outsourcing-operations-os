@@ -36,14 +36,19 @@ jobs:
           rm -rf .pages-site
           mkdir -p .pages-site
           cp preview/index.html .pages-site/index.html
+          cp preview/app.js .pages-site/app.js
+          cp preview/preview.css .pages-site/preview.css
           cp app/globals.css .pages-site/globals.css
+          cp app/request-workflow.css .pages-site/request-workflow.css
+          cp app/request-polish.css .pages-site/request-polish.css
           cp app/request-baseline.css .pages-site/request-baseline.css
           cp app/request-final.css .pages-site/request-final.css
           cp app/request-entity.css .pages-site/request-entity.css
           cp app/commercial-baseline.css .pages-site/commercial-baseline.css
+          cp app/proposal-template.css .pages-site/proposal-template.css
           cp app/tender-core.css .pages-site/tender-core.css
           cp app/tender-demo.css .pages-site/tender-demo.css
-          cp app/proposal-template.css .pages-site/proposal-template.css
+          cp app/tender-final.css .pages-site/tender-final.css
           touch .pages-site/.nojekyll
       - name: Upload preview artifact
         uses: actions/upload-pages-artifact@v4
