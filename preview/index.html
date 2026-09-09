@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="tender-core.css" />
   <link rel="stylesheet" href="tender-demo.css" />
   <link rel="stylesheet" href="tender-final.css" />
+  <link rel="stylesheet" href="sales-system.css" />
   <link rel="stylesheet" href="preview.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -36,5 +37,6 @@
   <div class="preview-modal" id="drawer"><aside class="preview-drawer"><div class="preview-drawer-head"><div><strong>Добавить тендер</strong><span>Регистрация новой закупки в Tender Core</span></div><button class="icon-button" type="button" onclick="closeDrawer()">×</button></div><div class="preview-drawer-body"><div class="preview-form"><label class="wide"><span>Название тендера *</span><input id="newTitle" /></label><label><span>Заказчик</span><input id="newCustomer" /></label><label><span>Площадка</span><input id="newPlatform" placeholder="ЕИС, B2B-Center, Bidzaar…" /></label><label><span>Номер процедуры</span><input id="newNumber" /></label><label><span>НМЦК, ₽</span><input id="newPrice" type="number" /></label><label><span>Подача до</span><input id="newDeadline" type="datetime-local" /></label><label><span>Потенциал</span><select id="newPotential"><option>Средний</option><option>Высокий</option><option>Низкий</option></select></label><label class="wide"><span>Комментарий аналитика</span><textarea id="newComment" rows="5"></textarea></label></div></div><div class="preview-drawer-foot"><button class="button" type="button" onclick="closeDrawer()">Отмена</button><button class="button primary" type="button" onclick="saveTender()">Добавить тендер</button></div></aside></div>
   <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" hidden />
   <script src="app.js"></script>
+  <script src="sales-latest.js"></script>
 </body>
 </html>
