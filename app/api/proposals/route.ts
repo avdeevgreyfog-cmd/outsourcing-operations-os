@@ -4,11 +4,12 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import { getDefaultProposalTemplate } from "@/lib/commercial/proposal-template";
 
 const schema=z.object({requestId:z.string().uuid()});
 
 type RequestScope={
-  organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;client:string|null;
+  organizationId:string;ownerUserId:string|null;ownerName:string|null;ownerEmail:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;client:string|null;
   title:string;vatMode:string|null;location:string|null;startDate:string|null;durationText:string|null;schedule:Record<string,unknown>;
   housingRule:string|null;travelRule:string|null;shuttleRule:string|null;ppeRule:string|null;medicalRule:string|null;toolsRule:string|null;
   status:string;archivedAt:string|null;
@@ -31,14 +32,16 @@ export async function POST(request:Request){
     requireCapability(actor,"sales.proposal.create");
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const body=schema.parse(await request.json());
+    const selectedTemplate=await getDefaultProposalTemplate(actor);
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [scope]=await tx<Array<RequestScope>>`
-        SELECT r.organization_id "organizationId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",
-          r.region_id "regionId",r.client_company_id "clientId",c.name client,r.title,r.vat_mode "vatMode",r.location_text location,
-          r.expected_start_date::text "startDate",r.duration_text "durationText",r.schedule_json schedule,
+        SELECT r.organization_id "organizationId",r.owner_user_id "ownerUserId",owner.display_name "ownerName",owner.email "ownerEmail",
+          r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",r.region_id "regionId",r.client_company_id "clientId",c.name client,r.title,
+          r.vat_mode "vatMode",r.location_text location,r.expected_start_date::text "startDate",r.duration_text "durationText",r.schedule_json schedule,
           r.housing_rule "housingRule",r.travel_rule "travelRule",r.shuttle_rule "shuttleRule",r.ppe_rule "ppeRule",r.medical_rule "medicalRule",r.tools_rule "toolsRule",
           r.status,r.archived_at::text "archivedAt"
-        FROM requests r LEFT JOIN client_companies c ON c.id=r.client_company_id WHERE r.id=${body.requestId}::uuid
+        FROM requests r LEFT JOIN client_companies c ON c.id=r.client_company_id LEFT JOIN app_users owner ON owner.id=r.owner_user_id
+        WHERE r.id=${body.requestId}::uuid
       `;
       if(!scope)throw new Error("Заявка не найдена");
       if(!canReadRow(actor.access,"sales.proposal.create",scope,actor))throw new AccessDeniedError("sales.proposal.create");
@@ -72,24 +75,13 @@ export async function POST(request:Request){
       }
       const scheduleLabel=[scope.schedule?.pattern,scope.schedule?.paidHours?`${scope.schedule.paidHours} оплачиваемых часов`:null].filter(Boolean).join(", ");
       const content={
-        requestId:body.requestId,
-        title:scope.title,
-        objectName:scope.title,
-        company:scope.client,
-        clientId:scope.clientId,
-        description:"Предоставление персонала по согласованной заявке и коммерческим условиям.",
-        vatMode:scope.vatMode,
-        vatPct:scenarios[0]?.vatPct??0,
-        location:scope.location,
-        expectedStartDate:scope.startDate,
-        validUntil:null,
-        schedule:scheduleLabel||null,
-        projectDuration:scope.durationText,
-        included,
-        clientProvides,
-        terms:"Оплата производится по фактически подтверждённому объёму оказанных услуг в соответствии с выбранной единицей расчёта.",
-        additionalConditions:null,
-        comment:null,
+        requestId:body.requestId,title:scope.title,objectName:scope.title,company:scope.client,clientId:scope.clientId,
+        description:selectedTemplate.config.intro,vatMode:scope.vatMode,vatPct:scenarios[0]?.vatPct??0,location:scope.location,expectedStartDate:scope.startDate,
+        validUntil:null,schedule:scheduleLabel||null,projectDuration:scope.durationText,included,clientProvides,
+        terms:"Условия проекта согласовываются индивидуально и фиксируются в договоре и приложении.",additionalConditions:null,comment:null,
+        template:{id:selectedTemplate.id,name:selectedTemplate.name,kind:selectedTemplate.kind,version:selectedTemplate.version},
+        presentation:selectedTemplate.config,
+        manager:{name:scope.ownerName||actor.displayName,email:scope.ownerEmail||actor.email,phone:null,telegram:null},
         roles:scenarios.map((item)=>({role:item.role,specialtyId:item.specialtyId,count:item.count,rateNet:item.rateNet,rateGross:item.rateGross,unit:item.billingUnit,scenarioId:item.scenarioId})),
       };
       const scenarioIds=scenarios.map((item)=>item.scenarioId);
