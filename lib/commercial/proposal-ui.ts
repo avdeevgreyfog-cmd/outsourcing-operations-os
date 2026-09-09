@@ -12,13 +12,15 @@ export const proposalStatusLabels: Record<string, string> = {
 };
 
 export const proposalUnitLabels: Record<string, string> = {
-  hour: "час",
-  shift: "смена",
+  hour: "чел./час",
+  shift: "чел./смена",
   unit: "единица",
-  worker_month: "сотрудник / месяц",
-  project_month: "проект / месяц",
+  piece: "за единицу",
+  piecework: "сдельно",
+  worker_month: "чел./месяц",
+  project_month: "проект/месяц",
   project_fixed: "проект",
-  mixed: "переменная единица",
+  mixed: "сдельно / переменная единица",
 };
 
 export function proposalStatusLabel(status: string) {
