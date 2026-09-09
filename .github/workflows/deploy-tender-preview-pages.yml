@@ -37,6 +37,7 @@ jobs:
           mkdir -p .pages-site
           cp preview/index.html .pages-site/index.html
           cp preview/app.js .pages-site/app.js
+          cp preview/sales-latest.js .pages-site/sales-latest.js
           cp preview/preview.css .pages-site/preview.css
           cp app/globals.css .pages-site/globals.css
           cp app/request-workflow.css .pages-site/request-workflow.css
@@ -49,6 +50,7 @@ jobs:
           cp app/tender-core.css .pages-site/tender-core.css
           cp app/tender-demo.css .pages-site/tender-demo.css
           cp app/tender-final.css .pages-site/tender-final.css
+          cp app/sales-system.css .pages-site/sales-system.css
           touch .pages-site/.nojekyll
       - name: Upload preview artifact
         uses: actions/upload-pages-artifact@v4
