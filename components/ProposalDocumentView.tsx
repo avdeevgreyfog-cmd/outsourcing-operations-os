@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { ProposalDocumentEditor } from "@/components/ProposalDocumentEditor";
 import { KeyValue, Section } from "@/components/UI";
 import { proposalPresentation, type CommercialProposalDetail } from "@/lib/commercial/proposal-document";
@@ -11,8 +12,8 @@ export function ProposalDocumentView({proposal,canEdit,templates=[]}:{proposal:C
   const roles=proposal.content.roles??[];const presentation=proposalPresentation(proposal.content);const manager=proposal.content.manager;
   const showNet=presentation.priceDisplay!=="gross_only";const showGross=presentation.priceDisplay!=="net_only";
   return <div className="proposal-document-workspace proposal-document-price-led">
-    <article className="proposal-sheet proposal-sheet-commercial" style={{"--proposal-accent":presentation.accent} as React.CSSProperties}>
-      <header className="proposal-commercial-head"><div className="proposal-commercial-brand"><strong>{proposal.content.company??proposal.client}</strong><span>Коммерческое предложение</span></div><div><strong>КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</strong><span>{proposal.createdAt}</span></div></header>
+    <article className="proposal-sheet proposal-sheet-commercial" style={{"--proposal-accent":presentation.accent} as CSSProperties}>
+      <header className="proposal-commercial-head"><div className="proposal-commercial-brand"><strong>КП №{proposal.version}</strong><span>{proposal.content.template?.name??"Стандарт OPERIS"}</span></div><div><strong>КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ</strong><span>{proposal.createdAt}</span></div></header>
       <div className="proposal-commercial-title"><h2>{presentation.documentTitle}</h2>{presentation.intro&&<p>{presentation.intro}</p>}</div>
       <section className="proposal-price-section"><h3>СТОИМОСТЬ УСЛУГ</h3><div className="proposal-price-rule"/><table className="proposal-sheet-table proposal-price-table"><thead><tr><th>Специальность</th><th>Количество</th><th>Единица расчёта</th>{showNet&&<th>Без НДС</th>}{showGross&&<th>С НДС</th>}</tr></thead><tbody>{roles.map(item=><tr key={item.scenarioId}><td>{item.role}</td><td>{item.count}</td><td>{unitLabels[item.unit]??item.unit}</td>{showNet&&<td>{rub(item.rateNet)}</td>}{showGross&&<td>{rub(item.rateGross)}</td>}</tr>)}</tbody></table><p className="proposal-vat-note">{showGross&&proposal.content.vatPct?`Ставка с НДС рассчитана по ставке ${proposal.content.vatPct}%. `:""}Количество и единица расчёта зафиксированы в текущей версии предложения.</p></section>
       {presentation.showIncluded&&!!proposal.content.included?.length&&<section className="proposal-optional-section"><h3>В СТОИМОСТЬ ВКЛЮЧЕНО</h3><div className="proposal-included-grid">{proposal.content.included.map((item,index)=><div key={`${item}-${index}`}><b>{String(index+1).padStart(2,"0")}</b><span>{item}</span></div>)}</div></section>}
