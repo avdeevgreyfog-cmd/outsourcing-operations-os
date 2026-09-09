@@ -84,7 +84,6 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
             vatMode,
             schedule,
             projectWorkers,
-            economicsDate: request?.startDate ?? null,
           }}/>
         </div>
       </Section>
