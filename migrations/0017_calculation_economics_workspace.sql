@@ -38,6 +38,9 @@ WHERE tender_id IS NOT NULL AND economics_date IS NULL;
 
 ALTER TABLE calculations ALTER COLUMN version SET DEFAULT 1;
 ALTER TABLE calculations ALTER COLUMN version SET NOT NULL;
+-- Legacy import/seed paths may omit this new field. Runtime calculation creation writes the
+-- business economics date explicitly; current_date is only the safe compatibility fallback.
+ALTER TABLE calculations ALTER COLUMN economics_date SET DEFAULT current_date;
 ALTER TABLE calculations ALTER COLUMN economics_date SET NOT NULL;
 
 CREATE UNIQUE INDEX calculations_request_version_uq
