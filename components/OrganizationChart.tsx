@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, BriefcaseBusiness, Building2, ChevronDown, ChevronRight, CircleUserRound, Focus, FolderTree, Globe2, Maximize2, Minus, Network, Plus, Search, Users, UsersRound, X } from "lucide-react";
 import { buildOrganizationTree, organizationUnitLabels } from "@/lib/core/organization.mjs";
 import type { CompanyEmployeeRow, OrganizationUnitRow, PositionAssignmentRow, StaffPositionRow } from "@/lib/organization/types";
@@ -17,11 +17,11 @@ function UnitIcon({ kind, size = 16 }: { kind: OrganizationUnitRow["kind"]; size
   return <FolderTree size={size} />;
 }
 
-export function OrganizationChart({ units, employees, staffPositions, assignments }: { units: OrganizationUnitRow[]; employees: CompanyEmployeeRow[]; staffPositions: StaffPositionRow[]; assignments: PositionAssignmentRow[] }) {
+export function OrganizationChart({ units, employees, staffPositions, assignments, currentEmployeeId }: { units: OrganizationUnitRow[]; employees: CompanyEmployeeRow[]; staffPositions: StaffPositionRow[]; assignments: PositionAssignmentRow[]; currentEmployeeId?: string }) {
   const viewport = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [panning, setPanning] = useState(false);
-  const [view, setView] = useState<"units" | "positions">(() => typeof window !== "undefined" && new URL(window.location.href).searchParams.get("mode") === "positions" ? "positions" : "units");
+  const [view, setView] = useState<"people" | "units" | "positions">(() => { if (typeof window === "undefined") return "people"; const mode = new URL(window.location.href).searchParams.get("mode"); return mode === "positions" ? "positions" : mode === "units" ? "units" : "people"; });
   const [query, setQuery] = useState(() => typeof window === "undefined" ? "" : new URL(window.location.href).searchParams.get("q") ?? "");
   const [kind, setKind] = useState("all");
   const [region, setRegion] = useState(() => typeof window === "undefined" ? "all" : new URL(window.location.href).searchParams.get("region") ?? "all");
@@ -76,7 +76,7 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
   function focusSearchResult() {
     if (!normalized) return;
     const unit = units.find((item) => item.name.toLowerCase().includes(normalized)); const employee = employees.find(employeeMatches); const position = staffPositions.find((item) => [item.code, item.name, item.jobProfile, item.orgUnit].join(" ").toLowerCase().includes(normalized));
-    const next = view === "units" ? unit ? { type: "unit" as const, id: unit.id } : employee ? { type: "employee" as const, id: employee.id } : null : position ? { type: "position" as const, id: position.id } : null;
+    const next = view === "units" ? unit ? { type: "unit" as const, id: unit.id } : employee ? { type: "employee" as const, id: employee.id } : null : view === "people" ? employee ? { type: "employee" as const, id: employee.id } : null : position ? { type: "position" as const, id: position.id } : null;
     if (next) { select(next); requestAnimationFrame(() => document.querySelector(`[data-node-id="${next.id}"]`)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" })); }
   }
   function startPan(event: React.PointerEvent<HTMLDivElement>) { if (event.button !== 0 || (event.target as HTMLElement).closest("button,input,select,a")) return; const element = viewport.current; if (!element) return; drag.current = { x: event.clientX, y: event.clientY, left: element.scrollLeft, top: element.scrollTop }; setPanning(true); element.setPointerCapture(event.pointerId); }
@@ -99,25 +99,79 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
   }
 
   const filteredPositions = staffPositions.filter((item) => (region === "all" || item.region === region) && (!normalized || [item.code, item.name, item.jobProfile, item.orgUnit].join(" ").toLowerCase().includes(normalized)) && (!issuesOnly || item.open > 0 || (!item.reportsToPositionId && item.level > 0)));
-  const noResults = view === "units" ? !roots.some(unitVisible) : filteredPositions.length === 0;
+  const noResults = view === "units" ? !roots.some(unitVisible) : view === "people" ? !employees.some(employeeMatches) : filteredPositions.length === 0;
   return <div className="org-chart-workspace">
     <div className="org-chart-toolbar">
-      <div className="org-view-switch" role="tablist" aria-label="Режим оргструктуры"><button type="button" role="tab" aria-selected={view === "units"} className={view === "units" ? "active" : ""} onClick={() => setView("units")}>Структура</button><button type="button" role="tab" aria-selected={view === "positions"} className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Штат и назначения</button></div>
-      <label className="toolbar-search"><Search size={15} /><span className="sr-only">Поиск в структуре</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") focusSearchResult(); }} placeholder={view === "units" ? "Подразделение, сотрудник или роль" : "Код, профиль или позиция"} /></label>
-      <select value={kind} onChange={(event) => setKind(event.target.value)} aria-label="Тип узла" disabled={view === "positions"}><option value="all">Все типы</option>{Object.entries(organizationUnitLabels).filter(([key]) => key !== "company").map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
+      <div className="org-view-switch" role="tablist" aria-label="Режим оргструктуры"><button type="button" role="tab" aria-selected={view === "people"} className={view === "people" ? "active" : ""} onClick={() => setView("people")}>Люди</button><button type="button" role="tab" aria-selected={view === "units"} className={view === "units" ? "active" : ""} onClick={() => setView("units")}>Подразделения</button><button type="button" role="tab" aria-selected={view === "positions"} className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Штат и назначения</button></div>
+      <label className="toolbar-search"><Search size={15} /><span className="sr-only">Поиск в структуре</span><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") focusSearchResult(); }} placeholder={view === "positions" ? "Код, профиль или позиция" : "Сотрудник, должность или подразделение"} /></label>
+      <select value={kind} onChange={(event) => setKind(event.target.value)} aria-label="Тип узла" disabled={view !== "units"}><option value="all">Все типы</option>{Object.entries(organizationUnitLabels).filter(([key]) => key !== "company").map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select>
       <select value={region} onChange={(event) => setRegion(event.target.value)} aria-label="Регион"><option value="all">Все регионы</option>{regions.map((item) => <option key={item}>{item}</option>)}</select>
       <button type="button" className={`button compact ${issuesOnly ? "active-filter" : ""}`} onClick={() => setIssuesOnly((value) => !value)} aria-pressed={issuesOnly}><AlertTriangle size={14} />Проблемы</button>
+      {view === "people" && currentEmployeeId && <button type="button" className="button compact org-my-branch" onClick={() => select({ type: "employee", id: currentEmployeeId })}>Моя ветка</button>}
       {view === "units" && <button type="button" className="button compact org-layout-toggle" onClick={() => setLayout((value) => value === "compact" ? "wide" : "compact")} aria-pressed={layout === "compact"} title={layout === "compact" ? "Показать классическую широкую схему" : "Собрать крупные ветки компактно"}><Network size={14} />{layout === "compact" ? "Компактно" : "Широко"}</button>}
       <div className="org-zoom" aria-label="Масштаб"><button type="button" onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.1).toFixed(2))))} aria-label="Уменьшить"><Minus size={14} /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(1.5, Number((value + 0.1).toFixed(2))))} aria-label="Увеличить"><Plus size={14} /></button></div>
       <button type="button" className="icon-button" onClick={fitToScreen} aria-label="Вместить структуру в экран" title="Вместить в экран"><Maximize2 size={15} /></button><button type="button" className="icon-button" onClick={() => setCollapsed(new Set(units.filter((unit) => unit.parentId).map((unit) => unit.id)))} aria-label="Свернуть все ветки" title="Свернуть все"><Network size={15} /></button><button type="button" className="icon-button" onClick={() => { setCollapsed(new Set()); if (selection) requestAnimationFrame(() => document.querySelector(`[data-node-id="${selection.id}"]`)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" })); }} aria-label="Развернуть и показать выбранный узел" title="Показать выбранное"><Focus size={15} /></button>
     </div>
     <div className={`org-chart-viewport ${panning ? "is-panning" : ""}`} ref={viewport} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} aria-label="Интерактивная схема организации">
-      <div className="org-canvas-hint"><span>{view === "units" ? "Перетащите свободную область, чтобы осмотреть карту" : "Раскрывайте строки, чтобы увидеть назначения"}</span><b>{view === "units" ? `${units.length} узлов` : `${filteredPositions.length} штатных позиций`}</b></div>
-      <div className="org-chart-canvas" style={{ transform: `scale(${zoom})` }}>{view === "units" ? <ul className="org-tree-root">{roots.map(renderUnit)}</ul> : <PositionTree positions={filteredPositions} assignments={assignments} employees={employees} selection={selection} onSelect={select} />}</div>
+      <div className="org-canvas-hint"><span>{view === "people" ? "Нажмите на человека, чтобы открыть его контекст и ответственность" : view === "units" ? "Перетащите свободную область, чтобы осмотреть карту" : "Раскрывайте строки, чтобы увидеть назначения"}</span><b>{view === "people" ? `${employees.filter(employeeMatches).length} сотрудников` : view === "units" ? `${units.length} узлов` : `${filteredPositions.length} штатных позиций`}</b></div>
+      <div className="org-chart-canvas" style={{ transform: `scale(${zoom})` }}>{view === "people" ? <PeopleOrgChart employees={employees} units={units} selection={selection} selectedPath={selectedPath} query={normalized} region={region} issuesOnly={issuesOnly} onSelect={select} /> : view === "units" ? <ul className="org-tree-root">{roots.map(renderUnit)}</ul> : <PositionTree positions={filteredPositions} assignments={assignments} employees={employees} selection={selection} onSelect={select} />}</div>
       {noResults && <div className="org-no-results"><Users size={24} /><strong>В этой области ничего не найдено</strong><span>Измените запрос или снимите часть фильтров.</span></div>}
     </div>
     {selection && <OrganizationDrawer selection={selection} units={units} employees={employees} positions={staffPositions} assignments={assignments} tab={detailTab} onTab={setDetailTab} onClose={() => setSelection(null)} />}
   </div>;
+}
+
+type PeopleTreeNode = { employee: CompanyEmployeeRow; children: PeopleTreeNode[] };
+
+function PeopleOrgChart({ employees, units, selection, query, region, issuesOnly, onSelect }: { employees: CompanyEmployeeRow[]; units: OrganizationUnitRow[]; selection: Selection | null; selectedPath: Set<string>; query: string; region: string; issuesOnly: boolean; onSelect: (selection: Selection) => void }) {
+  const [closed, setClosed] = useState<Set<string>>(new Set());
+  const issueUnits = useMemo(() => new Set(units.filter((unit) => unit.kind !== "company" && (!unit.managerMembershipId || Number(unit.vacancyCount ?? 0) > 0)).map((unit) => unit.id)), [units]);
+  const matches = useCallback((employee: CompanyEmployeeRow) => {
+    const text = [employee.name, employee.position, employee.primaryStaffPosition, employee.orgUnit, employee.region, ...employee.roles.map((role) => role.name), ...employee.responsibilities].filter(Boolean).join(" ").toLowerCase();
+    const searchMatch = !query || text.includes(query);
+    const regionMatch = region === "all" || employee.region === region;
+    const issueMatch = !issuesOnly || !employee.managerMembershipId || Boolean(employee.orgUnitId && issueUnits.has(employee.orgUnitId));
+    return searchMatch && regionMatch && issueMatch;
+  }, [query, region, issuesOnly, issueUnits]);
+  const matchingIds = useMemo(() => new Set(employees.filter(matches).map((employee) => employee.id)), [employees, matches]);
+  const visibleIds = useMemo(() => {
+    const next = new Set(matchingIds);
+    if (!query && region === "all" && !issuesOnly) return new Set(employees.map((employee) => employee.id));
+    for (const employee of employees.filter((item) => matchingIds.has(item.id))) {
+      let managerId = employee.managerMembershipId;
+      while (managerId) { next.add(managerId); managerId = employees.find((item) => item.id === managerId)?.managerMembershipId ?? null; }
+    }
+    return next;
+  }, [employees, matchingIds, query, region, issuesOnly]);
+  const peopleByManager = useMemo(() => {
+    const map = new Map<string, CompanyEmployeeRow[]>();
+    for (const employee of employees) { if (!visibleIds.has(employee.id)) continue; const key = employee.managerMembershipId && visibleIds.has(employee.managerMembershipId) ? employee.managerMembershipId : "root"; if (!map.has(key)) map.set(key, []); map.get(key)!.push(employee); }
+    return map;
+  }, [employees, visibleIds]);
+  const tree = useMemo((): PeopleTreeNode[] => {
+    const build = (employee: CompanyEmployeeRow): PeopleTreeNode => ({ employee, children: (peopleByManager.get(employee.id) ?? []).map(build) });
+    return (peopleByManager.get("root") ?? []).map(build);
+  }, [peopleByManager]);
+  const selectedPeoplePath = useMemo(() => {
+    const path = new Set<string>(); let id = selection?.type === "employee" ? selection.id : null;
+    while (id) { path.add(id); id = employees.find((employee) => employee.id === id)?.managerMembershipId ?? null; }
+    return path;
+  }, [selection, employees]);
+  const toggle = (id: string) => setClosed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const renderNode = (node: PeopleTreeNode, depth = 0): React.ReactNode => {
+    const { employee } = node; const isSelected = selection?.type === "employee" && selection.id === employee.id; const inPath = selectedPeoplePath.has(employee.id) && !isSelected; const isClosed = closed.has(employee.id); const directReports = node.children.length;
+    return <section className={`people-org-node depth-${Math.min(depth, 3)} ${inPath ? "on-path" : ""}`} key={employee.id}>
+      <button type="button" className={`people-card ${depth === 0 ? "is-root" : ""} ${isSelected ? "selected" : ""} ${inPath ? "path-card" : ""}`} data-node-id={employee.id} onClick={() => onSelect({ type: "employee", id: employee.id })}>
+        <span className="people-avatar" aria-hidden="true">{initials(employee.name)}</span>
+        <span className="people-card-copy"><strong>{employee.name}</strong><small>{employee.primaryStaffPosition ?? employee.position ?? "Позиция не назначена"}</small><em>{employee.orgUnit ?? "Вся компания"}</em></span>
+        <span className={`people-status status-${employee.status}`} title={employee.status === "active" ? "Активен" : employee.status === "invited" ? "Приглашён" : "Неактивен"} />
+        <span className="people-card-more" aria-hidden="true">⋮</span>
+        <span className="people-card-footer"><span>{employee.roles.length ? `${employee.roles.length} ${employee.roles.length === 1 ? "роль" : "роли"}` : "Роли не назначены"}</span>{(employee.additionalAssignments ?? 0) > 0 && <span>{employee.additionalAssignments} доп. назнач.</span>}{directReports > 0 && <span>{directReports} в подчинении</span>}</span>
+      </button>
+      {directReports > 0 && <><button type="button" className="people-branch-toggle" onClick={() => toggle(employee.id)} aria-expanded={!isClosed} aria-label={`${isClosed ? "Развернуть" : "Свернуть"} подчинённых ${employee.name}`}>{isClosed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}<span>{directReports}</span></button>{!isClosed && <div className="people-org-children"><div className="people-org-children-line" aria-hidden="true" /><div className="people-org-columns">{node.children.map((child) => <div className="people-org-column" key={child.employee.id}>{renderNode(child, depth + 1)}</div>)}</div></div>}</>}
+    </section>;
+  };
+  return <div className="people-org-board"><div className="people-org-heading"><div><strong>Карта взаимодействия</strong><span>Руководители, прямые подчинённые и зоны ответственности в одной схеме.</span></div><div className="people-org-legend"><span><i className="legend-line" />Прямое подчинение</span><span><i className="legend-line accent" />Ваша цепочка</span></div></div><div className="people-org-tree">{tree.map((node) => renderNode(node))}</div>{tree.length === 0 && <div className="people-org-empty"><Users size={22} /><strong>Сотрудники не найдены</strong><span>Измените поиск или снимите фильтры.</span></div>}</div>;
 }
 
 function PositionTree({ positions, assignments, employees, selection, onSelect }: { positions: StaffPositionRow[]; assignments: PositionAssignmentRow[]; employees: CompanyEmployeeRow[]; selection: Selection | null; onSelect: (selection: Selection) => void }) {
