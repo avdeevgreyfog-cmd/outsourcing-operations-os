@@ -159,3 +159,67 @@ test("target-margin rounding never rounds rate below target and client-limit rou
   });
   assert.ok(limit.clientRateNet <= 499.99);
 });
+
+test("target profit mode prices from required monthly contribution", () => {
+  const result = calculateCommercialScenario({
+    workers: 1,
+    hoursPerWorker: 100,
+    workerPayAmount: 100,
+    workerPayUnit: "hour",
+    pricingMode: "target_profit",
+    targetMonthlyContribution: 2500,
+    billingUnit: "hour",
+    vatMode: "without_vat",
+    ruleVersionId: "rule-profit",
+    rules: { mandatoryChargePct: 0, roundingStep: 0.01, legalParametersVerified: true },
+    costs: [],
+  });
+  assert.equal(result.monthlyCost, 10000);
+  assert.equal(result.clientRateNet, 125);
+  assert.equal(result.monthlyContribution, 2500);
+  assert.equal(result.marginPct, 20);
+});
+
+test("minimum guaranteed volume is separate from minimum guaranteed payment", () => {
+  const result = calculateCommercialScenario({
+    workers: 1,
+    hoursPerWorker: 100,
+    workerPayAmount: 100,
+    workerPayUnit: "hour",
+    pricingMode: "target_margin",
+    targetMarginPct: 20,
+    billingUnit: "hour",
+    minimumVolumeMonthly: 120,
+    minimumMonthlyNet: 0,
+    vatMode: "without_vat",
+    ruleVersionId: "rule-volume",
+    rules: { mandatoryChargePct: 0, roundingStep: 0.01, legalParametersVerified: true },
+    costs: [],
+  });
+  assert.equal(result.billableVolumeMonthly, 100);
+  assert.equal(result.guaranteedBillableVolumeMonthly, 120);
+  assert.equal(result.minimumVolumeMonthly, 120);
+  assert.ok(result.clientRateNet < 125);
+  assert.ok(result.marginPct >= 20);
+});
+
+test("role-level monthly and fixed costs are not multiplied by headcount", () => {
+  const result = calculateCommercialScenario({
+    workers: 10,
+    hoursPerWorker: 100,
+    projectMonths: 2,
+    workerPayAmount: 0,
+    workerPayUnit: "hour",
+    pricingMode: "target_margin",
+    targetMarginPct: 0,
+    billingUnit: "hour",
+    vatMode: "without_vat",
+    ruleVersionId: "rule-role-cost",
+    rules: { mandatoryChargePct: 0, legalParametersVerified: true },
+    costs: [
+      { amount: 1000, base: "role_month", enabled: true },
+      { amount: 2000, base: "role_fixed", enabled: true },
+    ],
+  });
+  assert.equal(result.additionalCostsMonthly, 2000);
+});
