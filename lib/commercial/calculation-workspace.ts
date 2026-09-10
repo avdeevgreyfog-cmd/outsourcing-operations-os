@@ -28,7 +28,7 @@ export type CalculationWorkspaceMeta = {
 export type RateReference = {
   id: string;
   amountMin: number;
-  amountMax: number | null;
+  amountMax: number;
   unit: string;
   paySemantics: string;
   employmentModel: string;
@@ -107,9 +107,9 @@ export async function getRateReferencesForRoles(
     for (const role of roles) {
       if (!role.specialtyId) continue;
       const [reference] = await sql<Array<{
-        id:string;amountMin:number|string;amountMax:number|string|null;unit:string;paySemantics:string;employmentModel:string;source:string;sourceDate:string;confidence:string;
+        id:string;amountMin:number|string;amountMax:number|string;unit:string;paySemantics:string;employmentModel:string;source:string;sourceDate:string;confidence:string;
       }>>`
-        SELECT id,amount_min "amountMin",amount_max "amountMax",unit,pay_semantics "paySemantics",employment_model "employmentModel",
+        SELECT id,amount_min "amountMin",COALESCE(amount_max,amount_min) "amountMax",unit,pay_semantics "paySemantics",employment_model "employmentModel",
           source,source_date::text "sourceDate",confidence
         FROM rate_reference_entries
         WHERE specialty_id=${role.specialtyId}::uuid
@@ -123,7 +123,7 @@ export async function getRateReferencesForRoles(
         output[role.id] = {
           id: reference.id,
           amountMin: Number(reference.amountMin),
-          amountMax: reference.amountMax == null ? null : Number(reference.amountMax),
+          amountMax: Number(reference.amountMax),
           unit: reference.unit,
           paySemantics: reference.paySemantics,
           employmentModel: reference.employmentModel,
