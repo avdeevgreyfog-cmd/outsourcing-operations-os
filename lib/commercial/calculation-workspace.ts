@@ -37,6 +37,22 @@ export type RateReference = {
   confidence: string;
 };
 
+export type CalculationScenarioSeed = {
+  id: string;
+  organizationId: string;
+  calculationId: string;
+  sourceRoleId: string;
+  modelId: string;
+  name: string;
+  inputs: Record<string, unknown>;
+  costs: Array<Record<string, unknown>>;
+  ownerUserId: string | null;
+  createdByUserId: string;
+  teamId: string | null;
+  regionId: string | null;
+  clientId: string | null;
+};
+
 export async function getCalculationWorkspaceMeta(actor: Actor, id: string): Promise<CalculationWorkspaceMeta | null> {
   requireCapability(actor, "calculation.scenario.read");
   if (actor.demo) return null;
@@ -54,6 +70,23 @@ export async function getCalculationWorkspaceMeta(actor: Actor, id: string): Pro
       LEFT JOIN requests r ON r.id=c.request_id
       LEFT JOIN tenders t ON t.id=c.tender_id
       WHERE c.id=${id}::uuid
+    `;
+    if (!row || !canReadRow(actor.access, "calculation.scenario.read", row, actor)) return null;
+    return row;
+  });
+}
+
+export async function getCalculationScenarioSeed(actor: Actor, scenarioId: string): Promise<CalculationScenarioSeed | null> {
+  requireCapability(actor, "calculation.scenario.read");
+  if (actor.demo) return null;
+  return withTenant(actor.organizationId, actor.userId, async (sql) => {
+    const [row] = await sql<CalculationScenarioSeed[]>`
+      SELECT cs.id,cs.organization_id "organizationId",cs.calculation_id "calculationId",COALESCE(cs.request_role_id,cs.tender_role_id) "sourceRoleId",
+        cs.model_id "modelId",cs.name,cs.inputs_snapshot inputs,cs.cost_snapshot costs,c.owner_user_id "ownerUserId",cs.created_by_user_id "createdByUserId",
+        COALESCE(r.assigned_team_id,t.assigned_team_id) "teamId",COALESCE(r.region_id,t.region_id) "regionId",COALESCE(r.client_company_id,t.client_company_id) "clientId"
+      FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id
+      LEFT JOIN requests r ON r.id=c.request_id LEFT JOIN tenders t ON t.id=c.tender_id
+      WHERE cs.id=${scenarioId}::uuid
     `;
     if (!row || !canReadRow(actor.access, "calculation.scenario.read", row, actor)) return null;
     return row;
