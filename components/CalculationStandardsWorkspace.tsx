@@ -6,7 +6,7 @@ type Tab = "models"|"expenses"|"schedules"|"rules";
 const tabs:[Tab,string,string][]=[["models","Модели оформления","Тип занятости и налоговая логика"],["expenses","Расходы","Затраты на сотрудника, роль и проект"],["schedules","Графики","Смены, часы и оплачиваемые перерывы"],["rules","Финансовые правила","Резерв, маржа, НДС и округление"]];
 const expenses=[["Проживание","project_month","Проект","Активный"],["Транспорт до объекта","per_shift","Сотрудник","Активный"],["Медосмотр и оформление","per_worker_period","Сотрудник","Черновик"],["Резерв замены","percent_of_worker_pay","Проект","Активный"]];
 const schedules=[["5/2 · дневная","8 ч","21,7 смены","Перерыв 1 ч · не оплачивается"],["Вахта 15/15","11 ч","15 смен","Перерыв 1 ч · оплачивается"],["Сменная 2/2","12 ч","15,2 смены","Перерыв 1 ч · не оплачивается"]];
-const pct=(v:unknown)=>Number.isFinite(Number(v))?\`${Number(v)}%\`:"—";
+const pct=(v:unknown)=>Number.isFinite(Number(v))?String(Number(v))+"%":"—";
 export function CalculationStandardsWorkspace({models}:{models:Model[]}){
  const [tab,setTab]=useState<Tab>("models"),[query,setQuery]=useState(""),[selected,setSelected]=useState(models[0]?.id??"");
  const visible=useMemo(()=>models.filter(m=>m.name.toLowerCase().includes(query.toLowerCase())),[models,query]);
