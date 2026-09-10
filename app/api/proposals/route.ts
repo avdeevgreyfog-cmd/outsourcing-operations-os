@@ -15,7 +15,7 @@ type RequestScope={
   status:string;archivedAt:string|null;
 };
 type ScenarioSnapshot={
-  scenarioId:string;requestRoleId:string;specialtyId:string;role:string;count:number;rateNet:number;rateGross:number;billingUnit:string;
+  scenarioId:string;requestRoleId:string;specialtyId:string;role:string;count:number;rateNet:number;rateGross:number;billingUnit:string;billingUnitLabel:string|null;
   monthlyRevenueNet:number;vatPct:number;workers:number;hoursPerWorker:number;
 };
 
@@ -47,11 +47,19 @@ export async function POST(request:Request){
       if(!canReadRow(actor.access,"sales.proposal.create",scope,actor))throw new AccessDeniedError("sales.proposal.create");
       if(scope.archivedAt)throw new Error("Сначала восстановите заявку из архива");
       if(["accepted","launched","lost"].includes(scope.status))throw new Error("Коммерческий цикл этой заявки уже закрыт");
+
+      const [approvedCalculation]=await tx<Array<{id:string;version:number}>>`
+        SELECT id,version FROM calculations
+        WHERE request_id=${body.requestId}::uuid AND status='approved'
+        ORDER BY version DESC,approved_at DESC NULLS LAST,created_at DESC LIMIT 1
+      `;
+      if(!approvedCalculation)throw new Error("Сначала согласуйте целиком одну версию расчёта для всех позиций заявки");
+
       const scenarios=await tx<ScenarioSnapshot[]>`
         SELECT cs.id "scenarioId",rr.id "requestRoleId",rr.specialty_id "specialtyId",s.name role,rr.count_required count,
           COALESCE((cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric,0)::float8 "rateNet",
           COALESCE((cs.result_snapshot->>'clientRateGross')::numeric,(cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric,0)::float8 "rateGross",
-          COALESCE(cs.result_snapshot->>'billingUnit','hour') "billingUnit",
+          COALESCE(cs.result_snapshot->>'billingUnit','hour') "billingUnit",cs.result_snapshot->>'billingUnitLabel' "billingUnitLabel",
           COALESCE((cs.result_snapshot->>'monthlyRevenueNet')::numeric,
             COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,0)*COALESCE((cs.inputs_snapshot->>'workers')::numeric,rr.count_required)*COALESCE((cs.inputs_snapshot->>'hoursPerWorker')::numeric,0),0)::float8 "monthlyRevenueNet",
           COALESCE((cs.result_snapshot->>'vatPct')::numeric,0)::float8 "vatPct",
@@ -59,13 +67,13 @@ export async function POST(request:Request){
           COALESCE((cs.inputs_snapshot->>'hoursPerWorker')::numeric,0)::float8 "hoursPerWorker"
         FROM request_roles rr JOIN specialties s ON s.id=rr.specialty_id
         LEFT JOIN LATERAL (
-          SELECT cs.* FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id
-          WHERE c.request_id=rr.request_id AND cs.request_role_id=rr.id AND cs.status='accepted'
-          ORDER BY cs.accepted_at DESC NULLS LAST,cs.created_at DESC LIMIT 1
+          SELECT cs.* FROM calculation_scenarios cs
+          WHERE cs.calculation_id=${approvedCalculation.id}::uuid AND cs.request_role_id=rr.id AND cs.status='accepted'
+          ORDER BY cs.accepted_at DESC NULLS LAST,cs.version DESC,cs.created_at DESC LIMIT 1
         ) cs ON true
         WHERE rr.request_id=${body.requestId}::uuid ORDER BY rr.created_at
       `;
-      if(!scenarios.length||scenarios.some((item)=>!item.scenarioId))throw new Error("Сначала согласуйте расчёт для каждой позиции заявки");
+      if(!scenarios.length||scenarios.some((item)=>!item.scenarioId))throw new Error(`Расчёт v${approvedCalculation.version} согласован не для всех позиций заявки`);
       const [previous]=await tx<Array<{id:string;version:number}>>`SELECT id,version FROM proposals WHERE request_id=${body.requestId}::uuid ORDER BY version DESC LIMIT 1`;
       const version=(previous?.version??0)+1;
       const totalValue=scenarios.reduce((sum,item)=>sum+Number(item.monthlyRevenueNet),0);
@@ -75,14 +83,14 @@ export async function POST(request:Request){
       }
       const scheduleLabel=[scope.schedule?.pattern,scope.schedule?.paidHours?`${scope.schedule.paidHours} оплачиваемых часов`:null].filter(Boolean).join(", ");
       const content={
-        requestId:body.requestId,title:scope.title,objectName:scope.title,company:scope.client,clientId:scope.clientId,
+        requestId:body.requestId,calculationId:approvedCalculation.id,calculationVersion:approvedCalculation.version,title:scope.title,objectName:scope.title,company:scope.client,clientId:scope.clientId,
         description:selectedTemplate.config.intro,vatMode:scope.vatMode,vatPct:scenarios[0]?.vatPct??0,location:scope.location,expectedStartDate:scope.startDate,
         validUntil:null,schedule:scheduleLabel||null,projectDuration:scope.durationText,included,clientProvides,
         terms:"Условия проекта согласовываются индивидуально и фиксируются в договоре и приложении.",additionalConditions:null,comment:null,
         template:{id:selectedTemplate.id,name:selectedTemplate.name,kind:selectedTemplate.kind,version:selectedTemplate.version},
         presentation:selectedTemplate.config,
         manager:{name:scope.ownerName||actor.displayName,email:scope.ownerEmail||actor.email,phone:null,telegram:null},
-        roles:scenarios.map((item)=>({role:item.role,specialtyId:item.specialtyId,count:item.count,rateNet:item.rateNet,rateGross:item.rateGross,unit:item.billingUnit,scenarioId:item.scenarioId})),
+        roles:scenarios.map((item)=>({role:item.role,specialtyId:item.specialtyId,count:item.count,rateNet:item.rateNet,rateGross:item.rateGross,unit:item.billingUnit,unitLabel:item.billingUnitLabel,scenarioId:item.scenarioId})),
       };
       const scenarioIds=scenarios.map((item)=>item.scenarioId);
       const [created]=await tx<Array<{id:string;version:number;status:string}>>`
