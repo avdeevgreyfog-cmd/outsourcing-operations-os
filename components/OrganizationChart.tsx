@@ -157,15 +157,12 @@ function PeopleOrgChart({ employees, units, selection, query, region, issuesOnly
     while (id) { path.add(id); id = employees.find((employee) => employee.id === id)?.managerMembershipId ?? null; }
     return path;
   }, [selection, employees]);
-  useEffect(() => {
-    if (selection?.type !== "employee") return;
-    setClosed((current) => { const next = new Set(current); let id: string | null = selection.id; while (id) { next.delete(id); id = employees.find((employee) => employee.id === id)?.managerMembershipId ?? null; } return next; });
-  }, [selection, employees]);
+  const selectEmployee = (id: string) => { setClosed((current) => { const next = new Set(current); let currentId: string | null = id; while (currentId) { next.delete(currentId); currentId = employees.find((employee) => employee.id === currentId)?.managerMembershipId ?? null; } return next; }); onSelect({ type: "employee", id }); };
   const toggle = (id: string) => setClosed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const renderNode = (node: PeopleTreeNode, depth = 0): React.ReactNode => {
     const { employee } = node; const isSelected = selection?.type === "employee" && selection.id === employee.id; const inPath = selectedPeoplePath.has(employee.id) && !isSelected; const isClosed = closed.has(employee.id); const directReports = node.children.length;
     return <section className={`people-org-node depth-${Math.min(depth, 3)} ${inPath ? "on-path" : ""}`} key={employee.id}>
-      <button type="button" className={`people-card ${depth === 0 ? "is-root" : ""} ${isSelected ? "selected" : ""} ${inPath ? "path-card" : ""}`} data-node-id={employee.id} onClick={() => onSelect({ type: "employee", id: employee.id })}>
+      <button type="button" className={`people-card ${depth === 0 ? "is-root" : ""} ${isSelected ? "selected" : ""} ${inPath ? "path-card" : ""}`} data-node-id={employee.id} onClick={() => selectEmployee(employee.id)}>
         <span className="people-avatar" aria-hidden="true">{initials(employee.name)}</span>
         <span className="people-card-copy"><strong>{employee.name}</strong><small>{employee.primaryStaffPosition ?? employee.position ?? "Позиция не назначена"}</small><em>{employee.orgUnit ?? "Вся компания"}</em></span>
         <span className={`people-status status-${employee.status}`} title={employee.status === "active" ? "Активен" : employee.status === "invited" ? "Приглашён" : "Неактивен"} />
