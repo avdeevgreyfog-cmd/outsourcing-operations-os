@@ -434,6 +434,40 @@ button,input,select,textarea{letter-spacing:inherit}
 @media(max-width:1100px){.org-chart-workspace:has(.org-detail-drawer) .org-chart-viewport{margin-right:0}.org-detail-drawer{position:fixed;top:var(--topbar-h);right:0;height:calc(100vh - var(--topbar-h));width:min(420px,92vw);max-width:none}}
 @media(prefers-reduced-motion:reduce){.org-unit-card,.org-position-card{transition:none}.org-unit-card:hover,.org-position-card:hover{transform:none}}
 
+/* Structure view: calm canvas, clear hierarchy, and a readable staffing register. */
+.summary-strip .summary-warning strong{color:var(--warn)}
+.org-chart-workspace{box-shadow:none}
+.org-chart-viewport{background-color:var(--panel-2);background-image:none}
+.org-chart-canvas{padding-top:48px;padding-bottom:72px}
+.org-canvas-hint{background:var(--panel);box-shadow:0 2px 8px rgba(31,47,60,.04)}
+.org-unit-card{box-shadow:0 2px 9px rgba(31,47,60,.035)}
+.org-unit-card:hover,.org-position-card:hover{box-shadow:0 5px 16px rgba(31,47,60,.07)}
+.org-unit-card.kind-company{min-height:132px}
+.org-node-title{font-size:13px}
+.org-branch-toggle{background:var(--panel-2)}
+
+.org-staff-tree{width:min(1080px,calc(100vw - 390px));min-width:760px;margin:0 auto;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.org-staff-columns{display:grid;grid-template-columns:minmax(320px,1fr) 140px 120px 34px;gap:12px;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--soft);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.org-staff-columns span:nth-child(n+2){text-align:right}
+.org-staff-groups,.org-staff-profiles{margin:0;padding:0;list-style:none}
+.org-staff-group+.org-staff-group{border-top:1px solid var(--border)}
+.org-staff-group-head{width:100%;min-height:58px;padding:9px 14px;display:grid;grid-template-columns:22px 30px minmax(0,1fr) auto;align-items:center;gap:9px;border:0;background:var(--panel);color:var(--text);text-align:left;cursor:pointer}
+.org-staff-group-head:hover{background:var(--panel-2)}
+.org-staff-toggle{display:grid;place-items:center;color:var(--muted)}
+.org-staff-group-icon{width:30px;height:30px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--accent) 24%,var(--border));border-radius:6px;background:var(--accent-soft);color:var(--accent)}
+.org-staff-group-name{min-width:0}.org-staff-group-name small,.org-staff-group-name strong{display:block}.org-staff-group-name small{color:var(--accent);font-size:8px;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.org-staff-group-name strong{margin-top:2px;overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}
+.org-staff-group-meta{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:9.5px;white-space:nowrap}.org-staff-group-meta b{color:var(--text);font-size:10.5px}.org-staff-group-meta em{margin-left:5px;padding:3px 5px;border-radius:4px;background:var(--warn-bg);color:var(--warn);font-style:normal;font-size:9px}
+.org-staff-profiles{margin-left:62px;border-left:1px solid var(--border-strong)}
+.org-staff-profile+.org-staff-profile{border-top:1px solid var(--border)}
+.org-staff-profile-head{width:100%;min-height:40px;padding:7px 14px;display:grid;grid-template-columns:18px 18px minmax(0,1fr) auto;align-items:center;gap:7px;border:0;background:var(--panel-2);color:var(--muted);text-align:left;cursor:pointer}.org-staff-profile-head:hover{color:var(--text)}.org-staff-profile-head strong{overflow:hidden;color:var(--text);font-size:10.5px;text-overflow:ellipsis;white-space:nowrap}.org-staff-profile-head>span:last-child{font-size:9px;white-space:nowrap}
+.org-staff-seats{border-top:1px solid var(--border)}
+.org-staff-seat{display:grid;grid-template-columns:minmax(320px,1fr) 140px 120px 34px;align-items:center;gap:12px;padding:6px 14px 6px 38px;border-bottom:1px solid var(--border);background:var(--panel)}.org-staff-seat:last-child{border-bottom:0}.org-staff-seat:hover,.org-staff-seat.selected{background:var(--accent-soft)}
+.org-staff-seat-main{min-width:0;padding:2px 0;display:flex;align-items:center;gap:9px;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}.org-staff-seat-main>span:last-child{min-width:0}.org-staff-seat-main strong,.org-staff-seat-main small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.org-staff-seat-main strong{font-size:10.5px}.org-staff-seat-main small{margin-top:2px;color:var(--muted);font-size:8.5px}.org-staff-seat-code{min-width:49px;color:var(--accent);font-size:8.5px;font-weight:750}
+.org-staff-seat-occupancy{display:flex;flex-direction:column;align-items:flex-end;color:var(--text);font-size:10px;font-variant-numeric:tabular-nums}.org-staff-seat-occupancy b{margin-top:2px;color:var(--warn);font-size:8px;font-weight:650}.org-staff-seat-status{justify-self:end;padding:3px 5px;border-radius:4px;font-size:8.5px;font-weight:650}.org-staff-seat-status.status-filled{background:var(--good-bg);color:var(--good)}.org-staff-seat-status.status-open{background:var(--warn-bg);color:var(--warn)}.org-staff-seat-status.status-planned{background:var(--info-bg);color:var(--info)}.org-staff-seat-status.status-frozen,.org-staff-seat-status.status-closed{background:var(--panel-3);color:var(--muted)}
+.org-staff-seat-toggle{width:26px;height:26px;display:grid;place-items:center;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--muted);cursor:pointer}.org-staff-seat-toggle:hover{border-color:var(--border);background:var(--panel-2);color:var(--text)}
+.org-staff-assignments{grid-column:1/-1;margin:0 0 3px 58px;padding:6px 0 0;display:grid;gap:4px;border-top:1px dashed var(--border)}.org-staff-assignments .org-person-card{max-width:500px;min-height:40px}
+@media(max-width:1100px){.org-staff-tree{width:calc(100vw - 54px);min-width:680px}.org-staff-columns,.org-staff-seat{grid-template-columns:minmax(260px,1fr) 110px 100px 32px}.org-staff-profiles{margin-left:48px}}
+
 .organization-history{list-style:none;margin:0;padding:0;display:grid}.organization-history li{display:grid;grid-template-columns:24px 1fr;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)}.organization-history li:last-child{border-bottom:0}.history-mark{width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:var(--panel-2);color:var(--muted)}.organization-history strong,.organization-history small{display:block}.organization-history strong{font-size:12px}.organization-history small{margin-top:2px;color:var(--muted);font-size:10px}.organization-history p{margin:4px 0 0;font-size:11px;color:var(--text-2)}.history-state{min-height:90px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;padding:16px;color:var(--muted);text-align:center;border:1px dashed var(--border);border-radius:8px}.history-state strong{color:var(--text);font-size:12px}.history-state span{font-size:11px}.history-state.bad{color:var(--danger)}
 .capability-editor{display:grid;gap:5px;max-height:310px;overflow:auto}.capability-editor>div{display:grid;grid-template-columns:18px 1fr 112px;align-items:center;gap:7px;padding:7px 8px;border:1px solid var(--border);border-radius:7px}.capability-editor>div>svg{color:var(--muted)}.capability-editor strong,.capability-editor small{display:block}.capability-editor strong{font-size:10.5px}.capability-editor small{margin-top:2px;color:var(--muted);font-size:8.5px}.capability-editor select{height:30px;font-size:10px}
 .responsibility-pane{min-height:420px}.responsibility-toolbar{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border)}.responsibility-toolbar strong,.responsibility-toolbar span{display:block}.responsibility-toolbar strong{font-size:12px}.responsibility-toolbar span{margin-top:2px;color:var(--muted);font-size:10px}.responsibility-matrix .data-table{min-width:1120px}
