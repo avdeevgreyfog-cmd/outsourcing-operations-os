@@ -99,7 +99,7 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
   }
 
   const filteredPositions = staffPositions.filter((item) => (region === "all" || item.region === region) && (!normalized || [item.code, item.name, item.jobProfile, item.orgUnit].join(" ").toLowerCase().includes(normalized)) && (!issuesOnly || item.open > 0 || (!item.reportsToPositionId && item.level > 0)));
-  const noResults = view === "units" ? !roots.some(unitVisible) : view === "people" ? !employees.some(employeeMatches) : filteredPositions.length === 0;
+  const noResults = view === "units" ? !roots.some(unitVisible) : view === "people" ? false : filteredPositions.length === 0;
   return <div className="org-chart-workspace">
     <div className="org-chart-toolbar">
       <div className="org-view-switch" role="tablist" aria-label="Режим оргструктуры"><button type="button" role="tab" aria-selected={view === "people"} className={view === "people" ? "active" : ""} onClick={() => setView("people")}>Люди</button><button type="button" role="tab" aria-selected={view === "units"} className={view === "units" ? "active" : ""} onClick={() => setView("units")}>Подразделения</button><button type="button" role="tab" aria-selected={view === "positions"} className={view === "positions" ? "active" : ""} onClick={() => setView("positions")}>Штат и назначения</button></div>
@@ -110,7 +110,7 @@ export function OrganizationChart({ units, employees, staffPositions, assignment
       {view === "people" && currentEmployeeId && <button type="button" className="button compact org-my-branch" onClick={() => select({ type: "employee", id: currentEmployeeId })}>Моя ветка</button>}
       {view === "units" && <button type="button" className="button compact org-layout-toggle" onClick={() => setLayout((value) => value === "compact" ? "wide" : "compact")} aria-pressed={layout === "compact"} title={layout === "compact" ? "Показать классическую широкую схему" : "Собрать крупные ветки компактно"}><Network size={14} />{layout === "compact" ? "Компактно" : "Широко"}</button>}
       <div className="org-zoom" aria-label="Масштаб"><button type="button" onClick={() => setZoom((value) => Math.max(0.5, Number((value - 0.1).toFixed(2))))} aria-label="Уменьшить"><Minus size={14} /></button><span>{Math.round(zoom * 100)}%</span><button type="button" onClick={() => setZoom((value) => Math.min(1.5, Number((value + 0.1).toFixed(2))))} aria-label="Увеличить"><Plus size={14} /></button></div>
-      <button type="button" className="icon-button" onClick={fitToScreen} aria-label="Вместить структуру в экран" title="Вместить в экран"><Maximize2 size={15} /></button><button type="button" className="icon-button" onClick={() => setCollapsed(new Set(units.filter((unit) => unit.parentId).map((unit) => unit.id)))} aria-label="Свернуть все ветки" title="Свернуть все"><Network size={15} /></button><button type="button" className="icon-button" onClick={() => { setCollapsed(new Set()); if (selection) requestAnimationFrame(() => document.querySelector(`[data-node-id="${selection.id}"]`)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" })); }} aria-label="Развернуть и показать выбранный узел" title="Показать выбранное"><Focus size={15} /></button>
+      <button type="button" className="icon-button" onClick={fitToScreen} aria-label="Вместить структуру в экран" title="Вместить в экран"><Maximize2 size={15} /></button>{view !== "people" && <button type="button" className="icon-button" onClick={() => setCollapsed(new Set(units.filter((unit) => unit.parentId).map((unit) => unit.id)))} aria-label="Свернуть все ветки" title="Свернуть все"><Network size={15} /></button>}<button type="button" className="icon-button" onClick={() => { setCollapsed(new Set()); if (selection) requestAnimationFrame(() => document.querySelector(`[data-node-id="${selection.id}"]`)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" })); }} aria-label="Развернуть и показать выбранный узел" title="Показать выбранное"><Focus size={15} /></button>
     </div>
     <div className={`org-chart-viewport ${panning ? "is-panning" : ""}`} ref={viewport} onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan} aria-label="Интерактивная схема организации">
       <div className="org-canvas-hint"><span>{view === "people" ? "Нажмите на человека, чтобы открыть его контекст и ответственность" : view === "units" ? "Перетащите свободную область, чтобы осмотреть карту" : "Раскрывайте строки, чтобы увидеть назначения"}</span><b>{view === "people" ? `${employees.filter(employeeMatches).length} сотрудников` : view === "units" ? `${units.length} узлов` : `${filteredPositions.length} штатных позиций`}</b></div>
@@ -156,6 +156,10 @@ function PeopleOrgChart({ employees, units, selection, query, region, issuesOnly
     const path = new Set<string>(); let id = selection?.type === "employee" ? selection.id : null;
     while (id) { path.add(id); id = employees.find((employee) => employee.id === id)?.managerMembershipId ?? null; }
     return path;
+  }, [selection, employees]);
+  useEffect(() => {
+    if (selection?.type !== "employee") return;
+    setClosed((current) => { const next = new Set(current); let id: string | null = selection.id; while (id) { next.delete(id); id = employees.find((employee) => employee.id === id)?.managerMembershipId ?? null; } return next; });
   }, [selection, employees]);
   const toggle = (id: string) => setClosed((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const renderNode = (node: PeopleTreeNode, depth = 0): React.ReactNode => {
