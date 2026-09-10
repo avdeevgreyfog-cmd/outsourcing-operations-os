@@ -43,7 +43,7 @@ export async function POST(_request:Request,{params}:{params:Promise<{id:string}
       const [created]=await tx<Array<{id:string}>>`
         INSERT INTO calculations(organization_id,request_id,tender_id,status,owner_user_id,created_by_user_id,version,supersedes_calculation_id,economics_date,allocation_mode,project_costs_json)
         VALUES(${actor.organizationId}::uuid,${current.requestId}::uuid,${current.tenderId}::uuid,'draft',${actor.userId}::uuid,${actor.userId}::uuid,
-          ${nextVersion},${current.id}::uuid,${current.economicsDate}::date,${current.allocationMode},${sql.json(current.projectCosts??[])})
+          ${nextVersion},${current.id}::uuid,${current.economicsDate}::date,${current.allocationMode},${sql.json(current.projectCosts as never)})
         RETURNING id
       `;
 
@@ -60,7 +60,7 @@ export async function POST(_request:Request,{params}:{params:Promise<{id:string}
         await tx`
           INSERT INTO calculation_scenarios(organization_id,calculation_id,request_role_id,tender_role_id,model_id,rule_version_id,name,status,version,supersedes_scenario_id,inputs_snapshot,cost_snapshot,result_snapshot,rate_reference_snapshot,created_by_user_id)
           VALUES(${actor.organizationId}::uuid,${created.id}::uuid,${template.requestRoleId}::uuid,${template.tenderRoleId}::uuid,${template.modelId}::uuid,${template.ruleVersionId}::uuid,
-            ${template.name},'draft',1,${template.id}::uuid,${sql.json(inputs)},${sql.json(template.costs)},${sql.json(template.result)},${template.rateReference?sql.json(template.rateReference):null},${actor.userId}::uuid)
+            ${template.name},'draft',1,${template.id}::uuid,${sql.json(inputs as never)},${sql.json(template.costs as never)},${sql.json(template.result as never)},${template.rateReference?sql.json(template.rateReference as never):null},${actor.userId}::uuid)
         `;
       }
       await tx`
