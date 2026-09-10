@@ -15,6 +15,6 @@ export async function AppShell({ actor, children }: { actor: Actor; children: Re
   const allowed: NavigationSection[] = filterNavigation(navigationManifest, navigationAccess, { showFoundations });
   return <div className="app-shell" data-initial-theme={theme}>
     <script dangerouslySetInnerHTML={{ __html: `document.documentElement.dataset.theme=${JSON.stringify(theme)}` }} />
-    <WorkspaceNavigation actor={actor} sections={allowed}/><main className="main-canvas"><div className="page-wrap">{children}</div></main>
+    <WorkspaceNavigation key={`${actor.organizationId}:${actor.membershipId}`} actor={actor} sections={allowed}/><main className="main-canvas"><div className="page-wrap">{children}</div></main>
   </div>;
 }

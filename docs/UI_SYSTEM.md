@@ -14,7 +14,7 @@
 
 The target information architecture is declared once in `lib/core/navigation.mjs`. Every item has a canonical section, group and route. Modules marked `foundation` have a real baseline workspace describing their purpose, process, core fields, relations and next implementation scope. They are visible in demo and platform-administration contexts, remain capability-safe in the production context and contain no fake operations or demo records.
 
-Level 1 and Level 2 are collapsible. Level 2 remains visible inside an expanded section even when only one group is available to the current role. Level 3 appears only in an open subgroup, while the active route and its parent hierarchy remain expanded. Contextual entity tabs own the long-lived third level inside clients, requests, objects and workers. Navigation items are filtered by server-provided effective access.
+Level 1 and Level 2 are collapsible. Level 2 remains visible inside an expanded section even when only one group is available to the current role. Level 3 appears only in an open subgroup, the current route opens its parent hierarchy when navigating, and users may then collapse it. Contextual entity tabs own the long-lived third level inside clients, requests, objects and workers. Navigation items are filtered by server-provided effective access.
 
 An available route must appear only once in global navigation. Cross-cutting access from another context belongs in entity links, command search or a summary, not in a second equal sidebar destination.
 
@@ -98,3 +98,37 @@ scrolling. Preserve the document preview's separate white print surface.
 Development remains Next.js. `scripts/dev.mjs` translates the supervised preview's
 host flag, retaining native Next behavior; `terminal.local` is an allowed development
 origin only. Local demo environment settings are ignored, never published as secrets.
+
+
+## Sidebar and portfolio (10 September 2026)
+
+- Preserve the 238 px runtime sidebar, existing Russian three-level manifest and
+  capability filtering. Areas and groups are initially visible; the active group
+  opens on first entry. Explicit collapse remains available for active groups.
+- Preferences use `operis.navigation.v4:<organization>:<membership>` and hydrate
+  before any write. Only presentation preferences live in browser storage.
+  Storage failures fall back to memory. Scroll position is session-scoped.
+- Pinned destinations are secondary shortcuts to existing routes. They are
+  filtered through the server-provided navigation, never used to grant access.
+  Command center and Portfolio are initially pinned when available. Canonical
+  destinations remain in their existing groups. Search only finds available pages.
+- The command search uses a native modal dialog, focus containment and return,
+  Escape, arrow navigation and Enter. The menu opens as an overlay through the
+  tablet interval as well as on mobile. Active pages use a quiet orange marker;
+  parent areas no longer compete with a second highlighted container.
+- `/analytics` is the cross-object Portfolio; comparison and workforce retain
+  their query-string routes. The personal command center remains separate.
+- Portfolio composes `SalesLayout`, metrics, filters, empty state and drawer.
+  Staffing comes from object needs, not worker-directory counts or shift attendance.
+  An unspecified need is unavailable, not 100% filled. Financial snapshots use
+  the newest available period per object and are not summed across periods.
+- Sources remain server-side and use both source-specific capabilities/scopes
+  and `analytics.portfolio.read` scope. No finance query is made without finance
+  capability. No new permissions, schema changes or demo business writes are added.
+- Client timesheet summaries show the latest saved client snapshot and its period.
+  They do not imply that an unsaved current timesheet is complete. Detailed pivot
+  and reconciliation workflows remain in Timesheets and are outside this change.
+- Requests with start dates are a separate commercial queue. They are never added
+  to object headcounts; known source-request links exclude converted records.
+  Demo data and missing periods are visibly identified. No speculative forecasts,
+  fake payment totals or inferred actual shift attendance are presented.
