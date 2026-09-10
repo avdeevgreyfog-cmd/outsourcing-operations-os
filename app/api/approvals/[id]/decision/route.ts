@@ -34,11 +34,31 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           else await tx`UPDATE calculation_scenarios SET status='superseded' WHERE tender_role_id=${subject.tenderRoleId}::uuid AND status='accepted' AND id<>${approval.subjectId}::uuid`;
           await tx`UPDATE calculation_scenarios SET status='accepted',accepted_by_user_id=${actor.userId}::uuid,accepted_at=now() WHERE id=${approval.subjectId}::uuid`;
           if(requestId){
-            const [remaining]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM request_roles rr WHERE rr.request_id=${requestId}::uuid AND NOT EXISTS(SELECT 1 FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id WHERE c.request_id=rr.request_id AND cs.request_role_id=rr.id AND cs.status='accepted')`;
-            if((remaining?.count??0)===0){await tx`UPDATE calculations SET status='approved',approved_by_user_id=${actor.userId}::uuid,approved_at=now(),updated_at=now() WHERE id=${subject.calculationId}::uuid`;await tx`UPDATE requests SET status='proposal_ready',updated_at=now() WHERE id=${requestId}::uuid`;}else await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${requestId}::uuid`;
+            const [remaining]=await tx<Array<{count:number}>>`
+              SELECT count(*)::int count FROM request_roles rr
+              WHERE rr.request_id=${requestId}::uuid AND NOT EXISTS(
+                SELECT 1 FROM calculation_scenarios cs
+                WHERE cs.calculation_id=${subject.calculationId}::uuid AND cs.request_role_id=rr.id AND cs.status='accepted'
+              )
+            `;
+            if((remaining?.count??0)===0){
+              await tx`UPDATE calculations SET status='approved',approved_by_user_id=${actor.userId}::uuid,approved_at=now(),updated_at=now() WHERE id=${subject.calculationId}::uuid`;
+              await tx`UPDATE calculations SET status='superseded',updated_at=now() WHERE id=(SELECT supersedes_calculation_id FROM calculations WHERE id=${subject.calculationId}::uuid) AND status='approved'`;
+              await tx`UPDATE requests SET status='proposal_ready',updated_at=now() WHERE id=${requestId}::uuid`;
+            }else await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${requestId}::uuid`;
           }else if(tenderId){
-            const [remaining]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM tender_roles tr WHERE tr.tender_id=${tenderId}::uuid AND NOT EXISTS(SELECT 1 FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id WHERE c.tender_id=tr.tender_id AND cs.tender_role_id=tr.id AND cs.status='accepted')`;
-            if((remaining?.count??0)===0){await tx`UPDATE calculations SET status='approved',approved_by_user_id=${actor.userId}::uuid,approved_at=now(),updated_at=now() WHERE id=${subject.calculationId}::uuid`;await tx`UPDATE tenders SET stage='preparation',updated_at=now() WHERE id=${tenderId}::uuid`;}else await tx`UPDATE tenders SET stage='calculation',updated_at=now() WHERE id=${tenderId}::uuid`;
+            const [remaining]=await tx<Array<{count:number}>>`
+              SELECT count(*)::int count FROM tender_roles tr
+              WHERE tr.tender_id=${tenderId}::uuid AND NOT EXISTS(
+                SELECT 1 FROM calculation_scenarios cs
+                WHERE cs.calculation_id=${subject.calculationId}::uuid AND cs.tender_role_id=tr.id AND cs.status='accepted'
+              )
+            `;
+            if((remaining?.count??0)===0){
+              await tx`UPDATE calculations SET status='approved',approved_by_user_id=${actor.userId}::uuid,approved_at=now(),updated_at=now() WHERE id=${subject.calculationId}::uuid`;
+              await tx`UPDATE calculations SET status='superseded',updated_at=now() WHERE id=(SELECT supersedes_calculation_id FROM calculations WHERE id=${subject.calculationId}::uuid) AND status='approved'`;
+              await tx`UPDATE tenders SET stage='preparation',updated_at=now() WHERE id=${tenderId}::uuid`;
+            }else await tx`UPDATE tenders SET stage='calculation',updated_at=now() WHERE id=${tenderId}::uuid`;
           }
         }else{
           await tx`UPDATE calculation_scenarios SET status='rejected' WHERE id=${approval.subjectId}::uuid`;await tx`UPDATE calculations SET status='draft',updated_at=now() WHERE id=${subject.calculationId}::uuid`;
