@@ -18,6 +18,8 @@ const schema=z.object({
   requestRoleId:z.string().uuid().optional(),
   modelId:z.string().uuid(),
   ruleVersionId:z.string().uuid().optional(),
+  supersedesScenarioId:z.string().uuid().optional(),
+  allocationMode:z.enum(["headcount","labor_hours"]).optional(),
   name:z.string().trim().min(2).max(160),
   inputs:jsonObject,
   costs:z.array(jsonObject),
@@ -28,7 +30,11 @@ const schema=z.object({
 });
 
 type RuleRow={id:string;rules:JsonRecord};
-type SourceScope={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;status?:string;stage?:string;archivedAt?:string|null};
+type SourceScope={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;status?:string;stage?:string;archivedAt?:string|null;expectedStartDate?:string|null};
+type ExistingCalculation={id:string;requestId:string|null;tenderId:string|null;status:string;version:number;economicsDate:string;allocationMode:"headcount"|"labor_hours"};
+
+function dateFromJson(value:unknown){return typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)?value:null;}
+function numberFromJson(value:unknown,fallback=0){const n=Number(value);return Number.isFinite(n)?n:fallback;}
 
 export async function POST(request:Request){
   try{
@@ -37,11 +43,18 @@ export async function POST(request:Request){
     const b=schema.parse(await request.json());
     const row=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       let calculationId:string|null=b.calculationId??null;
+      let calculationVersion=1;
+      let existingCalculation:ExistingCalculation|undefined;
       let sourceType:SourceType|undefined=b.sourceType??(b.requestId?"request":undefined);
       let sourceId:string|null=b.sourceId??b.requestId??null;
       if(calculationId){
-        const [calc]=await tx<Array<{id:string;requestId:string|null;tenderId:string|null}>>`SELECT id,request_id "requestId",tender_id "tenderId" FROM calculations WHERE id=${calculationId}::uuid`;
+        const [calc]=await tx<ExistingCalculation[]>`
+          SELECT id,request_id "requestId",tender_id "tenderId",status,version,economics_date::text "economicsDate",allocation_mode "allocationMode"
+          FROM calculations WHERE id=${calculationId}::uuid
+        `;
         if(!calc)throw new Error("Расчёт не найден");
+        if(["approved","superseded"].includes(calc.status))throw new Error("Принятый расчёт зафиксирован. Создайте новую версию расчёта для изменений");
+        existingCalculation=calc;calculationVersion=calc.version;
         sourceType=calc.tenderId?"tender":"request";sourceId=calc.tenderId??calc.requestId;
       }
       if(!sourceType||!sourceId)throw new Error("Не удалось определить источник расчёта");
@@ -53,7 +66,8 @@ export async function POST(request:Request){
       let sourceRow:SourceScope|undefined;
       if(resolvedSourceType==="request"){
         [sourceRow]=await tx<SourceScope[]>`
-          SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",status,archived_at::text "archivedAt"
+          SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",status,
+            archived_at::text "archivedAt",expected_start_date::text "expectedStartDate"
           FROM requests WHERE id=${resolvedSourceId}::uuid
         `;
         if(!sourceRow||!canReadRow(actor.access,"calculation.scenario.create",sourceRow,actor))throw new AccessDeniedError("calculation.scenario.create");
@@ -61,7 +75,8 @@ export async function POST(request:Request){
         if(["accepted","launched","lost"].includes(sourceRow.status??""))throw new Error("Коммерческий цикл заявки закрыт; новый расчёт нельзя добавить в зафиксированный результат");
       }else{
         [sourceRow]=await tx<SourceScope[]>`
-          SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage
+          SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,
+            NULL::text "expectedStartDate"
           FROM tenders WHERE id=${resolvedSourceId}::uuid AND archived_at IS NULL
         `;
         if(!sourceRow||!canReadRow(actor.access,"calculation.scenario.create",sourceRow,actor))throw new AccessDeniedError("calculation.scenario.create");
@@ -82,52 +97,111 @@ export async function POST(request:Request){
       const [model]=await tx<Array<{id:string}>>`SELECT id FROM calculation_models WHERE id=${b.modelId}::uuid AND active`;
       if(!model)throw new Error("Модель расчёта недоступна");
 
+      const economicsDate=dateFromJson(b.inputs.economicsDate)??existingCalculation?.economicsDate??sourceRow.expectedStartDate??new Date().toISOString().slice(0,10);
+      const allocationMode=b.allocationMode??(b.inputs.projectAllocationMode==="labor_hours"?"labor_hours":"headcount");
+
       let rule:RuleRow|undefined;
       if(b.ruleVersionId){
-        [rule]=await tx<RuleRow[]>`SELECT id,rules_json rules FROM calculation_rule_versions WHERE id=${b.ruleVersionId}::uuid AND calculation_model_id=${b.modelId}::uuid AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)`;
-        if(!rule)throw new Error("Версия правил не относится к выбранной модели или больше не действует");
+        [rule]=await tx<RuleRow[]>`
+          SELECT id,rules_json rules FROM calculation_rule_versions
+          WHERE id=${b.ruleVersionId}::uuid AND calculation_model_id=${b.modelId}::uuid
+            AND effective_from<=${economicsDate}::date AND (effective_to IS NULL OR effective_to>=${economicsDate}::date)
+        `;
+        if(!rule)throw new Error("Версия правил не относится к выбранной модели или не действует на дату экономики");
       }else{
-        [rule]=await tx<RuleRow[]>`SELECT id,rules_json rules FROM calculation_rule_versions WHERE calculation_model_id=${b.modelId}::uuid AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date) ORDER BY version DESC,effective_from DESC LIMIT 1`;
+        [rule]=await tx<RuleRow[]>`
+          SELECT id,rules_json rules FROM calculation_rule_versions
+          WHERE calculation_model_id=${b.modelId}::uuid
+            AND effective_from<=${economicsDate}::date AND (effective_to IS NULL OR effective_to>=${economicsDate}::date)
+          ORDER BY version DESC,effective_from DESC LIMIT 1
+        `;
       }
       const ruleVersionId=rule?.id??null;
-      const inputs:JsonRecord={...b.inputs,ruleVersionId,sourceType:resolvedSourceType,sourceId:resolvedSourceId};
+
+      if(!calculationId){
+        const existing=resolvedSourceType==="request"
+          ? await tx<ExistingCalculation[]>`
+              SELECT id,request_id "requestId",tender_id "tenderId",status,version,economics_date::text "economicsDate",allocation_mode "allocationMode"
+              FROM calculations WHERE request_id=${resolvedSourceId}::uuid ORDER BY version DESC,created_at DESC LIMIT 1
+            `
+          : await tx<ExistingCalculation[]>`
+              SELECT id,request_id "requestId",tender_id "tenderId",status,version,economics_date::text "economicsDate",allocation_mode "allocationMode"
+              FROM calculations WHERE tender_id=${resolvedSourceId}::uuid ORDER BY version DESC,created_at DESC LIMIT 1
+            `;
+        const latest=existing[0];
+        if(latest&&!['approved','superseded'].includes(latest.status)){
+          calculationId=latest.id;calculationVersion=latest.version;existingCalculation=latest;
+        }else{
+          calculationVersion=(latest?.version??0)+1;
+          const [createdCalc]=await tx<Array<{id:string}>>`
+            INSERT INTO calculations(organization_id,request_id,tender_id,status,owner_user_id,created_by_user_id,version,supersedes_calculation_id,economics_date,allocation_mode,project_costs_json)
+            VALUES(${actor.organizationId}::uuid,${requestId}::uuid,${tenderId}::uuid,'draft',${actor.userId}::uuid,${actor.userId}::uuid,${calculationVersion},${latest?.id??null}::uuid,${economicsDate}::date,${allocationMode},'[]'::jsonb)
+            RETURNING id
+          `;calculationId=createdCalc.id;
+        }
+      }
+      if(!calculationId)throw new Error("Не удалось создать расчёт");
+
+      const inputs:JsonRecord={...b.inputs,ruleVersionId,sourceType:resolvedSourceType,sourceId:resolvedSourceId,economicsDate,calculationVersion,projectAllocationMode:allocationMode};
       const isCommercialScenario="workerPayAmount" in b.inputs||"billingUnit" in b.inputs||"pricingMode" in b.inputs;
       const serverResult:JsonRecord=isCommercialScenario?calculateCommercialScenario({...inputs,costs:b.costs,rules:rule?.rules??{}}) as JsonRecord:b.result??{};
       if(isCommercialScenario&&Object.keys(serverResult).length===0)throw new Error("Не удалось рассчитать экономику сценария");
 
       let referenceSnapshot:JsonRecord|null=null;
       if(specialtyId){
-        const [reference]=await tx<Array<{id:string;amountMin:number|string;amountMax:number|string|null;unit:string;paySemantics:string;source:string;sourceDate:string;confidence:string}>>`
-          SELECT id,amount_min "amountMin",amount_max "amountMax",unit,pay_semantics "paySemantics",source,source_date::text "sourceDate",confidence
-          FROM rate_reference_entries WHERE specialty_id=${specialtyId}::uuid AND (${sourceRow.regionId}::uuid IS NULL OR region_id=${sourceRow.regionId}::uuid OR region_id IS NULL) AND valid_from<=current_date AND (valid_to IS NULL OR valid_to>=current_date)
+        const [reference]=await tx<Array<{id:string;amountMin:number|string;amountMax:number|string|null;unit:string;paySemantics:string;employmentModel:string;source:string;sourceDate:string;confidence:string}>>`
+          SELECT id,amount_min "amountMin",amount_max "amountMax",unit,pay_semantics "paySemantics",employment_model "employmentModel",source,source_date::text "sourceDate",confidence
+          FROM rate_reference_entries
+          WHERE specialty_id=${specialtyId}::uuid
+            AND (${sourceRow.regionId}::uuid IS NULL OR region_id=${sourceRow.regionId}::uuid OR region_id IS NULL)
+            AND valid_from<=${economicsDate}::date AND (valid_to IS NULL OR valid_to>=${economicsDate}::date)
           ORDER BY (region_id=${sourceRow.regionId}::uuid) DESC,source_date DESC,created_at DESC LIMIT 1
         `;
-        referenceSnapshot=reference?{id:reference.id,amountMin:Number(reference.amountMin),amountMax:reference.amountMax==null?null:Number(reference.amountMax),unit:reference.unit,paySemantics:reference.paySemantics,source:reference.source,sourceDate:reference.sourceDate,confidence:reference.confidence}:null;
+        referenceSnapshot=reference?{
+          id:reference.id,amountMin:Number(reference.amountMin),amountMax:reference.amountMax==null?null:Number(reference.amountMax),unit:reference.unit,
+          paySemantics:reference.paySemantics,employmentModel:reference.employmentModel,source:reference.source,sourceDate:reference.sourceDate,confidence:reference.confidence,
+        }:null;
       }
 
-      if(!calculationId){
-        const existing=resolvedSourceType==="request"
-          ? await tx<Array<{id:string}>>`SELECT id FROM calculations WHERE request_id=${resolvedSourceId}::uuid ORDER BY created_at DESC LIMIT 1`
-          : await tx<Array<{id:string}>>`SELECT id FROM calculations WHERE tender_id=${resolvedSourceId}::uuid ORDER BY created_at DESC LIMIT 1`;
-        if(existing[0])calculationId=existing[0].id;
-        else{
-          const [createdCalc]=await tx<Array<{id:string}>>`
-            INSERT INTO calculations(organization_id,request_id,tender_id,status,owner_user_id,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${requestId}::uuid,${tenderId}::uuid,'draft',${actor.userId}::uuid,${actor.userId}::uuid) RETURNING id
-          `;calculationId=createdCalc.id;
-        }
-      }
-      if(!calculationId)throw new Error("Не удалось создать расчёт");
+      const rawProjectCosts=b.costs.filter(cost=>cost.scope==="project").map(cost=>{
+        const entered=numberFromJson(cost.enteredAmount,numberFromJson(cost.amount,0));
+        return {...cost,amount:entered,enteredAmount:entered,allocationShare:1};
+      });
+      await tx`
+        UPDATE calculations SET economics_date=${economicsDate}::date,allocation_mode=${allocationMode},project_costs_json=${sql.json(rawProjectCosts)},updated_at=now()
+        WHERE id=${calculationId}::uuid
+      `;
+
       const requestRoleId=resolvedSourceType==="request"?resolvedRoleId:null;
       const tenderRoleId=resolvedSourceType==="tender"?resolvedRoleId:null;
+      let supersedesScenarioId=b.supersedesScenarioId??null;
+      if(supersedesScenarioId){
+        const [previous]=await tx<Array<{id:string}>>`
+          SELECT id FROM calculation_scenarios WHERE id=${supersedesScenarioId}::uuid AND calculation_id=${calculationId}::uuid
+            AND COALESCE(request_role_id,tender_role_id)=${resolvedRoleId}::uuid
+        `;
+        if(!previous)throw new Error("Исходный сценарий не относится к выбранной позиции расчёта");
+      }else{
+        const [previous]=await tx<Array<{id:string}>>`
+          SELECT id FROM calculation_scenarios WHERE calculation_id=${calculationId}::uuid
+            AND COALESCE(request_role_id,tender_role_id)=${resolvedRoleId}::uuid
+          ORDER BY version DESC,created_at DESC LIMIT 1
+        `;
+        supersedesScenarioId=previous?.id??null;
+      }
+      const [versionRow]=await tx<Array<{version:number}>>`
+        SELECT COALESCE(max(version),0)::int+1 version FROM calculation_scenarios
+        WHERE calculation_id=${calculationId}::uuid AND COALESCE(request_role_id,tender_role_id)=${resolvedRoleId}::uuid
+      `;
+      const scenarioVersion=versionRow?.version??1;
       const [created]=await tx<Array<{id:string;name:string;status:string;createdAt:string}>>`
-        INSERT INTO calculation_scenarios(organization_id,calculation_id,request_role_id,tender_role_id,model_id,rule_version_id,name,status,inputs_snapshot,cost_snapshot,result_snapshot,rate_reference_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${calculationId}::uuid,${requestRoleId}::uuid,${tenderRoleId}::uuid,${b.modelId}::uuid,${ruleVersionId}::uuid,${b.name},'draft',${sql.json(inputs)},${sql.json(b.costs)},${sql.json(serverResult)},${referenceSnapshot?sql.json(referenceSnapshot):null},${actor.userId}::uuid)
+        INSERT INTO calculation_scenarios(organization_id,calculation_id,request_role_id,tender_role_id,model_id,rule_version_id,name,status,version,supersedes_scenario_id,inputs_snapshot,cost_snapshot,result_snapshot,rate_reference_snapshot,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${calculationId}::uuid,${requestRoleId}::uuid,${tenderRoleId}::uuid,${b.modelId}::uuid,${ruleVersionId}::uuid,${b.name},'draft',${scenarioVersion},${supersedesScenarioId}::uuid,${sql.json(inputs)},${sql.json(b.costs)},${sql.json(serverResult)},${referenceSnapshot?sql.json(referenceSnapshot):null},${actor.userId}::uuid)
         RETURNING id,name,status,created_at "createdAt"
       `;
       if(resolvedSourceType==="request")await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${resolvedSourceId}::uuid`;
       else await tx`UPDATE tenders SET stage='calculation',updated_at=now() WHERE id=${resolvedSourceId}::uuid AND stage IN ('new','analysis','clarification','calculation','approval')`;
-      return {...created,calculationId,sourceType:resolvedSourceType,sourceId:resolvedSourceId,requestId,tenderId,ruleVersionId,result:serverResult};
+      return {...created,calculationId,calculationVersion,scenarioVersion,sourceType:resolvedSourceType,sourceId:resolvedSourceId,requestId,tenderId,ruleVersionId,economicsDate,result:serverResult};
     }));
     return NextResponse.json(row,{status:201});
   }catch(error){
