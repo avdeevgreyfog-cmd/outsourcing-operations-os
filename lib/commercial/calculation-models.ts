@@ -21,8 +21,8 @@ export type CalculationModelOption = {
   ruleVersionId: string | null;
   ruleVersion: number | null;
   ruleSource: string | null;
-  ruleEffectiveFrom: string | null;
-  ruleEffectiveTo: string | null;
+  ruleEffectiveFrom?: string | null;
+  ruleEffectiveTo?: string | null;
   rules: CalculationRuleConfig;
 };
 
