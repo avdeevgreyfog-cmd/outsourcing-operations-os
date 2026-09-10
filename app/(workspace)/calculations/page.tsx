@@ -9,7 +9,6 @@ import { getCommercialRequest } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
 import { PageHeader, Section } from "@/components/UI";
 import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
-import { CalculatorWorkspaceOperis } from "@/components/CalculatorWorkspaceOperis";
 
 export default async function Calculations({searchParams}:{searchParams:Promise<{request?:string;tender?:string}>}) {
   const actor = await requireActor();
@@ -50,10 +49,6 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
         breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"Расчёты"}]}
       />
       <CalculationsRegistryWorkspace rows={rows} canEdit={canEdit}/>
-      <div className="calculation-workspace-gap"/>
-      <Section title="Быстрый расчёт" note="Моделирование без привязки к заявке или тендеру. Результат можно выгрузить, но он не попадает в коммерческий workflow.">
-        <div className="calculation-editor-wrap"><CalculatorWorkspaceOperis/></div>
-      </Section>
     </>;
   }
 
