@@ -9,6 +9,7 @@ import { getCommercialRequest } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
 import { PageHeader, Section } from "@/components/UI";
 import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
+import { CalculatorWorkspaceOperis } from "@/components/CalculatorWorkspaceOperis";
 
 export default async function Calculations({searchParams}:{searchParams:Promise<{request?:string;tender?:string}>}) {
   const actor = await requireActor();
