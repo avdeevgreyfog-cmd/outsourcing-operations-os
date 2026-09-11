@@ -11,14 +11,14 @@ function lifecycle(proposal: CommercialProposalDetail) {
     { title: "Согласовано внутри", detail: "Предложение разрешено к отправке заказчику", at: proposal.approvedAt, done: Boolean(proposal.approvedAt) },
     { title: "Отправлено заказчику", detail: "Клиентская версия зафиксирована и отправлена", at: proposal.sentAt, done: Boolean(proposal.sentAt) },
     { title: "Решение клиента", detail: proposal.status === "client_rejected" ? "Клиент отказался от предложения" : proposal.status === "revision_requested" ? "Клиент запросил доработку" : "Предложение принято клиентом", at: proposal.acceptedAt, done: Boolean(proposal.acceptedAt) || ["client_rejected", "revision_requested"].includes(proposal.status) },
-    { title: "Передано в запуск", detail: "По принятому КП создан операционный объект", at: proposal.launchedAt, done: Boolean(proposal.launchedAt) },
+    { title: "Начата подготовка", detail: "Созданы объект в подготовке, потребности подбора, план запуска и черновик договора", at: proposal.launchedAt, done: Boolean(proposal.sourceObjectId) },
   ].filter((item) => item.done);
 }
 
 export function ProposalApprovalView({ proposal, canSubmit, canClientDecision, canLaunch }: { proposal: CommercialProposalDetail; canSubmit: boolean; canClientDecision: boolean; canLaunch: boolean }) {
   const items = lifecycle(proposal);
   return <div className="proposal-approval-layout">
-    <Section title="Жизненный цикл" note="Внутренняя проверка отделена от решения заказчика.">
+    <Section title="Жизненный цикл" note="Внутренняя проверка отделена от решения заказчика; после принятия КП подготовка объекта идёт параллельно договорной работе.">
       <div className="proposal-lifecycle">{items.map((item, index) => <article key={`${item.title}-${index}`}><i>{index + 1}</i><div><strong>{item.title}</strong><span>{item.detail}</span><small>{item.at ? proposalDate(item.at) : "Текущий этап"}</small></div></article>)}</div>
     </Section>
     <aside>
