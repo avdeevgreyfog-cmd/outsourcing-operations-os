@@ -5,12 +5,18 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
-const schema=z.object({subjectType:z.enum(["calculation_scenario","proposal","tender"]),subjectId:z.string().uuid(),processCode:z.enum(["tender_participation","tender_bid","tender_submission"]).optional()});
+const schema=z.object({
+  subjectType:z.enum(["calculation_scenario","proposal","contract","tender"]),
+  subjectId:z.string().uuid(),
+  processCode:z.enum(["tender_participation","tender_bid","tender_submission"]).optional(),
+});
 type SubjectContext={sourceType:"request"|"tender";sourceId:string;regionId:string|null;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;clientId:string|null;status:string};
 
 export async function POST(request:Request){
   try{
-    const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
+    const actor=await getCurrentActor();
+    if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
+    if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       let context:SubjectContext|undefined;let processCode="";let stepCode="";let capability="";
@@ -22,16 +28,37 @@ export async function POST(request:Request){
             COALESCE(t.created_by_user_id,r.created_by_user_id) "createdByUserId",COALESCE(t.assigned_team_id,r.assigned_team_id) "teamId",COALESCE(t.client_company_id,r.client_company_id) "clientId",cs.status
           FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id LEFT JOIN requests r ON r.id=c.request_id LEFT JOIN tenders t ON t.id=c.tender_id WHERE cs.id=${body.subjectId}::uuid
         `;context=row;
-        if(!context)throw new Error("Сценарий расчёта не найден");if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
+        if(!context)throw new Error("Сценарий расчёта не найден");
+        if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
         if(!["draft","rejected"].includes(context.status))throw new Error("На согласование можно отправить только черновик или отклонённый сценарий");
       }else if(body.subjectType==="proposal"){
         capability="sales.proposal.submit";processCode="commercial_proposal";stepCode="proposal_approval";requireCapability(actor,capability);
-        const [row]=await tx<Array<SubjectContext>>`SELECT 'request' "sourceType",r.id "sourceId",r.region_id "regionId",r.organization_id "organizationId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",r.client_company_id "clientId",p.status FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${body.subjectId}::uuid`;context=row;
-        if(!context)throw new Error("Коммерческое предложение не найдено");if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);if(context.status!=="draft")throw new Error("На внутреннее согласование можно отправить только черновик КП");
+        const [row]=await tx<Array<SubjectContext>>`
+          SELECT 'request' "sourceType",r.id "sourceId",r.region_id "regionId",r.organization_id "organizationId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",r.client_company_id "clientId",p.status
+          FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${body.subjectId}::uuid
+        `;context=row;
+        if(!context)throw new Error("Коммерческое предложение не найдено");
+        if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
+        if(context.status!=="draft")throw new Error("На внутреннее согласование можно отправить только черновик КП");
+      }else if(body.subjectType==="contract"){
+        capability="contract.submit";processCode="commercial_contract";stepCode="contract_approval";requireCapability(actor,capability);
+        const [row]=await tx<Array<SubjectContext>>`
+          SELECT 'request' "sourceType",r.id "sourceId",r.region_id "regionId",r.organization_id "organizationId",COALESCE(c.owner_user_id,r.owner_user_id) "ownerUserId",
+            c.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",r.client_company_id "clientId",c.status
+          FROM contracts c JOIN requests r ON r.id=c.request_id WHERE c.id=${body.subjectId}::uuid
+        `;context=row;
+        if(!context)throw new Error("Договор не найден");
+        if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
+        if(!["draft","negotiation","rejected"].includes(context.status))throw new Error("На согласование можно отправить только черновик или договор после переговоров");
       }else{
         capability="sales.tender.edit";requireCapability(actor,capability);processCode=body.processCode??"tender_participation";stepCode=processCode==="tender_bid"?"bid_approval":processCode==="tender_submission"?"submission_approval":"participation_approval";
-        const [row]=await tx<Array<SubjectContext>>`SELECT 'tender' "sourceType",id "sourceId",region_id "regionId",organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",client_company_id "clientId",stage status FROM tenders WHERE id=${body.subjectId}::uuid AND archived_at IS NULL`;context=row;
-        if(!context)throw new Error("Тендер не найден");if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);if(context.status==="completed")throw new Error("Завершённый тендер нельзя отправить на согласование");
+        const [row]=await tx<Array<SubjectContext>>`
+          SELECT 'tender' "sourceType",id "sourceId",region_id "regionId",organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",client_company_id "clientId",stage status
+          FROM tenders WHERE id=${body.subjectId}::uuid AND archived_at IS NULL
+        `;context=row;
+        if(!context)throw new Error("Тендер не найден");
+        if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
+        if(context.status==="completed")throw new Error("Завершённый тендер нельзя отправить на согласование");
       }
       const [pending]=await tx<Array<{id:string}>>`SELECT id FROM approval_instances WHERE subject_type=${body.subjectType} AND subject_id=${body.subjectId}::uuid AND status='pending'`;
       if(pending)throw new Error("По этому предмету уже есть активное согласование");
@@ -63,10 +90,16 @@ export async function POST(request:Request){
         if(context.sourceType==="request")await tx`UPDATE requests SET status='calculation_review',updated_at=now() WHERE id=${context.sourceId}::uuid`;
         else await tx`UPDATE tenders SET stage='approval',updated_at=now() WHERE id=${context.sourceId}::uuid`;
       }else if(body.subjectType==="proposal"){
-        await tx`UPDATE proposals SET status='internal_review',submitted_at=now() WHERE id=${body.subjectId}::uuid`;await tx`UPDATE requests SET status='proposal_review',updated_at=now() WHERE id=${context.sourceId}::uuid`;
-      }else await tx`UPDATE tenders SET stage='approval',updated_at=now() WHERE id=${body.subjectId}::uuid`;
+        await tx`UPDATE proposals SET status='internal_review',submitted_at=now() WHERE id=${body.subjectId}::uuid`;
+        await tx`UPDATE requests SET status='proposal_review',updated_at=now() WHERE id=${context.sourceId}::uuid`;
+      }else if(body.subjectType==="contract"){
+        await tx`UPDATE contracts SET status='internal_review',updated_at=now() WHERE id=${body.subjectId}::uuid`;
+      }else{
+        await tx`UPDATE tenders SET stage='approval',updated_at=now() WHERE id=${body.subjectId}::uuid`;
+      }
       return {id:approval.id,approverUserId:approver.userId,status:"pending"};
-    }));return NextResponse.json(result,{status:201});
+    }));
+    return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Некорректный предмет согласования",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
