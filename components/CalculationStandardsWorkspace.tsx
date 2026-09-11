@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { CalculationModelOption, CalculationRuleConfig } from "@/lib/commercial/calculation-models";
 import type { ExpenseStandard, ScheduleStandard } from "@/lib/commercial/calculation-standards";
-import { defaultCommercialPolicy, loadCompanyRulesDraft, saveCompanyRulesDraft, type CommercialPolicy } from "@/lib/commercial/company-rules-client";
+import { defaultCommercialPolicy, type CommercialPolicy } from "@/lib/commercial/commercial-policy";
+import { loadCompanyRulesDraft, saveCompanyRulesDraft } from "@/lib/commercial/company-rules-client";
 
 type Tab = "models" | "expenses" | "schedules" | "policy";
 type Kind = "model" | "expense" | "schedule";
@@ -24,12 +25,12 @@ const s = (value: FormDataEntryValue | null) => String(value ?? "").trim();
 const localId = () => typeof crypto !== "undefined" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
 const codeFromName = (name: string) => name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `rule-${Date.now()}`;
 
-export function CalculationStandardsWorkspace({ models: initialModels, expenses: initialExpenses, schedules: initialSchedules, canManage }: { models: CalculationModelOption[]; expenses: ExpenseStandard[]; schedules: ScheduleStandard[]; canManage: boolean }) {
+export function CalculationStandardsWorkspace({ models: initialModels, expenses: initialExpenses, schedules: initialSchedules, initialCommercialPolicy = defaultCommercialPolicy, canManage }: { models: CalculationModelOption[]; expenses: ExpenseStandard[]; schedules: ScheduleStandard[]; initialCommercialPolicy?: CommercialPolicy; canManage: boolean }) {
   const [tab, setTab] = useState<Tab>("models");
   const [models, setModels] = useState(initialModels);
   const [expenses, setExpenses] = useState(initialExpenses);
   const [schedules, setSchedules] = useState(initialSchedules);
-  const [commercialPolicy, setCommercialPolicy] = useState<CommercialPolicy>(defaultCommercialPolicy);
+  const [commercialPolicy, setCommercialPolicy] = useState<CommercialPolicy>(initialCommercialPolicy);
   const [selected, setSelected] = useState(initialModels[0]?.id ?? "");
   const [editor, setEditor] = useState<Editor>(null);
   const [query, setQuery] = useState("");
@@ -41,11 +42,11 @@ export function CalculationStandardsWorkspace({ models: initialModels, expenses:
     const timer = window.setTimeout(() => {
       const draft = loadCompanyRulesDraft();
       if (!draft) return;
-      setModels(draft.models); setExpenses(draft.expenses); setSchedules(draft.schedules); setCommercialPolicy({ ...defaultCommercialPolicy, ...(draft.commercialPolicy ?? {}) });
+      setModels(draft.models); setExpenses(draft.expenses); setSchedules(draft.schedules); setCommercialPolicy({ ...initialCommercialPolicy, ...(draft.commercialPolicy ?? {}) });
       if (draft.models[0]) setSelected(draft.models[0].id);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [demo]);
+  }, [demo, initialCommercialPolicy]);
 
   const active = models.find(model => model.id === selected) ?? models[0];
   const visibleModels = useMemo(() => models.filter(model => `${model.name} ${model.code}`.toLowerCase().includes(query.toLowerCase())), [models, query]);
@@ -78,17 +79,21 @@ export function CalculationStandardsWorkspace({ models: initialModels, expenses:
     applyServerChange(payload, result); setMessage("Новая версия сохранена. Старые расчёты не изменятся."); setEditor(null);
   }
 
-  function saveCommercialPolicy(event: FormEvent<HTMLFormElement>) {
+  async function saveCommercialPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const next: CommercialPolicy = {
       minimumMarginPct: n(form.get("minimumMarginPct")), recommendedMarginPct: n(form.get("recommendedMarginPct")), riskReservePct: n(form.get("riskReservePct")),
       vatPct: n(form.get("vatPct")), roundingStep: n(form.get("roundingStep"), 1), approvalBelowMarginPct: n(form.get("approvalBelowMarginPct")), notes: s(form.get("notes")),
     };
-    setCommercialPolicy(next);
-    if (demo) { persistDemo(models, expenses, schedules, next); setMessage("Коммерческая политика сохранена в демо-контуре этого браузера."); return; }
-    setMessage("Для рабочей базы сохранение политики подключается к настройкам организации. В этой демо-версии изменения сохраняются в браузере.");
-    persistDemo(models, expenses, schedules, next);
+    if (demo) { setCommercialPolicy(next); persistDemo(models, expenses, schedules, next); setMessage("Коммерческая политика сохранена в демо-контуре этого браузера."); return; }
+    const previous = commercialPolicy;
+    setCommercialPolicy(next); setMessage("Сохраняем новую версию коммерческой политики…");
+    const response = await fetch("/api/standards", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({kind:"policy",action:"revise",effectiveFrom:today,effectiveTo:null,policy:next}) });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) { setCommercialPolicy(previous); setMessage(result.error ?? "Не удалось сохранить коммерческую политику"); return; }
+    const saved = result.policy && typeof result.policy === "object" ? result.policy as CommercialPolicy : next;
+    setCommercialPolicy(saved); setMessage(`Коммерческая политика v${result.version ?? "—"} сохранена. Новые расчёты будут использовать эту версию.`);
   }
 
   function applyDemoChange(payload: Record<string, unknown>) {
@@ -142,7 +147,7 @@ export function CalculationStandardsWorkspace({ models: initialModels, expenses:
     <div className="standards-tabs" role="tablist">{tabs.map(([key,label,note]) => <button key={key} className={`standards-tab ${tab === key ? "is-active" : ""}`} role="tab" aria-selected={tab === key} onClick={() => { setTab(key); setEditor(null); setMessage(""); }}><strong>{label}</strong><small>{note}</small></button>)}</div>
     {message && <p className="calculation-save-message">{message}</p>}
 
-    {tab === "models" && <div className="standards-grid"><section className="section"><div className="section-head"><div><h2>Модели расчёта</h2><p>Выберите базовую модель или добавьте собственную.</p></div>{addAction}</div><div className="standards-toolbar"><input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Поиск модели"/></div><div className="standards-model-list">{visibleModels.map(model => <button key={model.id} className={`standards-model ${active?.id === model.id ? "is-selected" : ""}`} onClick={() => setSelected(model.id)}><span><strong>{model.name}</strong><small>{model.code} · правила №{model.ruleVersion ?? "—"}</small></span><em>{model.rules.payStructure === "mrot_plus_supplement" ? "База + доплата" : "Полная выплата"}</em></button>)}</div></section><section className="section standards-detail">{active ? <ModelDetail model={active} canManage={canManage} onEdit={() => setEditor({kind:"model",action:"revise",item:active})} onArchive={() => archive("model",active)}/> : <p className="standards-empty">Нет активных моделей.</p>}</section></div>}
+    {tab === "models" && <div className="standards-grid"><section className="section"><div className="section-head"><div><h2>Модели оформления</h2><p>Выберите базовую модель оформления или добавьте собственную.</p></div>{addAction}</div><div className="standards-toolbar"><input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Поиск модели"/></div><div className="standards-model-list">{visibleModels.map(model => <button key={model.id} className={`standards-model ${active?.id === model.id ? "is-selected" : ""}`} onClick={() => setSelected(model.id)}><span><strong>{model.name}</strong><small>{model.code} · правила №{model.ruleVersion ?? "—"}</small></span><em>{model.rules.payStructure === "mrot_plus_supplement" ? "База + доплата" : "Полная выплата"}</em></button>)}</div></section><section className="section standards-detail">{active ? <ModelDetail model={active} canManage={canManage} onEdit={() => setEditor({kind:"model",action:"revise",item:active})} onArchive={() => archive("model",active)}/> : <p className="standards-empty">Нет активных моделей.</p>}</section></div>}
 
     {tab === "expenses" && <section className="section"><div className="section-head"><div><h2>Расходы</h2><p>Отключённая статья не попадёт в новые расчёты. Старые snapshots останутся прежними.</p></div>{addAction}</div>{editor?.kind === "expense" && <ExpenseForm item={editor.item as ExpenseStandard | undefined} onSubmit={save} onCancel={() => setEditor(null)}/>}<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Наименование</th><th>Группа</th><th>База</th><th>Контур</th><th>Версия</th><th></th></tr></thead><tbody>{expenses.map(item => <tr key={item.id}><td><strong>{item.name}</strong><span className="cell-sub">{item.defaultEnabled ? "Включён по умолчанию" : "По выбору"}</span></td><td>{item.groupName}</td><td>{baseLabels[item.base]}</td><td>{scopeLabels[item.scope]}</td><td>v{item.version}</td><td><RowActions canManage={canManage} onEdit={() => setEditor({kind:"expense",action:"revise",item})} onArchive={() => archive("expense",item)}/></td></tr>)}</tbody></table></div></section>}
 
@@ -167,7 +172,7 @@ function CommercialPolicyForm({ value, disabled, onSubmit }: { value: Commercial
     <label>Шаг округления, ₽<input className="input" name="roundingStep" type="number" min="0.01" step="0.01" defaultValue={value.roundingStep}/></label>
     <label>Порог согласования, %<input className="input" name="approvalBelowMarginPct" type="number" min="0" max="95" step="0.01" defaultValue={value.approvalBelowMarginPct}/><small>Используйте для настройки маршрута согласования.</small></label>
     <label className="calculation-form-wide">Пояснение для команды<textarea className="input" name="notes" defaultValue={value.notes}/></label>
-    <div className="calculation-inline-actions"><button className="button primary" disabled={disabled} type="submit">Сохранить коммерческую политику</button></div>
+    <div className="calculation-inline-actions"><button className="button primary" disabled={disabled} type="submit">Сохранить новую версию политики</button></div>
   </form>;
 }
 
