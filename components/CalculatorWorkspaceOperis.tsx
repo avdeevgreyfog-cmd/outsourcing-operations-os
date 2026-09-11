@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
 import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
 import type { CalculationModelOption } from "@/lib/commercial/calculation-models";
 import type { ExpenseStandard, ScheduleStandard } from "@/lib/commercial/calculation-standards";
+import { loadCompanyRulesDraft, subscribeCompanyRulesDraft } from "@/lib/commercial/company-rules-client";
 import type { RateReference } from "@/lib/commercial/calculation-workspace";
 import { pct, rub } from "@/lib/ui/format";
 
@@ -136,7 +137,10 @@ function basesForScope(scope:CostScope):Base[] {
 
 export function CalculatorWorkspaceOperis({ context, seed, models: standaloneModels }: { context?: Context; seed?: ScenarioSeed | null; models?: CalculationModelOption[] }) {
   const router = useRouter();
-  const models = context?.models?.length ? context.models : standaloneModels?.length ? standaloneModels : fallbackModels;
+  const sourceModels = context?.models?.length ? context.models : standaloneModels?.length ? standaloneModels : fallbackModels;
+  const [companyRules, setCompanyRules] = useState<ReturnType<typeof loadCompanyRulesDraft>>(null);
+  const models = companyRules?.models.length ? companyRules.models : sourceModels;
+  const scheduleStandards = companyRules?.schedules.length ? companyRules.schedules : context?.scheduleStandards ?? [];
   const sourceType = context?.sourceType ?? "request";
   const sourceId = context?.sourceId ?? context?.requestId ?? "";
   const seedInputs=seed?.inputs??{};
@@ -179,6 +183,26 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const [allocationMode,setAllocationMode]=useState<AllocationMode>(context?.allocationMode??(seedInputs.projectAllocationMode==="labor_hours"?"labor_hours":"headcount"));
   const [costs, setCosts] = useState<Cost[]>(()=>buildInitialCosts(context?.projectCosts,seed?.costs,context?.expenseStandards));
 
+  useEffect(() => {
+    const refresh = () => setCompanyRules(loadCompanyRulesDraft());
+    refresh();
+    return subscribeCompanyRulesDraft(refresh);
+  }, []);
+  useEffect(() => {
+    if (models.some(item => item.id === modelId)) return;
+    const timer = window.setTimeout(() => setModelId(models[0]?.id ?? ""), 0);
+    return () => window.clearTimeout(timer);
+  }, [models, modelId]);
+  useEffect(() => {
+    if (!companyRules) return;
+    const timer = window.setTimeout(() => setCosts(current => {
+      const currentNonRule = current.filter(item => item.source !== "rule");
+      const ruleCosts = companyRules.expenses.filter(item => item.active).map(item => ({ id:item.id,standardId:item.id,standardVersion:item.version,group:item.groupName||groups[4],label:item.name,amount:item.amount,base:item.base,enabled:item.defaultEnabled,scope:item.scope,source:"rule" as const,amortizationMonths:item.amortizationMonths }));
+      return [...ruleCosts, ...currentNonRule];
+    }), 0);
+    return () => window.clearTimeout(timer);
+  }, [companyRules]);
+
   const totalProjectWorkers = Math.max(1, context?.projectWorkers ?? context?.roles.reduce((sum,role)=>sum+role.count,0) ?? workers);
   const totalProjectLaborHours = useMemo(()=>{
     if(!context)return workers*hours;
@@ -214,7 +238,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
 
   function selectModel(nextId:string){setModelId(nextId);const next=models.find(item=>item.id===nextId);if(next){setMargin(Number(next.rules.recommendedMarginPct??margin));setVatPct(Number(next.rules.vatPct??vatPct));}}
   function selectRole(nextId:string){setSelectedRoleId(nextId);const role=context?.roles.find(item=>item.id===nextId);if(!role)return;setWorkers(role.count);const paid=positive(role.schedule?.paidHours??context?.schedule?.paidHours,shiftHours);setShiftHours(paid);setHours(paid*shifts);setClientLimit(Number(role.targetClientRate??0));}
-  function selectScheduleStandard(nextId:string){setScheduleStandardId(nextId);const standard=context?.scheduleStandards?.find(item=>item.id===nextId);if(!standard)return;const paid=Math.max(0.1,standard.shiftHours-(standard.breakPaid?0:standard.breakHours));setShiftHours(paid);setShifts(standard.shiftsPerMonth);setHours(paid*standard.shiftsPerMonth);}
+  function selectScheduleStandard(nextId:string){setScheduleStandardId(nextId);const standard=scheduleStandards.find(item=>item.id===nextId);if(!standard)return;const paid=Math.max(0.1,standard.shiftHours-(standard.breakPaid?0:standard.breakHours));setShiftHours(paid);setShifts(standard.shiftsPerMonth);setHours(paid*standard.shiftsPerMonth);}
 
   function applyReference(reference:RateReference,amount:number){
     if(reference.paySemantics!=="net")return;
@@ -275,7 +299,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   })).filter((group) => group.rows.length > 0);
   const rateGroups = [
     { id: "pay", title: "Выплата сотруднику", rows: [rateRow("Сотруднику на руки", result.workerPayMonthly, `Выплата ${workerPayUnit === "hour" ? "за час" : workerPayUnit === "shift" ? "за смену" : workerPayUnit === "unit" ? `за ${unitLabel}` : "за месяц"}`)] },
-    { id: "charges", title: "Налоги, взносы и комиссии", rows: [rateRow("Начисления по выбранной модели", result.mandatoryChargesMonthly, model?.ruleVersionId ? `Правила №${model.ruleVersion ?? "—"}` : "Версия правил не выбрана")] },
+    { id: "charges", title: "Налоги, взносы и комиссии", rows: [rateRow("Начисления по выбранной модели", result.mandatoryChargesMonthly, model?.ruleVersionId ? `Правила №${model.ruleVersion ?? "—"}` : "Версия правил не выбрана"), ...(Number(result.supplementCommissionMonthly)>0?[rateRow("Комиссия доплаты", result.supplementCommissionMonthly, "По правилам модели компании")]:[])] },
     ...expenseGroups,
     { id: "reserve", title: "Резерв и прочие расходы", rows: [rateRow("Резерв рисков", result.reserveMonthly, `${model?.rules.riskReservePct ?? 0}% от полной стоимости`)] },
   ];
@@ -310,7 +334,8 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
         {reference&&<div className="calc-reference"><div><span>Ориентир базы ставок</span><strong>{rub(reference.amountMin)}{reference.amountMax!=null?` – ${rub(reference.amountMax)}`:""} / {reference.unit}</strong><small>{reference.source} · {displayDate(reference.sourceDate)??reference.sourceDate} · {reference.paySemantics==="net"?"на руки":"брутто"}</small></div>{reference.paySemantics==="net"&&<div><button type="button" className="button" onClick={()=>applyReference(reference,reference.amountMin)}>Подставить минимум</button>{reference.amountMax!=null&&<button type="button" className="button" onClick={()=>applyReference(reference,(reference.amountMin+reference.amountMax)/2)}>Подставить середину</button>}</div>}</div>}
         <div className="calc-row"><span className="calc-row-check">✓</span><span>Сотруднику на руки<small>Вручную</small></span><input type="number" min="0" value={workerPayAmount} onChange={event=>setWorkerPayAmount(Number(event.target.value))}/><select value={workerPayUnit} onChange={event=>setWorkerPayUnit(event.target.value as WorkerPayUnit)}><option value="hour">₽/ч</option><option value="shift">₽/смену</option><option value="month">₽/мес</option><option value="unit">₽/ед.</option></select></div>
         <CalcInput label="Количество сотрудников" note={context?"Из позиции источника":"Вручную"} value={workers} onChange={setWorkers} unit="чел."/>
-        {context?.scheduleStandards?.length&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Шаблон графика<small>Подставляет оплачиваемые часы и смены</small></span><select value={scheduleStandardId} onChange={event=>selectScheduleStandard(event.target.value)}><option value="">Из источника / вручную</option>{context.scheduleStandards.map(item=><option key={item.id} value={item.id}>{item.name} · {item.shiftsPerMonth} смен.</option>)}</select><span/></div>}
+        {scheduleStandards.length>0&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Шаблон графика<small>Подставляет оплачиваемые часы и смены</small></span><select value={scheduleStandardId} onChange={event=>selectScheduleStandard(event.target.value)}><option value="">Из источника / вручную</option>{scheduleStandards.map(item=><option key={item.id} value={item.id}>{item.name} · {item.shiftsPerMonth} смен.</option>)}</select><span/></div>}
+        {model?.rules.payStructure==="mrot_plus_supplement"&&<div className="calc-model-breakdown"><span>Официальная база: <strong>{rub(result.officialBaseMonthly)} / мес.</strong></span><span>Доплата: <strong>{rub(result.supplementMonthly)} / мес.</strong></span><small>Разделение и комиссия задаются в «Нормативах» у выбранной модели.</small></div>}
         <CalcInput label="Часов на сотрудника / месяц" note={context?"Из графика, можно скорректировать":"Вручную"} value={hours} onChange={setHours} unit="ч"/>
         <CalcInput label="Оплачиваемых часов / смену" note={context?"Из графика, можно скорректировать":"Вручную"} value={shiftHours} onChange={setShiftHours} unit="ч"/>
         <CalcInput label="Смен на сотрудника / месяц" value={shifts} onChange={setShifts} unit="смен"/>
@@ -366,6 +391,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
         <div className="price-waterfall" aria-label="Структура экономики">
           <div><span>Оплата персоналу</span><strong>{rub(result.workerPayMonthly)}</strong></div>
           <div><span>Обязательные начисления</span><strong>+ {rub(result.mandatoryChargesMonthly)}</strong></div>
+          {Number(result.supplementCommissionMonthly)>0&&<div><span>Комиссия доплаты</span><strong>+ {rub(result.supplementCommissionMonthly)}</strong></div>}
           <div><span>Обеспечение и проектные расходы</span><strong>+ {rub(result.additionalCostsMonthly)}</strong></div>
           <div><span>Резерв</span><strong>+ {rub(result.reserveMonthly)}</strong></div>
           <div className="price-waterfall-total"><span>Себестоимость / месяц</span><strong>{rub(result.monthlyCost)}</strong></div>

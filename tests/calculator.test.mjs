@@ -44,6 +44,21 @@ test("commercial calculator applies model rules and VAT without hardcoded tax ra
   assert.deepEqual(result.warnings, []);
 });
 
+test("company MROT plus supplement model splits the economic bases", () => {
+  const result = calculateCommercialScenario({
+    workers: 2, hoursPerWorker: 160, workerPayAmount: 100000, workerPayUnit: "month",
+    pricingMode: "target_margin", targetMarginPct: 20, billingUnit: "hour", vatMode: "without_vat", ruleVersionId: "company-rule",
+    rules: { payStructure:"mrot_plus_supplement", officialBasePerWorkerMonthly:30000, mandatoryChargeBase:"official_base", mandatoryChargePct:30, supplementCommissionPct:10, legalParametersVerified:true },
+    costs: [],
+  });
+  assert.equal(result.workerPayMonthly, 200000);
+  assert.equal(result.officialBaseMonthly, 60000);
+  assert.equal(result.supplementMonthly, 140000);
+  assert.equal(result.mandatoryChargesMonthly, 18000);
+  assert.equal(result.supplementCommissionMonthly, 14000);
+  assert.equal(result.monthlyCost, 232000);
+});
+
 test("client limit mode shows margin below company minimum", () => {
   const result = calculateCommercialScenario({
     workers: 5,

@@ -46,8 +46,8 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
     return <>
       <PageHeader
         eyebrow="Коммерция → Экономика"
-        title="Расчёты экономики"
-        subtitle="Рабочий реестр версий расчётов по заявкам и тендерам: себестоимость, клиентская ставка, маржа, согласование и история пересчётов."
+        title="К расчёту и расчёты"
+        subtitle="Рабочая очередь заявок и тендеров с подготовленной экономикой: варианты, лимиты заказчика, согласование и история пересчётов."
         breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"Расчёты"}]}
         actions={<Link className="button primary" href="/calculations/quick">+ Быстрый расчёт</Link>}
       />

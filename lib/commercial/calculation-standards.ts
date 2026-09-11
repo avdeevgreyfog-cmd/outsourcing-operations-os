@@ -33,18 +33,22 @@ export async function getCalculationStandards(actor: Actor, effectiveDate?: stri
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [expenses, schedules] = await Promise.all([
       sql<ExpenseStandard[]>`
-        SELECT DISTINCT ON (code) id,code,version,name,group_name "groupName",amount::float8 amount,base,scope,
-          amortization_months::float8 "amortizationMonths",default_enabled "defaultEnabled",active,effective_from::text "effectiveFrom",effective_to::text "effectiveTo",notes
-        FROM calculation_expense_standard_versions
-        WHERE active AND effective_from<=${date}::date AND (effective_to IS NULL OR effective_to>=${date}::date)
-        ORDER BY code,version DESC,effective_from DESC
+        SELECT * FROM (
+          SELECT DISTINCT ON (code) id,code,version,name,group_name "groupName",amount::float8 amount,base,scope,
+            amortization_months::float8 "amortizationMonths",default_enabled "defaultEnabled",active,effective_from::text "effectiveFrom",effective_to::text "effectiveTo",notes
+          FROM calculation_expense_standard_versions
+          WHERE effective_from<=${date}::date AND (effective_to IS NULL OR effective_to>=${date}::date)
+          ORDER BY code,version DESC,effective_from DESC
+        ) current WHERE active
       `,
       sql<ScheduleStandard[]>`
-        SELECT DISTINCT ON (code) id,code,version,name,pattern,shift_hours::float8 "shiftHours",break_hours::float8 "breakHours",break_paid "breakPaid",
-          shifts_per_month::float8 "shiftsPerMonth",active,effective_from::text "effectiveFrom",effective_to::text "effectiveTo",notes
-        FROM calculation_schedule_standard_versions
-        WHERE active AND effective_from<=${date}::date AND (effective_to IS NULL OR effective_to>=${date}::date)
-        ORDER BY code,version DESC,effective_from DESC
+        SELECT * FROM (
+          SELECT DISTINCT ON (code) id,code,version,name,pattern,shift_hours::float8 "shiftHours",break_hours::float8 "breakHours",break_paid "breakPaid",
+            shifts_per_month::float8 "shiftsPerMonth",active,effective_from::text "effectiveFrom",effective_to::text "effectiveTo",notes
+          FROM calculation_schedule_standard_versions
+          WHERE effective_from<=${date}::date AND (effective_to IS NULL OR effective_to>=${date}::date)
+          ORDER BY code,version DESC,effective_from DESC
+        ) current WHERE active
       `,
     ]);
     return { expenses, schedules };

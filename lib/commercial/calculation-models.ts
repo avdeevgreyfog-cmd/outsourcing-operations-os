@@ -10,6 +10,16 @@ export type CalculationRuleConfig = {
   vatPct?: number;
   roundingStep?: number;
   legalParametersVerified?: boolean;
+  /**
+   * Company-designed cost model: part of the employee payout is treated as an
+   * official payroll base, with a separately configured cost for the remainder.
+   * This is an economic assumption, never a legal conclusion.
+   */
+  payStructure?: "full_pay" | "mrot_plus_supplement";
+  officialBasePerWorkerMonthly?: number;
+  mandatoryChargeBase?: "full_pay" | "official_base";
+  supplementCommissionPct?: number;
+  supplementCommissionFixedPerWorkerMonthly?: number;
   notes?: string;
   [key: string]: unknown;
 };
@@ -62,14 +72,14 @@ const demoModels: CalculationModelOption[] = [
   },
   {
     id: "76000000-0000-4000-8000-000000000004",
-    name: "Модель компании",
-    code: "custom",
+    name: "МРОТ + доплата",
+    code: "mrot_supplement",
     ruleVersionId: "77000000-0000-4000-8000-000000000014",
     ruleVersion: 1,
-    ruleSource: "Демонстрационная пользовательская модель.",
+    ruleSource: "Настраиваемая модель компании. Значения должны быть проверены компанией перед использованием.",
     ruleEffectiveFrom: "2026-01-01",
     ruleEffectiveTo: null,
-    rules: { mandatoryChargePct: 12, riskReservePct: 4, minimumMarginPct: 17, recommendedMarginPct: 20, vatPct: 22, roundingStep: 1, legalParametersVerified: false },
+    rules: { payStructure:"mrot_plus_supplement", officialBasePerWorkerMonthly:0, mandatoryChargeBase:"official_base", supplementCommissionPct:0, supplementCommissionFixedPerWorkerMonthly:0, mandatoryChargePct:0, riskReservePct:0, minimumMarginPct:0, recommendedMarginPct:0, vatPct:0, roundingStep:1, legalParametersVerified:false },
   },
 ];
 
