@@ -5,6 +5,7 @@ import { hasCapability } from "@/lib/core/access.mjs";
 import { listCommercialCalculations } from "@/lib/commercial/calculation-list";
 import { getCalculationModels } from "@/lib/commercial/calculation-models";
 import { getRateReferencesForRoles } from "@/lib/commercial/calculation-workspace";
+import { getCalculationStandards } from "@/lib/commercial/calculation-standards";
 import { getCommercialRequest } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
 import { PageHeader, Section } from "@/components/UI";
@@ -48,13 +49,14 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
         title="Расчёты экономики"
         subtitle="Рабочий реестр версий расчётов по заявкам и тендерам: себестоимость, клиентская ставка, маржа, согласование и история пересчётов."
         breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"Расчёты"}]}
+        actions={<Link className="button primary" href="/calculations/quick">+ Быстрый расчёт</Link>}
       />
       <CalculationsRegistryWorkspace rows={rows} canEdit={canEdit}/>
     </>;
   }
 
   const economicsDate=request?.startDate??new Date().toISOString().slice(0,10);
-  const models=await getCalculationModels(actor,economicsDate);
+  const [models, standards]=await Promise.all([getCalculationModels(actor,economicsDate),getCalculationStandards(actor,economicsDate)]);
   const rateReferences=hasCapability(actor.access,"calculation.rate_reference.read")
     ? await getRateReferencesForRoles(actor,baseRoles,request?.regionId??tender?.regionId??null,economicsDate)
     : {};
@@ -74,7 +76,7 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
     </div>
 
     {canCreate && roles.length > 0 && <Section title="Первый сценарий" note={`${sourceKind}: ${sourceTitle}. Параметры позиции и графика подставлены из источника; нормативы выбраны на дату экономики.`}>
-      <div className="calculation-editor-wrap"><CalculatorWorkspaceOperis context={{sourceType:request?"request":"tender",sourceId:source.id,sourceLabel:sourceTitle??undefined,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:"headcount",projectCosts:[]}}/></div>
+      <div className="calculation-editor-wrap"><CalculatorWorkspaceOperis context={{sourceType:request?"request":"tender",sourceId:source.id,sourceLabel:sourceTitle??undefined,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:"headcount",projectCosts:[],expenseStandards:standards.expenses,scheduleStandards:standards.schedules}}/></div>
     </Section>}
 
     {tender && roles.length === 0 && <Section title="Сначала добавьте позиции"><p className="muted calculation-section-text">Чтобы сохранить расчёт по тендеру, укажите хотя бы одну специальность или работу во вкладке «Анализ».</p></Section>}

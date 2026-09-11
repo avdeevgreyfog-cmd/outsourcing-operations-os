@@ -2,18 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
 import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
 import type { CalculationModelOption } from "@/lib/commercial/calculation-models";
+import type { ExpenseStandard, ScheduleStandard } from "@/lib/commercial/calculation-standards";
 import type { RateReference } from "@/lib/commercial/calculation-workspace";
 import { pct, rub } from "@/lib/ui/format";
 
-type Base = "per_hour" | "per_shift" | "per_worker_month" | "role_month" | "role_fixed" | "project_month" | "project_fixed" | "per_unit";
+type Base = "per_hour" | "per_shift" | "per_worker_month" | "per_worker_period" | "percent_of_worker_pay" | "role_month" | "role_fixed" | "project_month" | "project_fixed" | "per_unit";
 type CostScope = "worker" | "role" | "project";
 type CostSource = "manual" | "request" | "rule" | "reference";
-type Cost = { id: string; group: string; label: string; amount: number; base: Base; enabled: boolean; scope: CostScope; source: CostSource };
+type Cost = { id: string; group: string; label: string; amount: number; base: Base; enabled: boolean; scope: CostScope; source: CostSource; amortizationMonths?:number|null; standardId?:string; standardVersion?:number };
 type BillingUnit = "hour" | "shift" | "unit" | "worker_month" | "project_month" | "project_fixed" | "mixed";
-type WorkerPayUnit = "hour" | "shift" | "month";
+type WorkerPayUnit = "hour" | "shift" | "month" | "unit";
 type PricingMode = "target_margin" | "target_profit" | "client_limit";
 type AllocationMode = "headcount" | "labor_hours";
 type ContextRole = {
@@ -50,22 +51,24 @@ type Context = {
   economicsDate?: string | null;
   allocationMode?: AllocationMode;
   projectCosts?: Array<Record<string, unknown>>;
+  expenseStandards?: ExpenseStandard[];
+  scheduleStandards?: ScheduleStandard[];
 };
 
 const groups = [
   "Регулярное обеспечение",
-  "Транспорт и проживание",
-  "СИЗ и медицина",
-  "Подбор и управление",
+  "Периодические и разовые расходы",
+  "Подбор и ротация",
+  "Управление объектом",
   "Прочие расходы",
 ];
 
 const initialCosts: Cost[] = [
-  { id: "housing", group: groups[1], label: "Проживание", amount: 0, base: "per_shift", enabled: false, scope: "worker", source: "manual" },
-  { id: "travel", group: groups[1], label: "Проезд и логистика", amount: 0, base: "per_worker_month", enabled: false, scope: "worker", source: "manual" },
-  { id: "ppe", group: groups[2], label: "СИЗ и спецодежда", amount: 0, base: "per_worker_month", enabled: false, scope: "worker", source: "manual" },
-  { id: "medical", group: groups[2], label: "Медицина", amount: 0, base: "per_worker_month", enabled: false, scope: "worker", source: "manual" },
-  { id: "recruit", group: groups[3], label: "Подбор и запуск", amount: 0, base: "project_fixed", enabled: false, scope: "project", source: "manual" },
+  { id: "housing", group: groups[0], label: "Проживание", amount: 0, base: "per_shift", enabled: false, scope: "worker", source: "manual" },
+  { id: "travel", group: groups[0], label: "Проезд и логистика", amount: 0, base: "per_worker_month", enabled: false, scope: "worker", source: "manual" },
+  { id: "ppe", group: groups[1], label: "СИЗ и спецодежда", amount: 0, base: "per_worker_month", enabled: false, scope: "worker", source: "manual" },
+  { id: "medical", group: groups[1], label: "Медицина", amount: 0, base: "per_worker_month", enabled: false, scope: "worker", source: "manual" },
+  { id: "recruit", group: groups[2], label: "Подбор и запуск", amount: 0, base: "project_fixed", enabled: false, scope: "project", source: "manual" },
   { id: "manager", group: groups[3], label: "Управление объектом", amount: 0, base: "project_month", enabled: false, scope: "project", source: "manual" },
 ];
 
@@ -95,7 +98,7 @@ const warningLabels: Record<string, string> = {
   rule_version_missing: "Для модели не найдена действующая версия правил",
 };
 const baseLabels: Record<Base, string> = {
-  per_hour: "₽/ч/сотр.",per_shift: "₽/смену/сотр.",per_worker_month: "₽/сотр./мес.",role_month:"₽/позицию/мес.",role_fixed:"₽/позицию разово",project_month: "₽/проект/мес.",project_fixed: "₽/проект разово",per_unit: "₽/единицу",
+  per_hour: "₽/ч/сотр.",per_shift: "₽/смену/сотр.",per_worker_month: "₽/сотр./мес.",per_worker_period:"на сотр. / период",percent_of_worker_pay:"% выплаты",role_month:"₽/позицию/мес.",role_fixed:"₽/позицию разово",project_month: "₽/проект/мес.",project_fixed:"₽/проект разово",per_unit: "₽/единицу",
 };
 const scopeLabels: Record<CostScope, string> = { worker: "Сотрудник", role: "Позиция", project: "Проект" };
 const sourceLabels: Record<CostSource, string> = { manual: "Вручную", request: "Из заявки", rule: "Из норматива", reference:"Из базы" };
@@ -103,7 +106,7 @@ const sourceLabels: Record<CostSource, string> = { manual: "Вручную", req
 function positive(value: unknown, fallback: number) { const n=Number(value);return Number.isFinite(n)&&n>0?n:fallback; }
 function nonNegative(value: unknown, fallback=0) { const n=Number(value);return Number.isFinite(n)&&n>=0?n:fallback; }
 function str(value: unknown, fallback="") { return typeof value==="string"?value:fallback; }
-function payUnit(value: unknown):WorkerPayUnit { return value==="shift"||value==="month"?value:"hour"; }
+function payUnit(value: unknown):WorkerPayUnit { return value==="shift"||value==="month"||value==="unit"?value:"hour"; }
 function pricing(value: unknown):PricingMode { return value==="client_limit"||value==="target_profit"?value:"target_margin"; }
 function billing(value: unknown):BillingUnit { return ["hour","shift","unit","worker_month","project_month","project_fixed","mixed"].includes(String(value))?value as BillingUnit:"hour"; }
 function displayDate(value?: string | null) { if(!value)return null;const date=new Date(`${value}T00:00:00`);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat("ru-RU").format(date); }
@@ -114,11 +117,12 @@ function normalizeCost(raw:Record<string,unknown>):Cost|null {
   const rawSource=str(raw.source,"manual");const source:CostSource=["request","rule","reference"].includes(rawSource)?rawSource as CostSource:"manual";
   const rawBase=str(raw.base,"per_hour");const allowed=Object.keys(baseLabels);const base:Base=allowed.includes(rawBase)?rawBase as Base:(scope==="project"?"project_month":scope==="role"?"role_month":"per_hour");
   const amount=scope==="project"?nonNegative(raw.enteredAmount,nonNegative(raw.amount)):nonNegative(raw.amount);
-  return {id,group:str(raw.group,groups[4]),label,amount,base,enabled:raw.enabled!==false,scope,source};
+  return {id,group:str(raw.group,groups[4]),label,amount,base,enabled:raw.enabled!==false,scope,source,amortizationMonths:raw.amortizationMonths==null?null:nonNegative(raw.amortizationMonths),standardId:str(raw.standardId)||undefined,standardVersion:raw.standardVersion==null?undefined:nonNegative(raw.standardVersion)};
 }
 
-function buildInitialCosts(projectCosts?:Array<Record<string,unknown>>,seedCosts?:Array<Record<string,unknown>>) {
-  const map=new Map(initialCosts.map(item=>[item.id,{...item}]));
+function buildInitialCosts(projectCosts?:Array<Record<string,unknown>>,seedCosts?:Array<Record<string,unknown>>,standards?:ExpenseStandard[]) {
+  const map=new Map((standards?.length ? [] : initialCosts).map(item=>[item.id,{...item}]));
+  for(const standard of standards??[])map.set(standard.id,{id:standard.id,standardId:standard.id,standardVersion:standard.version,group:standard.groupName||groups[4],label:standard.name,amount:standard.amount,base:standard.base,enabled:standard.defaultEnabled,scope:standard.scope,source:"rule",amortizationMonths:standard.amortizationMonths});
   for(const raw of seedCosts??[]){const cost=normalizeCost(raw);if(cost)map.set(cost.id,cost);}
   for(const raw of projectCosts??[]){const cost=normalizeCost({...raw,scope:"project"});if(cost)map.set(cost.id,cost);}
   return [...map.values()];
@@ -127,12 +131,12 @@ function buildInitialCosts(projectCosts?:Array<Record<string,unknown>>,seedCosts
 function basesForScope(scope:CostScope):Base[] {
   if(scope==="project")return ["project_month","project_fixed"];
   if(scope==="role")return ["role_month","role_fixed"];
-  return ["per_hour","per_shift","per_worker_month","per_unit"];
+  return ["per_hour","per_shift","per_worker_month","per_worker_period","percent_of_worker_pay","per_unit"];
 }
 
-export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context; seed?: ScenarioSeed | null }) {
+export function CalculatorWorkspaceOperis({ context, seed, models: standaloneModels }: { context?: Context; seed?: ScenarioSeed | null; models?: CalculationModelOption[] }) {
   const router = useRouter();
-  const models = context?.models?.length ? context.models : fallbackModels;
+  const models = context?.models?.length ? context.models : standaloneModels?.length ? standaloneModels : fallbackModels;
   const sourceType = context?.sourceType ?? "request";
   const sourceId = context?.sourceId ?? context?.requestId ?? "";
   const seedInputs=seed?.inputs??{};
@@ -147,12 +151,15 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
   const initialShifts=positive(seedInputs.shiftsPerWorker,22);
   const [scenarioName, setScenarioName] = useState(seed?`${seed.name} · новая версия`:"Базовый сценарий");
   const [saveState, setSaveState] = useState<{busy:boolean;message:string;error:boolean}>({busy:false,message:"",error:false});
+  const [editorTab, setEditorTab] = useState<"inputs"|"structure">("inputs");
+  const [expandedRateGroups, setExpandedRateGroups] = useState<Set<string>>(() => new Set(["pay","charges"]));
   const [workerPayAmount, setWorkerPayAmount] = useState(nonNegative(seedInputs.workerPayAmount,0));
   const [workerPayUnit, setWorkerPayUnit] = useState<WorkerPayUnit>(payUnit(seedInputs.workerPayUnit));
   const [workers, setWorkers] = useState(positive(seedInputs.workers,selectedRole?.count??1));
   const [hours, setHours] = useState(positive(seedInputs.hoursPerWorker,initialPaidHours*initialShifts));
   const [shiftHours, setShiftHours] = useState(initialPaidHours);
   const [shifts, setShifts] = useState(initialShifts);
+  const [scheduleStandardId,setScheduleStandardId]=useState("");
   const [projectMonths, setProjectMonths] = useState(positive(seedInputs.projectMonths,1));
   const [pricingMode, setPricingMode] = useState<PricingMode>(pricing(seedInputs.pricingMode));
   const [margin, setMargin] = useState(nonNegative(seedInputs.targetMarginPct,Number(model?.rules.recommendedMarginPct ?? 18)));
@@ -170,7 +177,7 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
   const [vatMode, setVatMode] = useState(str(seedInputs.vatMode,context?.vatMode ?? "with_vat"));
   const [vatPct, setVatPct] = useState(nonNegative(seedInputs.vatPct,Number(model?.rules.vatPct ?? 0)));
   const [allocationMode,setAllocationMode]=useState<AllocationMode>(context?.allocationMode??(seedInputs.projectAllocationMode==="labor_hours"?"labor_hours":"headcount"));
-  const [costs, setCosts] = useState<Cost[]>(()=>buildInitialCosts(context?.projectCosts,seed?.costs));
+  const [costs, setCosts] = useState<Cost[]>(()=>buildInitialCosts(context?.projectCosts,seed?.costs,context?.expenseStandards));
 
   const totalProjectWorkers = Math.max(1, context?.projectWorkers ?? context?.roles.reduce((sum,role)=>sum+role.count,0) ?? workers);
   const totalProjectLaborHours = useMemo(()=>{
@@ -195,7 +202,7 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
   const unitLabel=volumeUnitCode==="custom"?customVolumeLabel:(volumeUnits.find(item=>item.code===volumeUnitCode)?.label??"единица");
   const result = useMemo(() => calculateCommercialScenario({
     workers,hoursPerWorker:hours,hoursPerShift:shiftHours,shiftsPerWorker:shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,
-    targetMarginPct:margin,targetMonthlyContribution:targetContribution,clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,
+    targetMarginPct:margin,targetMonthlyContribution:targetContribution,targetProfitPerBillingUnit:targetContribution,clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,
     billingUnitCode:billingUnit==="unit"?volumeUnitCode:null,billingUnitLabel:billingUnit==="unit"?unitLabel:null,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,
     vatMode,vatPct,roundingStep:model?.rules.roundingStep,rules:model?.rules??{},ruleVersionId:model?.ruleVersionId??null,costs:calculatedCosts,
   }), [workers,hours,shiftHours,shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,margin,targetContribution,clientLimit,clientLimitVatMode,billingUnit,variableBillingUnit,volumeUnitCode,unitLabel,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model,calculatedCosts]);
@@ -207,6 +214,7 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
 
   function selectModel(nextId:string){setModelId(nextId);const next=models.find(item=>item.id===nextId);if(next){setMargin(Number(next.rules.recommendedMarginPct??margin));setVatPct(Number(next.rules.vatPct??vatPct));}}
   function selectRole(nextId:string){setSelectedRoleId(nextId);const role=context?.roles.find(item=>item.id===nextId);if(!role)return;setWorkers(role.count);const paid=positive(role.schedule?.paidHours??context?.schedule?.paidHours,shiftHours);setShiftHours(paid);setHours(paid*shifts);setClientLimit(Number(role.targetClientRate??0));}
+  function selectScheduleStandard(nextId:string){setScheduleStandardId(nextId);const standard=context?.scheduleStandards?.find(item=>item.id===nextId);if(!standard)return;const paid=Math.max(0.1,standard.shiftHours-(standard.breakPaid?0:standard.breakHours));setShiftHours(paid);setShifts(standard.shiftsPerMonth);setHours(paid*standard.shiftsPerMonth);}
 
   function applyReference(reference:RateReference,amount:number){
     if(reference.paySemantics!=="net")return;
@@ -219,6 +227,8 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
     const amount=cost.scope==="project"?cost.amount*projectAllocationShare:cost.amount;
     if(cost.base==="per_shift")return amount*shifts*workers;
     if(cost.base==="per_worker_month")return amount*workers;
+    if(cost.base==="per_worker_period")return amount*workers/Math.max(1,cost.amortizationMonths??1);
+    if(cost.base==="percent_of_worker_pay")return result.workerPayMonthly*amount/100;
     if(cost.base==="role_month"||cost.base==="project_month")return amount;
     if(cost.base==="role_fixed"||cost.base==="project_fixed")return amount/Math.max(1,projectMonths);
     if(cost.base==="per_unit")return amount*unitsPerWorkerShift*shifts*workers;
@@ -255,8 +265,29 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
   const economicsDate=displayDate(context?.economicsDate);
   const reference=selectedRole?.reference??null;
 
+  const monthlyHours = Math.max(1, hours * workers);
+  const monthlyShifts = Math.max(1, shifts * workers);
+  const rateRow = (label:string, monthly:number, note?:string) => ({ label, monthly, note });
+  const expenseGroups = groups.map((group) => ({
+    id: `expense:${group}`,
+    title: group,
+    rows: costs.filter((cost) => cost.group === group && cost.enabled).map((cost) => rateRow(cost.label, monthlyCostPreview(cost), `${sourceLabels[cost.source]} · ${baseLabels[cost.base]}`)),
+  })).filter((group) => group.rows.length > 0);
+  const rateGroups = [
+    { id: "pay", title: "Выплата сотруднику", rows: [rateRow("Сотруднику на руки", result.workerPayMonthly, `Выплата ${workerPayUnit === "hour" ? "за час" : workerPayUnit === "shift" ? "за смену" : workerPayUnit === "unit" ? `за ${unitLabel}` : "за месяц"}`)] },
+    { id: "charges", title: "Налоги, взносы и комиссии", rows: [rateRow("Начисления по выбранной модели", result.mandatoryChargesMonthly, model?.ruleVersionId ? `Правила №${model.ruleVersion ?? "—"}` : "Версия правил не выбрана")] },
+    ...expenseGroups,
+    { id: "reserve", title: "Резерв и прочие расходы", rows: [rateRow("Резерв рисков", result.reserveMonthly, `${model?.rules.riskReservePct ?? 0}% от полной стоимости`)] },
+  ];
+  const toggleRateGroup = (id:string) => setExpandedRateGroups((current) => { const next = new Set(current); if(next.has(id)) next.delete(id); else next.add(id); return next; });
+
   return <div className="calc-layout calc-operis">
     <div className="calc-editor">
+      <div className="calc-workspace-tabs" role="tablist" aria-label="Экран расчёта">
+        <button type="button" className={editorTab === "inputs" ? "active" : ""} role="tab" aria-selected={editorTab === "inputs"} onClick={() => setEditorTab("inputs")}>Исходные данные<small>Зарплата, график и тарификация</small></button>
+        <button type="button" className={editorTab === "structure" ? "active" : ""} role="tab" aria-selected={editorTab === "structure"} onClick={() => setEditorTab("structure")}>Структура ставки<small>Единая сводка расходов</small></button>
+      </div>
+      {editorTab === "inputs" && <>
       {context&&<div className="commercial-calc-context">
         <label>{context.roleLabel??(sourceType==="tender"?"Позиция тендера":"Позиция заявки")}<select value={selectedRoleId} onChange={event=>selectRole(event.target.value)}>{context.roles.map(role=><option key={role.id} value={role.id}>{role.specialty} · {role.count} чел.</option>)}</select></label>
         <label>Название сценария<input value={scenarioName} onChange={event=>setScenarioName(event.target.value)}/></label>
@@ -275,10 +306,11 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
       </div>
 
       <details className="calc-group" open>
-        <summary><span>Исходные условия и оплата</span><span>{workerPayAmount>0?`${rub(workerPayAmount)} / ${workerPayUnit==="hour"?"ч":workerPayUnit==="shift"?"смену":"мес"}`:"Заполните ставку"}</span></summary>
+        <summary><span>Исходные условия и оплата</span><span>{workerPayAmount>0?`${rub(workerPayAmount)} / ${workerPayUnit==="hour"?"ч":workerPayUnit==="shift"?"смену":workerPayUnit==="unit"?unitLabel:"мес"}`:"Заполните ставку"}</span></summary>
         {reference&&<div className="calc-reference"><div><span>Ориентир базы ставок</span><strong>{rub(reference.amountMin)}{reference.amountMax!=null?` – ${rub(reference.amountMax)}`:""} / {reference.unit}</strong><small>{reference.source} · {displayDate(reference.sourceDate)??reference.sourceDate} · {reference.paySemantics==="net"?"на руки":"брутто"}</small></div>{reference.paySemantics==="net"&&<div><button type="button" className="button" onClick={()=>applyReference(reference,reference.amountMin)}>Подставить минимум</button>{reference.amountMax!=null&&<button type="button" className="button" onClick={()=>applyReference(reference,(reference.amountMin+reference.amountMax)/2)}>Подставить середину</button>}</div>}</div>}
-        <div className="calc-row"><span className="calc-row-check">✓</span><span>Сотруднику на руки<small>Вручную</small></span><input type="number" min="0" value={workerPayAmount} onChange={event=>setWorkerPayAmount(Number(event.target.value))}/><select value={workerPayUnit} onChange={event=>setWorkerPayUnit(event.target.value as WorkerPayUnit)}><option value="hour">₽/ч</option><option value="shift">₽/смену</option><option value="month">₽/мес</option></select></div>
+        <div className="calc-row"><span className="calc-row-check">✓</span><span>Сотруднику на руки<small>Вручную</small></span><input type="number" min="0" value={workerPayAmount} onChange={event=>setWorkerPayAmount(Number(event.target.value))}/><select value={workerPayUnit} onChange={event=>setWorkerPayUnit(event.target.value as WorkerPayUnit)}><option value="hour">₽/ч</option><option value="shift">₽/смену</option><option value="month">₽/мес</option><option value="unit">₽/ед.</option></select></div>
         <CalcInput label="Количество сотрудников" note={context?"Из позиции источника":"Вручную"} value={workers} onChange={setWorkers} unit="чел."/>
+        {context?.scheduleStandards?.length&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Шаблон графика<small>Подставляет оплачиваемые часы и смены</small></span><select value={scheduleStandardId} onChange={event=>selectScheduleStandard(event.target.value)}><option value="">Из источника / вручную</option>{context.scheduleStandards.map(item=><option key={item.id} value={item.id}>{item.name} · {item.shiftsPerMonth} смен.</option>)}</select><span/></div>}
         <CalcInput label="Часов на сотрудника / месяц" note={context?"Из графика, можно скорректировать":"Вручную"} value={hours} onChange={setHours} unit="ч"/>
         <CalcInput label="Оплачиваемых часов / смену" note={context?"Из графика, можно скорректировать":"Вручную"} value={shiftHours} onChange={setShiftHours} unit="ч"/>
         <CalcInput label="Смен на сотрудника / месяц" value={shifts} onChange={setShifts} unit="смен"/>
@@ -292,7 +324,7 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
         {billingUnit==="unit"&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Единица объёма</span><select value={volumeUnitCode} onChange={event=>setVolumeUnitCode(event.target.value)}>{volumeUnits.map(item=><option key={item.code} value={item.code}>{item.label}</option>)}</select>{volumeUnitCode==="custom"?<input value={customVolumeLabel} onChange={event=>setCustomVolumeLabel(event.target.value)} aria-label="Название единицы объёма"/>:<span/>}</div>}
         {billingUnit==="mixed"&&<><div className="calc-row"><span className="calc-row-check">✓</span><span>Переменная единица</span><select value={variableBillingUnit} onChange={event=>setVariableBillingUnit(event.target.value as "hour"|"shift"|"unit")}><option value="hour">час</option><option value="shift">смена</option><option value="unit">объём</option></select><span/></div><CalcInput label="Фиксированная часть / месяц" value={fixedMonthlyNet} onChange={setFixedMonthlyNet} unit="₽"/></>}
         {(billingUnit==="unit"||(billingUnit==="mixed"&&variableBillingUnit==="unit"))&&<CalcInput label={`Производительность / сотрудника / смену`} value={unitsPerWorkerShift} onChange={setUnitsPerWorkerShift} unit={unitLabel}/>} 
-        {pricingMode==="target_margin"?<CalcInput label="Целевая маржа" note={model?.rules.recommendedMarginPct!=null?`Норматив рекомендует ${model.rules.recommendedMarginPct}%`:undefined} value={margin} onChange={setMargin} unit="%"/>:pricingMode==="target_profit"?<CalcInput label="Целевая прибыль / месяц" value={targetContribution} onChange={setTargetContribution} unit="₽"/>:<><CalcInput label="Лимит клиента" note={selectedRole?.targetClientRate?"Из позиции источника":"Вручную"} value={clientLimit} onChange={setClientLimit} unit="₽"/><div className="calc-row"><span className="calc-row-check">✓</span><span>Лимит указан</span><select value={clientLimitVatMode} onChange={event=>setClientLimitVatMode(event.target.value as "with_vat"|"without_vat")}><option value="without_vat">без НДС</option><option value="with_vat">с НДС</option></select><span/></div></>}
+        {pricingMode==="target_margin"?<CalcInput label="Целевая маржа" note={model?.rules.recommendedMarginPct!=null?`Норматив рекомендует ${model.rules.recommendedMarginPct}%`:undefined} value={margin} onChange={setMargin} unit="%"/>:pricingMode==="target_profit"?<CalcInput label="Целевая прибыль на расчётную единицу" note={`На ${rateSuffix}`} value={targetContribution} onChange={setTargetContribution} unit="₽"/>:<><CalcInput label="Лимит клиента" note={selectedRole?.targetClientRate?"Из позиции источника":"Вручную"} value={clientLimit} onChange={setClientLimit} unit="₽"/><div className="calc-row"><span className="calc-row-check">✓</span><span>Лимит указан</span><select value={clientLimitVatMode} onChange={event=>setClientLimitVatMode(event.target.value as "with_vat"|"without_vat")}><option value="without_vat">без НДС</option><option value="with_vat">с НДС</option></select><span/></div></>}
         {billingUnit!=="project_fixed"&&<CalcInput label="Минимальный гарантированный объём / месяц" note="Отдельно от минимального платежа" value={minimumVolumeMonthly} onChange={setMinimumVolumeMonthly} unit={rateUnit==="hour"?"ч":rateUnit==="shift"?"смен":rateUnit==="unit"?unitLabel:"ед."}/>} 
         <CalcInput label="Минимальный гарантированный платёж / месяц" note="Денежная гарантия клиента" value={minimumMonthlyNet} onChange={setMinimumMonthlyNet} unit="₽ без НДС"/>
         <div className="calc-row"><span className="calc-row-check">✓</span><span>Режим НДС</span><select value={vatMode} onChange={event=>setVatMode(event.target.value)}><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option><option value="not_applicable">Не применяется</option></select><span/></div>
@@ -314,6 +346,17 @@ export function CalculatorWorkspaceOperis({ context, seed }: { context?: Context
         </div>)}
         <button type="button" className="add-expense" onClick={()=>addCost(group)}><Plus size={14}/> Добавить статью</button>
       </details>;})}
+      </>}
+      {editorTab === "structure" && <section className="rate-structure" aria-label="Структура ставки">
+        <header className="rate-structure-head"><div><span>Структура ставки</span><h2>Из чего складывается {rub(result.clientRateNet)} {rateSuffix} без НДС</h2><p>Раскройте категорию, чтобы посмотреть статьи и скорректировать расходы на вкладке «Исходные данные».</p></div><dl><div><dt>Себестоимость</dt><dd>{rub(result.totalCostHourly)} / ч</dd></div><div><dt>Прибыль</dt><dd>{rub(result.monthlyContribution)} / мес.</dd></div><div><dt>Маржа</dt><dd>{pct(result.marginPct)}</dd></div></dl></header>
+        <div className="rate-progress"><i style={{width:`${Math.min(100, Math.max(0, 100 - result.marginPct))}%`}}/><b style={{width:`${Math.min(100, Math.max(0, result.marginPct))}%`}}/></div>
+        <div className="rate-table" role="table"><div className="rate-table-head" role="row"><span>Категория / статья</span><span>1 час</span><span>1 смена</span><span>1 месяц</span><span>% ставки</span></div>
+          {rateGroups.map((group) => { const monthly = group.rows.reduce((sum,row) => sum + row.monthly, 0); const opened = expandedRateGroups.has(group.id); return <div className="rate-table-group" key={group.id}><button type="button" className="rate-group-row" onClick={() => toggleRateGroup(group.id)} aria-expanded={opened}><span><ChevronDown size={15} className={opened ? "is-open" : ""}/><strong>{group.title}</strong><small>{group.rows.length} {group.rows.length === 1 ? "статья" : "статьи"}</small></span><b>{rub(monthly / monthlyHours)}</b><b>{rub(monthly / monthlyShifts)}</b><b>{rub(monthly)}</b><b>{pct(result.monthlyRevenueNet ? monthly / result.monthlyRevenueNet * 100 : 0)}</b></button>{opened && group.rows.map((row) => <div className="rate-line-row" role="row" key={`${group.id}:${row.label}`}><span><strong>{row.label}</strong>{row.note && <small>{row.note}</small>}</span><span>{rub(row.monthly / monthlyHours)}</span><span>{rub(row.monthly / monthlyShifts)}</span><span>{rub(row.monthly)}</span><span>{pct(result.monthlyRevenueNet ? row.monthly / result.monthlyRevenueNet * 100 : 0)}</span></div>)}</div>; })}
+          <div className="rate-total-row cost"><span>Полная прямая себестоимость</span><b>{rub(result.totalCostHourly)}</b><b>{rub(result.monthlyCost / monthlyShifts)}</b><b>{rub(result.monthlyCost)}</b><b>{pct(result.monthlyRevenueNet ? result.monthlyCost / result.monthlyRevenueNet * 100 : 0)}</b></div>
+          <div className={`rate-total-row profit ${result.monthlyContribution < 0 ? "is-negative" : ""}`}><span>Маржинальная прибыль</span><b>{rub(result.monthlyContribution / monthlyHours)}</b><b>{rub(result.monthlyContribution / monthlyShifts)}</b><b>{rub(result.monthlyContribution)}</b><b>{pct(result.marginPct)}</b></div>
+          <div className="rate-client-rate"><span>Коммерческая ставка<br/><strong>{rub(result.clientRateNet)} {rateSuffix} без НДС</strong></span><b>{vatMode === "with_vat" ? `${rub(result.clientRateGross)} ${rateSuffix} с НДС` : "НДС не применяется"}</b></div>
+        </div>
+      </section>}
     </div>
 
     <aside className="calc-summary">

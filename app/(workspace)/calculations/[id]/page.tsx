@@ -7,6 +7,7 @@ import { getCalculationModels } from "@/lib/commercial/calculation-models";
 import { getCommercialRequest, listApprovals } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
 import { getCalculationScenarioSeed, getCalculationWorkspaceMeta, getRateReferencesForRoles, type CalculationWorkspaceMeta } from "@/lib/commercial/calculation-workspace";
+import { getCalculationStandards } from "@/lib/commercial/calculation-standards";
 import { PageHeader, Section, Status, EntityTabs } from "@/components/UI";
 import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
 import { CalculatorWorkspaceOperis } from "@/components/CalculatorWorkspaceOperis";
@@ -40,7 +41,7 @@ export default async function CalculationWorkspace({params,searchParams}:{params
   const sourceTitle=request?.title??tender?.title??meta.source;const sourceKind=request?"Заявка":tender?"Тендер":"Источник";
   const sourceHref=request?`/requests/${request.id}`:tender?`/tenders/${tender.id}?tab=calculations`:"/calculations";
   const economicsDate=safeDate(query.date)??meta.economicsDate;
-  const models=await getCalculationModels(actor,economicsDate);
+  const [models, standards]=await Promise.all([getCalculationModels(actor,economicsDate),getCalculationStandards(actor,economicsDate)]);
   const baseRoles=request
     ? request.roles.map(role=>({id:role.id,specialtyId:role.specialtyId,specialty:role.specialty,count:role.count,schedule:role.schedule,targetClientRate:role.targetClientRate}))
     : tender
@@ -97,7 +98,7 @@ export default async function CalculationWorkspace({params,searchParams}:{params
         </Section>
       </div>
 
-      {!immutable&&canCreate&&roles.length>0&&<><div className="calculation-workspace-gap"/><Section title={validSeed?`Новая версия сценария · ${validSeed.name}`:"Новый сценарий"} note={validSeed?"Параметры взяты из сохранённого сценария. После сохранения появится новая историческая версия.":"Позиция, график, нормативы и рыночный ориентир подставляются из связанных данных. Значения можно скорректировать перед сохранением."}><div className="calculation-editor-wrap"><CalculatorWorkspaceOperis context={{calculationId:meta.id,sourceType:meta.sourceType,sourceId:meta.sourceId,sourceLabel:sourceTitle,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:meta.allocationMode,projectCosts:meta.projectCosts}} seed={validSeed}/></div></Section></>}
+      {!immutable&&canCreate&&roles.length>0&&<><div className="calculation-workspace-gap"/><Section title={validSeed?`Новая версия сценария · ${validSeed.name}`:"Новый сценарий"} note={validSeed?"Параметры взяты из сохранённого сценария. После сохранения появится новая историческая версия.":"Позиция, график, нормативы и рыночный ориентир подставляются из связанных данных. Значения можно скорректировать перед сохранением."}><div className="calculation-editor-wrap"><CalculatorWorkspaceOperis context={{calculationId:meta.id,sourceType:meta.sourceType,sourceId:meta.sourceId,sourceLabel:sourceTitle,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:meta.allocationMode,projectCosts:meta.projectCosts,expenseStandards:standards.expenses,scheduleStandards:standards.schedules}} seed={validSeed}/></div></Section></>}
       {immutable&&<div className="calculation-lock-note"><strong>Эта версия расчёта зафиксирована.</strong><span>Для переговоров или пересчёта создайте новую версию. Принятые сценарии останутся в истории без изменений.</span></div>}
     </>}
 

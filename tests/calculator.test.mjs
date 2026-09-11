@@ -223,3 +223,47 @@ test("role-level monthly and fixed costs are not multiplied by headcount", () =>
   });
   assert.equal(result.additionalCostsMonthly, 2000);
 });
+
+test("target profit can be expressed per billing unit", () => {
+  const result = calculateCommercialScenario({
+    workers: 1,
+    hoursPerWorker: 100,
+    workerPayAmount: 600,
+    workerPayUnit: "hour",
+    pricingMode: "target_profit",
+    targetProfitPerBillingUnit: 100,
+    billingUnit: "hour",
+    vatMode: "without_vat",
+    ruleVersionId: "rule-profit-per-hour",
+    rules: { mandatoryChargePct: 0, roundingStep: 0.01, legalParametersVerified: true },
+    costs: [],
+  });
+  assert.equal(result.clientRateNet, 700);
+  assert.equal(result.monthlyContribution, 10000);
+  assert.equal(result.targetProfitPerBillingUnit, 100);
+});
+
+test("piecework payment and periodic expenses use their actual calculation base", () => {
+  const result = calculateCommercialScenario({
+    workers: 2,
+    hoursPerWorker: 100,
+    shiftsPerWorker: 10,
+    unitsPerWorkerShift: 25,
+    workerPayAmount: 4,
+    workerPayUnit: "unit",
+    pricingMode: "target_margin",
+    targetMarginPct: 0,
+    billingUnit: "unit",
+    vatMode: "without_vat",
+    ruleVersionId: "rule-piecework",
+    rules: { mandatoryChargePct: 0, legalParametersVerified: true },
+    costs: [
+      { amount: 1200, base: "per_worker_period", amortizationMonths: 12, enabled: true },
+      { amount: 2, base: "percent_of_worker_pay", enabled: true },
+    ],
+  });
+  assert.equal(result.workerPayMonthly, 2000);
+  assert.equal(result.additionalCostsMonthly, 240);
+  assert.equal(result.monthlyCost, 2240);
+  assert.equal(result.clientRateNet, 4.49);
+});
