@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentProps } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState, type ComponentProps } from "react";
 import { CalculatorWorkspaceOperis } from "@/components/CalculatorWorkspaceOperis";
 import type { RateMemoryRow } from "@/lib/commercial/rate-references";
+import type { CommercialPolicy } from "@/lib/commercial/commercial-policy";
+import { setRuntimeCompanyRules } from "@/lib/commercial/company-rules-client";
 
 const STORAGE_KEY = "operis.rate-memory.v1";
 const STORAGE_EVENT = "operis:rate-memory";
-type Props = ComponentProps<typeof CalculatorWorkspaceOperis>;
+type CalculatorProps = ComponentProps<typeof CalculatorWorkspaceOperis>;
+type Props = CalculatorProps & { commercialPolicy?: CommercialPolicy };
 
 function loadLocalRows(): RateMemoryRow[] {
   try {
@@ -21,8 +24,19 @@ function normalizedUnit(value: string) {
   return "hour";
 }
 
-export function CalculatorWorkspaceWithRateMemory(props: Props) {
+export function CalculatorWorkspaceWithRateMemory({ commercialPolicy, ...props }: Props) {
   const [localRows,setLocalRows]=useState<RateMemoryRow[]>([]);
+
+  useLayoutEffect(()=>{
+    if(!commercialPolicy)return;
+    setRuntimeCompanyRules({
+      models:props.context?.models??props.models??[],
+      expenses:props.context?.expenseStandards??[],
+      schedules:props.context?.scheduleStandards??[],
+      commercialPolicy,
+    });
+    return()=>setRuntimeCompanyRules(null);
+  },[commercialPolicy,props.context,props.models]);
 
   useEffect(()=>{
     if(!props.demo)return;
