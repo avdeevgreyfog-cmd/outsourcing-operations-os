@@ -10,5 +10,5 @@ export default async function StandardsPage() {
   const actor = await requireActor();
   if (!hasCapability(actor.access, "calculation.rules.read")) notFound();
   const [models, standards] = await Promise.all([getCalculationModels(actor), getCalculationStandards(actor)]);
-  return <><PageHeader eyebrow="Коммерция → Экономика" title="Нормативы" subtitle="Настраиваемые модели расчёта, расходы и графики. Каждая новая версия применяется только к новым сценариям." breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"Нормативы"}]} /><CalculationStandardsWorkspace models={models} expenses={standards.expenses} schedules={standards.schedules} canManage={hasCapability(actor.access,"calculation.rules.manage")} /></>;
+  return <><PageHeader eyebrow="Коммерция → Экономика" title="Нормативы" subtitle="Настраиваемые модели оформления, расходы, графики и коммерческая политика. Новые версии применяются только к новым сценариям." breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"Нормативы"}]} /><CalculationStandardsWorkspace models={models} expenses={standards.expenses} schedules={standards.schedules} initialCommercialPolicy={standards.commercialPolicy} canManage={hasCapability(actor.access,"calculation.rules.manage")} /></>;
 }
