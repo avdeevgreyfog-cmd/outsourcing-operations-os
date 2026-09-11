@@ -1,2 +1,19 @@
-import {requireActor} from "@/lib/auth/server";import {listRateReferences} from "@/lib/data/service";import {PageHeader,Section,Status} from "@/components/UI";import {rub} from "@/lib/ui/format";
-export default async function Rates(){const actor=await requireActor();const rows=await listRateReferences(actor);return <><PageHeader eyebrow="Экономика" title="База ставок" subtitle="Ориентиры с источником, датой и уровнем доверия. Значение в расчёт подтверждает пользователь." breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"База ставок"}]}/><Section><table className="data-table"><thead><tr><th>Специальность</th><th>Регион</th><th>Модель</th><th>Диапазон</th><th>Тип</th><th>Источник</th><th>Дата</th><th>Свежесть</th></tr></thead><tbody>{rows.map(x=><tr key={x.id}><td className="cell-title">{x.specialty}</td><td>{x.region}</td><td>{x.employmentModel}</td><td className="num">{rub(x.amountMin)}–{rub(x.amountMax)} / {x.unit}</td><td>{x.grossNet}</td><td>{x.source}<span className="cell-sub">{x.comment}</span></td><td>{x.sourceDate}</td><td><Status tone={x.confidence==="verified"?"good":"warn"}>{x.confidence}</Status></td></tr>)}</tbody></table></Section></>}
+import { requireActor } from "@/lib/auth/server";
+import { hasCapability } from "@/lib/core/access.mjs";
+import { listRateMemory } from "@/lib/commercial/rate-references";
+import { PageHeader } from "@/components/UI";
+import { RatesWorkspace } from "@/components/RatesWorkspace";
+
+export default async function RatesPage() {
+  const actor = await requireActor();
+  const rows = await listRateMemory(actor);
+  return <>
+    <PageHeader
+      eyebrow="Коммерция → Экономика"
+      title="База ставок"
+      subtitle="Коммерческая память компании: выплаты сотрудникам, себестоимость и ставки клиенту по специальностям, регионам и условиям."
+      breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"База ставок"}]}
+    />
+    <RatesWorkspace rows={rows} initialRows={rows} demo={actor.demo} canManage={hasCapability(actor.access,"calculation.rate_reference.edit")}/>
+  </>;
+}
