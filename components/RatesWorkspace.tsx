@@ -35,10 +35,11 @@ const isoDate = (value: unknown): string => {
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const match = text.match(/^(\d{1,2})[.\/]([0-1]?\d)[.\/](\d{4})$/);
   if (match) return `${match[3]}-${match[2].padStart(2,"0")}-${match[1].padStart(2,"0")}`;
-  return new Date().toISOString().slice(0,10);
+  return "";
 };
 const dateTime = (value: string) => {
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : isoDate(value);
+  if (!iso) return 0;
   const time = new Date(`${iso}T00:00:00`).getTime();
   return Number.isFinite(time) ? time : 0;
 };
@@ -54,13 +55,19 @@ const unitLabel = (unit: string) => {
   return unit || "₽/ч";
 };
 const rangeLabel = (min: number | null | undefined, max: number | null | undefined, suffix = "") => {
-  if (min == null && max == null) return "—";
-  if (min != null && max != null && min !== max) return `${money.format(min)}–${money.format(max)}${suffix}`;
-  return `${money.format(min ?? max ?? 0)}${suffix}`;
+  const safeMin = min != null && Number.isFinite(min) ? min : null;
+  const safeMax = max != null && Number.isFinite(max) ? max : null;
+  if (safeMin == null && safeMax == null) return "—";
+  if (safeMin != null && safeMax != null && safeMin !== safeMax) return `${money.format(safeMin)}–${money.format(safeMax)}${suffix}`;
+  return `${money.format(safeMin ?? safeMax ?? 0)}${suffix}`;
+};
+const rangeBounds = (values: Array<number | null | undefined>): [number | null, number | null] => {
+  const finite = values.filter((value): value is number => value != null && Number.isFinite(value));
+  return finite.length ? [Math.min(...finite), Math.max(...finite)] : [null,null];
 };
 const sourceLabels: Record<string,string> = { calculation:"Расчёт", proposal:"КП", object:"Факт объекта", import:"Импорт", manual:"Ручной ориентир", reference:"Ориентир" };
 
-function parseImportRow(raw: Record<string, unknown>, index: number): { row?: RateMemoryRow; error?: string } {
+function parseImportRow(raw: Record<string, unknown>, index: number, fallbackDate: string): { row?: RateMemoryRow; error?: string } {
   const values = new Map(Object.entries(raw).map(([key,value]) => [normalizedHeader(key), value]));
   const get = (...names: string[]) => {
     for (const name of names) { const value = values.get(normalizedHeader(name)); if (value !== undefined && value !== "") return value; }
@@ -79,7 +86,7 @@ function parseImportRow(raw: Record<string, unknown>, index: number): { row?: Ra
     employmentModel: norm(get("Модель оформления","Модель","employment model")) || "Не указано",
     amountMin: workerMin ?? workerMax, amountMax: workerMax ?? workerMin, unit: norm(get("Единица","unit")) || "hour",
     grossNet: norm(get("Тип выплаты","Тип","pay semantics")) || "На руки", source: norm(get("Источник","source")) || "Импорт компании",
-    sourceType: "import", sourceStatus: norm(get("Статус источника","source status")) || "historical", sourceDate: isoDate(get("Дата источника","Дата","source date")),
+    sourceType: "import", sourceStatus: norm(get("Статус источника","source status")) || "historical", sourceDate: isoDate(get("Дата источника","Дата","source date")) || fallbackDate,
     confidence: "imported", comment: norm(get("Комментарий","comment")) || null, scheduleLabel: norm(get("График","schedule")) || null,
     housingIncluded: booleanValue(get("Проживание","housing")), shuttleIncluded: booleanValue(get("Развозка","shuttle")),
     fullCostMin: numberValue(get("Себестоимость мин","cost min")), fullCostMax: numberValue(get("Себестоимость макс","cost max")),
@@ -96,7 +103,7 @@ function conditions(row: RateMemoryRow) {
   return parts.join(" · ") || "Условия не зафиксированы";
 }
 
-export function RatesWorkspace({ initialRows, demo, canManage }: { initialRows: RateMemoryRow[]; demo: boolean; canManage: boolean }) {
+export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { initialRows: RateMemoryRow[]; demo: boolean; canManage: boolean; now: number; today: string }) {
   const [rows, setRows] = useState(initialRows);
   const [view, setView] = useState<"summary"|"history">("summary");
   const [query, setQuery] = useState("");
@@ -111,10 +118,13 @@ export function RatesWorkspace({ initialRows, demo, canManage }: { initialRows: 
 
   useEffect(() => {
     if (!demo) return;
-    try {
-      const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]") as RateMemoryRow[];
-      if (Array.isArray(saved) && saved.length) setRows([...saved, ...initialRows.filter(base => !saved.some(item => item.id === base.id))]);
-    } catch { /* ignore damaged demo storage */ }
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]") as RateMemoryRow[];
+        if (Array.isArray(saved) && saved.length) setRows([...saved, ...initialRows.filter(base => !saved.some(item => item.id === base.id))]);
+      } catch { /* ignore damaged demo storage */ }
+    },0);
+    return () => window.clearTimeout(timer);
   }, [demo, initialRows]);
 
   const persistDemo = (next: RateMemoryRow[]) => {
@@ -140,17 +150,19 @@ export function RatesWorkspace({ initialRows, demo, canManage }: { initialRows: 
     return [...map.entries()].map(([key, items]) => {
       const sorted = [...items].sort((a,b) => dateTime(b.sourceDate) - dateTime(a.sourceDate));
       const latest = sorted[0];
-      const workerMins = items.map(item => item.amountMin).filter((value): value is number => value != null);
-      const workerMaxs = items.map(item => item.amountMax).filter((value): value is number => value != null);
-      const clientMins = items.map(item => item.clientRateMin).filter((value): value is number => value != null);
-      const clientMaxs = items.map(item => item.clientRateMax).filter((value): value is number => value != null);
-      return { key, items: sorted, latest, specialty: latest.specialty, zone: latest.priceZone || latest.region, workerMin: workerMins.length ? Math.min(...workerMins) : null, workerMax: workerMaxs.length ? Math.max(...workerMaxs) : null, clientMin: clientMins.length ? Math.min(...clientMins) : null, clientMax: clientMaxs.length ? Math.max(...clientMaxs) : null };
+      const [workerMin] = rangeBounds(items.map(item => item.amountMin));
+      const [,workerMax] = rangeBounds(items.map(item => item.amountMax));
+      const [clientMin] = rangeBounds(items.map(item => item.clientRateMin));
+      const [,clientMax] = rangeBounds(items.map(item => item.clientRateMax));
+      return { key, items: sorted, latest, specialty: latest.specialty, zone: latest.priceZone || latest.region, workerMin, workerMax, clientMin, clientMax };
     }).sort((a,b) => a.specialty.localeCompare(b.specialty,"ru"));
   }, [filtered]);
 
   const regions = useMemo(() => [...new Set(rows.map(row => row.region))].sort((a,b)=>a.localeCompare(b,"ru")), [rows]);
   const models = useMemo(() => [...new Set(rows.map(row => row.employmentModel))].sort((a,b)=>a.localeCompare(b,"ru")), [rows]);
-  const fresh = rows.filter(row => Date.now() - dateTime(row.sourceDate) < 180 * 86400000).length;
+  const fresh = rows.filter(row => now - dateTime(row.sourceDate) < 180 * 86400000).length;
+  const selectedWorkerRange = rangeBounds(selected?.flatMap(row => [row.amountMin,row.amountMax]) ?? []);
+  const selectedClientRange = rangeBounds(selected?.flatMap(row => [row.clientRateMin,row.clientRateMax]) ?? []);
   const metrics = [
     { label:"Специальностей", value:new Set(rows.map(row=>row.specialty)).size, note:"с накопленной историей" },
     { label:"Наблюдений", value:rows.length, note:"расчёты, импорт и ориентиры" },
@@ -183,7 +195,7 @@ export function RatesWorkspace({ initialRows, demo, canManage }: { initialRows: 
       const workbook = XLSX.read(await file.arrayBuffer(), { type:"array", cellDates:true });
       const first = workbook.Sheets[workbook.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json<Record<string,unknown>>(first, { defval:"" });
-      const parsed = raw.map((item,index)=>parseImportRow(item,index));
+      const parsed = raw.map((item,index)=>parseImportRow(item,index,today));
       setPreview({ rows: parsed.flatMap(item => item.row ? [item.row] : []), errors: parsed.flatMap(item => item.error ? [item.error] : []), name:file.name });
     } catch {
       setMessage("Не удалось прочитать файл. Используйте XLSX/XLS/CSV и не удаляйте заголовок «Специальность».");
@@ -221,7 +233,7 @@ export function RatesWorkspace({ initialRows, demo, canManage }: { initialRows: 
     const row: RateMemoryRow = {
       id:`local-${crypto.randomUUID()}`,organizationId:"demo",specialty,region:regionName,priceZone:norm(form.get("priceZone"))||regionName,
       employmentModel:norm(form.get("employmentModel"))||"Не указано",amountMin:workerMin,amountMax:numberValue(form.get("workerMax"))??workerMin,unit:norm(form.get("unit"))||"hour",
-      grossNet:"На руки",source:norm(form.get("source"))||"Ручной ориентир",sourceType:"manual",sourceStatus:"reference",sourceDate:isoDate(form.get("sourceDate")),confidence:"manual",comment:norm(form.get("comment"))||null,
+      grossNet:"На руки",source:norm(form.get("source"))||"Ручной ориентир",sourceType:"manual",sourceStatus:"reference",sourceDate:isoDate(form.get("sourceDate"))||today,confidence:"manual",comment:norm(form.get("comment"))||null,
       scheduleLabel:norm(form.get("schedule"))||null,housingIncluded:booleanValue(form.get("housing")),shuttleIncluded:null,clientRateMin:clientMin,clientRateMax:numberValue(form.get("clientMax"))??clientMin,
     };
     const ok = await commitRows([row]); if (ok) setAddOpen(false);
@@ -251,10 +263,10 @@ export function RatesWorkspace({ initialRows, demo, canManage }: { initialRows: 
     {preview&&<div className="rates-import-preview"><div><strong>{preview.name}</strong><span>Готово к импорту: {preview.rows.length}{preview.errors.length?` · пропущено: ${preview.errors.length}`:""}</span>{preview.errors.slice(0,3).map(error=><small key={error}>{error}</small>)}</div><div><button className="button primary" disabled={!preview.rows.length} onClick={()=>void applyPreview()}>Импортировать {preview.rows.length}</button><button className="button" onClick={()=>setPreview(null)}>Отмена</button></div></div>}
 
     {view==="summary" ? <div className="request-table-wrap rates-table-wrap">{summary.length?<table className="data-table rates-summary-table"><thead><tr><th>Специальность</th><th>Ценовая зона</th><th>Базовые условия</th><th>Сотруднику</th><th>Клиенту без НДС</th><th>Наблюдений</th><th>Обновлено</th></tr></thead><tbody>{summary.map(group=><tr key={group.key} onClick={()=>setSelected(group.items)} tabIndex={0} onKeyDown={event=>{if(event.key==="Enter")setSelected(group.items)}}><td><strong>{group.specialty}</strong><span className="cell-sub">{group.latest.region}</span></td><td>{group.zone}</td><td>{conditions(group.latest)}</td><td className="num">{rangeLabel(group.workerMin,group.workerMax,` ${unitLabel(group.latest.unit)}`)}</td><td className="num">{rangeLabel(group.clientMin,group.clientMax,` ${unitLabel(group.latest.unit)}`)}</td><td className="num">{group.items.length}</td><td>{dateLabel(group.latest.sourceDate)}</td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>
-    : <div className="request-table-wrap rates-table-wrap">{filtered.length?<table className="data-table rates-history-table"><thead><tr><th>Специальность</th><th>Регион / зона</th><th>Условия</th><th>Сотруднику</th><th>Себестоимость</th><th>Клиенту</th><th>Источник</th><th>Дата</th></tr></thead><tbody>{filtered.sort((a,b)=>dateTime(b.sourceDate)-dateTime(a.sourceDate)).map(row=><tr key={row.id} onClick={()=>setSelected([row])}><td><strong>{row.specialty}</strong><span className="cell-sub">{row.employmentModel}</span></td><td>{row.region}<span className="cell-sub">{row.priceZone||"—"}</span></td><td>{conditions(row)}</td><td className="num">{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.fullCostMin,row.fullCostMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</td><td>{sourceLabels[row.sourceType]||row.sourceType}<span className="cell-sub">{row.source}</span></td><td>{dateLabel(row.sourceDate)}</td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>}
+    : <div className="request-table-wrap rates-table-wrap">{filtered.length?<table className="data-table rates-history-table"><thead><tr><th>Специальность</th><th>Регион / зона</th><th>Условия</th><th>Сотруднику</th><th>Себестоимость</th><th>Клиенту</th><th>Источник</th><th>Дата</th></tr></thead><tbody>{[...filtered].sort((a,b)=>dateTime(b.sourceDate)-dateTime(a.sourceDate)).map(row=><tr key={row.id} onClick={()=>setSelected([row])}><td><strong>{row.specialty}</strong><span className="cell-sub">{row.employmentModel}</span></td><td>{row.region}<span className="cell-sub">{row.priceZone||"—"}</span></td><td>{conditions(row)}</td><td className="num">{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.fullCostMin,row.fullCostMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</td><td>{sourceLabels[row.sourceType]||row.sourceType}<span className="cell-sub">{row.source}</span></td><td>{dateLabel(row.sourceDate)}</td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>}
 
-    {selected&&<SalesDrawer title={selected[0].specialty} subtitle={`${selected[0].priceZone||selected[0].region} · ${selected.length} наблюдений`} onClose={()=>setSelected(null)}><div className="rates-drawer-summary"><div><span>Сотруднику</span><strong>{rangeLabel(Math.min(...selected.map(row=>row.amountMin??Infinity).filter(Number.isFinite)),Math.max(...selected.map(row=>row.amountMax??-Infinity).filter(Number.isFinite)),` ${unitLabel(selected[0].unit)}`)}</strong></div><div><span>Клиенту</span><strong>{rangeLabel(Math.min(...selected.map(row=>row.clientRateMin??Infinity).filter(Number.isFinite)),Math.max(...selected.map(row=>row.clientRateMax??-Infinity).filter(Number.isFinite)),` ${unitLabel(selected[0].unit)}`)}</strong></div></div><div className="rates-drawer-list">{selected.map(row=><article key={row.id}><header><strong>{dateLabel(row.sourceDate)} · {sourceLabels[row.sourceType]||row.sourceType}</strong><span>{row.sourceStatus}</span></header><p>{conditions(row)}</p><dl><div><dt>Сотруднику</dt><dd>{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</dd></div><div><dt>Клиенту</dt><dd>{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</dd></div><div><dt>Источник</dt><dd>{row.source}</dd></div></dl>{row.comment&&<small>{row.comment}</small>}</article>)}</div></SalesDrawer>}
+    {selected&&<SalesDrawer title={selected[0].specialty} subtitle={`${selected[0].priceZone||selected[0].region} · ${selected.length} наблюдений`} onClose={()=>setSelected(null)}><div className="rates-drawer-summary"><div><span>Сотруднику</span><strong>{rangeLabel(selectedWorkerRange[0],selectedWorkerRange[1],` ${unitLabel(selected[0].unit)}`)}</strong></div><div><span>Клиенту</span><strong>{rangeLabel(selectedClientRange[0],selectedClientRange[1],` ${unitLabel(selected[0].unit)}`)}</strong></div></div><div className="rates-drawer-list">{selected.map(row=><article key={row.id}><header><strong>{dateLabel(row.sourceDate)} · {sourceLabels[row.sourceType]||row.sourceType}</strong><span>{row.sourceStatus}</span></header><p>{conditions(row)}</p><dl><div><dt>Сотруднику</dt><dd>{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</dd></div><div><dt>Клиенту</dt><dd>{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</dd></div><div><dt>Источник</dt><dd>{row.source}</dd></div></dl>{row.comment&&<small>{row.comment}</small>}</article>)}</div></SalesDrawer>}
 
-    {addOpen&&<SalesDrawer title="Новый ориентир" subtitle="Можно заполнить только известные данные. Остальные поля останутся пустыми." onClose={()=>setAddOpen(false)}><form className="rates-manual-form" onSubmit={event=>void addManual(event)}><label>Специальность<input className="input" name="specialty" required/></label><label>Регион<input className="input" name="region" placeholder="Москва и МО"/></label><label>Ценовая зона<input className="input" name="priceZone" placeholder="Если не указана, используется регион"/></label><label>Модель оформления<input className="input" name="employmentModel" placeholder="ТК / ГПХ / НПД"/></label><label>График<input className="input" name="schedule" placeholder="5/2 · 8 ч"/></label><label>Проживание<select name="housing" defaultValue=""><option value="">Не указано</option><option value="нет">Без проживания</option><option value="да">С проживанием</option></select></label><label>Единица<select name="unit" defaultValue="hour"><option value="hour">₽ / час</option><option value="shift">₽ / смена</option><option value="month">₽ / месяц</option></select></label><label>Сотруднику мин<input className="input" name="workerMin" type="number" min="0" step="0.01"/></label><label>Сотруднику макс<input className="input" name="workerMax" type="number" min="0" step="0.01"/></label><label>Клиенту мин без НДС<input className="input" name="clientMin" type="number" min="0" step="0.01"/></label><label>Клиенту макс без НДС<input className="input" name="clientMax" type="number" min="0" step="0.01"/></label><label>Дата источника<input className="input" name="sourceDate" type="date" defaultValue={new Date().toISOString().slice(0,10)}/></label><label className="rates-form-wide">Источник<input className="input" name="source" placeholder="Старый расчёт, договор, опыт менеджера..."/></label><label className="rates-form-wide">Комментарий<textarea className="input" name="comment"/></label><div className="rates-form-actions"><button className="button primary" type="submit">Сохранить ориентир</button><button className="button" type="button" onClick={()=>setAddOpen(false)}>Отмена</button></div></form></SalesDrawer>}
+    {addOpen&&<SalesDrawer title="Новый ориентир" subtitle="Можно заполнить только известные данные. Остальные поля останутся пустыми." onClose={()=>setAddOpen(false)}><form className="rates-manual-form" onSubmit={event=>void addManual(event)}><label>Специальность<input className="input" name="specialty" required/></label><label>Регион<input className="input" name="region" placeholder="Москва и МО"/></label><label>Ценовая зона<input className="input" name="priceZone" placeholder="Если не указана, используется регион"/></label><label>Модель оформления<input className="input" name="employmentModel" placeholder="ТК / ГПХ / НПД"/></label><label>График<input className="input" name="schedule" placeholder="5/2 · 8 ч"/></label><label>Проживание<select name="housing" defaultValue=""><option value="">Не указано</option><option value="нет">Без проживания</option><option value="да">С проживанием</option></select></label><label>Единица<select name="unit" defaultValue="hour"><option value="hour">₽ / час</option><option value="shift">₽ / смена</option><option value="month">₽ / месяц</option></select></label><label>Сотруднику мин<input className="input" name="workerMin" type="number" min="0" step="0.01"/></label><label>Сотруднику макс<input className="input" name="workerMax" type="number" min="0" step="0.01"/></label><label>Клиенту мин без НДС<input className="input" name="clientMin" type="number" min="0" step="0.01"/></label><label>Клиенту макс без НДС<input className="input" name="clientMax" type="number" min="0" step="0.01"/></label><label>Дата источника<input className="input" name="sourceDate" type="date" defaultValue={today}/></label><label className="rates-form-wide">Источник<input className="input" name="source" placeholder="Старый расчёт, договор, опыт менеджера..."/></label><label className="rates-form-wide">Комментарий<textarea className="input" name="comment"/></label><div className="rates-form-actions"><button className="button primary" type="submit">Сохранить ориентир</button><button className="button" type="button" onClick={()=>setAddOpen(false)}>Отмена</button></div></form></SalesDrawer>}
   </div>;
 }
