@@ -10,7 +10,7 @@ import { getCommercialRequest } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
 import { PageHeader, Section } from "@/components/UI";
 import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
-import { CalculatorWorkspaceOperis } from "@/components/CalculatorWorkspaceOperis";
+import { CalculatorWorkspaceWithRateMemory } from "@/components/CalculatorWorkspaceWithRateMemory";
 
 export default async function Calculations({searchParams}:{searchParams:Promise<{request?:string;tender?:string}>}) {
   const actor = await requireActor();
@@ -76,7 +76,7 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
     </div>
 
     {canCreate && roles.length > 0 && <Section title="Первый сценарий" note={`${sourceKind}: ${sourceTitle}. Параметры позиции и графика подставлены из источника; нормативы выбраны на дату экономики.`}>
-      <div className="calculation-editor-wrap"><CalculatorWorkspaceOperis demo={actor.demo} context={{sourceType:request?"request":"tender",sourceId:source.id,sourceLabel:sourceTitle??undefined,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:"headcount",projectCosts:[],expenseStandards:standards.expenses,scheduleStandards:standards.schedules}}/></div>
+      <div className="calculation-editor-wrap"><CalculatorWorkspaceWithRateMemory demo={actor.demo} context={{sourceType:request?"request":"tender",sourceId:source.id,sourceLabel:sourceTitle??undefined,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:"headcount",projectCosts:[],expenseStandards:standards.expenses,scheduleStandards:standards.schedules}}/></div>
     </Section>}
 
     {tender && roles.length === 0 && <Section title="Сначала добавьте позиции"><p className="muted calculation-section-text">Чтобы сохранить расчёт по тендеру, укажите хотя бы одну специальность или работу во вкладке «Анализ».</p></Section>}
