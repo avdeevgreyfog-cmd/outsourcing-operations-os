@@ -1,5 +1,6 @@
 import type { Actor } from "@/lib/access/types";
 import { withTenant } from "@/lib/db/client";
+import { defaultCommercialPolicy, type CommercialPolicy } from "@/lib/commercial/commercial-policy";
 
 export type ExpenseStandard = {
   id: string; code: string; version: number; name: string; groupName: string; amount: number;
@@ -27,11 +28,11 @@ const demoSchedules: ScheduleStandard[] = [
   {id:"schedule-22",code:"two_two",version:1,name:"Сменная 2/2",pattern:"2/2",shiftHours:12,breakHours:1,breakPaid:false,shiftsPerMonth:15.2,active:true,effectiveFrom:"2026-01-01",effectiveTo:null,notes:null,demo:true},
 ];
 
-export async function getCalculationStandards(actor: Actor, effectiveDate?: string|null) {
-  if (actor.demo) return { expenses: demoExpenses, schedules: demoSchedules };
+export async function getCalculationStandards(actor: Actor, effectiveDate?: string|null): Promise<{expenses:ExpenseStandard[];schedules:ScheduleStandard[];commercialPolicy:CommercialPolicy}> {
+  if (actor.demo) return { expenses: demoExpenses, schedules: demoSchedules, commercialPolicy: defaultCommercialPolicy };
   const date = effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ? effectiveDate : new Date().toISOString().slice(0,10);
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [expenses, schedules] = await Promise.all([
+    const [expenses, schedules, policyRows] = await Promise.all([
       sql<ExpenseStandard[]>`
         SELECT * FROM (
           SELECT DISTINCT ON (code) id,code,version,name,group_name "groupName",amount::float8 amount,base,scope,
@@ -50,7 +51,12 @@ export async function getCalculationStandards(actor: Actor, effectiveDate?: stri
           ORDER BY code,version DESC,effective_from DESC
         ) current WHERE active
       `,
+      sql<Array<{policy:CommercialPolicy}>>`
+        SELECT policy_json policy FROM commercial_policy_versions
+        WHERE effective_from<=${date}::date AND (effective_to IS NULL OR effective_to>=${date}::date)
+        ORDER BY version DESC,effective_from DESC LIMIT 1
+      `,
     ]);
-    return { expenses, schedules };
+    return { expenses, schedules, commercialPolicy: { ...defaultCommercialPolicy, ...(policyRows[0]?.policy ?? {}) } };
   });
 }
