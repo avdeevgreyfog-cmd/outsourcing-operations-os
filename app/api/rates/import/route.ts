@@ -69,6 +69,7 @@ export async function POST(request: Request) {
           `;
           regionId=region.id;
         }
+        const priceZone = row.priceZone ?? (row.region || null);
         const [inserted] = await tx<Array<{id:string}>>`
           INSERT INTO rate_reference_entries(
             organization_id,specialty_id,region_id,employment_model,amount_min,amount_max,unit,pay_semantics,source,source_date,confidence,notes,valid_from,valid_to,created_by_user_id,
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
           ) VALUES(
             ${actor.organizationId}::uuid,${specialty.id}::uuid,${regionId}::uuid,${row.employmentModel},${row.amountMin??row.amountMax??null},${row.amountMax??row.amountMin??null},${unit(row.unit)},${paySemantics(row.grossNet)},
             ${row.source},${row.sourceDate}::date,${row.confidence},${row.comment??null},${row.sourceDate}::date,NULL,${actor.userId}::uuid,
-            ${row.priceZone??row.region||null},${row.scheduleLabel??null},${row.housingIncluded??null},${row.shuttleIncluded??null},${row.fullCostMin??null},${row.fullCostMax??null},${row.clientRateMin??row.clientRateMax??null},${row.clientRateMax??row.clientRateMin??null},${row.marginMin??null},${row.marginMax??null},${row.sourceType},${row.sourceStatus},'{}'::jsonb
+            ${priceZone},${row.scheduleLabel??null},${row.housingIncluded??null},${row.shuttleIncluded??null},${row.fullCostMin??null},${row.fullCostMax??null},${row.clientRateMin??row.clientRateMax??null},${row.clientRateMax??row.clientRateMin??null},${row.marginMin??null},${row.marginMax??null},${row.sourceType},${row.sourceStatus},'{}'::jsonb
           ) RETURNING id
         `;
         result.push({ ...row, id:inserted.id, organizationId:actor.organizationId, regionId });
