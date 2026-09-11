@@ -32,7 +32,13 @@ const model = z.object({
   name:z.string().trim().min(2).max(160), modelType:z.enum(["employment","gph","npd","custom"]).default("custom"), active:z.boolean().default(true),
   effectiveFrom:date, effectiveTo:date.nullable().optional(), source:z.string().trim().max(1000).nullable().optional(), rules:modelRules,
 }).superRefine((value,ctx)=>{ if(value.action!=="create"&&!value.modelId)ctx.addIssue({code:"custom",message:"Не указана модель для изменения",path:["modelId"]}); if(value.effectiveTo&&value.effectiveTo<value.effectiveFrom)ctx.addIssue({code:"custom",message:"Дата окончания не может быть раньше даты начала",path:["effectiveTo"]}); });
-const schema = z.discriminatedUnion("kind", [expense, schedule, model]);
+const policyValues = z.object({
+  minimumMarginPct:z.coerce.number().min(0).max(95), recommendedMarginPct:z.coerce.number().min(0).max(95), riskReservePct:z.coerce.number().min(0).max(100),
+  vatPct:z.coerce.number().min(0).max(100), roundingStep:z.coerce.number().positive(), approvalBelowMarginPct:z.coerce.number().min(0).max(95), notes:z.string().trim().max(1500).default(""),
+});
+const policy = z.object({ kind:z.literal("policy"), action:z.literal("revise"), effectiveFrom:date, effectiveTo:date.nullable().optional(), policy:policyValues })
+  .refine(value=>!value.effectiveTo||value.effectiveTo>=value.effectiveFrom,{message:"Дата окончания не может быть раньше даты начала",path:["effectiveTo"]});
+const schema = z.discriminatedUnion("kind", [expense, schedule, model, policy]);
 
 export async function GET(request: Request) {
   const actor = await getCurrentActor();
@@ -51,9 +57,18 @@ export async function POST(request: Request) {
     const actor = await getCurrentActor();
     if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     requireCapability(actor, "calculation.rules.manage");
-    if (actor.demo) return NextResponse.json({ error: "Демо-нормативы доступны только для чтения" }, { status: 409 });
+    if (actor.demo) return NextResponse.json({ error: "Демо-нормативы сохраняются в браузере" }, { status: 409 });
     const body = schema.parse(await request.json());
     const row = await withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+      if(body.kind === "policy"){
+        const [version]=await tx<Array<{version:number}>>`SELECT COALESCE(max(version),0)::int+1 version FROM commercial_policy_versions`;
+        const [created]=await tx`
+          INSERT INTO commercial_policy_versions(organization_id,version,effective_from,effective_to,policy_json,notes,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${version.version},${body.effectiveFrom}::date,${body.effectiveTo??null}::date,${tx.json(body.policy)},${body.policy.notes||null},${actor.userId}::uuid)
+          RETURNING id,version,effective_from::text "effectiveFrom",effective_to::text "effectiveTo",policy_json policy
+        `;
+        return {kind:"policy",...created};
+      }
       if(body.kind === "model"){
         let modelId=body.modelId;
         if(body.action === "create"){
