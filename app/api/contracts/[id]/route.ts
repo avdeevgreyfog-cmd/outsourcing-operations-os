@@ -32,15 +32,6 @@ type ContractScope = {
   ownerUserId:string|null; createdByUserId:string; status:string; launchGate:string; currentVersionId:string|null;
 };
 
-async function unlockLaunch(tx: any, contract: ContractScope, gate: "ready"|"exception") {
-  await tx`UPDATE contracts SET launch_gate=${gate},updated_at=now() WHERE id=${contract.id}::uuid`;
-  if (contract.objectId) {
-    await tx`UPDATE objects SET status='launch',contract_id=${contract.id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
-    await tx`UPDATE launches SET phase='ready' WHERE object_id=${contract.objectId}::uuid`;
-  }
-  await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
-}
-
 export async function PATCH(request: Request, { params }: { params: Promise<{id:string}> }) {
   try {
     const actor = await getCurrentActor();
@@ -110,20 +101,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
         if (!contract.currentVersionId) throw new Error("У договора нет зафиксированной версии условий");
         await tx`UPDATE contract_versions SET status='signed',signed_by_user_id=${actor.userId}::uuid,signed_at=now() WHERE id=${contract.currentVersionId}::uuid`;
         await tx`UPDATE contracts SET status='signed',signed_at=now(),launch_gate='ready',updated_at=now() WHERE id=${id}::uuid`;
-        await unlockLaunch(tx, contract, "ready");
+        if (contract.objectId) {
+          await tx`UPDATE objects SET status='launch',contract_id=${id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
+          await tx`UPDATE launches SET phase='ready' WHERE object_id=${contract.objectId}::uuid`;
+        }
+        await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
       } else if (body.action === "launch_exception") {
         if (contract.status === "signed") throw new Error("Договор уже подписан; исключение не требуется");
         await tx`UPDATE contracts SET launch_gate='exception',launch_exception_reason=${body.reason},launch_exception_by_user_id=${actor.userId}::uuid,launch_exception_at=now(),updated_at=now() WHERE id=${id}::uuid`;
-        await unlockLaunch(tx, contract, "exception");
+        if (contract.objectId) {
+          await tx`UPDATE objects SET status='launch',contract_id=${id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
+          await tx`UPDATE launches SET phase='ready' WHERE object_id=${contract.objectId}::uuid`;
+        }
+        await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
       } else if (body.action === "terminate") {
         if (contract.status !== "signed") throw new Error("Завершить можно только подписанный договор");
         await tx`UPDATE contracts SET status='terminated',updated_at=now() WHERE id=${id}::uuid`;
       }
 
-      if (body.action !== "edit") {
-        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'contract',${id}::uuid,${body.action},${`Действие по договору: ${body.action}`},${sql.json({note:"note" in body ? body.note??null : "reason" in body ? body.reason : null})})`;
-      }
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'contract',${id}::uuid,${body.action},${`Действие по договору: ${body.action}`},${sql.json({note:"note" in body ? body.note??null : "reason" in body ? body.reason : null})})`;
       return {id,action:body.action};
     }));
     return NextResponse.json(result);
