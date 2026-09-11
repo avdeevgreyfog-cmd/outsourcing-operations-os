@@ -103,12 +103,12 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const [needCount]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM needs WHERE object_id=${object.id}::uuid`;
       if((rateCount?.count??0)!==(needCount?.count??0))throw new Error("Принятая версия КП не покрывает все позиции заявки; подготовка отменена");
 
-      const terms={
+      const terms=JSON.parse(JSON.stringify({
         vatMode:source.content.vatMode??null,vatPct:source.content.vatPct??null,schedule:source.content.schedule??null,
         projectDuration:source.content.projectDuration??null,included:source.content.included??[],clientProvides:source.content.clientProvides??[],
         paymentTerms:null,paymentDelayDays:null,billingBasis:"Подтверждённый заказчиком табель / акт",timesheetRule:null,minimumVolume:null,sla:null,penalties:null,notes:null,
         roles:source.content.roles??[],proposalSnapshot:{proposalId:source.proposalId,proposalVersion:source.proposalVersion},
-      };
+      }));
       const [contract]=await tx<Array<{id:string}>>`
         INSERT INTO contracts(organization_id,client_company_id,request_id,proposal_id,object_id,kind,status,title,owner_user_id,launch_gate,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${source.clientId}::uuid,${source.requestId}::uuid,${source.proposalId}::uuid,${object.id}::uuid,'master','draft',${`Договор · ${source.title}`},${source.ownerUserId??actor.userId}::uuid,'blocked',${actor.userId}::uuid)
