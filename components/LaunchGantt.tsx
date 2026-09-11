@@ -7,6 +7,8 @@ import type { LaunchTaskRow } from "@/lib/data/service";
 
 const days = Array.from({ length: 20 }, (_, index) => index + 1);
 const day = (value: string) => Number(value.split(".")[0]);
+const taskStatusLabels:Record<string,string>={planned:"Запланировано",in_progress:"В работе",blocked:"Заблокировано",done:"Завершено",cancelled:"Отменено"};
+const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 
 export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
   const [selected, setSelected] = useState<LaunchTaskRow | null>(null);
@@ -40,6 +42,6 @@ export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
       })}
       <div className="gantt-legend"><span><i className="baseline"/> Исходный план</span><span><i className="normal"/> Текущий план</span><span><i className="critical"/> Критический путь</span><span><i className="today"/> Сегодня</span></div>
     </section>
-    {selected && <><div className="drawer-backdrop" onClick={() => setSelected(null)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={() => setSelected(null)} aria-label="Закрыть"><X size={17}/></button><div className="eyebrow">Задача запуска · {selected.object}</div><h2>{selected.title}</h2><Status tone={selected.risk === "high" ? "warn" : selected.status === "done" ? "good" : "info"}>{selected.status}</Status><div className="drawer-content"><KeyValue label="Ответственный" value={selected.owner}/><KeyValue label="Текущий план" value={`${selected.start}–${selected.end}`}/><KeyValue label="Исходный план" value={`${selected.baselineStart ?? "—"}–${selected.baselineEnd ?? "—"}`}/><KeyValue label="Прогресс" value={`${selected.progress}%`}/><KeyValue label="Риск" value={selected.risk}/><KeyValue label="Критический путь" value={selected.critical ? "Да" : "Нет"}/><KeyValue label="Зависимости" value={selected.dependencyIds.length || "Нет"}/></div></aside></>}
+    {selected && <><div className="drawer-backdrop" onClick={() => setSelected(null)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={() => setSelected(null)} aria-label="Закрыть"><X size={17}/></button><div className="eyebrow">Задача запуска · {selected.object}</div><h2>{selected.title}</h2><Status tone={selected.risk === "high" || selected.risk === "critical" ? "warn" : selected.status === "done" ? "good" : "info"}>{taskStatusLabels[selected.status]??"В работе"}</Status><div className="drawer-content"><KeyValue label="Ответственный" value={selected.owner}/><KeyValue label="Текущий план" value={`${selected.start}–${selected.end}`}/><KeyValue label="Исходный план" value={`${selected.baselineStart ?? "—"}–${selected.baselineEnd ?? "—"}`}/><KeyValue label="Прогресс" value={`${selected.progress}%`}/><KeyValue label="Риск" value={riskLabels[selected.risk]??"Контроль"}/><KeyValue label="Критический путь" value={selected.critical ? "Да" : "Нет"}/><KeyValue label="Зависимости" value={selected.dependencyIds.length || "Нет"}/></div></aside></>}
   </>;
 }
