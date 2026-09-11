@@ -1,21 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { filterNavigation, flattenNavigation, navigationManifest } from "../lib/core/navigation.mjs";
-import { findFoundationModule, foundationModules } from "../lib/core/modules.mjs";
+import { foundationModules } from "../lib/core/modules.mjs";
 
 const access = (capabilities) => ({ capabilities, denies: [], scopes: {}, allOrg: false });
 const visibleItems = (sections) => sections.flatMap((section) => section.groups.flatMap((group) => group.items));
 
 test("foundation modules stay hidden in the regular capability-filtered sidebar", () => {
   const result = filterNavigation(navigationManifest, access(["*"]));
-  assert.equal(visibleItems(result).some((item) => item.status === "foundation"), false);
-  assert.equal(visibleItems(result).some((item) => item.href === "/contracts"), false);
+  const items = visibleItems(result);
+  assert.equal(items.some((item) => item.status === "foundation"), false);
+  assert.equal(items.some((item) => item.href === "/contracts"), true, "contracts are now an active capability-protected module");
+  assert.equal(items.find((item) => item.href === "/contracts")?.status, undefined);
 });
 
-test("internal mode exposes the complete target architecture", () => {
+test("internal mode exposes foundation architecture without bypassing active capabilities", () => {
   const result = filterNavigation(navigationManifest, access([]), { showFoundations: true });
   const items = visibleItems(result);
-  assert.equal(items.some((item) => item.href === "/contracts"), true);
+  assert.equal(items.some((item) => item.href === "/contracts"), false, "active contracts still require contract.read");
   assert.ok(items.filter((item) => item.status === "foundation").length <= Object.keys(foundationModules).length);
   assert.equal(items.find((item)=>item.href==="/approvals")?.status, undefined, "activated approvals must no longer be marked as foundation");
 });
@@ -51,5 +53,7 @@ test("every foundation route has a module descriptor and canonical route", () =>
   const foundations = flattenNavigation().filter((item) => item.status === "foundation");
   assert.equal(new Set(foundations.map((item) => item.href)).size, foundations.length);
   for (const item of foundations) assert.ok(foundationModules[item.id], `missing descriptor for ${item.id}`);
-  assert.equal(findFoundationModule(["contracts"])?.id, "contract-registry");
+  const contracts = flattenNavigation().find((item) => item.href === "/contracts");
+  assert.equal(contracts?.id, "contract-registry");
+  assert.equal(contracts?.status, undefined, "contracts must not fall back to the foundation catch-all route");
 });
