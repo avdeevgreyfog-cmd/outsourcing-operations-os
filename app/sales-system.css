@@ -198,4 +198,18 @@
 .portfolio-detail{display:grid;grid-template-columns:120px 1fr;gap:16px 12px;margin:0 0 24px;font-size:13px}
 .portfolio-detail dt{color:var(--muted)}
 .portfolio-detail dd{margin:0}
+/* Keep the request editor readable at normal laptop widths: the context is
+   condensed below the form instead of silently disappearing. */
+@media(max-width:1380px){
+  .sales-workspace .request-baseline-editor{grid-template-columns:minmax(0,1fr)}
+  .sales-workspace .request-baseline-editor .request-final-context{display:grid;position:static;grid-template-columns:220px minmax(220px,1fr) minmax(220px,1fr);align-items:stretch}
+  .sales-workspace .request-baseline-editor .request-final-context-head{border-right:1px solid var(--border);border-bottom:0}
+  .sales-workspace .request-baseline-editor .request-final-context-metrics{border-right:1px solid var(--border);border-bottom:0}
+  .sales-workspace .request-baseline-editor .request-final-context-block,.sales-workspace .request-baseline-editor .request-final-context-note{display:none}
+}
+@media(max-width:760px){
+  .sales-workspace .request-baseline-editor .request-final-context{grid-template-columns:1fr}
+  .sales-workspace .request-baseline-editor .request-final-context-head{border-right:0;border-bottom:1px solid var(--border)}
+  .sales-workspace .request-baseline-editor .request-final-context-metrics{border-right:0;border-bottom:0}
+}
 @media(max-width:760px){.portfolio-views{flex-wrap:wrap}.portfolio-detail{grid-template-columns:1fr;gap:7px}.portfolio-detail dd{margin-bottom:10px}.app-shell:has(.sales-workspace) .sidebar.sales-mobile-open{z-index:45}.portfolio-table th:first-child,.portfolio-table td:first-child{position:static}}

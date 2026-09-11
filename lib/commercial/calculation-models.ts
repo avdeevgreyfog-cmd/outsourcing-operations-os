@@ -4,10 +4,15 @@ import { withTenant } from "@/lib/db/client";
 export type CalculationRuleConfig = {
   mandatoryChargePct?: number;
   mandatoryChargeFixedHourly?: number;
+  /** @deprecated Commercial policy belongs to the company, not employment form. */
   riskReservePct?: number;
+  /** @deprecated Commercial policy belongs to the company, not employment form. */
   minimumMarginPct?: number;
+  /** @deprecated Commercial policy belongs to the company, not employment form. */
   recommendedMarginPct?: number;
+  /** @deprecated Commercial policy belongs to the company, not employment form. */
   vatPct?: number;
+  /** @deprecated Commercial policy belongs to the company, not employment form. */
   roundingStep?: number;
   legalParametersVerified?: boolean;
   /**
@@ -46,7 +51,7 @@ const demoModels: CalculationModelOption[] = [
     ruleSource: "Демонстрационные правила компании. Не являются юридической или налоговой рекомендацией.",
     ruleEffectiveFrom: "2026-01-01",
     ruleEffectiveTo: null,
-    rules: { mandatoryChargePct: 30, riskReservePct: 2, minimumMarginPct: 15, recommendedMarginPct: 18, vatPct: 22, roundingStep: 1, legalParametersVerified: false },
+    rules: { mandatoryChargePct: 30, legalParametersVerified: false },
   },
   {
     id: "76000000-0000-4000-8000-000000000002",
@@ -57,7 +62,7 @@ const demoModels: CalculationModelOption[] = [
     ruleSource: "Демонстрационные правила компании. Не являются юридической или налоговой рекомендацией.",
     ruleEffectiveFrom: "2026-01-01",
     ruleEffectiveTo: null,
-    rules: { mandatoryChargePct: 18, riskReservePct: 3, minimumMarginPct: 16, recommendedMarginPct: 20, vatPct: 22, roundingStep: 1, legalParametersVerified: false },
+    rules: { mandatoryChargePct: 18, legalParametersVerified: false },
   },
   {
     id: "76000000-0000-4000-8000-000000000003",
@@ -68,7 +73,7 @@ const demoModels: CalculationModelOption[] = [
     ruleSource: "Демонстрационные правила компании. Не являются юридической или налоговой рекомендацией.",
     ruleEffectiveFrom: "2026-01-01",
     ruleEffectiveTo: null,
-    rules: { mandatoryChargePct: 7, riskReservePct: 5, minimumMarginPct: 18, recommendedMarginPct: 22, vatPct: 22, roundingStep: 1, legalParametersVerified: false },
+    rules: { mandatoryChargePct: 7, legalParametersVerified: false },
   },
   {
     id: "76000000-0000-4000-8000-000000000004",
@@ -79,7 +84,7 @@ const demoModels: CalculationModelOption[] = [
     ruleSource: "Настраиваемая модель компании. Значения должны быть проверены компанией перед использованием.",
     ruleEffectiveFrom: "2026-01-01",
     ruleEffectiveTo: null,
-    rules: { payStructure:"mrot_plus_supplement", officialBasePerWorkerMonthly:0, mandatoryChargeBase:"official_base", supplementCommissionPct:0, supplementCommissionFixedPerWorkerMonthly:0, mandatoryChargePct:0, riskReservePct:0, minimumMarginPct:0, recommendedMarginPct:0, vatPct:0, roundingStep:1, legalParametersVerified:false },
+    rules: { payStructure:"mrot_plus_supplement", officialBasePerWorkerMonthly:0, mandatoryChargeBase:"official_base", supplementCommissionPct:0, supplementCommissionFixedPerWorkerMonthly:0, mandatoryChargePct:0, legalParametersVerified:false },
   },
 ];
 

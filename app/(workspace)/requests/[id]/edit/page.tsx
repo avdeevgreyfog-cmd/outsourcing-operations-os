@@ -17,6 +17,6 @@ export default async function EditRequestPage({ params }: { params: Promise<{ id
   if (!request) notFound();
   return <>
     <PageHeader eyebrow="Коммерция → Заявки" title={`Редактирование · ${request.title}`} subtitle="Общие условия задаются один раз; исключения и требования уточняются внутри конкретных позиций." breadcrumbs={[{ label:"Коммерция"},{label:"Заявки",href:"/requests"},{label:request.title,href:`/requests/${id}`},{label:"Редактирование"}]}/>
-    <RequestIntakeFinalShell request={request} options={options} intake={intake} workflowMeta={workflowMeta}/>
+    <RequestIntakeFinalShell request={request} options={options} intake={intake} workflowMeta={workflowMeta} demo={actor.demo} demoRequestId={actor.demo ? id : undefined}/>
   </>;
 }

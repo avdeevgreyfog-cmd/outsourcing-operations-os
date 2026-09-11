@@ -1,6 +1,10 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { requestBucket, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
 import { SalesMetrics } from "@/components/sales/SalesUI";
 import { RequestsWorkspaceBaseline } from "@/components/RequestsWorkspaceBaseline";
+import { mergeDemoRequestRows, subscribeDemoRequests } from "@/lib/commercial/demo-workspace-client";
 
 type Props = {
   rows: RequestBoardRow[];
@@ -9,14 +13,23 @@ type Props = {
   canConfigure: boolean;
   canEdit: boolean;
   now: number;
+  demo?: boolean;
 };
 
 export function RequestsWorkspaceFinal(props: Props) {
-  const active = props.rows.filter((row) => requestBucket(row) === "active");
-  const completed = props.rows.filter((row) => requestBucket(row) === "completed");
+  const [rows, setRows] = useState<RequestBoardRow[]>(props.rows);
+  useEffect(() => {
+    if (!props.demo) return;
+    const refresh = () => setRows(mergeDemoRequestRows(props.rows));
+    refresh();
+    return subscribeDemoRequests(refresh);
+  }, [props.demo, props.rows]);
+  const liveRows = props.demo ? rows : props.rows;
+  const active = liveRows.filter((row) => requestBucket(row) === "active");
+  const completed = liveRows.filter((row) => requestBucket(row) === "completed");
   const agreed = completed.filter((row) => row.workflowStageCode === "agreed");
   const activeHeadcount = active.reduce((sum, row) => sum + row.headcount, 0);
-  const sent = props.rows.reduce((sum, row) => sum + row.proposalSentCount, 0);
+  const sent = liveRows.reduce((sum, row) => sum + row.proposalSentCount, 0);
   const conversionBase = agreed.length + completed.filter((row) => row.workflowStageCode === "not_agreed").length;
   const conversion = conversionBase ? Math.round((agreed.length / conversionBase) * 100) : 0;
 

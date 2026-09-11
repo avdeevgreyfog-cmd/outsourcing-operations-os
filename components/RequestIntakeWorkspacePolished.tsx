@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { emptyRequestIntake, provisionKeys, type ProvisionKey, type RequestIntake } from "@/lib/commercial/request-intake";
 import type { RequestWorkflowMeta, RequestWorkspaceOptions, WorkspaceSpecialty } from "@/lib/commercial/request-workflow";
+import { getDemoRequest, saveDemoRequest, type DemoRequestPayload } from "@/lib/commercial/demo-workspace-client";
 
 type ExistingRequest = {
   id:string; clientId:string|null; title:string; source:string; location:string; regionId:string|null; startDate:string|null; durationText:string|null;
@@ -13,7 +14,7 @@ type ExistingRequest = {
 };
 type RoleDraft = { id?:string; specialtyId:string; specialtyName:string; count:number; scheduleOverride:boolean; schedule:Record<string,unknown>; requirements:Record<string,unknown>; targetClientRate:number|null };
 type ImportPreview = { row:number; specialtyName:string; specialtyId:string; count:number; schedule:Record<string,unknown>; requirements:Record<string,unknown>; targetClientRate:number|null; errors:string[] };
-type Props = { options:RequestWorkspaceOptions; intake?:RequestIntake; request?:ExistingRequest; workflowMeta?:RequestWorkflowMeta };
+type Props = { options:RequestWorkspaceOptions; intake?:RequestIntake; request?:ExistingRequest; workflowMeta?:RequestWorkflowMeta; demo?:boolean; demoRequestId?:string };
 type SimpleProvider = "client"|"us"|"not_required"|"unknown";
 
 const sectionLabels = [
@@ -55,7 +56,7 @@ function inferCity(address:string){
 }
 function emptyRole():RoleDraft{return {specialtyId:"",specialtyName:"",count:1,scheduleOverride:false,schedule:{},requirements:{experienceMode:"not_required",experienceMin:""},targetClientRate:null};}
 
-export function RequestIntakeWorkspacePolished({options,intake:initialIntake,request,workflowMeta}:Props){
+export function RequestIntakeWorkspacePolished({options,intake:initialIntake,request,workflowMeta,demo=false,demoRequestId}:Props){
   const router=useRouter();
   const fileRef=useRef<HTMLInputElement>(null);
   const [active,setActive]=useState<(typeof sectionLabels)[number][0]>("general");
@@ -78,6 +79,21 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   const [importOpen,setImportOpen]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+
+  useEffect(() => {
+    if (!demo || !demoRequestId) return;
+    const record = getDemoRequest(demoRequestId);
+    if (!record) return;
+    const draft = record.payload;
+    const timer = window.setTimeout(() => {
+      setTitle(draft.title); setClientId(draft.clientId ?? ""); setSource(draft.source === "manual" ? "" : draft.source);
+      setLocation(draft.location); setRegionId(draft.regionId ?? ""); setStartDate(draft.startDate ?? ""); setDurationText(draft.durationText ?? "");
+      setVatMode(draft.vatMode ?? "with_vat"); setComments(draft.comments ?? ""); setOwnerUserId(draft.ownerUserId ?? options.currentUserId); setObserverUserIds(draft.observerUserIds ?? []);
+      setIntake(normalizeLegacyIntake(draft.intake as RequestIntake));
+      setRoles(draft.roles.map((role) => ({ id:role.id, specialtyId:role.specialtyId ?? "", specialtyName:role.specialtyName, count:role.count, scheduleOverride:Object.keys(role.schedule ?? {}).length > 0, schedule:role.schedule ?? {}, requirements:role.requirements ?? {}, targetClientRate:role.targetClientRate })));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [demo, demoRequestId, options.currentUserId]);
 
   const totalHeadcount=useMemo(()=>roles.reduce((sum,role)=>sum+(Number.isFinite(role.count)?role.count:0),0),[roles]);
   const region=options.regions.find((item)=>item.id===regionId);
@@ -107,12 +123,18 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
         housingRule:legacyRule(intake,"housing"),travelRule:legacyRule(intake,"travel"),shuttleRule:legacyRule(intake,"shuttle"),ppeRule:`${legacyRule(intake,"workwear")} / ${legacyRule(intake,"ppe")}`,medicalRule:`${legacyRule(intake,"medical")} / ${legacyRule(intake,"medbook")}`,citizenshipRule:intake.compliance.workerCategories.join(", "),toolsRule:legacyRule(intake,"tools"),
       };
       if(!payload.title||payload.title.length<3)throw new Error("Укажите название заявки");
+      if (demo) {
+        const clientName = options.clients.find((item) => item.id === payload.clientId)?.name;
+        const ownerName = options.members.find((item) => item.id === payload.ownerUserId)?.name;
+        const saved = saveDemoRequest(payload as DemoRequestPayload, { id:demoRequestId ?? request?.id, clientName, ownerName, actorId:options.currentUserId });
+        router.push(`/requests?demo=${encodeURIComponent(saved.id)}`); router.refresh(); return;
+      }
       const response=await fetch(request?`/api/requests/${request.id}/v2`:"/api/requests/v2",{method:request?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить заявку");
       router.push(`/requests/${json.id??request?.id}`);router.refresh();
     }catch(saveError){setError(saveError instanceof Error?saveError.message:"Не удалось сохранить заявку");}finally{setBusy(false);}
   }
-  async function archive(){if(!request)return;if(!window.confirm("Переместить заявку в архив? Архив предназначен для дублей, ошибочных и технических записей."))return;setBusy(true);setError("");try{const response=await fetch(`/api/requests/${request.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"archive"})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось архивировать");router.push("/requests");router.refresh();}catch(archiveError){setError(archiveError instanceof Error?archiveError.message:"Не удалось архивировать");}finally{setBusy(false);}}
+  async function archive(){if(!request&&!demoRequestId)return;if(!window.confirm("Переместить заявку в архив? Архив предназначен для дублей, ошибочных и технических записей."))return;setBusy(true);setError("");try{if(demo){const current=getDemoRequest(demoRequestId??request?.id??"");if(current)saveDemoRequest(current.payload,{id:current.id,base:{...current.board,archivedAt:new Date().toISOString()},clientName:current.board.client,ownerName:current.board.owner??undefined,actorId:options.currentUserId});router.push("/requests");router.refresh();return;}if(!request)return;const response=await fetch(`/api/requests/${request.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"archive"})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось архивировать");router.push("/requests");router.refresh();}catch(archiveError){setError(archiveError instanceof Error?archiveError.message:"Не удалось архивировать");}finally{setBusy(false);}}
   async function importFile(file:File){setError("");try{const rows=await readSpreadsheet(file);const preview=rowsToPreview(rows,options.specialties);setImportPreview(preview);setImportOpen(true);}catch(importError){setError(importError instanceof Error?importError.message:"Не удалось прочитать файл");}}
   function applyImport(){const valid=importPreview.filter((row)=>row.errors.length===0);if(!valid.length)return;setRoles((current)=>[...current.filter((role)=>role.specialtyName.trim()),...valid.map((row)=>({specialtyId:row.specialtyId,specialtyName:row.specialtyName,count:row.count,scheduleOverride:Object.keys(row.schedule).length>0,schedule:row.schedule,requirements:row.requirements,targetClientRate:row.targetClientRate}))]);setImportOpen(false);setImportPreview([]);}
   function downloadTemplate(){const xml=excelTemplate();const blob=new Blob([xml],{type:"application/vnd.ms-excel;charset=utf-8"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="Шаблон_позиций_заявки.xls";link.click();URL.revokeObjectURL(url);}
@@ -146,7 +168,7 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
 
       {active==="commercial"&&<section className="request-v2-section"><header><div><span>06</span><h2>Коммерческие ориентиры</h2><p>Внутренний блок менеджера. Во внешней форме наши исторические ставки и экономика не показываются.</p></div></header><div className="request-form-grid cols-3"><label>Как платит заказчик<select value={intake.commercial.billingUnit} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{billingUnit:event.target.value}))}><option value="unknown">Пока неизвестно</option><option value="hour">Человеко-час</option><option value="shift">Смена</option><option value="worker_month">Сотрудник / месяц</option><option value="unit">За единицу</option><option value="volume">За объём</option><option value="fixed">Фикс за проект</option><option value="mixed">Смешанная</option></select></label><label>Лимит / ставка заказчика<input type="number" min="0" value={intake.commercial.clientLimit??""} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{clientLimit:num(event.target.value)}))}/></label><label>НДС для лимита<select value={intake.commercial.clientLimitVatMode} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{clientLimitVatMode:event.target.value}))}><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option></select></label></div><div className="request-form-grid cols-3"><label>Желаемая зарплата сотруднику<input type="number" min="0" value={intake.commercial.desiredWorkerNet??""} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{desiredWorkerNet:num(event.target.value)}))}/></label><label>Единица зарплаты<select value={intake.commercial.desiredWorkerNetUnit} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{desiredWorkerNetUnit:event.target.value}))}><option value="hour">В час</option><option value="shift">За смену</option><option value="month">В месяц</option></select></label><label>НДС нашей ставки<select value={vatMode} onChange={(event)=>setVatMode(event.target.value)}><option value="with_vat">Показывать с НДС</option><option value="without_vat">Без НДС</option></select></label></div><div className="request-form-grid cols-3"><label>Известная ставка конкурента<input type="number" min="0" value={intake.commercial.competitorRate??""} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{competitorRate:num(event.target.value)}))}/></label><label>НДС конкурента<select value={intake.commercial.competitorRateVatMode} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{competitorRateVatMode:event.target.value}))}><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option></select></label><label>Комментарий<input value={intake.commercial.competitorComment} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{competitorComment:event.target.value}))}/></label></div><div className="historical-rate-grid">{roles.filter((role)=>role.specialtyName.trim()).map((role,index)=>{const stat=specialtyStats(role);return <article key={`${role.specialtyName}-${index}`}><strong>{role.specialtyName}</strong>{stat&&stat.stats.sampleCount>0?<><span>Заказчику: {formatRub(stat.stats.clientRateMin)}–{formatRub(stat.stats.clientRateMax)} / ч</span><span>Медиана: {formatRub(stat.stats.clientRateMedian)} / ч</span><span>Сотруднику: {formatRub(stat.stats.workerPayMin)}–{formatRub(stat.stats.workerPayMax)}</span><small>По {stat.stats.sampleCount} похожим сохранённым расчётам. Это ориентир, не готовая цена.</small></>:<small>Недостаточно истории для надёжного ориентира.</small>}</article>})}</div><label>Общий комментарий к заявке<textarea value={comments} onChange={(event)=>setComments(event.target.value)} placeholder="Информация, которой нет в структурированных полях"/></label><div className="request-subsection"><h3>Ответственность внутри компании</h3><div className="request-form-grid cols-2"><label>Ответственный<select value={ownerUserId} onChange={(event)=>setOwnerUserId(event.target.value)}>{options.members.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select><small>По умолчанию ответственным становится создатель заявки.</small></label><label>Наблюдатели<select multiple value={observerUserIds} onChange={(event)=>setObserverUserIds(Array.from(event.currentTarget.selectedOptions).map((option)=>option.value))}>{options.members.filter((item)=>item.id!==ownerUserId).map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select><small>Наблюдатели видят заявку, но не становятся её ответственными.</small></label></div></div></section>}
 
-      <div className="request-v2-sticky"><div><span>{request?"Изменения сохранятся в истории заявки":"Черновик можно сохранить даже с неполными данными"}</span>{request&&<button type="button" className="request-danger-link" disabled={busy} onClick={archive}>В архив</button>}</div><div><Link href={request?`/requests/${request.id}`:"/requests"} className="button">Отмена</Link><button type="button" className="button primary" disabled={busy} onClick={save}>{busy?"Сохраняю…":request?"Сохранить изменения":"Создать заявку"}</button></div></div>
+      <div className="request-v2-sticky"><div><span>{demo ? "Демо-версия сохранится в браузере и сразу появится в воронке" : request?"Изменения сохранятся в истории заявки":"Черновик можно сохранить даже с неполными данными"}</span>{(request||demoRequestId)&&<button type="button" className="request-danger-link" disabled={busy} onClick={archive}>В архив</button>}</div><div><Link href="/requests" className="button">Отмена</Link><button type="button" className="button primary" disabled={busy} onClick={save}>{busy?"Сохраняю…":(request||demoRequestId)?"Сохранить изменения":"Создать заявку"}</button></div></div>
     </main>
 
     {importOpen&&<div className="request-modal-backdrop"><div className="request-import-modal"><header><div><strong>Предпросмотр загрузки</strong><span>Найдено строк: {importPreview.length}. С ошибками: {importPreview.filter((row)=>row.errors.length).length}.</span></div><button type="button" className="request-icon-button" onClick={()=>setImportOpen(false)}>×</button></header><div className="request-import-table"><table><thead><tr><th>Строка</th><th>Специальность</th><th>Количество</th><th>График</th><th>Проверка</th></tr></thead><tbody>{importPreview.map((row)=><tr key={row.row} className={row.errors.length?"has-error":""}><td>{row.row}</td><td>{row.specialtyName}{!row.specialtyId&&row.specialtyName&&<small>Новая специальность</small>}</td><td>{row.count||"—"}</td><td>{text(row.schedule.pattern)||"общий"}</td><td>{row.errors.length?<span>{row.errors.join("; ")}</span>:<strong>Готово</strong>}</td></tr>)}</tbody></table></div><footer><button className="button" type="button" onClick={()=>setImportOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={!importPreview.some((row)=>row.errors.length===0)} onClick={applyImport}>Загрузить корректные ({importPreview.filter((row)=>row.errors.length===0).length})</button></footer></div></div>}

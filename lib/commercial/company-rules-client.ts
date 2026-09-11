@@ -7,6 +7,27 @@ export type CompanyRulesDraft = {
   models: CalculationModelOption[];
   expenses: ExpenseStandard[];
   schedules: ScheduleStandard[];
+  commercialPolicy?: CommercialPolicy;
+};
+
+export type CommercialPolicy = {
+  minimumMarginPct: number;
+  recommendedMarginPct: number;
+  riskReservePct: number;
+  vatPct: number;
+  roundingStep: number;
+  approvalBelowMarginPct: number;
+  notes: string;
+};
+
+export const defaultCommercialPolicy: CommercialPolicy = {
+  minimumMarginPct: 15,
+  recommendedMarginPct: 18,
+  riskReservePct: 2,
+  vatPct: 22,
+  roundingStep: 1,
+  approvalBelowMarginPct: 15,
+  notes: "Внутренние ориентиры компании. Проверьте применимость перед использованием в сделке.",
 };
 
 const KEY = "operis.company-calculation-rules.v1";
@@ -19,7 +40,7 @@ export function loadCompanyRulesDraft(): CompanyRulesDraft | null {
     if (!value) return null;
     const parsed = JSON.parse(value) as Partial<CompanyRulesDraft>;
     if (!Array.isArray(parsed.models) || !Array.isArray(parsed.expenses) || !Array.isArray(parsed.schedules)) return null;
-    return parsed as CompanyRulesDraft;
+    return { ...parsed, commercialPolicy: { ...defaultCommercialPolicy, ...(parsed.commercialPolicy ?? {}) } } as CompanyRulesDraft;
   } catch { return null; }
 }
 

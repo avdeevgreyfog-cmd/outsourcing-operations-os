@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
 import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
 import type { CalculationModelOption } from "@/lib/commercial/calculation-models";
 import type { ExpenseStandard, ScheduleStandard } from "@/lib/commercial/calculation-standards";
-import { loadCompanyRulesDraft, subscribeCompanyRulesDraft } from "@/lib/commercial/company-rules-client";
+import { defaultCommercialPolicy, loadCompanyRulesDraft, subscribeCompanyRulesDraft } from "@/lib/commercial/company-rules-client";
 import type { RateReference } from "@/lib/commercial/calculation-workspace";
 import { pct, rub } from "@/lib/ui/format";
 
@@ -135,18 +135,21 @@ function basesForScope(scope:CostScope):Base[] {
   return ["per_hour","per_shift","per_worker_month","per_worker_period","percent_of_worker_pay","per_unit"];
 }
 
-export function CalculatorWorkspaceOperis({ context, seed, models: standaloneModels }: { context?: Context; seed?: ScenarioSeed | null; models?: CalculationModelOption[] }) {
+export function CalculatorWorkspaceOperis({ context, seed, models: standaloneModels, demo = false }: { context?: Context; seed?: ScenarioSeed | null; models?: CalculationModelOption[]; demo?: boolean }) {
   const router = useRouter();
   const sourceModels = context?.models?.length ? context.models : standaloneModels?.length ? standaloneModels : fallbackModels;
   const [companyRules, setCompanyRules] = useState<ReturnType<typeof loadCompanyRulesDraft>>(null);
+  const policyHydrated = useRef(false);
   const models = companyRules?.models.length ? companyRules.models : sourceModels;
   const scheduleStandards = companyRules?.schedules.length ? companyRules.schedules : context?.scheduleStandards ?? [];
+  const commercialPolicy = useMemo(() => ({ ...defaultCommercialPolicy, ...(companyRules?.commercialPolicy ?? {}) }), [companyRules?.commercialPolicy]);
   const sourceType = context?.sourceType ?? "request";
   const sourceId = context?.sourceId ?? context?.requestId ?? "";
   const seedInputs=seed?.inputs??{};
   const initialModelId=models.some(item=>item.id===seed?.modelId)?seed!.modelId:models[0]?.id??"";
   const [modelId, setModelId] = useState(initialModelId);
   const model = models.find((item) => item.id === modelId) ?? models[0];
+  const scenarioRules = useMemo(() => ({ ...(model?.rules ?? {}), ...commercialPolicy }), [model?.rules, commercialPolicy]);
   const initialRoleId=context?.roles.some(role=>role.id===seed?.sourceRoleId)?seed!.sourceRoleId:context?.roles[0]?.id??"";
   const [selectedRoleId, setSelectedRoleId] = useState(initialRoleId);
   const selectedRole = context?.roles.find((role) => role.id === selectedRoleId);
@@ -166,7 +169,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const [scheduleStandardId,setScheduleStandardId]=useState("");
   const [projectMonths, setProjectMonths] = useState(positive(seedInputs.projectMonths,1));
   const [pricingMode, setPricingMode] = useState<PricingMode>(pricing(seedInputs.pricingMode));
-  const [margin, setMargin] = useState(nonNegative(seedInputs.targetMarginPct,Number(model?.rules.recommendedMarginPct ?? 18)));
+  const [margin, setMargin] = useState(nonNegative(seedInputs.targetMarginPct,commercialPolicy.recommendedMarginPct));
   const [targetContribution, setTargetContribution] = useState(nonNegative(seedInputs.targetMonthlyContribution,0));
   const [clientLimit, setClientLimit] = useState(nonNegative(seedInputs.clientLimit,Number(selectedRole?.targetClientRate ?? 0)));
   const [clientLimitVatMode, setClientLimitVatMode] = useState<"with_vat"|"without_vat">(seedInputs.clientLimitVatMode==="with_vat"||(!seed&&context?.vatMode==="with_vat")?"with_vat":"without_vat");
@@ -179,7 +182,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const [minimumMonthlyNet, setMinimumMonthlyNet] = useState(nonNegative(seedInputs.minimumMonthlyNet,0));
   const [minimumVolumeMonthly,setMinimumVolumeMonthly]=useState(nonNegative(seedInputs.minimumVolumeMonthly,0));
   const [vatMode, setVatMode] = useState(str(seedInputs.vatMode,context?.vatMode ?? "with_vat"));
-  const [vatPct, setVatPct] = useState(nonNegative(seedInputs.vatPct,Number(model?.rules.vatPct ?? 0)));
+  const [vatPct, setVatPct] = useState(nonNegative(seedInputs.vatPct,commercialPolicy.vatPct));
   const [allocationMode,setAllocationMode]=useState<AllocationMode>(context?.allocationMode??(seedInputs.projectAllocationMode==="labor_hours"?"labor_hours":"headcount"));
   const [costs, setCosts] = useState<Cost[]>(()=>buildInitialCosts(context?.projectCosts,seed?.costs,context?.expenseStandards));
 
@@ -202,6 +205,12 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
     }), 0);
     return () => window.clearTimeout(timer);
   }, [companyRules]);
+  useEffect(() => {
+    if (!companyRules || seed || policyHydrated.current) return;
+    policyHydrated.current = true;
+    setMargin(commercialPolicy.recommendedMarginPct);
+    setVatPct(commercialPolicy.vatPct);
+  }, [companyRules, commercialPolicy.recommendedMarginPct, commercialPolicy.vatPct, seed]);
 
   const totalProjectWorkers = Math.max(1, context?.projectWorkers ?? context?.roles.reduce((sum,role)=>sum+role.count,0) ?? workers);
   const totalProjectLaborHours = useMemo(()=>{
@@ -228,15 +237,15 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
     workers,hoursPerWorker:hours,hoursPerShift:shiftHours,shiftsPerWorker:shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,
     targetMarginPct:margin,targetMonthlyContribution:targetContribution,targetProfitPerBillingUnit:targetContribution,clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,
     billingUnitCode:billingUnit==="unit"?volumeUnitCode:null,billingUnitLabel:billingUnit==="unit"?unitLabel:null,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,
-    vatMode,vatPct,roundingStep:model?.rules.roundingStep,rules:model?.rules??{},ruleVersionId:model?.ruleVersionId??null,costs:calculatedCosts,
-  }), [workers,hours,shiftHours,shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,margin,targetContribution,clientLimit,clientLimitVatMode,billingUnit,variableBillingUnit,volumeUnitCode,unitLabel,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model,calculatedCosts]);
+    vatMode,vatPct,roundingStep:scenarioRules.roundingStep,rules:scenarioRules,ruleVersionId:model?.ruleVersionId??null,costs:calculatedCosts,
+  }), [workers,hours,shiftHours,shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,margin,targetContribution,clientLimit,clientLimitVatMode,billingUnit,variableBillingUnit,volumeUnitCode,unitLabel,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model,calculatedCosts,scenarioRules]);
 
   function updateCost(id:string,patch:Partial<Cost>){setCosts(current=>current.map(cost=>cost.id===id?{...cost,...patch}:cost));}
   function setCostScope(cost:Cost,scope:CostScope){const allowed=basesForScope(scope);updateCost(cost.id,{scope,base:allowed.includes(cost.base)?cost.base:allowed[0]});}
   function addCost(group:string){setCosts(current=>[...current,{id:crypto.randomUUID(),group,label:"Новая статья",amount:0,base:"per_hour",enabled:true,scope:"worker",source:"manual"}]);}
   function duplicateCost(cost:Cost){setCosts(current=>[...current,{...cost,id:crypto.randomUUID(),label:`${cost.label} — копия`,source:"manual"}]);}
 
-  function selectModel(nextId:string){setModelId(nextId);const next=models.find(item=>item.id===nextId);if(next){setMargin(Number(next.rules.recommendedMarginPct??margin));setVatPct(Number(next.rules.vatPct??vatPct));}}
+  function selectModel(nextId:string){setModelId(nextId);}
   function selectRole(nextId:string){setSelectedRoleId(nextId);const role=context?.roles.find(item=>item.id===nextId);if(!role)return;setWorkers(role.count);const paid=positive(role.schedule?.paidHours??context?.schedule?.paidHours,shiftHours);setShiftHours(paid);setHours(paid*shifts);setClientLimit(Number(role.targetClientRate??0));}
   function selectScheduleStandard(nextId:string){setScheduleStandardId(nextId);const standard=scheduleStandards.find(item=>item.id===nextId);if(!standard)return;const paid=Math.max(0.1,standard.shiftHours-(standard.breakPaid?0:standard.breakHours));setShiftHours(paid);setShifts(standard.shiftsPerMonth);setHours(paid*standard.shiftsPerMonth);}
 
@@ -278,6 +287,14 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
       clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,billingUnitCode:billingUnit==="unit"?volumeUnitCode:null,billingUnitLabel:billingUnit==="unit"?unitLabel:null,
       unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model:model.code,ruleVersionId:model.ruleVersionId,economicsDate:context.economicsDate??null,
       projectWorkers:totalProjectWorkers,projectAllocationMode:allocationMode,projectAllocationShare};
+    const scenario={id:`demo-scenario-${crypto.randomUUID()}`,sourceType,sourceId,sourceRoleId:selectedRoleId,modelId:model.id,ruleVersionId:model.ruleVersionId??undefined,supersedesScenarioId:seed?.id,allocationMode,name:scenarioName,inputs,costs:calculatedCosts,result,createdAt:new Date().toISOString()};
+    if (demo) {
+      const key="operis.demo.calculation-scenarios.v1";
+      const saved=JSON.parse(window.localStorage.getItem(key)??"[]") as unknown[];
+      window.localStorage.setItem(key,JSON.stringify([scenario,...saved]));
+      setSaveState({busy:false,message:"Сценарий сохранён в демо-контуре этого браузера. Можно менять модель, лимит или маржу и сохранять следующий вариант.",error:false});
+      return;
+    }
     const response=await fetch("/api/calculations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({calculationId:context.calculationId,sourceType,sourceId,sourceRoleId:selectedRoleId,modelId:model.id,ruleVersionId:model.ruleVersionId??undefined,supersedesScenarioId:seed?.id,allocationMode,name:scenarioName,inputs,costs:calculatedCosts,result})});
     const json=await response.json().catch(()=>({}));if(!response.ok){setSaveState({busy:false,message:json.error??"Не удалось сохранить сценарий",error:true});return;}
     setSaveState({busy:false,message:`Сценарий v${json.scenarioVersion??""} сохранён.`,error:false});
@@ -301,7 +318,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
     { id: "pay", title: "Выплата сотруднику", rows: [rateRow("Сотруднику на руки", result.workerPayMonthly, `Выплата ${workerPayUnit === "hour" ? "за час" : workerPayUnit === "shift" ? "за смену" : workerPayUnit === "unit" ? `за ${unitLabel}` : "за месяц"}`)] },
     { id: "charges", title: "Налоги, взносы и комиссии", rows: [rateRow("Начисления по выбранной модели", result.mandatoryChargesMonthly, model?.ruleVersionId ? `Правила №${model.ruleVersion ?? "—"}` : "Версия правил не выбрана"), ...(Number(result.supplementCommissionMonthly)>0?[rateRow("Комиссия доплаты", result.supplementCommissionMonthly, "По правилам модели компании")]:[])] },
     ...expenseGroups,
-    { id: "reserve", title: "Резерв и прочие расходы", rows: [rateRow("Резерв рисков", result.reserveMonthly, `${model?.rules.riskReservePct ?? 0}% от полной стоимости`)] },
+    { id: "reserve", title: "Резерв и прочие расходы", rows: [rateRow("Резерв рисков", result.reserveMonthly, `${commercialPolicy.riskReservePct}% от полной стоимости`)] },
   ];
   const toggleRateGroup = (id:string) => setExpandedRateGroups((current) => { const next = new Set(current); if(next.has(id)) next.delete(id); else next.add(id); return next; });
 
@@ -324,9 +341,9 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
         : "Для выбранной модели нет действующей версии правил. Результат можно использовать только как предварительное моделирование."}</span></div>
       <div className="calc-rule-strip">
         <span>Начисления <strong>{model?.rules.mandatoryChargePct!=null?`${model.rules.mandatoryChargePct}%`:"—"}</strong></span>
-        <span>Резерв <strong>{model?.rules.riskReservePct!=null?`${model.rules.riskReservePct}%`:"—"}</strong></span>
-        <span>Мин. маржа <strong>{model?.rules.minimumMarginPct!=null?`${model.rules.minimumMarginPct}%`:"—"}</strong></span>
-        <span>Рекомендуемая <strong>{model?.rules.recommendedMarginPct!=null?`${model.rules.recommendedMarginPct}%`:"—"}</strong></span>
+        <span>Резерв <strong>{commercialPolicy.riskReservePct}%</strong></span>
+        <span>Мин. маржа <strong>{commercialPolicy.minimumMarginPct}%</strong></span>
+        <span>Рекомендуемая <strong>{commercialPolicy.recommendedMarginPct}%</strong></span>
       </div>
 
       <details className="calc-group" open>
@@ -335,7 +352,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
         <div className="calc-row"><span className="calc-row-check">✓</span><span>Сотруднику на руки<small>Вручную</small></span><input type="number" min="0" value={workerPayAmount} onChange={event=>setWorkerPayAmount(Number(event.target.value))}/><select value={workerPayUnit} onChange={event=>setWorkerPayUnit(event.target.value as WorkerPayUnit)}><option value="hour">₽/ч</option><option value="shift">₽/смену</option><option value="month">₽/мес</option><option value="unit">₽/ед.</option></select></div>
         <CalcInput label="Количество сотрудников" note={context?"Из позиции источника":"Вручную"} value={workers} onChange={setWorkers} unit="чел."/>
         {scheduleStandards.length>0&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Шаблон графика<small>Подставляет оплачиваемые часы и смены</small></span><select value={scheduleStandardId} onChange={event=>selectScheduleStandard(event.target.value)}><option value="">Из источника / вручную</option>{scheduleStandards.map(item=><option key={item.id} value={item.id}>{item.name} · {item.shiftsPerMonth} смен.</option>)}</select><span/></div>}
-        {model?.rules.payStructure==="mrot_plus_supplement"&&<div className="calc-model-breakdown"><span>Официальная база: <strong>{rub(result.officialBaseMonthly)} / мес.</strong></span><span>Доплата: <strong>{rub(result.supplementMonthly)} / мес.</strong></span><small>Разделение и комиссия задаются в «Нормативах» у выбранной модели.</small></div>}
+        {model?.rules.payStructure==="mrot_plus_supplement"&&<div className="calc-model-breakdown"><span>Официальная база: <strong>{rub(result.officialBaseMonthly)} / мес.</strong></span><span>Доплата: <strong>{rub(result.supplementMonthly)} / мес.</strong></span><small>Разделение и комиссия задаются в модели оформления; коммерческие ориентиры — отдельно в политике.</small></div>}
         <CalcInput label="Часов на сотрудника / месяц" note={context?"Из графика, можно скорректировать":"Вручную"} value={hours} onChange={setHours} unit="ч"/>
         <CalcInput label="Оплачиваемых часов / смену" note={context?"Из графика, можно скорректировать":"Вручную"} value={shiftHours} onChange={setShiftHours} unit="ч"/>
         <CalcInput label="Смен на сотрудника / месяц" value={shifts} onChange={setShifts} unit="смен"/>
@@ -349,11 +366,11 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
         {billingUnit==="unit"&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Единица объёма</span><select value={volumeUnitCode} onChange={event=>setVolumeUnitCode(event.target.value)}>{volumeUnits.map(item=><option key={item.code} value={item.code}>{item.label}</option>)}</select>{volumeUnitCode==="custom"?<input value={customVolumeLabel} onChange={event=>setCustomVolumeLabel(event.target.value)} aria-label="Название единицы объёма"/>:<span/>}</div>}
         {billingUnit==="mixed"&&<><div className="calc-row"><span className="calc-row-check">✓</span><span>Переменная единица</span><select value={variableBillingUnit} onChange={event=>setVariableBillingUnit(event.target.value as "hour"|"shift"|"unit")}><option value="hour">час</option><option value="shift">смена</option><option value="unit">объём</option></select><span/></div><CalcInput label="Фиксированная часть / месяц" value={fixedMonthlyNet} onChange={setFixedMonthlyNet} unit="₽"/></>}
         {(billingUnit==="unit"||(billingUnit==="mixed"&&variableBillingUnit==="unit"))&&<CalcInput label={`Производительность / сотрудника / смену`} value={unitsPerWorkerShift} onChange={setUnitsPerWorkerShift} unit={unitLabel}/>} 
-        {pricingMode==="target_margin"?<CalcInput label="Целевая маржа" note={model?.rules.recommendedMarginPct!=null?`Норматив рекомендует ${model.rules.recommendedMarginPct}%`:undefined} value={margin} onChange={setMargin} unit="%"/>:pricingMode==="target_profit"?<CalcInput label="Целевая прибыль на расчётную единицу" note={`На ${rateSuffix}`} value={targetContribution} onChange={setTargetContribution} unit="₽"/>:<><CalcInput label="Лимит клиента" note={selectedRole?.targetClientRate?"Из позиции источника":"Вручную"} value={clientLimit} onChange={setClientLimit} unit="₽"/><div className="calc-row"><span className="calc-row-check">✓</span><span>Лимит указан</span><select value={clientLimitVatMode} onChange={event=>setClientLimitVatMode(event.target.value as "with_vat"|"without_vat")}><option value="without_vat">без НДС</option><option value="with_vat">с НДС</option></select><span/></div></>}
+        {pricingMode==="target_margin"?<CalcInput label="Целевая маржа" note={`Ориентир политики: ${commercialPolicy.recommendedMarginPct}%`} value={margin} onChange={setMargin} unit="%"/>:pricingMode==="target_profit"?<CalcInput label="Целевая прибыль на расчётную единицу" note={`На ${rateSuffix}`} value={targetContribution} onChange={setTargetContribution} unit="₽"/>:<><CalcInput label="Лимит клиента" note={selectedRole?.targetClientRate?"Из позиции источника":"Вручную"} value={clientLimit} onChange={setClientLimit} unit="₽"/><div className="calc-row"><span className="calc-row-check">✓</span><span>Лимит указан</span><select value={clientLimitVatMode} onChange={event=>setClientLimitVatMode(event.target.value as "with_vat"|"without_vat")}><option value="without_vat">без НДС</option><option value="with_vat">с НДС</option></select><span/></div></>}
         {billingUnit!=="project_fixed"&&<CalcInput label="Минимальный гарантированный объём / месяц" note="Отдельно от минимального платежа" value={minimumVolumeMonthly} onChange={setMinimumVolumeMonthly} unit={rateUnit==="hour"?"ч":rateUnit==="shift"?"смен":rateUnit==="unit"?unitLabel:"ед."}/>} 
         <CalcInput label="Минимальный гарантированный платёж / месяц" note="Денежная гарантия клиента" value={minimumMonthlyNet} onChange={setMinimumMonthlyNet} unit="₽ без НДС"/>
         <div className="calc-row"><span className="calc-row-check">✓</span><span>Режим НДС</span><select value={vatMode} onChange={event=>setVatMode(event.target.value)}><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option><option value="not_applicable">Не применяется</option></select><span/></div>
-        {vatMode==="with_vat"&&<CalcInput label="Ставка НДС из правил" note="Норматив модели" value={vatPct} onChange={setVatPct} unit="%"/>}
+        {vatMode==="with_vat"&&<CalcInput label="Ставка НДС" note="Ориентир коммерческой политики, можно скорректировать в сценарии" value={vatPct} onChange={setVatPct} unit="%"/>}
       </details>
 
       <div className="calc-costs-head"><div><strong>Структура расходов</strong><span>Общепроектные статьи вводятся один раз полной суммой и распределяются на выбранную позицию автоматически.</span></div>{context&&context.roles.length>1&&<span>Доля позиции: <strong>{pct(projectAllocationShare*100)}</strong></span>}</div>
