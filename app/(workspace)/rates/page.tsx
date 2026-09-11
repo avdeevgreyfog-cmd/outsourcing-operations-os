@@ -14,6 +14,6 @@ export default async function RatesPage() {
       subtitle="Коммерческая память компании: выплаты сотрудникам, себестоимость и ставки клиенту по специальностям, регионам и условиям."
       breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"База ставок"}]}
     />
-    <RatesWorkspace rows={rows} initialRows={rows} demo={actor.demo} canManage={hasCapability(actor.access,"calculation.rate_reference.edit")}/>
+    <RatesWorkspace initialRows={rows} demo={actor.demo} canManage={hasCapability(actor.access,"calculation.rate_reference.edit")}/>
   </>;
 }
