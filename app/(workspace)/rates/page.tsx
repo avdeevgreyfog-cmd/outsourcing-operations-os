@@ -1,5 +1,6 @@
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
+import { getRequestSnapshotTime } from "@/lib/commercial/request-workflow-server";
 import { listRateMemory } from "@/lib/commercial/rate-references";
 import { PageHeader } from "@/components/UI";
 import { RatesWorkspace } from "@/components/RatesWorkspace";
@@ -7,7 +8,7 @@ import { RatesWorkspace } from "@/components/RatesWorkspace";
 export default async function RatesPage() {
   const actor = await requireActor();
   const rows = await listRateMemory(actor);
-  const now = Date.now();
+  const now = getRequestSnapshotTime();
   const today = new Date(now).toISOString().slice(0,10);
   return <>
     <PageHeader
