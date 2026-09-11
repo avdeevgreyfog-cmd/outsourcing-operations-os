@@ -2,6 +2,7 @@ import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import * as demo from "@/lib/demo/data";
 
 export type CalculationWorkspaceMeta = {
   id: string;
@@ -95,12 +96,31 @@ export async function getCalculationScenarioSeed(actor: Actor, scenarioId: strin
 
 export async function getRateReferencesForRoles(
   actor: Actor,
-  roles: Array<{ id: string; specialtyId: string | null | undefined }>,
+  roles: Array<{ id: string; specialtyId: string | null | undefined; specialty?: string }>,
   regionId: string | null | undefined,
   effectiveDate?: string | null,
 ): Promise<Record<string, RateReference>> {
   requireCapability(actor, "calculation.rate_reference.read");
-  if (actor.demo) return {};
+  if (actor.demo) {
+    const output: Record<string, RateReference> = {};
+    for (const role of roles) {
+      const reference = demo.rateReferences.find(item => item.specialty === role.specialty && (!regionId || item.regionId === regionId))
+        ?? demo.rateReferences.find(item => item.specialty === role.specialty);
+      if (!reference) continue;
+      output[role.id] = {
+        id: reference.id,
+        amountMin: Number(reference.amountMin),
+        amountMax: Number(reference.amountMax),
+        unit: reference.unit === "ч" ? "hour" : reference.unit,
+        paySemantics: reference.grossNet === "На руки" ? "net" : "gross",
+        employmentModel: reference.employmentModel,
+        source: reference.source,
+        sourceDate: reference.sourceDate,
+        confidence: reference.confidence,
+      };
+    }
+    return output;
+  }
   const date = effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ? effectiveDate : null;
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const output: Record<string, RateReference> = {};
@@ -113,6 +133,7 @@ export async function getRateReferencesForRoles(
           source,source_date::text "sourceDate",confidence
         FROM rate_reference_entries
         WHERE specialty_id=${role.specialtyId}::uuid
+          AND amount_min IS NOT NULL
           AND (${regionId ?? null}::uuid IS NULL OR region_id=${regionId ?? null}::uuid OR region_id IS NULL)
           AND valid_from<=COALESCE(${date}::date,current_date)
           AND (valid_to IS NULL OR valid_to>=COALESCE(${date}::date,current_date))
