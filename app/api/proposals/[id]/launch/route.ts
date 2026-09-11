@@ -42,6 +42,23 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       `;
       if(!resolved?.userId)throw new Error("Не определён ответственный за подготовку объекта. Настройте правило ответственности object_launch / owner для региона заявки");
       const ownerUserId=resolved.userId;
+      const [recruitingOwner]=await tx<Array<{userId:string;teamId:string|null}>>`
+        WITH routed AS (
+          SELECT user_id "userId",NULL::uuid "teamId",1 priority
+          FROM resolve_organization_responsibility('recruiting_need','owner','region',${source.regionId}::uuid,current_date)
+          LIMIT 1
+        ), fallback AS (
+          SELECT m.user_id "userId",m.primary_team_id "teamId",2 priority
+          FROM organization_memberships m
+          JOIN role_templates rt ON rt.id=m.role_template_id AND rt.code='recruiter'
+          LEFT JOIN membership_regions mr ON mr.membership_id=m.id AND mr.region_id=${source.regionId}::uuid
+          WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
+          ORDER BY (mr.region_id IS NOT NULL) DESC,m.created_at
+          LIMIT 1
+        )
+        SELECT "userId","teamId" FROM (SELECT * FROM routed UNION ALL SELECT * FROM fallback) x WHERE "userId" IS NOT NULL ORDER BY priority LIMIT 1
+      `;
+      const needOwnerUserId=recruitingOwner?.userId??ownerUserId;
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`
         INSERT INTO objects(organization_id,client_company_id,source_request_id,source_proposal_id,name,code,status,region_id,address_text,target_start_date,owner_user_id,created_by_user_id)
@@ -62,7 +79,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         VALUES
           (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача проекта в запуск',${ownerUserId}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,true,${actor.userId}::uuid),
           (${actor.organizationId}::uuid,${launch.id}::uuid,'Договорная готовность',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,${actor.userId}::uuid),
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Комплектация персоналом',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Комплектация персоналом',${needOwnerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,${actor.userId}::uuid),
           (${actor.organizationId}::uuid,${launch.id}::uuid,'Логистика и обеспечение',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,false,${actor.userId}::uuid),
           (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,true,${actor.userId}::uuid),
           (${actor.organizationId}::uuid,${launch.id}::uuid,'Старт объекта',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),0,'planned','normal',true,true,${actor.userId}::uuid)
@@ -81,11 +98,20 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           ('Готовность к первому выходу','Старт объекта')
         )
       `;
-      await tx`
+      const needs=await tx<Array<{id:string;countRequired:number}>>`
         INSERT INTO needs(organization_id,object_id,source_request_role_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,created_by_user_id)
-        SELECT rr.organization_id,${object.id}::uuid,rr.id,rr.specialty_id,rr.count_required,0,GREATEST(current_date,COALESCE(${source.startDate??null}::date,current_date+14)-3),'open',${ownerUserId}::uuid,${actor.userId}::uuid
+        SELECT rr.organization_id,${object.id}::uuid,rr.id,rr.specialty_id,rr.count_required,0,GREATEST(current_date,COALESCE(${source.startDate??null}::date,current_date+14)-3),'open',${needOwnerUserId}::uuid,${actor.userId}::uuid
         FROM request_roles rr WHERE rr.request_id=${source.requestId}::uuid
+        RETURNING id,count_required "countRequired"
       `;
+      if(recruitingOwner?.userId){
+        for(const need of needs){
+          await tx`
+            INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${recruitingOwner.userId}::uuid,${recruitingOwner.teamId??null}::uuid,${need.countRequired},${actor.userId}::uuid)
+          `;
+        }
+      }
       await tx`
         INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,pricing_snapshot,effective_from,created_by_user_id)
         SELECT ${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,rr.specialty_id,cs.id,
@@ -100,8 +126,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         WHERE cs.id=ANY(${source.scenarioIds}::uuid[]) AND c.request_id=${source.requestId}::uuid AND rr.request_id=${source.requestId}::uuid
       `;
       const [rateCount]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM client_rates WHERE object_id=${object.id}::uuid`;
-      const [needCount]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM needs WHERE object_id=${object.id}::uuid`;
-      if((rateCount?.count??0)!==(needCount?.count??0))throw new Error("Принятая версия КП не покрывает все позиции заявки; подготовка отменена");
+      const needCount=needs.length;
+      if((rateCount?.count??0)!==needCount)throw new Error("Принятая версия КП не покрывает все позиции заявки; подготовка отменена");
 
       const terms=JSON.parse(JSON.stringify({
         vatMode:source.content.vatMode??null,vatPct:source.content.vatPct??null,schedule:source.content.schedule??null,
@@ -123,8 +149,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       await tx`UPDATE proposals SET prelaunch_at=now() WHERE id=${id}::uuid`;
       await tx`UPDATE requests SET status='prelaunch',updated_at=now() WHERE id=${source.requestId}::uuid`;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'proposal',${id}::uuid,'prelaunch_started','Начата параллельная подготовка: подбор, план запуска и договор',${sql.json({objectId:object.id,contractId:contract.id,needCount:needCount?.count??0})})`;
-      return {...object,contractId:contract.id,needCount:needCount?.count??0,alreadyExists:false};
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'proposal',${id}::uuid,'prelaunch_started','Начата параллельная подготовка: подбор, план запуска и договор',${sql.json({objectId:object.id,contractId:contract.id,needCount,recruiterUserId:recruitingOwner?.userId??null})})`;
+      return {...object,contractId:contract.id,needCount,recruiterUserId:recruitingOwner?.userId??null,alreadyExists:false};
     }));
     return NextResponse.json(result,{status:201});
   }catch(error){
