@@ -16,8 +16,14 @@ export type CompanyRulesDraft = {
 
 const KEY = "operis.company-calculation-rules.v1";
 const EVENT = "operis:company-calculation-rules";
+let runtimeRules: CompanyRulesDraft | null = null;
+
+export function setRuntimeCompanyRules(value: CompanyRulesDraft | null) {
+  runtimeRules = value;
+}
 
 export function loadCompanyRulesDraft(): CompanyRulesDraft | null {
+  if (runtimeRules) return { ...runtimeRules, commercialPolicy: { ...defaultCommercialPolicy, ...(runtimeRules.commercialPolicy ?? {}) } };
   if (typeof window === "undefined") return null;
   try {
     const value = window.localStorage.getItem(KEY);
