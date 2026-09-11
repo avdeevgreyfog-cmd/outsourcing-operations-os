@@ -10,7 +10,7 @@ import { getCalculationScenarioSeed, getCalculationWorkspaceMeta, getRateReferen
 import { getCalculationStandards } from "@/lib/commercial/calculation-standards";
 import { PageHeader, Section, Status, EntityTabs } from "@/components/UI";
 import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
-import { CalculatorWorkspaceOperis } from "@/components/CalculatorWorkspaceOperis";
+import { CalculatorWorkspaceWithRateMemory } from "@/components/CalculatorWorkspaceWithRateMemory";
 import { CalculationVersionButton } from "@/components/CalculationVersionButton";
 import { pct, rub } from "@/lib/ui/format";
 
@@ -98,7 +98,7 @@ export default async function CalculationWorkspace({params,searchParams}:{params
         </Section>
       </div>
 
-      {!immutable&&canCreate&&roles.length>0&&<><div className="calculation-workspace-gap"/><Section title={validSeed?`Новая версия сценария · ${validSeed.name}`:"Новый сценарий"} note={validSeed?"Параметры взяты из сохранённого сценария. После сохранения появится новая историческая версия.":"Позиция, график, нормативы и рыночный ориентир подставляются из связанных данных. Значения можно скорректировать перед сохранением."}><div className="calculation-editor-wrap"><CalculatorWorkspaceOperis context={{calculationId:meta.id,sourceType:meta.sourceType,sourceId:meta.sourceId,sourceLabel:sourceTitle,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:meta.allocationMode,projectCosts:meta.projectCosts,expenseStandards:standards.expenses,scheduleStandards:standards.schedules}} seed={validSeed}/></div></Section></>}
+      {!immutable&&canCreate&&roles.length>0&&<><div className="calculation-workspace-gap"/><Section title={validSeed?`Новая версия сценария · ${validSeed.name}`:"Новый сценарий"} note={validSeed?"Параметры взяты из сохранённого сценария. После сохранения появится новая историческая версия.":"Позиция, график, нормативы и ориентир базы ставок подставляются из связанных данных. Значения можно скорректировать перед сохранением."}><div className="calculation-editor-wrap"><CalculatorWorkspaceWithRateMemory commercialPolicy={standards.commercialPolicy} context={{calculationId:meta.id,sourceType:meta.sourceType,sourceId:meta.sourceId,sourceLabel:sourceTitle,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:meta.allocationMode,projectCosts:meta.projectCosts,expenseStandards:standards.expenses,scheduleStandards:standards.schedules}} seed={validSeed}/></div></Section></>}
       {immutable&&<div className="calculation-lock-note"><strong>Эта версия расчёта зафиксирована.</strong><span>Для переговоров или пересчёта создайте новую версию. Принятые сценарии останутся в истории без изменений.</span></div>}
     </>}
 
