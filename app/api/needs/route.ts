@@ -51,6 +51,8 @@ export async function POST(request: Request) {
         regionId = object.regionId;
         objectOwnerId = object.ownerUserId;
       }
+      if (!regionId) throw new Error("Регион потребности не определён");
+      if (!actor.access.allOrg && !actor.regionIds.includes(regionId)) throw new AccessDeniedError("operations.need.create");
       const [specialty] = await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${body.specialtyId}::uuid AND active`;
       if (!specialty) throw new Error("Специальность не найдена");
 
