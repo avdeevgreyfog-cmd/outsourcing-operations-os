@@ -1,3 +1,4 @@
+import "../recruiting-workspace.css";
 import { requireActor } from "@/lib/auth/server";
 import { AppShell } from "@/components/AppShell";
 
