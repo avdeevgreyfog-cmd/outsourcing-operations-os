@@ -16,7 +16,7 @@ const schema=z.object({
 
 type ScopeRow={
   id:string;candidateId:string;needId:string;organizationId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;
-  clientId:string|null;regionId:string|null;assigneeUserIds:string[];stage:string;specialtyId:string;objectOwnerId:string|null;
+  clientId:string|null;regionId:string|null;assigneeUserIds:string[];stage:string;specialtyId:string;objectOwnerId:string|null;sourceRequestRoleId:string|null;
 };
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
@@ -33,7 +33,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
             || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
             || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
-          ca.stage,n.specialty_id "specialtyId",o.owner_user_id "objectOwnerId"
+          ca.stage,n.specialty_id "specialtyId",o.owner_user_id "objectOwnerId",n.source_request_role_id "sourceRequestRoleId"
         FROM candidate_applications ca JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
         WHERE ca.id=COALESCE(${body.applicationId??null}::uuid,${id}::uuid)
            OR (${body.applicationId??null}::uuid IS NULL AND ca.candidate_id=${id}::uuid)
@@ -41,7 +41,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       `;
       if(!current||!canReadRow(actor.access,"recruiting.candidate.edit",current,actor))throw new AccessDeniedError("recruiting.candidate.edit");
       const actualStart=body.stage==="started"?sql`now()`:sql`actual_start_at`;
-      await tx`UPDATE candidate_applications SET stage=${body.stage},next_action_at=${body.nextActionAt??null}::timestamptz,rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
+      const nextAction=body.nextActionAt===undefined?sql`next_action_at`:sql`${body.nextActionAt??null}::timestamptz`;
+      await tx`UPDATE candidate_applications SET stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
       await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,changed_by_user_id) VALUES (${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},${body.stage},${body.reason??null},${actor.userId}::uuid)`;
 
       let workerId:string|null=null;
@@ -67,6 +68,19 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
             INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
             VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,current_date,${current.managerUserId??current.objectOwnerId}::uuid,${actor.userId}::uuid)
           `;
+        }
+        const [activeRate]=await tx<Array<{id:string}>>`SELECT id FROM worker_rates WHERE worker_id=${workerId}::uuid AND object_id=${current.objectId}::uuid AND specialty_id=${current.specialtyId}::uuid AND effective_to IS NULL LIMIT 1`;
+        if(!activeRate&&current.sourceRequestRoleId){
+          const [rate]=await tx<Array<{amount:number|null}>>`
+            SELECT COALESCE(NULLIF(cs.inputs_snapshot->>'workerNetHourly','')::numeric,NULLIF(cs.inputs_snapshot->>'workerNet','')::numeric,NULLIF(cs.result_snapshot->>'workerNetHourly','')::numeric,NULLIF(cs.result_snapshot->>'workerNet','')::numeric) amount
+            FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id
+            WHERE cs.request_role_id=${current.sourceRequestRoleId}::uuid AND cs.status='accepted'
+            ORDER BY cs.accepted_at DESC NULLS LAST,cs.created_at DESC LIMIT 1
+          `;
+          if(rate?.amount!=null&&Number(rate.amount)>0){
+            await tx`INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id)
+              VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.specialtyId}::uuid,${current.objectId}::uuid,${rate.amount},'hour','any',current_date,${actor.userId}::uuid)`;
+          }
         }
         await tx`UPDATE candidates SET status='worker',updated_at=now() WHERE id=${current.candidateId}::uuid`;
         await tx`
