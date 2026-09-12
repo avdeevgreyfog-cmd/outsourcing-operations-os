@@ -1,2 +1,15 @@
-import {requireActor} from "@/lib/auth/server";import {listCandidates} from "@/lib/data/service";import {PageHeader,Metric} from "@/components/UI";import {CandidateBoard} from "@/components/CandidateBoard";
-export default async function Recruiting(){const actor=await requireActor();const rows=await listCandidates(actor);return <><PageHeader eyebrow="Подбор" title="Воронка кандидатов" subtitle="Следующие действия по заявкам кандидатов на доступные потребности." breadcrumbs={[{label:"Люди"},{label:"Подбор"}]}/><div className="metrics-grid"><Metric label="В работе" value={rows.length}/><Metric label="Новые" value={rows.filter(x=>x.stage==="new").length}/><Metric label="Документы" value={rows.filter(x=>x.stage==="documents").length}/><Metric label="Первый выход" value={rows.filter(x=>x.stage==="first_shift").length} tone="good"/></div><CandidateBoard rows={rows}/></>}
+import { requireActor } from "@/lib/auth/server";
+import { hasCapability } from "@/lib/core/access.mjs";
+import { PageHeader } from "@/components/UI";
+import { RecruitingFunnelWorkspace } from "@/components/RecruitingFunnelWorkspace";
+import { listRecruitingApplications, listRecruitingNeeds } from "@/lib/recruiting/service";
+
+export default async function Recruiting({searchParams}:{searchParams:Promise<{need?:string}>}){
+  const actor=await requireActor();
+  const {need}=await searchParams;
+  const [rows,needs]=await Promise.all([listRecruitingApplications(actor),listRecruitingNeeds(actor)]);
+  return <>
+    <PageHeader eyebrow="Подбор" title="Воронка подбора" subtitle="Рабочая CRM кандидатов от первого контакта до фактического выхода." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Воронка"}]}/>
+    <RecruitingFunnelWorkspace rows={rows} needs={needs} demo={actor.demo} canCreate={actor.demo||hasCapability(actor.access,"recruiting.candidate.create")} initialNeed={need??null}/>
+  </>;
+}
