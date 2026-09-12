@@ -15,7 +15,7 @@ const storageKey="operis.recruiting.applications.v1";
 
 export function RecruitingFunnelWorkspace({rows,needs,demo,canCreate,initialNeed}:Props){
  const router=useRouter();const [query,setQuery]=useState("");const [needFilter,setNeedFilter]=useState(initialNeed??"all");const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);const [showCreate,setShowCreate]=useState(false);const [form,setForm]=useState<CandidateForm>({...blank,needId:initialNeed??""});const [busy,setBusy]=useState("");const [error,setError]=useState("");const [localRows,setLocalRows]=useState<RecruitingApplicationRow[]>([]);
- useEffect(()=>{if(!demo)return;try{const raw=localStorage.getItem(storageKey);if(raw)setLocalRows(JSON.parse(raw));}catch{}},[demo]);
+ useEffect(()=>{if(!demo)return;let frame=0;try{const raw=localStorage.getItem(storageKey);if(raw){const parsed=JSON.parse(raw) as RecruitingApplicationRow[];frame=requestAnimationFrame(()=>setLocalRows(parsed));}}catch{}return()=>{if(frame)cancelAnimationFrame(frame)}},[demo]);
  const allRows=useMemo(()=>[...localRows,...rows.filter(row=>!localRows.some(local=>local.applicationId===row.applicationId))],[localRows,rows]);
  const filtered=useMemo(()=>allRows.filter(row=>{if(needFilter!=="all"&&row.needId!==needFilter)return false;if(!query.trim())return true;return `${row.fullName} ${row.phone??""} ${row.need} ${row.object??""} ${row.source??""}`.toLowerCase().includes(query.trim().toLowerCase())}),[allRows,needFilter,query]);
  const active=filtered.filter(row=>!["rejected","no_show"].includes(row.stage));const terminals=filtered.filter(row=>["rejected","no_show"].includes(row.stage));
