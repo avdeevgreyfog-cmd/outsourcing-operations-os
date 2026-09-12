@@ -1,2 +1,15 @@
-import { requireActor } from "@/lib/auth/server"; import { listNeeds } from "@/lib/data/service"; import { Metric,PageHeader,Section } from "@/components/UI"; import { NeedsGrid } from "@/components/RegistryGrids";
-export default async function Needs(){const actor=await requireActor();const rows=await listNeeds(actor);const deficit=rows.reduce((s,x)=>s+Number(x.deficit||0),0);return <><PageHeader eyebrow="Подбор" title="Потребности" subtitle="Позиции, сроки закрытия и ответственный контур подбора." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]}/><div className="metrics-grid"><Metric label="Активные потребности" value={rows.length}/><Metric label="Общий дефицит" value={deficit} tone={deficit?"bad":"good"}/><Metric label="Требуется" value={rows.reduce((s,x)=>s+Number(x.required||0),0)}/><Metric label="Закрыто" value={rows.reduce((s,x)=>s+Number(x.filled||0),0)} tone="good"/></div><Section><NeedsGrid rows={rows}/></Section></>}
+import { requireActor } from "@/lib/auth/server";
+import { hasCapability } from "@/lib/core/access.mjs";
+import { PageHeader } from "@/components/UI";
+import { RecruitingNeedsWorkspace } from "@/components/RecruitingNeedsWorkspace";
+import { getRecruitingOptions, listRecruitingNeeds } from "@/lib/recruiting/service";
+
+export default async function Needs(){
+  const actor=await requireActor();
+  const [rows,options]=await Promise.all([listRecruitingNeeds(actor),getRecruitingOptions(actor)]);
+  const canCreate=actor.demo||hasCapability(actor.access,"operations.need.create");
+  return <>
+    <PageHeader eyebrow="Подбор" title="Потребности" subtitle="Единая очередь заявок на персонал из коммерции, объектов и ручного набора." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]}/>
+    <RecruitingNeedsWorkspace rows={rows} options={options} canCreate={canCreate} demo={actor.demo}/>
+  </>;
+}
