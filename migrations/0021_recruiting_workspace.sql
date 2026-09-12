@@ -16,12 +16,9 @@ ALTER TABLE needs ADD CONSTRAINT needs_priority_check CHECK (priority IN ('low',
 ALTER TABLE needs ADD CONSTRAINT needs_location_check CHECK (object_id IS NOT NULL OR region_id IS NOT NULL);
 
 UPDATE needs n
-SET region_id=COALESCE(n.region_id,o.region_id),
-    title=COALESCE(n.title,s.name),
-    source_kind=CASE WHEN n.source_request_role_id IS NOT NULL THEN 'commercial' ELSE n.source_kind END
-FROM specialties s
-LEFT JOIN objects o ON true
-WHERE s.id=n.specialty_id AND (o.id=n.object_id OR n.object_id IS NULL);
+SET region_id=COALESCE(n.region_id,(SELECT o.region_id FROM objects o WHERE o.id=n.object_id)),
+    title=COALESCE(n.title,(SELECT s.name FROM specialties s WHERE s.id=n.specialty_id)),
+    source_kind=CASE WHEN n.source_request_role_id IS NOT NULL THEN 'commercial' ELSE n.source_kind END;
 
 -- Единая карточка человека: персональные контакты и атрибуция источника не зависят от конкретной вакансии.
 ALTER TABLE candidates ADD COLUMN IF NOT EXISTS email text;
@@ -73,6 +70,66 @@ CREATE INDEX idx_candidate_app_stage ON candidate_applications(organization_id,s
 CREATE INDEX idx_candidate_app_candidate ON candidate_applications(organization_id,candidate_id,updated_at DESC);
 CREATE INDEX idx_candidate_communications_candidate ON candidate_communications(organization_id,candidate_id,happened_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS one_worker_profile_per_candidate ON worker_profiles(origin_candidate_id) WHERE origin_candidate_id IS NOT NULL;
+
+-- Коммерческая потребность автоматически получает именно те условия, с которыми рекрутер должен работать.
+-- Клиентская цена сюда намеренно не попадает: сохраняется только worker-facing snapshot.
+CREATE OR REPLACE FUNCTION enrich_recruiting_need_context() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_region uuid;
+  v_manager uuid;
+  v_specialty text;
+  v_request record;
+  v_role record;
+  v_worker_pay jsonb;
+BEGIN
+  SELECT name INTO v_specialty FROM specialties WHERE id=NEW.specialty_id;
+  NEW.title := COALESCE(NULLIF(NEW.title,''),v_specialty);
+
+  IF NEW.object_id IS NOT NULL THEN
+    SELECT region_id,owner_user_id INTO v_region,v_manager FROM objects WHERE id=NEW.object_id;
+    NEW.region_id := COALESCE(NEW.region_id,v_region);
+    NEW.manager_user_id := COALESCE(NEW.manager_user_id,v_manager);
+  END IF;
+
+  IF NEW.source_request_role_id IS NOT NULL THEN
+    SELECT rr.schedule_json,rr.requirements_json,rr.request_id INTO v_role
+    FROM request_roles rr WHERE rr.id=NEW.source_request_role_id;
+    SELECT r.region_id,r.location_text,r.expected_start_date,r.duration_text,r.schedule_json,r.housing_rule,r.travel_rule,r.shuttle_rule,
+           r.ppe_rule,r.medical_rule,r.citizenship_rule,r.tools_rule,r.comments
+      INTO v_request
+    FROM requests r WHERE r.id=v_role.request_id;
+    SELECT COALESCE(cs.inputs_snapshot->'workerNetHourly',cs.inputs_snapshot->'workerNet',cs.result_snapshot->'workerNetHourly',cs.result_snapshot->'workerNet')
+      INTO v_worker_pay
+    FROM calculation_scenarios cs
+    JOIN calculations c ON c.id=cs.calculation_id
+    WHERE cs.request_role_id=NEW.source_request_role_id AND c.request_id=v_role.request_id AND cs.status='accepted'
+    ORDER BY cs.accepted_at DESC NULLS LAST,cs.created_at DESC LIMIT 1;
+
+    NEW.source_kind := 'commercial';
+    NEW.region_id := COALESCE(NEW.region_id,v_request.region_id);
+    NEW.conditions_snapshot := COALESCE(NEW.conditions_snapshot,'{}'::jsonb) || jsonb_strip_nulls(jsonb_build_object(
+      'location',v_request.location_text,
+      'expectedStartDate',v_request.expected_start_date,
+      'duration',v_request.duration_text,
+      'schedule',CASE WHEN v_role.schedule_json<>'{}'::jsonb THEN v_role.schedule_json ELSE v_request.schedule_json END,
+      'requirements',v_role.requirements_json,
+      'workerPay',v_worker_pay,
+      'housing',v_request.housing_rule,
+      'travel',v_request.travel_rule,
+      'shuttle',v_request.shuttle_rule,
+      'ppe',v_request.ppe_rule,
+      'medical',v_request.medical_rule,
+      'citizenship',v_request.citizenship_rule,
+      'tools',v_request.tools_rule,
+      'comment',v_request.comments
+    ));
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS needs_recruiting_context ON needs;
+CREATE TRIGGER needs_recruiting_context BEFORE INSERT OR UPDATE ON needs FOR EACH ROW EXECUTE FUNCTION enrich_recruiting_need_context();
 
 CREATE OR REPLACE FUNCTION validate_recruiting_reference_integrity() RETURNS trigger
 LANGUAGE plpgsql AS $$
