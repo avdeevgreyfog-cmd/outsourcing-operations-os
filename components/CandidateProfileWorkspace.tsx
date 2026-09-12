@@ -24,6 +24,7 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
 
  useEffect(()=>{
   if(!demo)return;
+  let frame=0;
   try{
    const custom=(JSON.parse(localStorage.getItem(profileStorage)||"{}") as Record<string,Partial<CandidateProfile>>)[candidateId];
    const apps=JSON.parse(localStorage.getItem(appStorage)||"[]") as RecruitingApplicationRow[];
@@ -32,17 +33,19 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
    if(!first&&!profile)return;
    const localComms=(JSON.parse(localStorage.getItem(commStorage)||"[]") as Array<CandidateProfile["communications"][number]&{candidateId:string}>).filter(x=>x.candidateId===candidateId);
    const applications=[...candidateApps,...(profile?.applications??[]).filter(x=>!candidateApps.some(y=>y.applicationId===x.applicationId))];
-   setCurrent({
-    id:candidateId,fullName:custom?.fullName??profile?.fullName??first.fullName,phone:custom?.phone??profile?.phone??first.phone,
-    email:custom?.email??profile?.email??first.email,preferredChannel:custom?.preferredChannel??profile?.preferredChannel??first.preferredChannel,
-    telegram:custom?.telegram??profile?.telegram??first.telegram,whatsapp:custom?.whatsapp??profile?.whatsapp??first.whatsapp,
-    city:custom?.city??profile?.city??first.city,birthDate:custom?.birthDate??profile?.birthDate??null,source:custom?.source??profile?.source??first.source,
-    sourceChannel:custom?.sourceChannel??profile?.sourceChannel??first.sourceChannel,sourceCampaign:custom?.sourceCampaign??profile?.sourceCampaign??first.sourceCampaign,
-    sourceReference:custom?.sourceReference??profile?.sourceReference??first.sourceReference,notes:custom?.notes??profile?.notes??null,
+   const hydrated:CandidateProfile={
+    id:candidateId,fullName:custom?.fullName??profile?.fullName??first?.fullName??"Кандидат",phone:custom?.phone??profile?.phone??first?.phone??null,
+    email:custom?.email??profile?.email??first?.email??null,preferredChannel:custom?.preferredChannel??profile?.preferredChannel??first?.preferredChannel??null,
+    telegram:custom?.telegram??profile?.telegram??first?.telegram??null,whatsapp:custom?.whatsapp??profile?.whatsapp??first?.whatsapp??null,
+    city:custom?.city??profile?.city??first?.city??null,birthDate:custom?.birthDate??profile?.birthDate??null,source:custom?.source??profile?.source??first?.source??null,
+    sourceChannel:custom?.sourceChannel??profile?.sourceChannel??first?.sourceChannel??null,sourceCampaign:custom?.sourceCampaign??profile?.sourceCampaign??first?.sourceCampaign??null,
+    sourceReference:custom?.sourceReference??profile?.sourceReference??first?.sourceReference??null,notes:custom?.notes??profile?.notes??null,
     status:profile?.status??(applications.some(x=>x.stage==="started")?"worker":"active"),applications,
     communications:[...localComms,...(profile?.communications??[]).filter(x=>!localComms.some(y=>y.id===x.id))],history:profile?.history??[],
-   });
+   };
+   frame=requestAnimationFrame(()=>setCurrent(hydrated));
   }catch{}
+  return()=>{if(frame)cancelAnimationFrame(frame)};
  },[candidateId,demo,profile]);
 
  const latest=current?.applications[0]??null;
