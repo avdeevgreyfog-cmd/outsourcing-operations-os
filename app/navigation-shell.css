@@ -174,21 +174,18 @@
 .sidebar-collapse:hover{background:var(--panel-3)}
 
 /* Compact mode carries the active context because level 2/3 are hidden there. */
-.sidebar.sidebar-compact .nav-section-button.is-current,
+.sidebar.sidebar-compact .nav-section-button.is-current{
+  background:var(--accent-soft);
+  box-shadow:inset 2px 0 var(--accent);
+}
+.sidebar.sidebar-compact .nav-section-button.is-current svg:first-child{color:var(--accent)}
+
 @media(max-width:1050px){
   .sidebar:not(.sales-mobile-open) .nav-section-button.is-current{
     background:var(--accent-soft);
     box-shadow:inset 2px 0 var(--accent);
   }
   .sidebar:not(.sales-mobile-open) .nav-section-button.is-current svg:first-child{color:var(--accent)}
-}
-
-@media(min-width:1051px){
-  .sidebar.sidebar-compact .nav-section-button.is-current{
-    background:var(--accent-soft);
-    box-shadow:inset 2px 0 var(--accent);
-  }
-  .sidebar.sidebar-compact .nav-section-button.is-current svg:first-child{color:var(--accent)}
 }
 
 /* Tablet/mobile expanded drawer gets the same branded header; collapsed rail stays compact. */
@@ -240,6 +237,10 @@
 :root[data-theme=dark] .sidebar .brand::before{opacity:.28}
 :root[data-theme=dark] .nav-shortcuts p{background:color-mix(in srgb,var(--panel) 42%,transparent)}
 :root[data-theme=dark] .nav-section-button.is-current{background:color-mix(in srgb,var(--panel-3) 55%,transparent)}
+:root[data-theme=dark] .sidebar.sidebar-compact .nav-section-button.is-current,
+:root[data-theme=dark] .sidebar:not(.sales-mobile-open) .nav-section-button.is-current{
+  background:var(--accent-soft);
+}
 :root[data-theme=dark] .nav-item-row.is-active{
   background:linear-gradient(90deg,color-mix(in srgb,var(--accent-soft) 92%,var(--panel)) 0%,color-mix(in srgb,var(--accent-soft) 62%,var(--panel)) 100%);
 }
