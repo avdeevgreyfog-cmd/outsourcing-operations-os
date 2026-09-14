@@ -1,0 +1,245 @@
+/* OPERIS global navigation refinement.
+   This layer only changes shell presentation: routes, capabilities and hierarchy stay in WorkspaceNavigation. */
+
+.sidebar{
+  background:
+    linear-gradient(180deg,color-mix(in srgb,var(--sidebar) 82%,var(--canvas)) 0,var(--sidebar) 24%,var(--sidebar) 100%);
+}
+
+.nav-groups{
+  scrollbar-width:thin;
+  scrollbar-color:color-mix(in srgb,var(--soft) 56%,transparent) transparent;
+  scrollbar-gutter:stable;
+}
+.nav-groups::-webkit-scrollbar{width:6px}
+.nav-groups::-webkit-scrollbar-track{background:transparent}
+.nav-groups::-webkit-scrollbar-thumb{
+  border:2px solid transparent;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--soft) 58%,transparent);
+  background-clip:padding-box;
+}
+.nav-groups::-webkit-scrollbar-thumb:hover{background-color:color-mix(in srgb,var(--muted) 72%,transparent)}
+
+/* Brand block: the only decorative zone in the sidebar. */
+@media(min-width:1051px){
+  .sidebar:not(.sidebar-compact) .brand{
+    position:relative;
+    isolation:isolate;
+    height:84px;
+    min-height:84px;
+    margin:-3px 2px 8px;
+    padding:11px 10px 34px;
+    overflow:hidden;
+    align-items:flex-start;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:linear-gradient(145deg,var(--panel) 0%,color-mix(in srgb,var(--panel-2) 86%,var(--canvas)) 100%);
+  }
+  .sidebar:not(.sidebar-compact) .brand::before{
+    content:"";
+    position:absolute;
+    z-index:-2;
+    inset:0;
+    background:url("/operis-sidebar-structure.svg") right center/auto 100% no-repeat;
+    opacity:.78;
+    pointer-events:none;
+  }
+  .sidebar:not(.sidebar-compact) .brand::after{
+    content:"";
+    position:absolute;
+    z-index:-1;
+    inset:auto 0 0;
+    height:30px;
+    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--panel) 76%,transparent));
+    pointer-events:none;
+  }
+  .sidebar:not(.sidebar-compact) .brand-mark{
+    width:32px;
+    height:32px;
+    border-radius:8px;
+    background:color-mix(in srgb,var(--accent-soft) 88%,var(--panel));
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 10%,transparent);
+  }
+  .sidebar:not(.sidebar-compact) .brand strong{font-size:13px;letter-spacing:.095em}
+  .sidebar:not(.sidebar-compact) .brand small{margin-top:3px;font-size:10.5px}
+}
+
+/* Search and shortcuts remain operational controls, not decorative cards. */
+.nav-search{
+  border-color:color-mix(in srgb,var(--border-strong) 70%,var(--border));
+  background:color-mix(in srgb,var(--panel) 86%,var(--panel-2));
+}
+.nav-search:hover{
+  border-color:var(--border-strong);
+  background:var(--panel);
+  color:var(--text);
+}
+.nav-search:focus-visible{background:var(--panel)}
+
+.nav-shortcuts{
+  margin:0 0 10px;
+  padding:2px 0 10px;
+}
+.nav-shortcuts-heading{
+  min-height:27px;
+  padding:4px 9px 6px;
+  color:var(--muted);
+  font-weight:600;
+}
+.nav-shortcuts p{
+  margin:1px 5px 2px;
+  padding:8px 9px;
+  border:1px dashed color-mix(in srgb,var(--border-strong) 72%,var(--border));
+  border-radius:6px;
+  background:color-mix(in srgb,var(--panel) 54%,transparent);
+  color:var(--soft);
+  font-size:10.5px;
+  line-height:1.4;
+}
+
+/* Three-level hierarchy: area -> group -> page. */
+.nav-section{margin-bottom:4px}
+.nav-section-button{
+  position:relative;
+  height:35px;
+  padding-inline:9px 8px;
+  gap:9px;
+  border-radius:6px;
+}
+.nav-section-button span{font-size:12.5px;font-weight:680}
+.nav-section-button:hover{background:color-mix(in srgb,var(--panel-3) 76%,transparent)}
+.nav-section-button.is-current{
+  background:color-mix(in srgb,var(--panel-3) 46%,transparent);
+  color:var(--text);
+}
+.nav-section-button.is-current svg:first-child{color:var(--muted)}
+.nav-section-body{
+  margin:1px 0 11px 10px;
+  padding:0 0 0 10px;
+  border-left-color:color-mix(in srgb,var(--border-strong) 72%,var(--border));
+}
+.nav-subgroup>button{
+  height:31px;
+  padding-inline:7px 5px;
+  border-radius:5px;
+}
+.nav-subgroup>button span{font-size:12px;font-weight:560}
+.nav-subgroup>button.is-current{color:var(--text);font-weight:680}
+.nav-subgroup>button:hover{background:color-mix(in srgb,var(--panel-2) 80%,transparent)}
+
+.nav-item-row{
+  min-height:33px;
+  border-radius:6px;
+}
+.nav-item-row.is-active{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent-soft) 98%,var(--panel)) 0%,color-mix(in srgb,var(--accent-soft) 72%,var(--panel)) 100%);
+  box-shadow:none;
+}
+.nav-item-row.is-active::before{
+  content:"";
+  position:absolute;
+  z-index:1;
+  top:5px;
+  bottom:5px;
+  left:0;
+  width:3px;
+  border-radius:0 3px 3px 0;
+  background:var(--accent);
+}
+.nav-subgroup .nav-item-row a,.nav-shortcuts .nav-item-row a{
+  min-height:33px;
+  padding:7px 6px 7px 11px;
+  font-size:12px;
+}
+.nav-subgroup .nav-item-row a.active,.nav-shortcuts .nav-item-row a.active{
+  color:var(--text);
+  font-weight:650;
+}
+.nav-item-row:hover{background:color-mix(in srgb,var(--panel-3) 76%,transparent)}
+.nav-item-row.is-active:hover{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent-soft) 100%,var(--panel)) 0%,color-mix(in srgb,var(--accent-soft) 78%,var(--panel)) 100%);
+}
+.nav-pin{transition:opacity .12s ease,color .12s ease,background-color .12s ease}
+
+/* Sticky identity zone visually closes the rail without becoming a separate card. */
+.sidebar-foot{
+  min-height:52px;
+  margin-top:1px;
+  padding:9px 5px 0;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sidebar) 38%,transparent),var(--sidebar) 30%);
+}
+.who strong{font-size:11.5px;font-weight:680}
+.who span{font-size:10px}
+.sidebar-collapse:hover{background:var(--panel-3)}
+
+/* Compact mode carries the active context because level 2/3 are hidden there. */
+.sidebar.sidebar-compact .nav-section-button.is-current,
+@media(max-width:1050px){
+  .sidebar:not(.sales-mobile-open) .nav-section-button.is-current{
+    background:var(--accent-soft);
+    box-shadow:inset 2px 0 var(--accent);
+  }
+  .sidebar:not(.sales-mobile-open) .nav-section-button.is-current svg:first-child{color:var(--accent)}
+}
+
+@media(min-width:1051px){
+  .sidebar.sidebar-compact .nav-section-button.is-current{
+    background:var(--accent-soft);
+    box-shadow:inset 2px 0 var(--accent);
+  }
+  .sidebar.sidebar-compact .nav-section-button.is-current svg:first-child{color:var(--accent)}
+}
+
+/* Tablet/mobile expanded drawer gets the same branded header; collapsed rail stays compact. */
+@media(max-width:1050px){
+  .sidebar:not(.sales-mobile-open) .brand{
+    height:44px;
+    min-height:44px;
+    margin-bottom:7px;
+    padding:0 8px 11px;
+  }
+  .sidebar:not(.sales-mobile-open) .brand::before,
+  .sidebar:not(.sales-mobile-open) .brand::after{display:none}
+  .sidebar.sales-mobile-open .brand{
+    position:relative;
+    isolation:isolate;
+    height:82px;
+    min-height:82px;
+    margin:-3px 2px 8px;
+    padding:11px 10px 32px;
+    overflow:hidden;
+    align-items:flex-start;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:linear-gradient(145deg,var(--panel) 0%,color-mix(in srgb,var(--panel-2) 86%,var(--canvas)) 100%);
+  }
+  .sidebar.sales-mobile-open .brand::before{
+    content:"";
+    position:absolute;
+    z-index:-2;
+    inset:0;
+    background:url("/operis-sidebar-structure.svg") right center/auto 100% no-repeat;
+    opacity:.72;
+    pointer-events:none;
+  }
+  .sidebar.sales-mobile-open .brand::after{
+    content:"";
+    position:absolute;
+    z-index:-1;
+    inset:auto 0 0;
+    height:28px;
+    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--panel) 76%,transparent));
+  }
+  .sidebar.sales-mobile-open .brand-mark{width:32px;height:32px;border-radius:8px}
+}
+
+:root[data-theme=dark] .sidebar{
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sidebar) 90%,var(--panel)) 0,var(--sidebar) 28%,var(--sidebar) 100%);
+}
+:root[data-theme=dark] .sidebar .brand::before{opacity:.28}
+:root[data-theme=dark] .nav-shortcuts p{background:color-mix(in srgb,var(--panel) 42%,transparent)}
+:root[data-theme=dark] .nav-section-button.is-current{background:color-mix(in srgb,var(--panel-3) 55%,transparent)}
+:root[data-theme=dark] .nav-item-row.is-active{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent-soft) 92%,var(--panel)) 0%,color-mix(in srgb,var(--accent-soft) 62%,var(--panel)) 100%);
+}
