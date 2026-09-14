@@ -1,0 +1,37 @@
+<svg width="420" height="180" viewBox="0 0 420 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g opacity="0.58" stroke="#9AA7B2" stroke-width="1">
+    <path d="M170 139H408"/>
+    <path d="M188 121H408"/>
+    <path d="M205 103H408"/>
+    <path d="M222 85H408"/>
+    <path d="M239 67H408"/>
+    <path d="M257 49H408"/>
+    <path d="M274 31H408"/>
+    <path d="M298 22V150"/>
+    <path d="M326 15V150"/>
+    <path d="M354 8V150"/>
+    <path d="M382 2V150"/>
+    <path d="M410 0V150"/>
+    <path d="M271 31L298 22L326 15L354 8L382 2"/>
+    <path d="M239 67L271 31"/>
+    <path d="M222 85L257 49"/>
+    <path d="M205 103L239 67"/>
+    <path d="M188 121L222 85"/>
+    <path d="M170 139L205 103"/>
+  </g>
+  <g opacity="0.36" fill="#B7C0C7">
+    <rect x="307" y="49" width="14" height="91" rx="1"/>
+    <rect x="335" y="36" width="14" height="104" rx="1"/>
+    <rect x="363" y="24" width="14" height="116" rx="1"/>
+    <rect x="391" y="12" width="14" height="128" rx="1"/>
+  </g>
+  <g opacity="0.34" stroke="#A7B2BC" stroke-width="1">
+    <path d="M145 151L222 84"/>
+    <path d="M118 151L205 102"/>
+    <path d="M91 151L188 120"/>
+    <path d="M64 151L170 138"/>
+    <path d="M37 151H408"/>
+  </g>
+  <path d="M-22 151L435 36" stroke="#E9661E" stroke-width="17" opacity="0.18"/>
+  <path d="M-16 154L438 40" stroke="#E9661E" stroke-width="2" opacity="0.56"/>
+</svg>
