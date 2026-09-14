@@ -237,10 +237,10 @@
 :root[data-theme=dark] .sidebar .brand::before{opacity:.28}
 :root[data-theme=dark] .nav-shortcuts p{background:color-mix(in srgb,var(--panel) 42%,transparent)}
 :root[data-theme=dark] .nav-section-button.is-current{background:color-mix(in srgb,var(--panel-3) 55%,transparent)}
-:root[data-theme=dark] .sidebar.sidebar-compact .nav-section-button.is-current,
-:root[data-theme=dark] .sidebar:not(.sales-mobile-open) .nav-section-button.is-current{
-  background:var(--accent-soft);
-}
+:root[data-theme=dark] .sidebar.sidebar-compact .nav-section-button.is-current{background:var(--accent-soft)}
 :root[data-theme=dark] .nav-item-row.is-active{
   background:linear-gradient(90deg,color-mix(in srgb,var(--accent-soft) 92%,var(--panel)) 0%,color-mix(in srgb,var(--accent-soft) 62%,var(--panel)) 100%);
+}
+@media(max-width:1050px){
+  :root[data-theme=dark] .sidebar:not(.sales-mobile-open) .nav-section-button.is-current{background:var(--accent-soft)}
 }
