@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckCircle2, Clock3, Download, Lightbulb, RotateCcw, TrendingDown, TrendingUp, UserRoundCheck, UsersRound } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Download, Lightbulb, RotateCcw, TrendingUp, UserRoundCheck, UsersRound } from "lucide-react";
 import { SalesFunnel } from "@/components/sales/SalesUI";
 import { RecruitingAnalyticsTrendChart } from "@/components/RecruitingAnalyticsTrendChart";
-import type { RecruitingAnalyticsData, RecruitingAnalyticsFilters, RecruitingAnalyticsMetrics } from "@/lib/recruiting/analytics";
+import type { RecruitingAnalyticsData, RecruitingAnalyticsFilters } from "@/lib/recruiting/analytics";
 import type { RecruitingOptions } from "@/lib/recruiting/service";
 
 type FunnelMode="candidates"|"conversion"|"losses"|"time";
@@ -14,6 +15,7 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
   const router=useRouter();
   const [mode,setMode]=useState<FunnelMode>("candidates");
   const filters=data.filters;
+  const funnelHref=buildRecruitingHref(filters);
 
   function apply(patch:Partial<RecruitingAnalyticsFilters>){
     const next={...filters,...patch};
@@ -102,17 +104,17 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
       <section className="needs-analytics-funnel-card">
         <div className="needs-analytics-card-head">
           <div><h3>Воронка кандидатов</h3><p>Показывает, сколько кандидатов дошло до каждого этапа за выбранный период.</p></div>
-          <div className="needs-mini-segments" role="group" aria-label="Режим воронки">
+          <div className="needs-analytics-head-actions"><Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть кандидатов</Link><div className="needs-mini-segments" role="group" aria-label="Режим воронки">
             {([
               ["candidates","Кандидаты"],
               ["conversion","Конверсия"],
               ["losses","Потери"],
               ["time","Среднее время"],
             ] as const).map(([value,label])=><button key={value} type="button" className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}
-          </div>
+          </div></div>
         </div>
         <div className="needs-funnel-column-head"><span>Этап и доля от общего</span><span>Кандидаты</span><span>{modeLabel(mode)}</span></div>
-        <SalesFunnel label="Воронка кандидатов" steps={funnelSteps}/>
+        <SalesFunnel label="Воронка кандидатов" steps={funnelSteps} onStep={()=>router.push(funnelHref)}/>
       </section>
 
       <aside className="needs-analytics-kpi-panel">
@@ -170,3 +172,5 @@ function trendNullable(current:number|null,previous:number|null){
   if(current==null||previous==null)return {text:"недостаточно данных",tone:"neutral"};
   return trend(current,previous,"percent",false);
 }
+
+function buildRecruitingHref(filters:RecruitingAnalyticsFilters){const params=new URLSearchParams();if(filters.objectId)params.set("object",filters.objectId);if(filters.specialtyId)params.set("specialty",filters.specialtyId);if(filters.recruiterId)params.set("recruiter",filters.recruiterId);if(filters.source)params.set("source",filters.source);const query=params.toString();return query?`/recruiting?${query}`:"/recruiting"}
