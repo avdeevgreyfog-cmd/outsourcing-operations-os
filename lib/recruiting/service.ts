@@ -42,6 +42,7 @@ export type RecruitingNeedRow = {
   started: number;
   conditionVersion: number;
   stageCounts: Partial<Record<RecruitingStage, number>>;
+  funnelReached: Partial<Record<RecruitingStage, number>>;
 };
 
 export type RecruitingApplicationRow = {
@@ -127,6 +128,15 @@ export type RecruitingOptions = {
   recruiters: Array<{id:string;name:string}>;
 };
 
+
+const recruitingStageOrder: RecruitingStage[]=["new","contact","interview","manager_review","approved","preparation","ready","started"];
+function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
+  return recruitingStageOrder.reduce<Partial<Record<RecruitingStage,number>>>((acc,stage,index)=>{
+    acc[stage]=stages.filter(value=>{const normalizedIndex=recruitingStageOrder.indexOf(value);return normalizedIndex>=index}).length;
+    return acc;
+  },{});
+}
+
 function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
   return demo.needs.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor)).map((row) => {
     const related = demo.candidates.filter((candidate) => candidate.objectId === row.objectId && candidate.need === row.specialty);
@@ -151,6 +161,7 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       approved: related.filter((candidate) => ["approved","documents","first_shift"].includes(candidate.stage)).length,
       ready, started, conditionVersion: 1,
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
+      funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
   });
 }
@@ -173,6 +184,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel.candidates,0)::int candidates,COALESCE(funnel.approved,0)::int approved,
         COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
         COALESCE(funnel."stageCounts",'{}'::jsonb) "stageCounts",
+        COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
         COALESCE(versions.version,1)::int "conditionVersion"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
@@ -190,22 +202,48 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
       ) workforce ON true
       LEFT JOIN LATERAL (
         SELECT count(*)::int candidates,
-          count(*) FILTER (WHERE ca.stage IN ('approved','preparation','ready','started','documents','first_shift'))::int approved,
-          count(*) FILTER (WHERE ca.stage='ready' OR ca.stage='documents')::int ready,
-          count(*) FILTER (WHERE ca.stage IN ('started','first_shift'))::int started,
+          count(*) FILTER (WHERE f.stage IN ('approved','preparation','ready','started','documents','first_shift'))::int approved,
+          count(*) FILTER (WHERE f.stage IN ('ready','documents'))::int ready,
+          count(*) FILTER (WHERE f.stage IN ('started','first_shift'))::int started,
           jsonb_build_object(
-            'new',count(*) FILTER (WHERE ca.stage='new'),
-            'contact',count(*) FILTER (WHERE ca.stage IN ('contact','call')),
-            'interview',count(*) FILTER (WHERE ca.stage='interview'),
-            'manager_review',count(*) FILTER (WHERE ca.stage='manager_review'),
-            'approved',count(*) FILTER (WHERE ca.stage='approved'),
-            'preparation',count(*) FILTER (WHERE ca.stage IN ('preparation','documents')),
-            'ready',count(*) FILTER (WHERE ca.stage='ready'),
-            'started',count(*) FILTER (WHERE ca.stage IN ('started','first_shift')),
-            'rejected',count(*) FILTER (WHERE ca.stage='rejected'),
-            'no_show',count(*) FILTER (WHERE ca.stage='no_show')
-          ) "stageCounts"
-        FROM candidate_applications ca WHERE ca.need_id=n.id
+            'new',count(*) FILTER (WHERE f.stage='new'),
+            'contact',count(*) FILTER (WHERE f.stage IN ('contact','call')),
+            'interview',count(*) FILTER (WHERE f.stage='interview'),
+            'manager_review',count(*) FILTER (WHERE f.stage='manager_review'),
+            'approved',count(*) FILTER (WHERE f.stage='approved'),
+            'preparation',count(*) FILTER (WHERE f.stage IN ('preparation','documents')),
+            'ready',count(*) FILTER (WHERE f.stage='ready'),
+            'started',count(*) FILTER (WHERE f.stage IN ('started','first_shift')),
+            'rejected',count(*) FILTER (WHERE f.stage='rejected'),
+            'no_show',count(*) FILTER (WHERE f.stage='no_show')
+          ) "stageCounts",
+          jsonb_build_object(
+            'new',count(*),
+            'contact',count(*) FILTER (WHERE f.max_rank>=2),
+            'interview',count(*) FILTER (WHERE f.max_rank>=3),
+            'manager_review',count(*) FILTER (WHERE f.max_rank>=4),
+            'approved',count(*) FILTER (WHERE f.max_rank>=5),
+            'preparation',count(*) FILTER (WHERE f.max_rank>=6),
+            'ready',count(*) FILTER (WHERE f.max_rank>=7),
+            'started',count(*) FILTER (WHERE f.max_rank>=8)
+          ) "reachedCounts"
+        FROM (
+          SELECT ca.stage,
+            GREATEST(
+              CASE ca.stage
+                WHEN 'new' THEN 1 WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 3
+                WHEN 'manager_review' THEN 4 WHEN 'approved' THEN 5 WHEN 'preparation' THEN 6 WHEN 'documents' THEN 6
+                WHEN 'ready' THEN 7 WHEN 'started' THEN 8 WHEN 'first_shift' THEN 8 ELSE 1 END,
+              COALESCE((
+                SELECT max(CASE h.to_stage
+                  WHEN 'new' THEN 1 WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 3
+                  WHEN 'manager_review' THEN 4 WHEN 'approved' THEN 5 WHEN 'preparation' THEN 6 WHEN 'documents' THEN 6
+                  WHEN 'ready' THEN 7 WHEN 'started' THEN 8 WHEN 'first_shift' THEN 8 ELSE 1 END)
+                FROM candidate_stage_history h WHERE h.application_id=ca.id
+              ),1)
+            ) max_rank
+          FROM candidate_applications ca WHERE ca.need_id=n.id
+        ) f
       ) funnel ON true
       LEFT JOIN LATERAL (
         SELECT ARRAY_REMOVE(ARRAY_AGG(na.recruiter_user_id::text),NULL) "assigneeUserIds",
