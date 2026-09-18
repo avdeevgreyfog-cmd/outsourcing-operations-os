@@ -41,6 +41,7 @@ export type RecruitingNeedRow = {
   ready: number;
   started: number;
   conditionVersion: number;
+  stageCounts: Partial<Record<RecruitingStage, number>>;
 };
 
 export type RecruitingApplicationRow = {
@@ -149,6 +150,7 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       candidates: related.length,
       approved: related.filter((candidate) => ["approved","documents","first_shift"].includes(candidate.stage)).length,
       ready, started, conditionVersion: 1,
+      stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
     };
   });
 }
@@ -170,6 +172,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(assignments.recruiters,'[]'::jsonb) recruiters,
         COALESCE(funnel.candidates,0)::int candidates,COALESCE(funnel.approved,0)::int approved,
         COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
+        COALESCE(funnel."stageCounts",'{}'::jsonb) "stageCounts",
         COALESCE(versions.version,1)::int "conditionVersion"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
@@ -189,7 +192,19 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         SELECT count(*)::int candidates,
           count(*) FILTER (WHERE ca.stage IN ('approved','preparation','ready','started','documents','first_shift'))::int approved,
           count(*) FILTER (WHERE ca.stage='ready' OR ca.stage='documents')::int ready,
-          count(*) FILTER (WHERE ca.stage IN ('started','first_shift'))::int started
+          count(*) FILTER (WHERE ca.stage IN ('started','first_shift'))::int started,
+          jsonb_build_object(
+            'new',count(*) FILTER (WHERE ca.stage='new'),
+            'contact',count(*) FILTER (WHERE ca.stage IN ('contact','call')),
+            'interview',count(*) FILTER (WHERE ca.stage='interview'),
+            'manager_review',count(*) FILTER (WHERE ca.stage='manager_review'),
+            'approved',count(*) FILTER (WHERE ca.stage='approved'),
+            'preparation',count(*) FILTER (WHERE ca.stage IN ('preparation','documents')),
+            'ready',count(*) FILTER (WHERE ca.stage='ready'),
+            'started',count(*) FILTER (WHERE ca.stage IN ('started','first_shift')),
+            'rejected',count(*) FILTER (WHERE ca.stage='rejected'),
+            'no_show',count(*) FILTER (WHERE ca.stage='no_show')
+          ) "stageCounts"
         FROM candidate_applications ca WHERE ca.need_id=n.id
       ) funnel ON true
       LEFT JOIN LATERAL (
