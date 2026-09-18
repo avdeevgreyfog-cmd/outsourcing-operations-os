@@ -13,7 +13,7 @@ const ALL = [
   "home.command.read","task.read","task.edit","sales.lead.read","sales.lead.create","sales.lead.edit",
   "sales.client.read","sales.client.create","sales.client.edit","sales.request.read","sales.request.create","sales.request.edit",...COMMERCIAL,
   "calculation.scenario.read","calculation.scenario.create","calculation.scenario.edit","calculation.scenario.approve","calculation.rate_reference.read","calculation.rate_reference.edit","calculation.rules.read","calculation.rules.manage",
-  "operations.object.read","operations.object.edit","operations.need.read","operations.need.edit","operations.shift.read","operations.shift.edit",
+  "operations.object.read","operations.object.edit","operations.need.read","operations.need.create","operations.need.edit","operations.shift.read","operations.shift.edit",
   "recruiting.candidate.read","recruiting.candidate.create","recruiting.candidate.edit","recruiting.candidate.assign",
   "worker.read","worker.edit","worker.compensation.read","worker.personal_docs.read","time.time_entry.read","time.time_entry.edit",
   "time.timesheet.read","time.timesheet.edit","time.timesheet.submit","time.timesheet.approve_client",
