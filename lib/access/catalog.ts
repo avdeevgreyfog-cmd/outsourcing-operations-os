@@ -23,6 +23,7 @@ export const capabilities = {
   objectsEdit: "operations.object.edit",
   needsRead: "operations.need.read",
   needsCreate: "operations.need.create",
+  needsEdit: "operations.need.edit",
   shiftsRead: "operations.shift.read",
   candidatesRead: "recruiting.candidate.read",
   candidatesCreate: "recruiting.candidate.create",
