@@ -140,8 +140,8 @@ function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingS
 function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
   return demo.needs.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor)).map((row) => {
     const related = demo.candidates.filter((candidate) => candidate.objectId === row.objectId && candidate.need === row.specialty);
-    const ready = related.filter((candidate) => candidate.stage === "documents").length;
-    const started = related.filter((candidate) => candidate.stage === "first_shift").length;
+    const ready = related.filter((candidate) => normalizeRecruitingStage(candidate.stage) === "ready").length;
+    const started = related.filter((candidate) => normalizeRecruitingStage(candidate.stage) === "started").length;
     const working = row.filled;
     const recruiterId = row.ownerUserId ?? "10000000-0000-4000-8000-000000000005";
     const recruiterName = "Ольга Новикова";
@@ -156,9 +156,9 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       deadline: row.deadline ?? null, status: row.status, ownerUserId: recruiterId, owner: recruiterName,
       managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [recruiterId],
       recruiters: [{userId:recruiterId,name:recruiterName,targetCount:Math.max(row.deficit,1)}],
-      conditions: { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
+      conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
-      approved: related.filter((candidate) => ["approved","documents","first_shift"].includes(candidate.stage)).length,
+      approved: related.filter((candidate) => ["approved","preparation","ready","started"].includes(normalizeRecruitingStage(candidate.stage))).length,
       ready, started, conditionVersion: 1,
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
@@ -275,7 +275,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId: row.ownerUserId ?? null,
       owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
-      rejectionReason: null, conditions: {},
+      rejectionReason: null, conditions: need?.conditions ?? {},
     };
   });
 }
