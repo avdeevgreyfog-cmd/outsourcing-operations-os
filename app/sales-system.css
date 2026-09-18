@@ -213,3 +213,22 @@
   .sales-workspace .request-baseline-editor .request-final-context-metrics{border-right:0;border-bottom:0}
 }
 @media(max-width:760px){.portfolio-views{flex-wrap:wrap}.portfolio-detail{grid-template-columns:1fr;gap:7px}.portfolio-detail dd{margin-bottom:10px}.app-shell:has(.sales-workspace) .sidebar.sales-mobile-open{z-index:45}.portfolio-table th:first-child,.portfolio-table td:first-child{position:static}}
+
+
+/* Shared operational funnel: reused across commercial and recruiting analytics. */
+.sales-funnel{display:flex;flex-direction:column;align-items:center;gap:4px;padding:18px 20px 20px}
+.sales-funnel-step{min-height:54px;display:grid;grid-template-columns:minmax(0,1fr) 64px 128px;align-items:center;gap:12px;padding:10px 34px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));background:color-mix(in srgb,var(--accent) 7%,var(--panel));color:var(--text);clip-path:polygon(4% 0,96% 0,90% 100%,10% 100%);font:inherit;text-align:left;text-decoration:none;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+button.sales-funnel-step{cursor:pointer}
+.sales-funnel-step:hover{background:color-mix(in srgb,var(--accent) 11%,var(--panel));border-color:color-mix(in srgb,var(--accent) 44%,var(--border))}
+button.sales-funnel-step:active{transform:translateY(1px)}
+.sales-funnel-step:nth-child(2){background:color-mix(in srgb,var(--accent) 9%,var(--panel))}
+.sales-funnel-step:nth-child(3){background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+.sales-funnel-step:nth-child(4){background:color-mix(in srgb,var(--accent) 15%,var(--panel))}
+.sales-funnel-step:nth-child(5){background:color-mix(in srgb,var(--accent) 18%,var(--panel))}
+.sales-funnel-step:nth-child(6){background:color-mix(in srgb,var(--accent) 21%,var(--panel))}
+.sales-funnel-step:nth-child(7){background:color-mix(in srgb,var(--accent) 25%,var(--panel))}
+.sales-funnel-step:nth-child(8){background:color-mix(in srgb,var(--accent) 30%,var(--panel))}
+.sales-funnel-label{min-width:0;font-size:12px;font-weight:620;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sales-funnel-step strong{font-size:20px;line-height:1;font-weight:680;text-align:right;font-variant-numeric:tabular-nums}
+.sales-funnel-step small{font-size:10px;line-height:1.3;color:var(--muted);text-align:right}
+@media(max-width:760px){.sales-funnel{padding-inline:8px}.sales-funnel-step{width:100%!important;grid-template-columns:1fr 48px;padding-inline:22px}.sales-funnel-step small{display:none}}
