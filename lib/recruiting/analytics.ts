@@ -77,7 +77,7 @@ type AnalyticsHistory = {
   createdAt: string;
 };
 
-const stageRank = new Map(recruitingStages.map((stage,index)=>[stage,index]));
+const stageRank = new Map<RecruitingStage,number>(recruitingStages.map((stage,index)=>[stage,index] as [RecruitingStage,number]));
 const terminalStages = new Set<RecruitingStage>(["rejected","no_show"]);
 
 function isoDay(date: Date) { return date.toISOString().slice(0,10); }
