@@ -251,12 +251,35 @@ function demoSpecialtyId(name: string | undefined) {
   return "60000000-0000-4000-8000-000000000001";
 }
 
-function demoAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): RecruitingAnalyticsData {
-  const end=parseDay(filters.to);
-  const span=Math.max(1,Math.round((parseDay(filters.to).getTime()-parseDay(filters.from).getTime())/86400000)+1);
-  const recruiterId="10000000-0000-4000-8000-000000000005";
-  const apps:AnalyticsApplication[]=[];
+function buildDemoPeriodRows(rows: typeof demo.candidates, from: string, to: string, scale = 1, rankPenalty = 0) {
+  const end=parseDay(to);
+  const span=Math.max(1,Math.round((parseDay(to).getTime()-parseDay(from).getTime())/86400000)+1);
+  const count=Math.max(0,Math.min(rows.length,Math.round(rows.length*scale)));
+  const applications:AnalyticsApplication[]=[];
   const history:AnalyticsHistory[]=[];
+  rows.slice(0,count).forEach((row,index)=>{
+    const current=normalizeRecruitingStage(row.stage);
+    const baseRank=stageRank.get(current)??0;
+    const rank=Math.max(0,baseRank-(rankPenalty>0&&index%3===0?rankPenalty:0));
+    const offset=Math.min(span-1,(index*2+rank)%span);
+    const created=new Date(end.getTime()-offset*86400000);
+    const applicationId=`demo-analytics-${from}-${index+1}`;
+    applications.push({
+      applicationId,organizationId:row.organizationId,objectId:row.objectId??null,specialtyId:demoSpecialtyId(row.need),
+      regionId:row.regionId??null,clientId:row.clientId??null,ownerUserId:"10000000-0000-4000-8000-000000000005",managerUserId:null,
+      assigneeUserIds:row.assigneeUserIds??["10000000-0000-4000-8000-000000000005"],source:row.source??null,
+      rawStage:recruitingStages[rank]??"new",createdAt:created.toISOString(),
+      updatedAt:new Date(Math.min(end.getTime()+12*3600000,created.getTime()+rank*30*3600000)).toISOString(),
+    });
+    for(let stageIndex=0;stageIndex<=rank;stageIndex++){
+      history.push({applicationId,toStage:recruitingStages[stageIndex],createdAt:new Date(Math.min(end.getTime()+12*3600000,created.getTime()+stageIndex*30*3600000)).toISOString()});
+    }
+  });
+  return {applications,history};
+}
+
+function demoAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): RecruitingAnalyticsData {
+  const recruiterId="10000000-0000-4000-8000-000000000005";
   const filtered=demo.candidates.filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor)).filter(row=>{
     if(filters.objectId&&row.objectId!==filters.objectId)return false;
     if(filters.specialtyId&&demoSpecialtyId(row.need)!==filters.specialtyId)return false;
@@ -264,33 +287,14 @@ function demoAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Recru
     if(filters.source&&row.source!==filters.source)return false;
     return true;
   });
-  filtered.forEach((row,index)=>{
-    const current=normalizeRecruitingStage(row.stage);
-    const rank=stageRank.get(current)??0;
-    const offset=Math.min(span-1,(index*2+rank)%span);
-    const created=new Date(end.getTime()-offset*86400000);
-    const applicationId=`demo-analytics-${index+1}`;
-    apps.push({
-      applicationId,organizationId:row.organizationId,objectId:row.objectId??null,specialtyId:demoSpecialtyId(row.need),
-      regionId:row.regionId??null,clientId:row.clientId??null,ownerUserId:recruiterId,managerUserId:null,
-      assigneeUserIds:row.assigneeUserIds??[recruiterId],source:row.source??null,rawStage:current,createdAt:created.toISOString(),
-      updatedAt:new Date(Math.min(end.getTime()+12*3600000,created.getTime()+rank*30*3600000)).toISOString(),
-    });
-    for(let stageIndex=0;stageIndex<=rank;stageIndex++){
-      const stage=recruitingStages[stageIndex];
-      history.push({applicationId,toStage:stage,createdAt:new Date(Math.min(end.getTime()+12*3600000,created.getTime()+stageIndex*30*3600000)).toISOString()});
-    }
-  });
-  const current=buildPeriodAnalytics(apps,history,filters.from,filters.to);
-  const comparison:RecruitingAnalyticsMetrics={
-    totalCandidates:Math.max(0,Math.round(current.metrics.totalCandidates*.88)),
-    conversionToStart:Math.max(0,current.metrics.conversionToStart-2),
-    inWork:Math.max(0,Math.round(current.metrics.inWork*.92)),
-    ready:Math.max(0,current.metrics.ready-1),
-    avgDaysToStart:current.metrics.avgDaysToStart==null?null:Number((current.metrics.avgDaysToStart+1.8).toFixed(1)),
-    started:Math.max(0,current.metrics.started-1),
-  };
-  return {filters,stages:current.stages,metrics:current.metrics,comparison,daily:current.daily,summary:buildSummary(current.stages)};
+  const currentSpan=Math.max(1,Math.round((parseDay(filters.to).getTime()-parseDay(filters.from).getTime())/86400000)+1);
+  const compareSpan=Math.max(1,Math.round((parseDay(filters.compareTo).getTime()-parseDay(filters.compareFrom).getTime())/86400000)+1);
+  const currentRows=buildDemoPeriodRows(filtered,filters.from,filters.to,1,0);
+  const compareScale=Math.min(1.2,Math.max(.35,(compareSpan/currentSpan)*.86));
+  const compareRows=buildDemoPeriodRows(filtered,filters.compareFrom,filters.compareTo,compareScale,1);
+  const current=buildPeriodAnalytics(currentRows.applications,currentRows.history,filters.from,filters.to);
+  const comparison=buildPeriodAnalytics(compareRows.applications,compareRows.history,filters.compareFrom,filters.compareTo);
+  return {filters,stages:current.stages,metrics:current.metrics,comparison:comparison.metrics,daily:current.daily,summary:buildSummary(current.stages)};
 }
 
 export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Promise<RecruitingAnalyticsData> {
