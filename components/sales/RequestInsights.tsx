@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { requestBucket, stageByCode, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
 import { Section } from "@/components/UI";
-import { SalesEmpty } from "./SalesUI";
+import { SalesEmpty, SalesFunnel } from "./SalesUI";
 
 export const lossLabels: Record<string, string> = { price: "Не устроила цена", competitor: "Выбран другой подрядчик", cancelled: "Потребность отменена", timing: "Не подошли сроки", conditions: "Не устроили условия", no_response: "Нет ответа заказчика", staffing: "Не обеспечили персонал", other: "Другая причина" };
 
@@ -16,7 +16,6 @@ export function RequestInsights({ rows, stages, now, onStage }: { rows: RequestB
   const actual = rows.filter(row => !row.archivedAt);
   const codes = [...new Set([...stages.map(stage => stage.code), ...actual.map(row => row.workflowStageCode)])];
   const distribution = codes.map(code => ({ code, label: stages.find(stage => stage.code === code)?.label ?? code, count: actual.filter(row => row.workflowStageCode === code).length })).filter(item => item.count || stages.find(stage => stage.code === item.code)?.active);
-  const maximum = Math.max(1, ...distribution.map(item => item.count));
   const agreed = actual.filter(row => row.workflowStageCode === "agreed").length;
   const lost = actual.filter(row => row.workflowStageCode === "not_agreed");
   const completed = agreed + lost.length;
@@ -25,7 +24,7 @@ export function RequestInsights({ rows, stages, now, onStage }: { rows: RequestB
 
   return <div className="sales-insights">
     <Section title="Заявки по этапам" note="Текущее распределение без архива. Нажмите на этап, чтобы открыть заявки.">
-      {actual.length ? <div className="sales-bars">{distribution.map(item => <button type="button" className="sales-bar-row" key={item.code} onClick={() => onStage(item.code)} aria-label={`${item.label}: ${item.count}, открыть заявки`}><span>{item.label}</span><strong>{item.count}<small>{Math.round(item.count / actual.length * 100)}%</small></strong><span className="sales-bar-track" aria-hidden="true"><i style={{ width: `${item.count / maximum * 100}%` }}/></span></button>)}</div> : <SalesEmpty title="Пока нет заявок" text="Распределение появится после добавления заявок."/>}
+      {actual.length ? <SalesFunnel label="Воронка заявок по текущим этапам" steps={distribution.map(item => ({key:item.code,label:item.label,value:item.count,note:`${Math.round(item.count / actual.length * 100)}% на этом этапе`}))} onStep={onStage}/> : <SalesEmpty title="Пока нет заявок" text="Распределение появится после добавления заявок."/>}
     </Section>
     <Section title="Результаты согласования" note="По завершённым заявкам в доступном контуре, за всё время.">
       <div className="sales-outcome"><strong>{completed ? `${Math.round(agreed / completed * 100)}%` : "—"}</strong><span>{completed ? `Согласовано ${agreed} из ${completed}` : "Завершённых заявок пока нет"}</span><div className="sales-outcome-track" aria-hidden="true"><i style={{ width: `${completed ? agreed / completed * 100 : 0}%` }}/></div><div className="sales-outcome-legend"><span>Согласовано <b>{agreed}</b></span><span>Не согласовано <b>{lost.length}</b></span></div></div>
