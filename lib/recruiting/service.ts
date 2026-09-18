@@ -5,6 +5,8 @@ import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
 import { needSourceLabels, normalizeRecruitingStage, recruitingStageLabels, type RecruitingStage } from "./model";
 
+export type NeedRecruiterAssignment = { userId: string; name: string; targetCount: number };
+
 export type RecruitingNeedRow = {
   id: string;
   organizationId: string;
@@ -22,7 +24,9 @@ export type RecruitingNeedRow = {
   priority: string;
   required: number;
   filled: number;
+  working: number;
   deficit: number;
+  toRecruit: number;
   deadline: string | null;
   status: string;
   ownerUserId: string | null;
@@ -30,11 +34,13 @@ export type RecruitingNeedRow = {
   managerUserId: string | null;
   manager: string | null;
   assigneeUserIds: string[];
+  recruiters: NeedRecruiterAssignment[];
   conditions: Record<string, unknown>;
   candidates: number;
   approved: number;
   ready: number;
   started: number;
+  conditionVersion: number;
 };
 
 export type RecruitingApplicationRow = {
@@ -117,25 +123,32 @@ export type RecruitingOptions = {
   specialties: Array<{id:string;name:string}>;
   regions: Array<{id:string;name:string}>;
   objects: Array<{id:string;name:string;regionId:string;region:string}>;
+  recruiters: Array<{id:string;name:string}>;
 };
 
 function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
   return demo.needs.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor)).map((row) => {
     const related = demo.candidates.filter((candidate) => candidate.objectId === row.objectId && candidate.need === row.specialty);
+    const ready = related.filter((candidate) => candidate.stage === "documents").length;
+    const started = related.filter((candidate) => candidate.stage === "first_shift").length;
+    const working = row.filled;
+    const recruiterId = row.ownerUserId ?? "10000000-0000-4000-8000-000000000005";
+    const recruiterName = "Ольга Новикова";
     return {
       id: row.id, organizationId: row.organizationId, objectId: row.objectId, object: row.object,
       clientId: row.clientId, client: demo.clients.find((client) => client.id === row.clientId)?.name ?? null,
       regionId: row.regionId, region: demo.objects.find((object) => object.id === row.objectId)?.region ?? null,
       specialtyId: row.specialty === "Грузчик" ? "60000000-0000-4000-8000-000000000002" : row.specialty === "Сборщик мебели" ? "60000000-0000-4000-8000-000000000003" : "60000000-0000-4000-8000-000000000001",
       specialty: row.specialty, title: row.specialty, sourceKind: "object", sourceLabel: needSourceLabels.object,
-      priority: row.deficit >= 7 ? "high" : "normal", required: row.required, filled: row.filled, deficit: row.deficit,
-      deadline: row.deadline ?? null, status: row.status, ownerUserId: row.ownerUserId, owner: "Ольга Новикова",
-      managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
+      priority: row.deficit >= 7 ? "high" : "normal", required: row.required, filled: working, working,
+      deficit: Math.max(row.required-working,0), toRecruit: Math.max(row.required-working-ready,0),
+      deadline: row.deadline ?? null, status: row.status, ownerUserId: recruiterId, owner: recruiterName,
+      managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [recruiterId],
+      recruiters: [{userId:recruiterId,name:recruiterName,targetCount:Math.max(row.deficit,1)}],
       conditions: { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
       approved: related.filter((candidate) => ["approved","documents","first_shift"].includes(candidate.stage)).length,
-      ready: related.filter((candidate) => ["documents","first_shift"].includes(candidate.stage)).length,
-      started: related.filter((candidate) => candidate.stage === "first_shift").length,
+      ready, started, conditionVersion: 1,
     };
   });
 }
@@ -147,15 +160,17 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
     const rows = await sql<Array<RecruitingNeedRow & Record<string, unknown>>>`
       SELECT n.id,n.organization_id "organizationId",n.object_id "objectId",o.name object,o.client_company_id "clientId",cl.name client,
         COALESCE(n.region_id,o.region_id) "regionId",rg.name region,n.specialty_id "specialtyId",s.name specialty,COALESCE(n.title,s.name) title,
-        n.source_kind "sourceKind",n.priority,n.count_required required,n.count_filled filled,GREATEST(n.count_required-n.count_filled,0)::int deficit,
+        n.source_kind "sourceKind",n.priority,n.count_required required,
+        COALESCE(workforce.working,0)::int filled,COALESCE(workforce.working,0)::int working,
+        GREATEST(n.count_required-COALESCE(workforce.working,0),0)::int deficit,
+        GREATEST(n.count_required-COALESCE(workforce.working,0)-COALESCE(funnel.ready,0),0)::int "toRecruit",
         to_char(n.deadline,'DD.MM.YYYY') deadline,n.status,n.owner_user_id "ownerUserId",owner.display_name owner,
         n.manager_user_id "managerUserId",manager.display_name manager,n.conditions_snapshot conditions,
-        ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=n.id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
-          || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=n.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
-        count(ca.id)::int candidates,
-        count(ca.id) FILTER (WHERE ca.stage IN ('approved','preparation','ready','started','documents','first_shift'))::int approved,
-        count(ca.id) FILTER (WHERE ca.stage IN ('ready','started','first_shift'))::int ready,
-        count(ca.id) FILTER (WHERE ca.stage IN ('started','first_shift'))::int started
+        COALESCE(assignments."assigneeUserIds",ARRAY[]::text[]) "assigneeUserIds",
+        COALESCE(assignments.recruiters,'[]'::jsonb) recruiters,
+        COALESCE(funnel.candidates,0)::int candidates,COALESCE(funnel.approved,0)::int approved,
+        COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
+        COALESCE(versions.version,1)::int "conditionVersion"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=n.object_id
@@ -163,11 +178,35 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
       LEFT JOIN regions rg ON rg.id=COALESCE(n.region_id,o.region_id)
       LEFT JOIN app_users owner ON owner.id=n.owner_user_id
       LEFT JOIN app_users manager ON manager.id=n.manager_user_id
-      LEFT JOIN candidate_applications ca ON ca.need_id=n.id
-      GROUP BY n.id,o.name,o.client_company_id,cl.name,rg.name,s.name,owner.display_name,manager.display_name
-      ORDER BY n.status='open' DESC,n.deadline NULLS LAST,n.created_at DESC
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT woa.worker_id)::int working
+        FROM worker_object_assignments woa
+        JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
+        WHERE woa.object_id=n.object_id AND woa.specialty_id=n.specialty_id
+          AND woa.effective_from<=current_date AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
+      ) workforce ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int candidates,
+          count(*) FILTER (WHERE ca.stage IN ('approved','preparation','ready','started','documents','first_shift'))::int approved,
+          count(*) FILTER (WHERE ca.stage='ready' OR ca.stage='documents')::int ready,
+          count(*) FILTER (WHERE ca.stage IN ('started','first_shift'))::int started
+        FROM candidate_applications ca WHERE ca.need_id=n.id
+      ) funnel ON true
+      LEFT JOIN LATERAL (
+        SELECT ARRAY_REMOVE(ARRAY_AGG(na.recruiter_user_id::text),NULL) "assigneeUserIds",
+          jsonb_agg(jsonb_build_object('userId',na.recruiter_user_id,'name',u.display_name,'targetCount',na.target_count) ORDER BY na.assigned_at)
+            FILTER (WHERE na.recruiter_user_id IS NOT NULL) recruiters
+        FROM need_assignments na
+        LEFT JOIN app_users u ON u.id=na.recruiter_user_id
+        WHERE na.need_id=n.id AND na.unassigned_at IS NULL
+      ) assignments ON true
+      LEFT JOIN LATERAL (
+        SELECT max(nv.version)::int version FROM need_versions nv WHERE nv.need_id=n.id
+      ) versions ON true
+      ORDER BY n.status IN ('open','in_progress','paused') DESC,n.deadline NULLS LAST,n.created_at DESC
     `;
-    return rows.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor)).map((row) => ({...row, sourceLabel: needSourceLabels[row.sourceKind] ?? "Другое"}));
+    return rows.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor))
+      .map((row) => ({...row, sourceLabel: needSourceLabels[row.sourceKind] ?? "Другое"}));
   });
 }
 
@@ -269,19 +308,33 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"30000000-0000-4000-8000-000000000002",name:"Калужская область"},
     ],
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
+    recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const specialties = await sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`;
-    const regions = await sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`;
-    const objects = await sql<Array<{id:string;name:string;regionId:string;region:string}>>`
-      SELECT DISTINCT o.id,o.name,o.region_id "regionId",r.name region
-      FROM objects o JOIN regions r ON r.id=o.region_id
-      LEFT JOIN object_assignments oa ON oa.object_id=o.id AND oa.effective_to IS NULL
-      LEFT JOIN needs n ON n.object_id=o.id
-      LEFT JOIN need_assignments na ON na.need_id=n.id AND na.unassigned_at IS NULL
-      WHERE ${actor.access.allOrg} OR o.region_id=ANY(${actor.regionIds}::uuid[]) OR oa.user_id=${actor.userId}::uuid OR na.recruiter_user_id=${actor.userId}::uuid
-      ORDER BY o.name
-    `;
-    return {specialties,regions,objects};
+    const [specialties,regions,objects,recruiters] = await Promise.all([
+      sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
+      sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
+      sql<Array<{id:string;name:string;regionId:string;region:string}>>`
+        SELECT DISTINCT o.id,o.name,o.region_id "regionId",r.name region
+        FROM objects o JOIN regions r ON r.id=o.region_id
+        LEFT JOIN object_assignments oa ON oa.object_id=o.id AND oa.effective_to IS NULL
+        LEFT JOIN needs n ON n.object_id=o.id
+        LEFT JOIN need_assignments na ON na.need_id=n.id AND na.unassigned_at IS NULL
+        WHERE ${actor.access.allOrg} OR o.region_id=ANY(${actor.regionIds}::uuid[]) OR oa.user_id=${actor.userId}::uuid OR na.recruiter_user_id=${actor.userId}::uuid
+        ORDER BY o.name
+      `,
+      sql<Array<{id:string;name:string}>>`
+        SELECT DISTINCT m.user_id id,u.display_name name
+        FROM organization_memberships m
+        JOIN app_users u ON u.id=m.user_id
+        JOIN role_templates rt ON rt.id=m.role_template_id
+        LEFT JOIN membership_regions mr ON mr.membership_id=m.id
+        WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
+          AND rt.code IN ('recruiter','recruiting_manager')
+          AND (${actor.access.allOrg} OR mr.region_id=ANY(${actor.regionIds}::uuid[]) OR m.user_id=${actor.userId}::uuid)
+        ORDER BY u.display_name
+      `,
+    ]);
+    return {specialties,regions,objects,recruiters};
   });
 }
