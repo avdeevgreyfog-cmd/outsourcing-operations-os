@@ -23,6 +23,10 @@ const conditionSchema = z.object({
   mealsProvided: z.boolean().nullable().optional(),
   ppeProvided: z.boolean().nullable().optional(),
   medicalProvided: z.boolean().nullable().optional(),
+  tools: z.string().trim().max(1000).nullable().optional(),
+  toolsProvided: z.boolean().nullable().optional(),
+  dailyAllowanceProvided: z.boolean().nullable().optional(),
+  dailyAllowanceAmount: z.string().trim().max(500).nullable().optional(),
   requirements: z.string().trim().max(3000).nullable().optional(),
   comment: z.string().trim().max(3000).nullable().optional(),
 });
