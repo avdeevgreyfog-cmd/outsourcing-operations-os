@@ -23,13 +23,14 @@ export type SalesFunnelStep = {
   value: number;
   conversion?: string;
   note?: string;
+  aside?: string;
 };
 
 export function SalesFunnel({ label, steps, onStep }: { label: string; steps: SalesFunnelStep[]; onStep?: (key: string) => void }) {
   const count = Math.max(steps.length, 1);
   return <div className="sales-funnel" aria-label={label}>{steps.map((step, index) => {
     const width = Math.max(48, 100 - (index * 48 / Math.max(count - 1, 1)));
-    const content = <><span className="sales-funnel-label">{step.label}</span><strong>{step.value}</strong><small>{step.conversion ?? step.note ?? ""}</small></>;
+    const content = <><span className="sales-funnel-copy"><span className="sales-funnel-label">{step.label}</span>{step.note&&<small>{step.note}</small>}</span><strong>{step.value}</strong><span className="sales-funnel-aside">{step.aside ?? step.conversion ?? ""}</span></>;
     return onStep
       ? <button type="button" key={step.key} className="sales-funnel-step" style={{ width: `${width}%` }} onClick={() => onStep(step.key)}>{content}</button>
       : <div key={step.key} className="sales-funnel-step" style={{ width: `${width}%` }}>{content}</div>;
