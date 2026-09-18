@@ -15,6 +15,27 @@ export function SalesSegments<T extends string>({ label, value, items, onChange 
   return <div className="sales-segments" role="group" aria-label={label}>{items.map(item => <button type="button" key={item.value} aria-pressed={value === item.value} onClick={() => onChange(item.value)}>{item.icon}{item.label}</button>)}</div>;
 }
 
+
+
+export type SalesFunnelStep = {
+  key: string;
+  label: string;
+  value: number;
+  conversion?: string;
+  note?: string;
+};
+
+export function SalesFunnel({ label, steps, onStep }: { label: string; steps: SalesFunnelStep[]; onStep?: (key: string) => void }) {
+  const count = Math.max(steps.length, 1);
+  return <div className="sales-funnel" aria-label={label}>{steps.map((step, index) => {
+    const width = Math.max(48, 100 - (index * 48 / Math.max(count - 1, 1)));
+    const content = <><span className="sales-funnel-label">{step.label}</span><strong>{step.value}</strong><small>{step.conversion ?? step.note ?? ""}</small></>;
+    return onStep
+      ? <button type="button" key={step.key} className="sales-funnel-step" style={{ width: `${width}%` }} onClick={() => onStep(step.key)}>{content}</button>
+      : <div key={step.key} className="sales-funnel-step" style={{ width: `${width}%` }}>{content}</div>;
+  })}</div>;
+}
+
 export function SalesEmpty({ title = "Ничего не найдено", text = "Попробуйте другой запрос или сбросьте фильтры.", onReset }: { title?: string; text?: string; onReset?: () => void }) {
   return <div className="sales-empty"><SearchX size={24} aria-hidden="true"/><strong>{title}</strong><p>{text}</p>{onReset && <button className="button" onClick={onReset}>Сбросить фильтры</button>}</div>;
 }
