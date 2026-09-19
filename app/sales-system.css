@@ -382,3 +382,64 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .request-loss-reason-list>div:not(.request-analytics-empty){border-bottom:1px solid var(--border)!important}
   .request-loss-reason-list>div:last-child{border-bottom:0!important}
 }
+
+
+/* Tender analytics — same analytical system as requests/recruiting, with tender-specific risk surfaces. */
+.tender-analytics-screen .request-analytics-filters>select{min-width:136px;max-width:205px}
+.tender-operational-strip{grid-template-columns:repeat(5,minmax(105px,.68fr)) minmax(220px,1.35fr)}
+.tender-operational-strip>div:nth-child(5){border-right:1px solid var(--border)}
+.tender-analytics-screen .request-funnel-card .sales-funnel-step:nth-child(9){background:color-mix(in srgb,var(--accent) 13.6%,var(--panel))}
+.tender-analytics-screen .request-funnel-card .sales-funnel{max-width:670px}
+.tender-analytics-screen .request-funnel-columns{max-width:670px}
+.tender-analytics-screen .request-kpi-grid{grid-auto-rows:minmax(80px,auto)}
+
+.tender-deadline-card,.tender-doc-readiness{min-height:0}
+.tender-deadline-risk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:8px}
+.tender-deadline-risk>div{min-height:82px;display:grid;align-content:center;gap:4px;padding:9px 10px;border-right:1px solid var(--border)}
+.tender-deadline-risk>div:last-child{border-right:0}
+.tender-deadline-risk span{font-size:9px;color:var(--muted);font-weight:600}
+.tender-deadline-risk strong{font-size:20px;line-height:1;font-weight:680;font-variant-numeric:tabular-nums}
+.tender-deadline-risk small{font-size:8.5px;color:var(--warn)}
+
+.tender-doc-readiness-body{display:grid;gap:9px;padding:9px 10px 11px}
+.tender-doc-readiness-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden;background:var(--panel-2)}
+.tender-doc-readiness-kpis>div{display:grid;align-content:center;gap:3px;min-height:58px;padding:7px 9px;border-right:1px solid var(--border)}
+.tender-doc-readiness-kpis>div:last-child{border-right:0}
+.tender-doc-readiness-kpis span{font-size:8.5px;color:var(--muted)}
+.tender-doc-readiness-kpis strong{font-size:15px;font-weight:680;font-variant-numeric:tabular-nums}
+.tender-doc-progress i{display:block;height:5px;border-radius:999px;background:var(--panel-3);overflow:hidden}
+.tender-doc-progress i b{display:block;height:100%;border-radius:inherit;background:var(--accent)}
+.tender-doc-categories{display:flex;gap:5px;flex-wrap:wrap}
+.tender-doc-categories span{display:flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid var(--border);border-radius:5px;background:var(--panel-2);font-size:8.5px;color:var(--muted)}
+.tender-doc-categories strong{font-size:9px;color:var(--text);font-variant-numeric:tabular-nums}
+
+.tender-reason-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.tender-reason-card{min-width:0}
+.tender-reason-card .request-loss-reason-list>div:not(.request-analytics-empty){min-height:40px}
+.tender-reason-card .request-loss-reason-list span{max-width:78%;line-height:1.35}
+
+.tender-trend-card .request-trend-chart{height:250px}
+
+@media(max-width:1280px){
+  .tender-operational-strip{grid-template-columns:repeat(3,1fr)}
+  .tender-operational-strip>div{border-bottom:1px solid var(--border)}
+  .tender-operational-strip>div:nth-child(3n){border-right:0}
+  .tender-operational-strip>div:nth-last-child(-n+3){border-bottom:0}
+  .tender-operational-strip>div:nth-child(5){border-right:1px solid var(--border)}
+  .tender-operational-strip>div:nth-child(6){border-right:0}
+}
+@media(max-width:900px){
+  .tender-reason-grid{grid-template-columns:1fr}
+  .tender-doc-readiness-kpis{grid-template-columns:repeat(2,1fr)}
+  .tender-doc-readiness-kpis>div:nth-child(2){border-right:0}
+  .tender-doc-readiness-kpis>div:nth-child(-n+2){border-bottom:1px solid var(--border)}
+}
+@media(max-width:780px){
+  .tender-operational-strip{grid-template-columns:repeat(2,1fr)}
+  .tender-operational-strip>div:nth-child(odd){border-right:1px solid var(--border)}
+  .tender-operational-strip>div:nth-child(even){border-right:0}
+  .tender-operational-strip>div:nth-last-child(-n+2){border-bottom:0}
+  .tender-deadline-risk{grid-template-columns:1fr}
+  .tender-deadline-risk>div{min-height:56px;border-right:0;border-bottom:1px solid var(--border)}
+  .tender-deadline-risk>div:last-child{border-bottom:0}
+}
