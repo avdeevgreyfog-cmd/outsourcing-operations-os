@@ -130,7 +130,7 @@ SELECT '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000
 
 INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_type)
 SELECT '00000000-0000-4000-8000-000000000001',id,'organization.read','all_org'
-FROM role_templates WHERE code<>'director';
+FROM role_templates WHERE organization_id='00000000-0000-4000-8000-000000000001' AND code<>'director';
 
 -- Sales manager: commercial own/team scope, calculations readable/creatable.
 INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_type)
