@@ -168,11 +168,11 @@ function formatDuration(hours:number|null){
   if(hours<24)return `${formatNumber(hours)} ч`;
   return `${formatNumber(hours/24)} дн.`;
 }
-function parseDay(value:string){return new Date(`${value}T00:00:00`)}
-function shiftDay(value:string,days:number){const date=parseDay(value);date.setDate(date.getDate()+days);return date.toISOString().slice(0,10)}
+function parseDay(value:string){return new Date(`${value}T00:00:00.000Z`)}
+function shiftDay(value:string,days:number){const date=parseDay(value);date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function periodDays(from:string,to:string){return Math.round((parseDay(to).getTime()-parseDay(from).getTime())/86400000)+1}
 function formatRange(from:string,to:string){
-  const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short"});
+  const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"});
   return `${formatter.format(parseDay(from))} — ${formatter.format(parseDay(to))}`;
 }
 
