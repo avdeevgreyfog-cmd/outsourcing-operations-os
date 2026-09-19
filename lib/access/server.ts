@@ -1,13 +1,45 @@
 import type { Sql } from "postgres";
-import type { Actor, EffectiveAccess, ScopeGrant } from "@/lib/access/types";
+import type { AccessPreviewTargetType, Actor, EffectiveAccess, ScopeGrant } from "@/lib/access/types";
+
+type GrantRow = {
+  capability: string;
+  effect: "allow" | "deny";
+  scope_type: ScopeGrant["type"];
+  scope_ids: string[];
+};
+
+function evaluateGrants(grants: GrantRow[], membershipRegionIds: string[], membershipOrgUnitIds: string[]): EffectiveAccess {
+  const capabilities = new Set<string>();
+  const denies = new Set<string>();
+  const scopes: Record<string, ScopeGrant[]> = {};
+
+  for (const row of grants) {
+    if (row.effect === "deny") {
+      denies.add(row.capability);
+      capabilities.delete(row.capability);
+      delete scopes[row.capability];
+      continue;
+    }
+    if (denies.has(row.capability)) continue;
+    capabilities.add(row.capability);
+    const ids = row.scope_type === "region" && row.scope_ids.length === 0
+      ? membershipRegionIds
+      : row.scope_type === "org_unit" && row.scope_ids.length === 0
+        ? membershipOrgUnitIds
+        : row.scope_ids;
+    (scopes[row.capability] ??= []).push({ type: row.scope_type, ids });
+  }
+
+  return {
+    capabilities: [...capabilities],
+    denies: [...denies],
+    allOrg: Object.values(scopes).some((items) => items.some((scope) => scope.type === "all_org")),
+    scopes,
+  };
+}
 
 export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTemplateId: string, positionIds: string[], membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
-  const grants = await sql<{
-    capability: string;
-    effect: "allow" | "deny";
-    scope_type: ScopeGrant["type"];
-    scope_ids: string[];
-  }[]>`
+  const grants = await sql<GrantRow[]>`
     SELECT capability, effect, scope_type, scope_ids FROM permission_grants
     WHERE role_template_id=${roleTemplateId}::uuid
     UNION ALL
@@ -22,6 +54,7 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
       AND (mr.effective_to IS NULL OR mr.effective_to >= current_date)
   `;
 
+  const access = evaluateGrants(grants, membershipRegionIds, membershipOrgUnitIds);
   const overrides = await sql<{
     capability: string;
     effect: "allow" | "deny";
@@ -36,45 +69,46 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
     ORDER BY created_at ASC
   `;
 
-  const capabilities = new Set<string>();
-  const denies = new Set<string>();
-  const scopes: Record<string, ScopeGrant[]> = {};
-
-  for (const row of grants) {
-    if (row.effect === "deny") {
-      denies.add(row.capability);
-      capabilities.delete(row.capability);
-      continue;
-    }
-    capabilities.add(row.capability);
-    const ids = row.scope_type === "region" && row.scope_ids.length === 0
-      ? membershipRegionIds
-      : row.scope_type === "org_unit" && row.scope_ids.length === 0
-        ? membershipOrgUnitIds
-        : row.scope_ids;
-    (scopes[row.capability] ??= []).push({ type: row.scope_type, ids });
-  }
-
   for (const row of overrides) {
     if (row.effect === "deny") {
-      denies.add(row.capability);
-      capabilities.delete(row.capability);
-      delete scopes[row.capability];
+      if (!access.denies.includes(row.capability)) access.denies.push(row.capability);
+      access.capabilities = access.capabilities.filter((item) => item !== row.capability);
+      delete access.scopes[row.capability];
       continue;
     }
-    denies.delete(row.capability);
-    capabilities.add(row.capability);
-    // An individual allow is an exception, not another inherited grant. Its
-    // scope therefore replaces inherited scopes for this capability.
-    scopes[row.capability] = row.scope_type ? [{ type: row.scope_type, ids: row.scope_ids }] : [];
+    access.denies = access.denies.filter((item) => item !== row.capability);
+    if (!access.capabilities.includes(row.capability)) access.capabilities.push(row.capability);
+    access.scopes[row.capability] = row.scope_type ? [{ type: row.scope_type, ids: row.scope_ids }] : [];
   }
+  access.allOrg = Object.values(access.scopes).some((items) => items.some((scope) => scope.type === "all_org"));
+  return access;
+}
 
-  return {
-    capabilities: [...capabilities],
-    denies: [...denies],
-    allOrg: Object.values(scopes).some((items) => items.some((s) => s.type === "all_org")),
-    scopes,
-  };
+export async function loadPreviewAccess(sql: Sql, targetType: AccessPreviewTargetType, targetId: string, membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
+  let grants: GrantRow[];
+  if (targetType === "role_template") {
+    grants = await sql<GrantRow[]>`
+      SELECT capability,effect,scope_type,scope_ids
+      FROM permission_grants
+      WHERE role_template_id=${targetId}::uuid
+      ORDER BY created_at ASC
+    `;
+  } else if (targetType === "position") {
+    grants = await sql<GrantRow[]>`
+      SELECT capability,effect,scope_type,scope_ids
+      FROM position_permission_grants
+      WHERE position_id=${targetId}::uuid
+      ORDER BY created_at ASC
+    `;
+  } else {
+    grants = await sql<GrantRow[]>`
+      SELECT capability,effect,scope_type,scope_ids
+      FROM process_role_permission_grants
+      WHERE process_role_id=${targetId}::uuid
+      ORDER BY created_at ASC
+    `;
+  }
+  return evaluateGrants(grants, membershipRegionIds, membershipOrgUnitIds);
 }
 
 export function requireCapability(actor: Actor, capability: string) {

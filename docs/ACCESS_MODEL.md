@@ -43,3 +43,24 @@ The editor writes to `user_permission_overrides`. The API verifies the administr
 ## UX versus security
 
 Sidebar and tabs hide unavailable destinations for clarity. They are not security boundaries. Services and mutations must still enforce capability, scope, field restrictions and PostgreSQL RLS.
+
+
+## Tenant workspaces and access preview
+
+The same application can expose two workspace kinds without branching the product code:
+
+- a synthetic, read-only **Демо-организация** for evaluation and visual testing;
+- database-backed tenant organizations containing real operational records.
+
+A valid database session is no longer replaced merely because demo mode is enabled.
+The explicit workspace cookie selects the synthetic demo; clearing it returns to the
+authenticated tenant. Business rows in the working tenant remain PostgreSQL/RLS scoped
+by `organization_id`.
+
+Administrators can use **Режим проверки** to evaluate the interface with another access
+subject. Supported subjects are role templates, job-position profiles and process roles.
+The preview capability set is evaluated on the server and therefore affects navigation,
+direct-route authorization and mutation capability checks. It does not change the signed-in
+user identity, membership, audit actor or persisted assignment. The preview intentionally
+excludes the administrator's own position grants, process-role grants and individual
+overrides so elevated rights do not leak into the tested subject.

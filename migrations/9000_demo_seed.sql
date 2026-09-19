@@ -93,7 +93,8 @@ UPDATE organization_memberships SET
     WHEN '10000000-0000-4000-8000-000000000004' THEN '50000000-0000-4000-8000-000000000003'::uuid
     WHEN '10000000-0000-4000-8000-000000000006' THEN '50000000-0000-4000-8000-000000000007'::uuid
     ELSE '50000000-0000-4000-8000-000000000001'::uuid END,
-  phone='+7 900 100-00-'||right(user_id::text,2);
+  phone='+7 900 100-00-'||right(user_id::text,2)
+WHERE organization_id='00000000-0000-4000-8000-000000000001';
 
 INSERT INTO membership_process_roles(organization_id,membership_id,process_role_id,org_unit_id,assigned_by_user_id) VALUES
 ('00000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000002','42000000-0000-4000-8000-000000000001','21000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001'),
@@ -130,7 +131,7 @@ SELECT '00000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000
 
 INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_type)
 SELECT '00000000-0000-4000-8000-000000000001',id,'organization.read','all_org'
-FROM role_templates WHERE code<>'director';
+FROM role_templates WHERE organization_id='00000000-0000-4000-8000-000000000001' AND code<>'director';
 
 -- Sales manager: commercial own/team scope, calculations readable/creatable.
 INSERT INTO permission_grants(organization_id,role_template_id,capability,scope_type)

@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { db, hasDatabase } from "@/lib/db/client";
-import { hashSessionToken, SESSION_COOKIE } from "@/lib/auth/server";
+import { ACCESS_PREVIEW_COOKIE, hashSessionToken, SESSION_COOKIE, WORKSPACE_MODE_COOKIE } from "@/lib/auth/server";
 
 export async function POST(request: Request) {
   if (!hasDatabase()) return NextResponse.json({ error: "База данных не настроена" }, { status: 503 });
   const body = await request.json().catch(() => ({}));
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "");
-  const organization = String(body.organization ?? "operis-demo").trim().toLowerCase();
+  const organization = String(body.organization ?? "sergey-work").trim().toLowerCase();
   if (!email || !password || !organization) return NextResponse.json({ error: "Заполните организацию, почту и пароль" }, { status: 400 });
   const sql = db();
   const [row] = await sql<{ user_id: string; organization_id: string; password_ok: boolean }[]>`
@@ -25,5 +25,7 @@ export async function POST(request: Request) {
   await sql`INSERT INTO sessions (organization_id,user_id,token_hash,expires_at) VALUES (${row.organization_id}::uuid,${row.user_id}::uuid,${hash},now()+interval '12 hours')`;
   const response = NextResponse.json({ ok: true });
   response.cookies.set(SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60*60*12 });
+  response.cookies.set(WORKSPACE_MODE_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+  response.cookies.set(ACCESS_PREVIEW_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
   return response;
 }

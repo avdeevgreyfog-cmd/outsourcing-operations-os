@@ -3,10 +3,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Actor } from "@/lib/access/types";
+import type { Actor, WorkspaceContext } from "@/lib/access/types";
 import { DemoRoleSwitch } from "@/components/DemoRoleSwitch";
+import { WorkspaceContextControls } from "@/components/WorkspaceContextControls";
+import { AccountMenu } from "@/components/AccountMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { roleLabel } from "@/lib/ui/format";
+import { hasCapability } from "@/lib/core/access.mjs";
 import { Activity, BriefcaseBusiness, Building2, ChartNoAxesCombined, ChevronDown, Factory, Home, Menu, PanelLeftClose, PanelLeftOpen, Pin, Search, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 
 export type NavigationItem = { id?: string; label: string; href: string; capability?: string; keywords?: string; status?: "foundation" };
@@ -21,7 +24,7 @@ function sameRoute(pathname: string, href: string, currentView: string) {
 type Preferences = { sections: Record<string, boolean>; groups: Record<string, boolean>; compact: boolean; pins: string[] };
 const booleanMap = (value: unknown): Record<string, boolean> => value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([, v]) => typeof v === "boolean")) : {};
 
-export function WorkspaceNavigation({ actor, sections }: { actor: Actor; sections: NavigationSection[] }) {
+export function WorkspaceNavigation({ actor, sections, workspace }: { actor: Actor; sections: NavigationSection[]; workspace: WorkspaceContext }) {
   const pathname = usePathname(); const router = useRouter(); const currentView = useSearchParams().get("view") ?? "portfolio";
   const activeSectionData = sections.find(section => section.groups.some(group => group.items.some(item => sameRoute(pathname, item.href, currentView))));
   const activeSection = activeSectionData?.id;
@@ -115,7 +118,7 @@ export function WorkspaceNavigation({ actor, sections }: { actor: Actor; section
       </nav>
       <div className="sidebar-foot"><div className="avatar">{actor.displayName.split(" ").map(x => x[0]).join("").slice(0, 2)}</div>{!compact && <div className="who"><strong>{actor.displayName}</strong><span>{currentRole}</span></div>}<button type="button" className="sidebar-collapse" onClick={() => setPrefs(current => ({ ...current, compact: !current.compact }))} aria-label={compact ? "Развернуть меню" : "Свернуть меню"}>{compact ? <PanelLeftOpen size={16}/> : <PanelLeftClose size={16}/>}</button></div>
     </aside>
-    <header className={`topbar ${compact ? "topbar-compact" : ""}`}><button className="mobile-menu" type="button" onClick={() => { setPrefs(current => ({ ...current, compact: false })); setMobileOpen(v => !v); }} aria-label="Меню" aria-expanded={mobileOpen}><Menu size={18}/></button><div className="topbar-context"><span className="live-dot"/><strong>{activeSectionLabel}</strong><span className="topbar-separator">·</span><span>{currentRole}</span></div><div className="topbar-actions">{actor.demo && <DemoRoleSwitch current={actor.roleCode === "object_manager" ? "object" : actor.roleCode === "sales_manager" ? "sales" : actor.roleCode === "regional_manager" ? "regional" : actor.roleCode}/>}<ThemeToggle/><Link className="icon-button" href="/tasks" aria-label="Задачи"><Activity size={16}/></Link></div></header>
+    <header className={`topbar ${compact ? "topbar-compact" : ""}`}><button className="mobile-menu" type="button" onClick={() => { setPrefs(current => ({ ...current, compact: false })); setMobileOpen(v => !v); }} aria-label="Меню" aria-expanded={mobileOpen}><Menu size={18}/></button><div className="topbar-context"><span className="live-dot"/><strong>{activeSectionLabel}</strong><span className="topbar-separator">·</span><span>{currentRole}</span>{actor.accessPreview&&<span className="access-preview-flag">Режим проверки</span>}</div><div className="topbar-actions"><WorkspaceContextControls context={workspace} demo={actor.demo}/>{actor.demo&&<DemoRoleSwitch current={actor.roleCode === "object_manager" ? "object" : actor.roleCode === "sales_manager" ? "sales" : actor.roleCode === "regional_manager" ? "regional" : actor.roleCode}/>}<ThemeToggle/>{hasCapability(actor.access,"task.read")&&<Link className="icon-button" href="/tasks" aria-label="Задачи"><Activity size={16}/></Link>}<AccountMenu actor={actor}/></div></header>
     {palette && <NavigationSearch query={query} setQuery={setQuery} results={results} open={open} close={() => { setPalette(false); setQuery(""); searchRef.current?.focus(); }}/>}
   </>;
 }
