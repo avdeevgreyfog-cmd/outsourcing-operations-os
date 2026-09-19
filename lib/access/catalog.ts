@@ -28,6 +28,7 @@ export const capabilities = {
   candidatesRead: "recruiting.candidate.read",
   candidatesCreate: "recruiting.candidate.create",
   candidatesConvert: "recruiting.candidate.convert",
+  recruitingAnalyticsConfigure: "recruiting.analytics.configure",
   workersRead: "worker.read",
   workerCompensation: "worker.compensation.read",
   timeRead: "time.time_entry.read",
