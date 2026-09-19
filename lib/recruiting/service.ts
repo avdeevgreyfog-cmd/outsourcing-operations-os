@@ -77,6 +77,7 @@ export type RecruitingApplicationRow = {
   plannedStartDate: string | null;
   actualStartAt: string | null;
   rejectionReason: string | null;
+  rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
 };
 
@@ -96,6 +97,7 @@ export type CandidateStageEvent = {
   fromStage: string | null;
   toStage: string;
   reason: string | null;
+  reasonCode: string | null;
   changedAt: string;
   changedBy: string;
 };
@@ -127,6 +129,7 @@ export type RecruitingOptions = {
   objects: Array<{id:string;name:string;regionId:string;region:string}>;
   recruiters: Array<{id:string;name:string}>;
   sources: string[];
+  exitReasons: Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>;
 };
 
 
@@ -276,7 +279,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId: row.ownerUserId ?? null,
       owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
-      rejectionReason: null, conditions: need?.conditions ?? {},
+      rejectionReason: null, rejectionReasonCode:null, conditions: need?.conditions ?? {},
     };
   });
 }
@@ -295,7 +298,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
           || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
           || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
-        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.conditions_snapshot conditions
+        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
       JOIN needs n ON n.id=ca.need_id
@@ -321,7 +324,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     id, fullName:first.fullName, phone:first.phone, email:first.email, preferredChannel:first.preferredChannel, telegram:first.telegram,
     whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
     sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:null, status:"active", applications,
-    communications: [], history: applications.map((application, index) => ({id:`demo-history-${index}`,applicationId:application.applicationId,fromStage:null,toStage:application.stage,reason:null,changedAt:"Демо",changedBy:"Ольга Новикова"})),
+    communications: [], history: applications.map((application, index) => ({id:`demo-history-${index}`,applicationId:application.applicationId,fromStage:null,toStage:application.stage,reason:null,reasonCode:null,changedAt:"Демо",changedBy:"Ольга Новикова"})),
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history">>>`
@@ -339,7 +342,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         WHERE cc.candidate_id=${id}::uuid ORDER BY cc.happened_at DESC LIMIT 100
       `,
       sql<CandidateStageEvent[]>`
-        SELECT h.id,h.application_id "applicationId",h.from_stage "fromStage",h.to_stage "toStage",h.reason,
+        SELECT h.id,h.application_id "applicationId",h.from_stage "fromStage",h.to_stage "toStage",h.reason,h.reason_code "reasonCode",
           to_char(h.created_at,'DD.MM.YYYY HH24:MI') "changedAt",u.display_name "changedBy"
         FROM candidate_stage_history h JOIN app_users u ON u.id=h.changed_by_user_id
         WHERE h.application_id=ANY(${applicationIds}::uuid[]) ORDER BY h.created_at DESC LIMIT 100
@@ -364,9 +367,25 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
     recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
     sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
+    exitReasons: [
+      {code:"pay",name:"Не устроила зарплата",kind:"rejected"},
+      {code:"schedule",name:"Не устроил график",kind:"rejected"},
+      {code:"housing",name:"Не устроило проживание",kind:"rejected"},
+      {code:"location",name:"Не устроила локация",kind:"rejected"},
+      {code:"other_offer",name:"Нашёл другую работу",kind:"rejected"},
+      {code:"security",name:"Не прошёл проверку / СБ",kind:"rejected"},
+      {code:"documents",name:"Проблемы с документами",kind:"rejected"},
+      {code:"no_contact",name:"Не выходит на связь",kind:"both"},
+      {code:"changed_mind",name:"Передумал",kind:"both"},
+      {code:"client_rejected",name:"Отказ клиента / объекта",kind:"rejected"},
+      {code:"transport",name:"Проблема с проездом / логистикой",kind:"no_show"},
+      {code:"shift_confirm",name:"Не подтвердил выход / смену",kind:"no_show"},
+      {code:"no_show",name:"Не вышел без предупреждения",kind:"no_show"},
+      {code:"other",name:"Другое",kind:"both"},
+    ],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [specialties,regions,objects,recruiters,sources] = await Promise.all([
+    const [specialties,regions,objects,recruiters,sources,exitReasons] = await Promise.all([
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;regionId:string;region:string}>>`
@@ -395,8 +414,12 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
         WHERE c.source IS NOT NULL AND btrim(c.source)<>''
         ORDER BY c.source
       `,
+      sql<Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>>`
+        SELECT code,name,kind FROM candidate_exit_reasons
+        WHERE active ORDER BY sort_order,name
+      `,
     ]);
-    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source)};
+    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source),exitReasons};
 
   });
 }
