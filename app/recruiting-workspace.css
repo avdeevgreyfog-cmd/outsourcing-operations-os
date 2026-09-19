@@ -329,3 +329,37 @@
  .needs-analytics-primary-grid{grid-template-columns:1fr}
  .needs-analytics-funnel-card .sales-funnel,.needs-funnel-column-head{max-width:700px}
 }
+
+
+/* Funnel analytics utility pass: make the trend chart a working comparison surface. */
+.needs-analytics-bottom-grid{grid-template-columns:minmax(290px,.72fr) minmax(560px,1.28fr);gap:9px;align-items:stretch}
+.needs-stage-details-card{grid-column:1/-1}
+.needs-trend-card{display:grid;grid-template-rows:auto auto 1fr}
+.needs-trend-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--border);background:var(--panel-2)}
+.needs-trend-summary>div{min-width:0;display:grid;gap:3px;padding:9px 11px;border-right:1px solid var(--border)}
+.needs-trend-summary>div:last-child{border-right:0}
+.needs-trend-summary span{font-size:8.5px;line-height:1.25;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.needs-trend-summary strong{font-size:15px;line-height:1.15;font-weight:670;font-variant-numeric:tabular-nums}
+.needs-trend-delta.good strong{color:var(--good)}
+.needs-trend-delta.bad strong{color:var(--bad)}
+.needs-trend-delta.neutral strong{color:var(--text)}
+.needs-trend-chart{height:250px}
+.needs-trend-card .needs-mini-segments button{padding-inline:8px}
+.needs-loss-card{min-height:0}
+.needs-loss-list{align-content:start}
+.needs-stage-details-card .needs-stage-table-wrap{max-height:none}
+
+@media(max-width:1220px){
+ .needs-analytics-bottom-grid{grid-template-columns:minmax(270px,.78fr) minmax(460px,1.22fr)}
+ .needs-trend-chart{height:238px}
+}
+@media(max-width:980px){
+ .needs-analytics-bottom-grid{grid-template-columns:1fr}
+ .needs-stage-details-card{grid-column:auto}
+ .needs-trend-chart{height:240px}
+}
+@media(max-width:620px){
+ .needs-trend-summary{grid-template-columns:1fr}
+ .needs-trend-summary>div{border-right:0;border-bottom:1px solid var(--border)}
+ .needs-trend-summary>div:last-child{border-bottom:0}
+}
