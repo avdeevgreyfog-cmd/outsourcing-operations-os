@@ -279,7 +279,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId: row.ownerUserId ?? null,
       owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
-      rejectionReason: null, rejectionReasonCode:null, conditions: need?.conditions ?? {},
+      rejectionReason: (row as {rejectionReason?:string}).rejectionReason??null, rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null, conditions: need?.conditions ?? {},
     };
   });
 }
