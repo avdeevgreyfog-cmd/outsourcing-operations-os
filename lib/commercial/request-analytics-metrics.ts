@@ -17,12 +17,12 @@ export function canConfigureRequestAnalytics(actor:Actor){
 export async function getRequestAnalyticsMetricPreferences(actor:Actor):Promise<RequestAnalyticsMetricPreference[]>{
   if(actor.demo)return defaultRequestAnalyticsMetricPreferences();
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const rows=await sql<Array<{metricKey:string;displayLabel:string|null;position:number;visible:boolean;targetValue:number|null}>>\`
+    const rows=await sql<Array<{metricKey:string;displayLabel:string|null;position:number;visible:boolean;targetValue:number|null}>>`
       SELECT metric_key "metricKey",display_label "displayLabel",position,visible,target_value::float8 "targetValue"
       FROM analytics_metric_preferences
-      WHERE module_code='sales_requests' AND scope_type='organization' AND scope_id=\${actor.organizationId}::uuid
+      WHERE module_code='sales_requests' AND scope_type='organization' AND scope_id=${actor.organizationId}::uuid
       ORDER BY position,metric_key
-    \`;
+    `;
     const override=new Map(rows.map(row=>[row.metricKey,row]));
     return defaultRequestAnalyticsMetricPreferences().map(item=>{
       const row=override.get(item.key);
@@ -47,25 +47,25 @@ export async function saveRequestAnalyticsMetricPreferences(actor:Actor,items:Re
       };
     });
   return withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-    await tx\`
+    await tx`
       DELETE FROM analytics_metric_preferences
-      WHERE module_code='sales_requests' AND scope_type='organization' AND scope_id=\${actor.organizationId}::uuid
-    \`;
+      WHERE module_code='sales_requests' AND scope_type='organization' AND scope_id=${actor.organizationId}::uuid
+    `;
     for(const item of clean){
-      await tx\`
+      await tx`
         INSERT INTO analytics_metric_preferences(
           organization_id,module_code,scope_type,scope_id,metric_key,display_label,position,visible,target_value,updated_by_user_id,updated_at
         ) VALUES (
-          \${actor.organizationId}::uuid,'sales_requests','organization',\${actor.organizationId}::uuid,
-          \${item.key},\${item.label},\${item.position},\${item.visible},\${item.targetValue},\${actor.userId}::uuid,now()
+          ${actor.organizationId}::uuid,'sales_requests','organization',${actor.organizationId}::uuid,
+          ${item.key},${item.label},${item.position},${item.visible},${item.targetValue},${actor.userId}::uuid,now()
         )
-      \`;
+      `;
     }
-    await tx\`
+    await tx`
       INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-      VALUES(\${actor.organizationId}::uuid,\${actor.userId}::uuid,'analytics_view',\${actor.organizationId}::uuid,'updated',
-        'Обновлена витрина метрик аналитики заявок',\${sql.json({module:"sales_requests",metrics:clean.map(item=>item.key)})})
-    \`;
+      VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'analytics_view',${actor.organizationId}::uuid,'updated',
+        'Обновлена витрина метрик аналитики заявок',${sql.json({module:"sales_requests",metrics:clean.map(item=>item.key)})})
+    `;
     return {saved:true};
   }));
 }
