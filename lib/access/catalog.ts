@@ -39,7 +39,7 @@ export const capabilities = {
   financeMarginRead: "finance.client_margin.read",
   financePnlRead: "finance.pnl.read",
   analyticsRead: "analytics.portfolio.read",
-  permissionsManage: "admin.permissions.manage",
+  permissionsManage: "admin.permissions.manage",\n  systemAccessManage: "admin.system_access.manage",
   auditRead: "audit.read",
   organizationRead: "organization.read",
   organizationManage: "organization.manage",
