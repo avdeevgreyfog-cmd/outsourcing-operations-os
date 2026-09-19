@@ -41,14 +41,16 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
 
   useEffect(()=>{
     if(!demo)return;
+    let frame=0;
     try{
       const raw=localStorage.getItem(demoMetricStorageKey);
       if(!raw)return;
       const parsed=JSON.parse(raw) as RecruitingMetricPreference[];
       const allowed=new Set(recruitingMetricCatalog.map(item=>item.key));
       const clean=parsed.filter(item=>allowed.has(item.key));
-      if(clean.length){setPreferences(clean);setDraftPreferences(clean)}
+      if(clean.length)frame=requestAnimationFrame(()=>{setPreferences(clean);setDraftPreferences(clean)});
     }catch{}
+    return()=>{if(frame)cancelAnimationFrame(frame)};
   },[demo]);
 
   function apply(patch:Partial<RecruitingAnalyticsFilters>){
