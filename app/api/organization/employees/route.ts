@@ -21,8 +21,8 @@ export async function POST(request:Request){
       const [existing]=await sql.unsafe<Array<{id:string}>>("SELECT id FROM app_users WHERE email=$1",[body.email]);
       let userId=existing?.id;
       if(!userId){const [created]=await sql.unsafe<Array<{id:string}>>("INSERT INTO app_users(email,display_name) VALUES($1,$2) RETURNING id",[body.email,body.name]);userId=created.id}
-      let [roleTemplate]=await sql.unsafe<Array<{id:string}>>("SELECT id FROM role_templates ORDER BY is_system DESC,created_at LIMIT 1");
-      if(!roleTemplate)[roleTemplate]=await sql.unsafe<Array<{id:string}>>("INSERT INTO role_templates(organization_id,code,name,description,is_system) VALUES($1::uuid,'member','Сотрудник','Базовый совместимый шаблон доступа',true) RETURNING id",[actor.organizationId]);
+      let [roleTemplate]=await sql.unsafe<Array<{id:string}>>("SELECT id FROM role_templates WHERE organization_id=$1::uuid AND code='member' LIMIT 1",[actor.organizationId]);
+      if(!roleTemplate)[roleTemplate]=await sql.unsafe<Array<{id:string}>>("INSERT INTO role_templates(organization_id,code,name,description,is_system) VALUES($1::uuid,'member','Сотрудник','Базовый системный профиль без бизнес-доступа',true) ON CONFLICT (organization_id,code) DO UPDATE SET code=EXCLUDED.code RETURNING id",[actor.organizationId]);
       const [membership]=await sql.unsafe<Array<{id:string}>>(
         "INSERT INTO organization_memberships(organization_id,user_id,role_template_id,position_id,primary_org_unit_id,manager_membership_id,phone,status) VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7,'invited') RETURNING id",
         [actor.organizationId,userId,roleTemplate.id,seat?.job_profile_id??null,seat?.organization_unit_id??null,body.managerMembershipId??null,body.phone??null]
