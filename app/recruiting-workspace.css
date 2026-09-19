@@ -610,3 +610,15 @@
 .recruiting-workspace{min-width:0}
 .recruiting-card{min-width:0;overflow-wrap:anywhere;font-family:inherit}
 .recruiting-card-meta{flex-wrap:wrap}
+
+
+/* Pilot tenant setup and operational directories */
+.recruiting-setup-notice{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 14px;border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border));border-radius:8px;background:color-mix(in srgb,var(--accent-soft) 54%,var(--panel));}
+.recruiting-setup-notice>div{min-width:0}.recruiting-setup-notice strong{display:block;font-size:12px;color:var(--text)}.recruiting-setup-notice span{display:block;margin-top:3px;color:var(--muted);font-size:11px;line-height:1.45}
+.directory-workspace{display:grid;gap:14px}.directory-note{padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:11px}
+.directory-create-row,.directory-create-grid{display:grid;gap:8px;padding:0 0 11px}
+.directory-create-row{grid-template-columns:minmax(240px,1fr) auto}.directory-create-grid{grid-template-columns:minmax(220px,.8fr) minmax(280px,1fr) auto}
+.directory-create-row input,.directory-create-grid input{height:34px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-size:11px}
+.directory-create-row input:focus,.directory-create-grid input:focus{outline:0;border-color:var(--accent);box-shadow:var(--focus)}
+.directory-workspace .section{overflow:visible}.directory-workspace .data-table td:last-child,.directory-workspace .data-table th:last-child{width:44px;text-align:right}.directory-edit-card{max-width:560px}
+@media(max-width:920px){.recruiting-setup-notice{align-items:flex-start;flex-direction:column}.directory-create-grid{grid-template-columns:1fr}.directory-create-row{grid-template-columns:1fr}}

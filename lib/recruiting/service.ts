@@ -2,7 +2,7 @@ import type { WorkflowDetails } from "./workflow";
 import { demoApplicationDetails } from "./demo-timeline";
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
-import { canReadRow } from "@/lib/core/access.mjs";
+import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
 import { needSourceLabels, normalizeRecruitingStage, recruitingStageLabels, type RecruitingStage } from "./model";
@@ -415,7 +415,16 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
         JOIN role_templates rt ON rt.id=m.role_template_id
         LEFT JOIN membership_regions mr ON mr.membership_id=m.id
         WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
-          AND rt.code IN ('recruiter','recruiting_manager')
+          AND (
+            rt.code IN ('recruiter','recruiting_manager')
+            OR EXISTS (
+              SELECT 1 FROM permission_grants pg
+              WHERE pg.role_template_id=rt.id
+                AND pg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
+                AND pg.effect='allow'
+            )
+            OR (m.user_id=${actor.userId}::uuid AND ${hasCapability(actor.access,"recruiting.candidate.edit")})
+          )
           AND (${actor.access.allOrg} OR mr.region_id=ANY(${actor.regionIds}::uuid[]) OR m.user_id=${actor.userId}::uuid)
         ORDER BY u.display_name
       `,

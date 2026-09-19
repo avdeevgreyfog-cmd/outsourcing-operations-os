@@ -4,6 +4,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import { hasCapability } from "@/lib/core/access.mjs";
 
 const conditionSchema = z.object({
   location: z.string().trim().max(500).nullable().optional(),
@@ -97,9 +98,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             FROM organization_memberships m
             JOIN role_templates rt ON rt.id=m.role_template_id
             WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
-              AND m.user_id=ANY(${ids}::uuid[]) AND rt.code IN ('recruiter','recruiting_manager')
+              AND m.user_id=ANY(${ids}::uuid[])
+              AND (
+                rt.code IN ('recruiter','recruiting_manager')
+                OR EXISTS (
+                  SELECT 1 FROM permission_grants pg
+                  WHERE pg.role_template_id=rt.id
+                    AND pg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
+                    AND pg.effect='allow'
+                )
+                OR (m.user_id=${actor.userId}::uuid AND ${hasCapability(actor.access,"recruiting.candidate.edit")})
+              )
           `;
-          if (valid.length !== ids.length) throw new Error("Один из назначенных сотрудников не является доступным рекрутером");
+          if (valid.length !== ids.length) throw new Error("Один из назначенных сотрудников не имеет доступа к подбору");
         }
       }
 
