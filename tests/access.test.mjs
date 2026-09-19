@@ -45,3 +45,13 @@ test("org unit scope can inherit the actor assignment", () => {
   assert.equal(canReadRow(access, "organization.read", { organizationId: "org1", orgUnitId: "ops" }, actor), true);
   assert.equal(canReadRow(access, "organization.read", { organizationId: "org1", orgUnitId: "finance" }, actor), false);
 });
+
+
+test("resolved org unit subtree scope includes descendants but not other branches", () => {
+  const access = {
+    capabilities: ["organization.read"],
+    scopes: { "organization.read": [{ type: "org_unit_subtree", ids: ["ops", "ops-team", "ops-project"] }] },
+  };
+  assert.equal(canReadRow(access, "organization.read", { organizationId: "org1", orgUnitId: "ops-team" }, actor), true);
+  assert.equal(canReadRow(access, "organization.read", { organizationId: "org1", orgUnitId: "finance" }, actor), false);
+});
