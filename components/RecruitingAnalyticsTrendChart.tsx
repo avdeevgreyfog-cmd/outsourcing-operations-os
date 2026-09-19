@@ -108,15 +108,15 @@ export function RecruitingAnalyticsTrendChart({rows}:{rows:RecruitingAnalyticsDa
 function bucketRows(rows:RecruitingAnalyticsDaily[]):ChartPoint[]{
   if(!rows.length)return[];
   const size=rows.length<=14?1:rows.length<=45?3:rows.length<=120?7:14;
-  const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short"});
+  const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"});
   const result:ChartPoint[]=[];
   for(let index=0;index<rows.length;index+=size){
     const bucket=rows.slice(index,index+size);
     const newCandidates=bucket.reduce((sum,row)=>sum+row.newCandidates,0);
     const ready=bucket.reduce((sum,row)=>sum+row.ready,0);
     const started=bucket.reduce((sum,row)=>sum+row.started,0);
-    const first=new Date(`${bucket[0].date}T00:00:00`);
-    const last=new Date(`${bucket[bucket.length-1].date}T00:00:00`);
+    const first=new Date(`${bucket[0].date}T00:00:00.000Z`);
+    const last=new Date(`${bucket[bucket.length-1].date}T00:00:00.000Z`);
     const label=bucket.length===1?formatter.format(first):`${formatter.format(first)}–${formatter.format(last)}`;
     result.push({
       label,newCandidates,ready,started,
