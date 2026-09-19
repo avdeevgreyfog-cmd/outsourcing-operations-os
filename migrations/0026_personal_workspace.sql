@@ -13,19 +13,18 @@ ON CONFLICT (id) DO UPDATE SET
   settings=organizations.settings || EXCLUDED.settings,
   updated_at=now();
 
--- Plaintext is not stored in source control. This precomputed bcrypt hash is for
--- the one-time temporary password issued to the owner for the first login.
-INSERT INTO app_users(id,email,display_name,password_hash,is_active)
+-- Account credentials are provisioned outside schema migrations. Keeping the
+-- password nullable here prevents reusable credentials or hashes from living in
+-- source control while preserving an existing password on upgrades.
+INSERT INTO app_users(id,email,display_name,is_active)
 VALUES(
   '10000000-0000-4000-8000-000000000101',
   'avdeevgreyfog@gmail.com',
   'Сергей Авдеев',
-  '$2a$12$/8nm/dVsJrClQ7A1cBxOr.3joqBrrjZs770.it.xtSFvRHhQlk7EG',
   true
 )
 ON CONFLICT (email) DO UPDATE SET
   display_name=EXCLUDED.display_name,
-  password_hash=COALESCE(app_users.password_hash,EXCLUDED.password_hash),
   is_active=true,
   updated_at=now();
 
