@@ -16,10 +16,11 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
   const [mode,setMode]=useState<FunnelMode>("candidates");
   const filters=data.filters;
   const funnelHref=buildRecruitingHref(filters);
+  const currentPeriodDays=periodDays(filters.from,filters.to);
 
   function apply(patch:Partial<RecruitingAnalyticsFilters>){
     const next={...filters,...patch};
-    const params=new URLSearchParams({view:"analytics",from:next.from,to:next.to,compareFrom:next.compareFrom,compareTo:next.compareTo});
+    const params=new URLSearchParams({view:"analytics",from:next.from,to:next.to});
     if(next.objectId)params.set("object",next.objectId);
     if(next.specialtyId)params.set("specialty",next.specialtyId);
     if(next.recruiterId)params.set("recruiter",next.recruiterId);
@@ -27,12 +28,16 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
     router.replace(`/needs?${params.toString()}`,{scroll:false});
   }
 
+  function setPreset(days:number){
+    apply({from:shiftDay(filters.to,-(days-1)),to:filters.to});
+  }
+
   const funnelSteps=useMemo(()=>data.stages.map(stage=>({
     key:stage.stage,
     label:stage.label,
     value:stage.candidates,
-    note:`${stage.shareTotal}% от общего`,
-    aside:mode==="candidates"?`${stage.candidates} кандид.`:mode==="conversion"?`${stage.conversion}%`:mode==="losses"?(stage.stage==="started"?"—":`−${stage.loss} · ${stage.lossRate}%`):formatDuration(stage.avgHours),
+    note:`${stage.shareTotal}% от общего потока`,
+    aside:mode==="candidates"?`${stage.shareTotal}%`:mode==="conversion"?`${stage.conversion}%`:mode==="losses"?(stage.stage==="started"?"—":`−${stage.loss} · ${stage.lossRate}%`):formatDuration(stage.avgHours),
   })),[data.stages,mode]);
 
   const losses=useMemo(()=>data.stages.slice(0,-1).map((stage,index)=>({
@@ -40,16 +45,16 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
     to:data.stages[index+1].label,
     loss:stage.loss,
     rate:stage.lossRate,
-  })).sort((a,b)=>b.rate-a.rate||b.loss-a.loss),[data.stages]);
+  })).sort((a,b)=>b.rate-a.rate||b.loss-a.loss).slice(0,5),[data.stages]);
 
   const stageRows=data.stages;
   const kpis=[
-    {label:"Всего кандидатов в воронке",value:String(data.metrics.totalCandidates),delta:trend(data.metrics.totalCandidates,data.comparison.totalCandidates,"percent",true),icon:<UsersRound size={19}/>},
-    {label:"Конверсия до выхода",value:`${data.metrics.conversionToStart}%`,delta:trend(data.metrics.conversionToStart,data.comparison.conversionToStart,"pp",true),icon:<TrendingUp size={19}/>},
-    {label:"Сейчас в работе",value:String(data.metrics.inWork),delta:trend(data.metrics.inWork,data.comparison.inWork,"percent",true),icon:<UsersRound size={19}/>},
-    {label:"Готовы к выходу",value:String(data.metrics.ready),delta:trend(data.metrics.ready,data.comparison.ready,"percent",true),icon:<UserRoundCheck size={19}/>},
-    {label:"Среднее время подбора",value:data.metrics.avgDaysToStart==null?"—":`${formatNumber(data.metrics.avgDaysToStart)} дн.`,delta:trendNullable(data.metrics.avgDaysToStart,data.comparison.avgDaysToStart),icon:<Clock3 size={19}/>},
-    {label:"Вышли на работу",value:String(data.metrics.started),delta:trend(data.metrics.started,data.comparison.started,"percent",true),icon:<CheckCircle2 size={19}/>},
+    {label:"Кандидаты за период",value:String(data.metrics.totalCandidates),delta:trend(data.metrics.totalCandidates,data.comparison.totalCandidates,"percent",true),icon:<UsersRound size={18}/>},
+    {label:"Конверсия до выхода",value:`${data.metrics.conversionToStart}%`,delta:trend(data.metrics.conversionToStart,data.comparison.conversionToStart,"pp",true),icon:<TrendingUp size={18}/>},
+    {label:"В работе на конец периода",value:String(data.metrics.inWork),delta:trend(data.metrics.inWork,data.comparison.inWork,"percent",null),icon:<UsersRound size={18}/>},
+    {label:"Готовы к выходу",value:String(data.metrics.ready),delta:trend(data.metrics.ready,data.comparison.ready,"percent",true),icon:<UserRoundCheck size={18}/>},
+    {label:"Среднее время до выхода",value:data.metrics.avgDaysToStart==null?"—":`${formatNumber(data.metrics.avgDaysToStart)} дн.`,delta:trendNullable(data.metrics.avgDaysToStart,data.comparison.avgDaysToStart),icon:<Clock3 size={18}/>},
+    {label:"Вышли на работу",value:String(data.metrics.started),delta:trend(data.metrics.started,data.comparison.started,"percent",true),icon:<CheckCircle2 size={18}/>},
   ];
 
   function exportCsv(){
@@ -79,11 +84,13 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
         <i>—</i>
         <input type="date" value={filters.to} onChange={event=>apply({to:event.target.value})}/>
       </div>
-      <div className="needs-date-filter">
-        <span>Сравнить с</span>
-        <input type="date" value={filters.compareFrom} onChange={event=>apply({compareFrom:event.target.value})}/>
-        <i>—</i>
-        <input type="date" value={filters.compareTo} onChange={event=>apply({compareTo:event.target.value})}/>
+      <div className="needs-period-presets" role="group" aria-label="Быстрый выбор периода">
+        {[7,30,90].map(days=><button type="button" key={days} className={currentPeriodDays===days?"active":""} onClick={()=>setPreset(days)}>{days} дней</button>)}
+      </div>
+      <div className="needs-auto-compare" title="Сравнение рассчитывается автоматически для предыдущего периода той же длительности">
+        <span>Сравнение</span>
+        <strong>{formatRange(filters.compareFrom,filters.compareTo)}</strong>
+        <small>предыдущий равный период</small>
       </div>
       <select value={filters.objectId??""} onChange={event=>apply({objectId:event.target.value||null})} aria-label="Объект">
         <option value="">Все объекты</option>{options.objects.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
@@ -103,18 +110,21 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
     <div className="needs-analytics-primary-grid">
       <section className="needs-analytics-funnel-card">
         <div className="needs-analytics-card-head">
-          <div><h3>Воронка кандидатов</h3><p>Показывает, сколько кандидатов дошло до каждого этапа за выбранный период.</p></div>
-          <div className="needs-analytics-head-actions"><Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть кандидатов</Link><div className="needs-mini-segments" role="group" aria-label="Режим воронки">
-            {([
-              ["candidates","Кандидаты"],
-              ["conversion","Конверсия"],
-              ["losses","Потери"],
-              ["time","Среднее время"],
-            ] as const).map(([value,label])=><button key={value} type="button" className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}
-          </div></div>
+          <div><h3>Воронка кандидатов</h3><p>Дошедшие до этапа кандидаты за выбранный период.</p></div>
+          <div className="needs-analytics-head-actions">
+            <Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть кандидатов</Link>
+            <div className="needs-mini-segments" role="group" aria-label="Режим воронки">
+              {([
+                ["candidates","Кандидаты"],
+                ["conversion","Конверсия"],
+                ["losses","Потери"],
+                ["time","Среднее время"],
+              ] as const).map(([value,label])=><button key={value} type="button" className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}
+            </div>
+          </div>
         </div>
-        <div className="needs-funnel-column-head"><span>Этап и доля от общего</span><span>Кандидаты</span><span>{modeLabel(mode)}</span></div>
-        <SalesFunnel label="Воронка кандидатов" steps={funnelSteps} onStep={()=>router.push(funnelHref)}/>
+        <div className="needs-funnel-column-head"><span>Этап</span><span>Кандидаты</span><span>{modeLabel(mode)}</span></div>
+        <SalesFunnel label="Воронка кандидатов" steps={funnelSteps} onStep={()=>router.push(funnelHref)} showIndex/>
       </section>
 
       <aside className="needs-analytics-kpi-panel">
@@ -124,7 +134,7 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
           <div><span>{item.label}</span><strong>{item.value}</strong><small className={item.delta.tone}>{item.delta.text}</small></div>
         </div>)}</div>
         <div className="needs-analytics-insight">
-          <Lightbulb size={19}/>
+          <Lightbulb size={18}/>
           <div><strong>{data.summary.title}</strong><p>{data.summary.text}</p></div>
         </div>
       </aside>
@@ -132,25 +142,25 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
 
     <div className="needs-analytics-bottom-grid">
       <section className="needs-loss-card">
-        <div className="needs-analytics-card-head"><div><h3>Где теряем кандидатов?</h3><p>Потери между соседними этапами.</p></div></div>
-        <div className="needs-loss-list">{losses.map((item,index)=><div className="needs-loss-row" key={`${item.from}-${item.to}`}>
+        <div className="needs-analytics-card-head"><div><h3>Где теряем кандидатов?</h3><p>Пять самых заметных потерь между соседними этапами.</p></div></div>
+        <div className="needs-loss-list">{losses.length?losses.map((item,index)=><div className="needs-loss-row" key={`${item.from}-${item.to}`}>
           <span className="needs-loss-rank">{index+1}</span>
           <span className="needs-loss-copy"><strong>{item.from} → {item.to}</strong><i><span style={{width:`${item.rate}%`}}/></i></span>
           <b>{item.loss} <small>({item.rate}%)</small></b>
-        </div>)}</div>
+        </div>):<div className="needs-analytics-empty">Потерь между этапами за период нет.</div>}</div>
       </section>
 
       <RecruitingAnalyticsTrendChart rows={data.daily}/>
 
       <section className="needs-stage-details-card">
-        <div className="needs-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Операционные метрики по каждому переходу.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
+        <div className="needs-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Конверсия, скорость прохождения и потери.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
         <div className="needs-stage-table-wrap"><table className="data-table needs-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Кандидаты</th><th>Конверсия</th><th>Потери</th><th>Ср. время</th></tr></thead><tbody>{stageRows.map((stage,index)=><tr key={stage.stage}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.candidates}</td><td>{stage.conversion}%</td><td>{stage.stage==="started"?"—":`${stage.loss} (${stage.lossRate}%)`}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
       </section>
     </div>
   </div>;
 }
 
-function modeLabel(mode:FunnelMode){return mode==="candidates"?"Доля":mode==="conversion"?"Конверсия":mode==="losses"?"Потери":"Среднее время"}
+function modeLabel(mode:FunnelMode){return mode==="candidates"?"Доля от общего":mode==="conversion"?"Конверсия":mode==="losses"?"Потери":"Среднее время"}
 
 function formatNumber(value:number){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1}).format(value)}
 function formatDuration(hours:number|null){
@@ -158,15 +168,22 @@ function formatDuration(hours:number|null){
   if(hours<24)return `${formatNumber(hours)} ч`;
   return `${formatNumber(hours/24)} дн.`;
 }
+function parseDay(value:string){return new Date(`${value}T00:00:00`)}
+function shiftDay(value:string,days:number){const date=parseDay(value);date.setDate(date.getDate()+days);return date.toISOString().slice(0,10)}
+function periodDays(from:string,to:string){return Math.round((parseDay(to).getTime()-parseDay(from).getTime())/86400000)+1}
+function formatRange(from:string,to:string){
+  const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short"});
+  return `${formatter.format(parseDay(from))} — ${formatter.format(parseDay(to))}`;
+}
 
-function trend(current:number,previous:number,kind:"percent"|"pp",higherIsBetter:boolean){
-  if(previous===current)return {text:"без изменений к сравнению",tone:"neutral"};
+function trend(current:number,previous:number,kind:"percent"|"pp",higherIsBetter:boolean|null){
+  if(previous===current)return {text:"без изменений",tone:"neutral"};
   const diff=current-previous;
-  const positive=higherIsBetter?diff>0:diff<0;
-  if(kind==="pp")return {text:`${diff>0?"+":""}${formatNumber(diff)} п.п. к сравнению`,tone:positive?"good":"bad"};
-  if(previous===0)return {text:current>0?"+ новое значение":"—",tone:positive?"good":"neutral"};
+  const tone=higherIsBetter==null?"neutral":((higherIsBetter?diff>0:diff<0)?"good":"bad");
+  if(kind==="pp")return {text:`${diff>0?"+":""}${formatNumber(diff)} п.п. к прошлому периоду`,tone};
+  if(previous===0)return {text:current>0?"+ новое значение":"—",tone};
   const pct=diff/previous*100;
-  return {text:`${pct>0?"+":""}${formatNumber(pct)}% к сравнению`,tone:positive?"good":"bad"};
+  return {text:`${pct>0?"+":""}${formatNumber(pct)}% к прошлому периоду`,tone};
 }
 function trendNullable(current:number|null,previous:number|null){
   if(current==null||previous==null)return {text:"недостаточно данных",tone:"neutral"};
