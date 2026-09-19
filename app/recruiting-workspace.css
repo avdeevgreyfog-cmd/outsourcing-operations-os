@@ -589,3 +589,12 @@
   .needs-analytics-funnel-card .sales-funnel-step.has-index{grid-template-columns:20px minmax(0,1fr) 48px}
   .needs-analytics-funnel-card .sales-funnel-aside{display:none}
 }
+
+/* Operational recruiting actions use the existing surfaces and controls. */
+.recruiting-action-fields{border:0;padding:0;margin:0;display:grid;gap:14px;min-width:0}
+.recruiting-action-fields label{display:grid;gap:6px;font-size:13px}
+.recruiting-action-fields input[type="checkbox"]{width:auto;justify-self:start}
+.recruiting-column.is-drop-target{outline:1px dashed var(--border-strong);outline-offset:-2px}
+.recruiting-card[draggable="true"]{cursor:grab}
+.recruiting-card[draggable="true"]:active{cursor:grabbing}
+.recruiting-toolbar .button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--text)}

@@ -61,8 +61,8 @@ export async function POST(request: Request) {
       if (duplicate) return {candidateId,applicationId:duplicate.id,duplicate:true};
       const conditionSnapshot = JSON.parse(JSON.stringify(need.conditions ?? {}));
       const [application] = await tx<Array<{id:string}>>`
-        INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,next_action_at,owner_user_id,manager_user_id,conditions_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${body.needId}::uuid,${need.objectId}::uuid,'new',${body.nextActionAt??null}::timestamptz,${need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${sql.json(conditionSnapshot)},${actor.userId}::uuid)
+        INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,next_action_at,owner_user_id,manager_user_id,conditions_snapshot,source_snapshot,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${body.needId}::uuid,${need.objectId}::uuid,'new',${body.nextActionAt??null}::timestamptz,${need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${sql.json(conditionSnapshot)},${sql.json({source:body.source??"Ручной ввод",channel:body.sourceChannel??null,campaign:body.sourceCampaign??null,reference:body.sourceReference??null})},${actor.userId}::uuid)
         RETURNING id
       `;
       await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,changed_by_user_id)

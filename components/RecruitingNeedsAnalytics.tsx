@@ -13,10 +13,15 @@ import type { RecruitingAnalyticsData, RecruitingAnalyticsFilters } from "@/lib/
 import {
   recruitingMetricCatalog, recruitingMetricDefinition, type RecruitingMetricKey, type RecruitingMetricPreference,
 } from "@/lib/recruiting/analytics-metric-registry";
-import type { RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
+import type { RecruitingApplicationRow, RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 
 type FunnelMode="candidates"|"conversion"|"losses"|"time";
+import {useRecruitingApplications} from "@/lib/recruiting/demo-client";
+import {calculateDemoAnalytics} from "@/lib/recruiting/analytics-engine";
+import {workRisks,isActiveStage} from "@/lib/recruiting/workflow";
+
 type Props={
+  applications:RecruitingApplicationRow[];
   data:RecruitingAnalyticsData;
   options:RecruitingOptions;
   needs:RecruitingNeedRow[];
@@ -27,8 +32,12 @@ type Props={
 
 const demoMetricStorageKey="operis.recruiting.analytics.metrics.v1";
 
-export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,canConfigure,demo}:Props){
+export function RecruitingNeedsAnalytics({applications,data:serverData,options,needs,metricPreferences,canConfigure,demo}:Props){
   const router=useRouter();
+  const rows=useRecruitingApplications(applications,demo);
+  const data=useMemo(()=>demo?calculateDemoAnalytics(rows,serverData.filters,needs,options.exitReasons.map(x=>({code:x.code,label:x.name,count:0}))):serverData,[demo,rows,serverData,needs,options.exitReasons]);
+  const [analysisView,setAnalysisView]=useState<'cohort'|'current'>('cohort');
+  const currentRows=rows.filter(row=>(!data.filters.objectId||row.objectId===data.filters.objectId)&&(!data.filters.specialtyId||needs.find(n=>n.id===row.needId)?.specialtyId===data.filters.specialtyId)&&(!data.filters.recruiterId||row.ownerUserId===data.filters.recruiterId||row.assigneeUserIds.includes(data.filters.recruiterId))&&(!data.filters.source||row.source===data.filters.source));
   const [mode,setMode]=useState<FunnelMode>("conversion");
   const [showMetrics,setShowMetrics]=useState(false);
   const [savingMetrics,setSavingMetrics]=useState(false);
@@ -68,14 +77,12 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
   const funnelSteps=useMemo(()=>data.stages.map(stage=>({
     key:stage.stage,
     label:stage.label,
-    value:stage.candidates,
-    note:`${stage.shareTotal}% от общего потока`,
-    aside:mode==="candidates"?`${stage.shareTotal}%`:mode==="conversion"?`${stage.conversion}%`:mode==="losses"?(stage.stage==="started"?"—":`−${stage.notAdvanced} · ${stage.notAdvancedRate}%`):formatDuration(stage.avgHours),
-  })),[data.stages,mode]);
+    value:analysisView==="current"?currentRows.filter(x=>x.stage===stage.stage).length:stage.candidates,
+    note:analysisView==="current"?"Сейчас на этапе":`${stage.shareTotal}% заявок набора`,
+    aside:analysisView==="current"?`${currentRows.filter(x=>x.stage===stage.stage&&workRisks(x).length).length} требуют действия`:mode==="candidates"?`${stage.shareTotal}%`:mode==="conversion"?`${stage.conversion}%`:mode==="losses"?(stage.stage==="started"?"—":`−${stage.notAdvanced} · ${stage.notAdvancedRate}%`):formatDuration(stage.avgHours),
+  })),[data.stages,mode,analysisView,currentRows]);
 
-  const gaps=useMemo(()=>data.stages.slice(0,-1).map((stage,index)=>({
-    from:stage.label,to:data.stages[index+1].label,count:stage.notAdvanced,rate:stage.notAdvancedRate,
-  })).sort((a,b)=>b.rate-a.rate||b.count-a.count).slice(0,5),[data.stages]);
+  const gaps=data.stages.filter(stage=>stage.lost>0).map(stage=>({from:stage.label,to:'Выбытие',count:stage.lost,rate:stage.candidates?Math.round(stage.lost/stage.candidates*100):0})).sort((a,b)=>b.count-a.count);
 
   const staffing=useMemo(()=>{
     const active=needs.filter(row=>["open","in_progress","paused"].includes(row.status))
@@ -110,9 +117,9 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
   }
 
   function exportCsv(){
-    const header=["Этап","Кандидаты","Доля от общего","Конверсия","Не перешли дальше","Доля не перешедших","Среднее время"];
+    const header=["Этап","Заявки","Доля от общего","Конверсия","На этапе","Выбыли","Резерв","Пропустили следующий","Среднее время"];
     const lines=data.stages.map(stage=>[
-      stage.label,stage.candidates,`${stage.shareTotal}%`,`${stage.conversion}%`,stage.notAdvanced,`${stage.notAdvancedRate}%`,formatDuration(stage.avgHours),
+      stage.label,stage.candidates,`${stage.shareTotal}%`,`${stage.conversion}%`,stage.waiting,stage.lost,stage.reserved,stage.skipped,formatDuration(stage.avgHours),
     ]);
     const csv="\ufeff"+[header,...lines].map(row=>row.map(value=>`"${String(value).replaceAll('"','""')}"`).join(";")).join("\n");
     const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
@@ -154,6 +161,8 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
   }
 
   return <div className="needs-analytics-screen">
+    <div className="recruiting-toolbar" role="group" aria-label="Вид аналитики"><button className="button" aria-pressed={analysisView==='cohort'} onClick={()=>setAnalysisView('cohort')}>Конверсия набора</button><button className="button" aria-pressed={analysisView==='current'} onClick={()=>setAnalysisView('current')}>Текущая очередь</button></div>
+    <p className="cell-sub">{demo?'Учебная история с фиксированными датами. ':''}Конверсия — по заявкам, созданным в выбранный период, на конец этого периода. Текущая очередь и комплектация — на сегодня, независимо от периода. Пропущенные этапы не считаются пройденными.</p>
     <section className="needs-analytics-filters" aria-label="Фильтры аналитики">
       <div className="needs-date-filter"><span><CalendarDays size={14}/> Период</span><input type="date" value={filters.from} onChange={event=>apply({from:event.target.value})}/><i>—</i><input type="date" value={filters.to} onChange={event=>apply({to:event.target.value})}/></div>
       <div className="needs-period-presets" role="group" aria-label="Быстрый выбор периода">{[7,30,90].map(days=><button type="button" key={days} className={currentPeriodDays===days?"active":""} onClick={()=>setPreset(days)}>{days} дней</button>)}</div>
@@ -170,19 +179,19 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
       <div><span>Работают</span><strong>{staffing.working}</strong></div>
       <div><span>Готовы</span><strong>{staffing.ready}</strong></div>
       <div><span>Нужно найти</span><strong>{staffing.toRecruit}</strong></div>
-      <div className="needs-staffing-progress"><span>Закрытие потребности</span><strong>{staffing.coverage}%</strong><i><b style={{width:`${Math.min(100,staffing.coverage)}%`}}/></i></div>
+      <div className="needs-staffing-progress"><span>Комплектация на сегодня</span><strong>{staffing.coverage}%</strong><i><b style={{width:`${Math.min(100,staffing.coverage)}%`}}/></i></div>
     </section>
 
     <div className="needs-analytics-primary-grid">
       <section className="needs-analytics-funnel-card">
         <div className="needs-analytics-card-head">
-          <div><h3>Воронка кандидатов</h3><p>Дошедшие до этапа кандидаты за выбранный период.</p></div>
+          <div><h3>{analysisView==="current"?"Сейчас на этапах":"Конверсия набора"}</h3><p>{analysisView==="current"?"Текущие заявки выбранного объекта, рекрутера и источника.":"Заявки, созданные за период. Переходы учитываются по записанной истории."}</p></div>
           <div className="needs-analytics-head-actions"><Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть кандидатов</Link><div className="needs-mini-segments" role="group" aria-label="Режим воронки">{([
             ["candidates","Доля"],["conversion","Конверсия"],["losses","Не перешли"],["time","Среднее время"],
           ] as const).map(([value,label])=><button key={value} type="button" className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}</div></div>
         </div>
         <div className="needs-funnel-column-head"><span>Этап</span><span>Кандидаты</span><span>{modeLabel(mode)}</span></div>
-        <SalesFunnel label="Воронка кандидатов" steps={funnelSteps} onStep={()=>router.push(funnelHref)} showIndex/>
+        <p className="cell-sub">Нажмите на этап, чтобы открыть его текущую очередь.</p><SalesFunnel label="Воронка кандидатов" steps={funnelSteps} onStep={key=>router.push(`${funnelHref}${funnelHref.includes("?")?"&":"?"}stage=${key}&queue=${key==="started"?"closed":"active"}`)} showIndex/>
       </section>
 
       <aside className="needs-analytics-kpi-panel">
@@ -190,7 +199,7 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
         <div className="needs-kpi-grid">{visibleMetrics.map(item=>{
           const definition=recruitingMetricDefinition(item.key);
           const current=metricRaw(item.key,true);
-          const previous=definition.comparison?metricRaw(item.key,false):null;
+          const previous=definition.comparison&&data.comparison.totalCandidates>0?metricRaw(item.key,false):null;
           const delta=definition.comparison&&typeof current==="number"&&typeof previous==="number"?metricTrend(current,previous,definition.direction,definition.format):null;
           return <div className="needs-kpi-card" key={item.key}><span className="needs-kpi-icon">{metricIcon(item.key)}</span><div><span>{item.label}</span><strong>{formatMetricValue(current,definition.format)}</strong><small className={delta?.tone??"neutral"}>{metricFootnote(item,definition,current,delta?.text??null)}</small></div></div>;
         })}</div>
@@ -199,15 +208,16 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
 
     <div className="needs-analytics-bottom-grid">
       <section className="needs-loss-card">
-        <div className="needs-analytics-card-head"><div><h3>Где не переходят дальше?</h3><p>Разрыв между достигнутыми этапами. В него могут входить и кандидаты, которые ещё находятся в работе.</p></div></div>
-        <div className="needs-loss-list">{gaps.length?gaps.map((item,index)=><div className="needs-loss-row" key={`${item.from}-${item.to}`}><span className="needs-loss-rank">{index+1}</span><span className="needs-loss-copy"><strong>{item.from} → {item.to}</strong><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<div className="needs-analytics-empty">Разрыва между этапами за период нет.</div>}</div>
+        <div className="needs-analytics-card-head"><div><h3>Фактические потери</h3><p>Отказы и невыходы по последнему рабочему этапу. Ожидающие выхода и резерв сюда не входят.</p></div></div>
+        <div className="needs-loss-list">{gaps.length?gaps.map((item,index)=><div className="needs-loss-row" key={`${item.from}-${item.to}`}><span className="needs-loss-rank">{index+1}</span><span className="needs-loss-copy"><strong>{item.from} → {item.to}</strong><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<div className="needs-analytics-empty">Зафиксированных отказов и невыходов в наборе нет.</div>}</div>
       </section>
 
+      <section className="needs-loss-card"><div className="needs-analytics-card-head"><div><h3>Требует действия сейчас</h3><p>Просрочки и незапланированные действия — отдельно от потерь.</p></div></div><div className="needs-loss-list">{[['attention','Заявки с рисками',currentRows.filter(x=>workRisks(x).length).length],['missing','Нет следующего действия',currentRows.filter(x=>isActiveStage(x.stage)&&!x.nextActionAt).length],['reserve','В резерве',currentRows.filter(x=>x.stage==='reserve').length]].map(([queue,label,count])=><Link className="needs-loss-row" key={queue} href={`${funnelHref}${funnelHref.includes('?')?'&':'?'}queue=${queue}`}><span>{label}</span><strong>{count}</strong></Link>)}</div></section>
       <RecruitingAnalyticsTrendChart rows={data.daily} comparisonRows={data.comparisonDaily}/>
 
       <section className="needs-source-card">
-        <div className="needs-analytics-card-head"><div><h3>Эффективность источников</h3><p>Выходы и конверсия без оценки стоимости привлечения.</p></div></div>
-        <div className="needs-source-table-wrap"><table className="data-table needs-source-table"><thead><tr><th>Источник</th><th>Кандидаты</th><th>Согласованы</th><th>Вышли</th><th>Конверсия</th><th>Ср. срок</th></tr></thead><tbody>{data.sources.length?data.sources.slice(0,8).map(row=><tr key={row.source}><td><strong>{row.source}</strong></td><td>{row.candidates}</td><td>{row.approved}</td><td>{row.started}</td><td>{row.conversion}%</td><td>{row.avgDaysToStart==null?"—":`${formatNumber(row.avgDaysToStart)} дн.`}</td></tr>):<tr><td colSpan={6}>Нет данных по источникам</td></tr>}</tbody></table></div>
+        <div className="needs-analytics-card-head"><div><h3>Эффективность источников</h3><p>Источники и кампании выбранного набора. Расходы не подключены: стоимость привлечения не рассчитывается.</p></div></div>
+        <div className="needs-source-table-wrap"><table className="data-table needs-source-table"><thead><tr><th>Источник</th><th>Кандидаты</th><th>Согласованы</th><th>Вышли</th><th>Конверсия</th><th>Ср. срок</th></tr></thead><tbody>{data.sources.length?data.sources.map(row=><tr key={row.source}><td><strong>{row.source}</strong>{row.candidates<10&&<span className="cell-sub">Малая выборка · {row.candidates} заявок</span>}</td><td>{row.candidates}</td><td>{row.approved}</td><td>{row.started}</td><td>{row.conversion}%</td><td>{row.avgDaysToStart==null?"—":`${formatNumber(row.avgDaysToStart)} дн.`}</td></tr>):<tr><td colSpan={6}>Нет данных по источникам</td></tr>}</tbody></table></div>
       </section>
 
       <section className="needs-exit-card">
@@ -216,8 +226,8 @@ export function RecruitingNeedsAnalytics({data,options,needs,metricPreferences,c
       </section>
 
       <section className="needs-stage-details-card">
-        <div className="needs-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Конверсия, скорость прохождения и разрыв между этапами.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
-        <div className="needs-stage-table-wrap"><table className="data-table needs-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Кандидаты</th><th>Конверсия</th><th>Не перешли</th><th>Ср. время</th></tr></thead><tbody>{data.stages.map((stage,index)=><tr key={stage.stage}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.candidates}</td><td>{stage.conversion}%</td><td>{stage.stage==="started"?"—":`${stage.notAdvanced} (${stage.notAdvancedRate}%)`}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
+        <div className="needs-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Состояние набора на конец периода. Среднее время — только по записанным соседним переходам.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
+        <div className="needs-stage-table-wrap"><table className="data-table needs-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Кандидаты</th><th>Конверсия</th><th>На этапе</th><th>Выбыли</th><th>Резерв</th><th>Пропустили следующий</th><th>Ср. время</th></tr></thead><tbody>{data.stages.map((stage,index)=><tr key={stage.stage}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.candidates}</td><td>{stage.conversion}%</td><td>{stage.waiting}</td><td>{stage.lost}</td><td>{stage.reserved}</td><td>{stage.skipped}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
       </section>
     </div>
 

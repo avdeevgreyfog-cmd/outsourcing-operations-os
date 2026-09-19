@@ -1,3 +1,5 @@
+import type { WorkflowDetails } from "./workflow";
+import { demoApplicationDetails } from "./demo-timeline";
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
@@ -73,6 +75,12 @@ export type RecruitingApplicationRow = {
   managerUserId: string | null;
   manager: string | null;
   assigneeUserIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  stageEnteredAt?: string | null;
+  nextActionAt?: string | null;
+  workflow?: WorkflowDetails;
+  stageEvents?: Array<{toStage:string;fromStage?:string|null;createdAt:string;reason?:string|null;reasonCode?:string|null}>;
   nextAction: string | null;
   plannedStartDate: string | null;
   actualStartAt: string | null;
@@ -268,11 +276,11 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
 }
 
 function demoApplications(actor: Actor): RecruitingApplicationRow[] {
-  return demo.candidates.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row, index) => {
+  return demo.candidates.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row) => {
     const stage = normalizeRecruitingStage(row.stage);
     const need = demo.needs.find((item) => item.objectId === row.objectId && item.specialty === row.need);
     return {
-      applicationId: `demo-application-${index + 1}`, candidateId: row.id, organizationId: row.organizationId,
+      applicationId: `demo-application-${row.id}`, candidateId: row.id, organizationId: row.organizationId,
       fullName: row.fullName, phone: row.phone ?? null, email: null, preferredChannel: "phone", telegram: null, whatsapp: null, city: null,
       source: row.source ?? null, sourceChannel: row.source ?? null, sourceCampaign: null, sourceReference: null,
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
@@ -280,6 +288,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
       rejectionReason: (row as {rejectionReason?:string}).rejectionReason??null, rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null, conditions: need?.conditions ?? {},
+      ...demoApplicationDetails(row,demo.candidates.findIndex(x=>x.id===row.id)),
     };
   });
 }
@@ -290,13 +299,15 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<Array<Omit<RecruitingApplicationRow,"stage"|"stageLabel"> & {rawStage:string} & Record<string, unknown>>>`
       SELECT ca.id "applicationId",c.id "candidateId",c.organization_id "organizationId",c.full_name "fullName",c.phone,c.email,
-        c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.source,c.source_channel "sourceChannel",
-        c.source_campaign "sourceCampaign",c.source_reference "sourceReference",ca.stage "rawStage",ca.need_id "needId",
+        c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,CASE WHEN ca.source_snapshot IS NULL THEN c.source ELSE ca.source_snapshot->>'source' END source,ca.source_snapshot->>'channel' "sourceChannel",
+        ca.source_snapshot->>'campaign' "sourceCampaign",ca.source_snapshot->>'reference' "sourceReference",ca.stage "rawStage",ca.need_id "needId",
         COALESCE(n.title,s.name) need,ca.object_id "objectId",o.name object,COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ca.owner_user_id "ownerUserId",owner.display_name owner,ca.manager_user_id "managerUserId",manager.display_name manager,
         ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
           || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
           || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
+        ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",ca.next_action_at::text "nextActionAt",ca.workflow_details workflow,
+        (SELECT max(h.created_at)::text FROM candidate_stage_history h WHERE h.application_id=ca.id) "stageEnteredAt",
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
         ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions
       FROM candidate_applications ca

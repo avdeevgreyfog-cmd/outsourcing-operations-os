@@ -9,7 +9,7 @@ export const recruitingStages = [
   "started",
 ] as const;
 
-export const recruitingTerminalStages = ["rejected", "no_show"] as const;
+export const recruitingTerminalStages = ["rejected", "no_show", "reserve"] as const;
 export type RecruitingStage = typeof recruitingStages[number] | typeof recruitingTerminalStages[number];
 
 export const recruitingStageLabels: Record<RecruitingStage, string> = {
@@ -23,6 +23,7 @@ export const recruitingStageLabels: Record<RecruitingStage, string> = {
   started: "Вышел",
   rejected: "Отказ",
   no_show: "Не вышел",
+  reserve: "Резерв",
 };
 
 export const legacyStageMap: Record<string, RecruitingStage> = {
