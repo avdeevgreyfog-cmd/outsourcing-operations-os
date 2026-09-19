@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db, hasDatabase, withTenant } from "@/lib/db/client";
-import { loadEffectiveAccess, loadRoleTemplateAccess } from "@/lib/access/server";
-import type { Actor, WorkspaceContext, WorkspaceOption } from "@/lib/access/types";
+import { loadEffectiveAccess, loadPreviewAccess } from "@/lib/access/server";
+import type { AccessPreviewTargetType, Actor, WorkspaceContext, WorkspaceOption } from "@/lib/access/types";
 import { getDemoActor } from "@/lib/demo/access";
 import { isDemoMode } from "@/lib/demo/mode";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -115,23 +115,40 @@ export async function getCurrentActor(options: ActorOptions = {}): Promise<Actor
     let roleName = row.role_name;
     let accessPreview: Actor["accessPreview"] = null;
 
-    const previewId = options.ignorePreview ? null : store.get(ACCESS_PREVIEW_COOKIE)?.value;
-    if (previewId && canAccessPreview) {
-      const [previewRole] = await tx<{ id: string; code: string; name: string }[]>`
-        SELECT id,code,name
-        FROM role_templates
-        WHERE id=${previewId}::uuid AND organization_id=${row.organization_id}::uuid
-        LIMIT 1
-      `;
-      if (previewRole) {
-        access = await loadRoleTemplateAccess(tx,previewRole.id,regionIds,orgUnitIds);
-        roleCode = previewRole.code;
-        roleName = previewRole.name;
-        accessPreview = {
-          roleTemplateId: previewRole.id,
-          roleCode: previewRole.code,
-          roleName: previewRole.name,
-        };
+    const previewValue = options.ignorePreview ? null : store.get(ACCESS_PREVIEW_COOKIE)?.value;
+    if (previewValue && canAccessPreview) {
+      const match = /^(role_template|position|process_role):([0-9a-f-]{36})$/i.exec(previewValue);
+      if (match) {
+        const targetType = match[1] as AccessPreviewTargetType;
+        const targetId = match[2];
+        const [previewTarget] = targetType === "role_template"
+          ? await tx<{ id: string; code: string; name: string }[]>`
+              SELECT id,code,name FROM role_templates
+              WHERE id=${targetId}::uuid AND organization_id=${row.organization_id}::uuid
+              LIMIT 1
+            `
+          : targetType === "position"
+            ? await tx<{ id: string; code: string; name: string }[]>`
+                SELECT id,code,name FROM positions
+                WHERE id=${targetId}::uuid AND organization_id=${row.organization_id}::uuid AND active=true
+                LIMIT 1
+              `
+            : await tx<{ id: string; code: string; name: string }[]>`
+                SELECT id,code,name FROM process_roles
+                WHERE id=${targetId}::uuid AND organization_id=${row.organization_id}::uuid AND active=true
+                LIMIT 1
+              `;
+        if (previewTarget) {
+          access = await loadPreviewAccess(tx,targetType,previewTarget.id,regionIds,orgUnitIds);
+          roleCode = previewTarget.code;
+          roleName = previewTarget.name;
+          accessPreview = {
+            targetType,
+            targetId: previewTarget.id,
+            code: previewTarget.code,
+            name: previewTarget.name,
+          };
+        }
       }
     }
 
@@ -198,30 +215,46 @@ export async function getWorkspaceContext(actor: Actor): Promise<WorkspaceContex
     organizations.push(realOrganization);
   }
 
-  let previewRoles: WorkspaceContext["previewRoles"] = [];
+  let previewOptions: WorkspaceContext["previewOptions"] = [];
   if (!actor.demo && actor.canAccessPreview) {
-    previewRoles = await withTenant(actor.organizationId,actor.userId,async (tx) => tx<{ id: string; code: string; name: string }[]>`
-      SELECT id,code,name
-      FROM role_templates
-      WHERE organization_id=${actor.organizationId}::uuid
-      ORDER BY CASE code
-        WHEN 'director' THEN 0
-        WHEN 'sales_manager' THEN 10
-        WHEN 'regional_manager' THEN 20
-        WHEN 'object_manager' THEN 30
-        WHEN 'recruiter' THEN 40
-        WHEN 'economist' THEN 50
-        WHEN 'finance' THEN 60
-        ELSE 100
-      END,name
-    `);
+    previewOptions = await withTenant(actor.organizationId,actor.userId,async (tx) => {
+      const roles = await tx<{ id: string; code: string; name: string }[]>`
+        SELECT id,code,name FROM role_templates
+        WHERE organization_id=${actor.organizationId}::uuid
+        ORDER BY CASE code
+          WHEN 'director' THEN 0
+          WHEN 'sales_manager' THEN 10
+          WHEN 'regional_manager' THEN 20
+          WHEN 'object_manager' THEN 30
+          WHEN 'recruiter' THEN 40
+          WHEN 'economist' THEN 50
+          WHEN 'finance' THEN 60
+          ELSE 100
+        END,name
+      `;
+      const positions = await tx<{ id: string; code: string; name: string }[]>`
+        SELECT id,code,name FROM positions
+        WHERE organization_id=${actor.organizationId}::uuid AND active=true
+        ORDER BY name
+      `;
+      const processRoles = await tx<{ id: string; code: string; name: string }[]>`
+        SELECT id,code,name FROM process_roles
+        WHERE organization_id=${actor.organizationId}::uuid AND active=true
+        ORDER BY name
+      `;
+      return [
+        ...roles.map((item) => ({...item,targetType:"role_template" as const})),
+        ...positions.map((item) => ({...item,targetType:"position" as const})),
+        ...processRoles.map((item) => ({...item,targetType:"process_role" as const})),
+      ];
+    });
   }
 
   return {
     organizations,
     currentOrganizationKey: actor.demo ? "demo" : actor.organizationId,
-    previewRoles,
-    previewRoleId: actor.accessPreview?.roleTemplateId ?? null,
+    previewOptions,
+    previewTarget: actor.accessPreview ? `${actor.accessPreview.targetType}:${actor.accessPreview.targetId}` : null,
     actualRoleName: actor.baseRoleName ?? actor.roleName,
     hasRealSession: Boolean(realOrganization),
   };
