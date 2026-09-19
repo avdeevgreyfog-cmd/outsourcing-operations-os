@@ -200,7 +200,7 @@ export function RequestInsights({analytics,stages,options,metricPreferences,canC
     <div className="request-analytics-secondary-grid">
       <section className="request-analytics-card request-gap-card">
         <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Разрыв между достигнутыми этапами. Это не всегда проигрыш — часть заявок ещё в работе.</p></div></div>
-        <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Разрывов между этапами нет" text="Переходы появятся после движения заявок по воронке."/ >}</div>
+        <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Разрывов между этапами нет" text="Переходы появятся после движения заявок по воронке."/>}</div>
       </section>
 
       <RequestAnalyticsTrendChart rows={analytics.daily} comparisonRows={analytics.comparisonDaily} unit={unit}/>
