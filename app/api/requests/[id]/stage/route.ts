@@ -46,12 +46,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!available[0]?.ok) throw new Error("Этап «Согласовано» доступен только после принятия заказчиком версии КП");
     }
     if (body.stageCode === "not_agreed") {
-      if (!body.lossReasonCode?.trim()) throw new Error("Выберите причину несогласования");
-      const reason = await withTenant(actor.organizationId, actor.userId, async (sql) => sql<Array<{ok:boolean}>>`
-        SELECT EXISTS(
-          SELECT 1 FROM request_loss_reasons WHERE code=${body.lossReasonCode} AND active
-        ) ok
-      `);
+      const reasonCode=body.lossReasonCode?.trim();
+      if (!reasonCode) throw new Error("Выберите причину несогласования");
+      const reason = await withTenant(actor.organizationId, actor.userId, async (sql) => {
+        return await sql<Array<{ok:boolean}>>`
+          SELECT EXISTS(
+            SELECT 1 FROM request_loss_reasons WHERE code=${reasonCode} AND active
+          ) ok
+        `;
+      });
       if (!reason[0]?.ok) throw new Error("Выбранная причина несогласования недоступна");
     }
 
