@@ -38,7 +38,7 @@ type AnalyticsRequest={
   source:string|null;createdByUserId:string;rawStage:string;lossReasonCode:string|null;headcount:number;specialtyIds:string[];
   createdAt:string;updatedAt:string;firstProposalAt:string|null;acceptedAt:string|null;
 };
-type StageEvent={requestId:string;toStageCode:string;createdAt:string};
+type StageEvent={requestId:string;toStageCode:string;lossReasonCode:string|null;createdAt:string};
 
 function isoDay(date:Date){return date.toISOString().slice(0,10)}
 function parseDay(value:string){return new Date(`${value}T00:00:00.000Z`)}
@@ -102,16 +102,16 @@ function buildPeriodAnalytics(rows:AnalyticsRequest[],history:StageEvent[],from:
   for(const row of cohort){
     const createdTime=new Date(row.createdAt).getTime(),firstReached=new Map<string,number>();
     const entryStage=stageCodes[0]??"new";firstReached.set(entryStage,createdTime);
-    let maxRank=0,asOfStage=entryStage;
+    let maxRank=0,asOfStage=entryStage,asOfLossReasonCode:string|null=null;
     for(const event of eventsByRequest.get(row.id)??[]){
       const eventTime=new Date(event.createdAt).getTime(),eventRank=rank.get(event.toStageCode);
       if(eventRank!=null){maxRank=Math.max(maxRank,eventRank);if(!firstReached.has(event.toStageCode))firstReached.set(event.toStageCode,eventTime)}
-      asOfStage=event.toStageCode;
+      asOfStage=event.toStageCode;if(event.toStageCode==="not_agreed")asOfLossReasonCode=event.lossReasonCode;
     }
     const updatedTime=new Date(row.updatedAt).getTime();
     if(updatedTime<=end){
       if(rank.has(row.rawStage)){const currentRank=rank.get(row.rawStage)!;maxRank=Math.max(maxRank,currentRank);if(!firstReached.has(row.rawStage))firstReached.set(row.rawStage,updatedTime);asOfStage=row.rawStage}
-      else if(row.rawStage==="not_agreed")asOfStage="not_agreed";
+      else if(row.rawStage==="not_agreed"){asOfStage="not_agreed";asOfLossReasonCode=row.lossReasonCode}
     }
     stageCodes.forEach((code,index)=>{if(maxRank>=index){reachedRequests.set(code,(reachedRequests.get(code)??0)+1);reachedHeadcount.set(code,(reachedHeadcount.get(code)??0)+row.headcount)}});
     for(let index=0;index<stageCodes.length-1;index++){
@@ -124,7 +124,7 @@ function buildPeriodAnalytics(rows:AnalyticsRequest[],history:StageEvent[],from:
     outcomes.set(row.id,{agreed,lost});
     if(agreedAt!=null&&agreedAt>=createdTime)cycleDays.push((agreedAt-createdTime)/86400000);
     if(row.firstProposalAt){const sentTime=new Date(row.firstProposalAt).getTime();if(sentTime<=end&&sentTime>=createdTime)proposalDays.push((sentTime-createdTime)/86400000)}
-    if(lost&&row.lossReasonCode){const item=lossMap.get(row.lossReasonCode)??{requests:0,headcount:0};item.requests++;item.headcount+=row.headcount;lossMap.set(row.lossReasonCode,item)}
+    if(lost&&asOfLossReasonCode){const item=lossMap.get(asOfLossReasonCode)??{requests:0,headcount:0};item.requests++;item.headcount+=row.headcount;lossMap.set(asOfLossReasonCode,item)}
 
     const createdDay=isoDay(new Date(createdTime)),createdPoint=dailyMap.get(createdDay)??{newRequests:0,newHeadcount:0,proposalRequests:0,proposalHeadcount:0,agreedRequests:0,agreedHeadcount:0};
     createdPoint.newRequests++;createdPoint.newHeadcount+=row.headcount;dailyMap.set(createdDay,createdPoint);
@@ -192,7 +192,7 @@ function makeDemoRows(actor:Actor,from:string,to:string,comparison=false):{rows:
     const rawStage=stageCodes[maxRank]??"new",id=`demo-request-${comparison?"prev":"cur"}-${index}`;
     const acceptedAt=rawStage==="agreed"?`${addDays(created,Math.min(8,maxRank+2))}T15:00:00.000Z`:null;
     rows.push({id,organizationId:base.organizationId,clientId:base.clientId??null,client:base.client??"Без клиента",ownerUserId:base.ownerUserId??actor.userId,owner:actor.displayName,regionId:base.regionId??null,source:index%3===0?"public_form":"manual",createdByUserId:base.createdByUserId,rawStage,lossReasonCode:null,headcount,specialtyIds:base.roles.map(role=>demoSpecialtyId(role.name)),createdAt:`${created}T09:00:00.000Z`,updatedAt:`${addDays(created,Math.min(maxRank,6))}T16:00:00.000Z`,firstProposalAt:maxRank>=5?`${addDays(created,4)}T12:00:00.000Z`:null,acceptedAt});
-    for(let stageIndex=0;stageIndex<=maxRank;stageIndex++)history.push({requestId:id,toStageCode:stageCodes[stageIndex],createdAt:`${addDays(created,stageIndex)}T10:00:00.000Z`});
+    for(let stageIndex=0;stageIndex<=maxRank;stageIndex++)history.push({requestId:id,toStageCode:stageCodes[stageIndex],lossReasonCode:null,createdAt:`${addDays(created,stageIndex)}T10:00:00.000Z`});
   }
   return {rows,history};
 }
@@ -241,7 +241,7 @@ export async function getRequestAnalytics(actor:Actor,filters:RequestAnalyticsFi
     const snapshot=snapshotRows.filter(row=>canReadRow(actor.access,"sales.request.read",row,actor)).filter(row=>matchesFilters(row,filters));
     const ids=accessible.map(row=>row.id);
     const history=ids.length?await sql<StageEvent[]>`
-      SELECT request_id "requestId",to_stage_code "toStageCode",created_at::text "createdAt"
+      SELECT request_id "requestId",to_stage_code "toStageCode",loss_reason_code "lossReasonCode",created_at::text "createdAt"
       FROM request_stage_history WHERE request_id=ANY(${ids}::uuid[]) AND created_at<(${latest}::date+INTERVAL '1 day')
       ORDER BY request_id,created_at
     `:[];
