@@ -52,6 +52,7 @@ export type RecruitingAnalyticsData = {
   metrics: RecruitingAnalyticsMetrics;
   comparison: RecruitingAnalyticsMetrics;
   daily: RecruitingAnalyticsDaily[];
+  comparisonDaily: RecruitingAnalyticsDaily[];
   summary: { title: string; text: string; stage: string | null };
 };
 
@@ -313,7 +314,7 @@ function demoAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Recru
   const compareRows=buildDemoPeriodRows(filtered,filters.compareFrom,filters.compareTo,compareScale,1);
   const current=buildPeriodAnalytics(currentRows.applications,currentRows.history,filters.from,filters.to);
   const comparison=buildPeriodAnalytics(compareRows.applications,compareRows.history,filters.compareFrom,filters.compareTo);
-  return {filters,stages:current.stages,metrics:current.metrics,comparison:comparison.metrics,daily:current.daily,summary:buildSummary(current.stages)};
+  return {filters,stages:current.stages,metrics:current.metrics,comparison:comparison.metrics,daily:current.daily,comparisonDaily:comparison.daily,summary:buildSummary(current.stages)};
 }
 
 export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Promise<RecruitingAnalyticsData> {
@@ -353,6 +354,7 @@ export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAn
       metrics:current.metrics,
       comparison:comparison.metrics,
       daily:current.daily,
+      comparisonDaily:comparison.daily,
       summary:buildSummary(current.stages),
     };
   });
