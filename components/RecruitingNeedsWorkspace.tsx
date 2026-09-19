@@ -9,7 +9,7 @@ import { SalesMetrics, SalesSearch, SalesSegments } from "@/components/sales/Sal
 import { RecruitingNeedsAnalytics } from "@/components/RecruitingNeedsAnalytics";
 import type { RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 import type { RecruitingAnalyticsData } from "@/lib/recruiting/analytics";
-import type { RecruitingMetricPreference } from "@/lib/recruiting/analytics-metrics";
+import type { RecruitingMetricPreference } from "@/lib/recruiting/analytics-metric-registry";
 import { needPriorityLabels, needSourceLabels } from "@/lib/recruiting/model";
 
 type Props={rows:RecruitingNeedRow[];options:RecruitingOptions;analytics:RecruitingAnalyticsData;metricPreferences:RecruitingMetricPreference[];initialView:View;canCreate:boolean;canManage:boolean;canConfigureAnalytics:boolean;demo:boolean};
