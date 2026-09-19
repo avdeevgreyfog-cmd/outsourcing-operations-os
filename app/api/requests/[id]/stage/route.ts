@@ -11,6 +11,7 @@ import { requestStageCodes } from "@/lib/commercial/request-workflow";
 
 const schema = z.object({
   stageCode: z.enum(requestStageCodes),
+  lossReasonCode: z.string().trim().max(80).nullable().optional(),
   lossReason: z.string().trim().max(500).nullable().optional(),
 });
 
@@ -44,11 +45,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       `);
       if (!available[0]?.ok) throw new Error("Этап «Согласовано» доступен только после принятия заказчиком версии КП");
     }
-    if (body.stageCode === "not_agreed" && !body.lossReason?.trim()) throw new Error("Укажите причину, почему предложение не согласовано");
+    if (body.stageCode === "not_agreed") {
+      if (!body.lossReasonCode?.trim()) throw new Error("Выберите причину несогласования");
+      const reason = await withTenant(actor.organizationId, actor.userId, async (sql) => sql<Array<{ok:boolean}>>`
+        SELECT EXISTS(
+          SELECT 1 FROM request_loss_reasons WHERE code=${body.lossReasonCode} AND active
+        ) ok
+      `);
+      if (!reason[0]?.ok) throw new Error("Выбранная причина несогласования недоступна");
+    }
 
     await withTenant(actor.organizationId, actor.userId, async (sql) => sql`
       UPDATE requests SET workflow_stage_code=${body.stageCode},
         loss_reason=CASE WHEN ${body.stageCode}='not_agreed' THEN ${body.lossReason ?? null} ELSE NULL END,
+        loss_reason_code=CASE WHEN ${body.stageCode}='not_agreed' THEN ${body.lossReasonCode ?? null} ELSE NULL END,
         lost_at=CASE WHEN ${body.stageCode}='not_agreed' THEN COALESCE(lost_at,now()) ELSE NULL END,
         won_at=CASE WHEN ${body.stageCode}='agreed' THEN COALESCE(won_at,now()) ELSE NULL END,
         closed_at=CASE WHEN ${body.stageCode} IN ('agreed','not_agreed') THEN COALESCE(closed_at,now()) ELSE NULL END,
