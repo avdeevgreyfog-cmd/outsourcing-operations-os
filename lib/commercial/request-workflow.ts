@@ -30,6 +30,8 @@ export type RequestWorkspaceOptions = {
   currentUserId: string;
   canAssign: boolean;
   canConfigurePipeline: boolean;
+  sources: string[];
+  lossReasons: Array<{code:string;name:string}>;
 };
 
 export type RequestBoardRow = {
@@ -51,11 +53,13 @@ export type RequestBoardRow = {
   archivedAt: string | null;
   closedAt: string | null;
   lossReason: string | null;
+  lossReasonCode: string | null;
   headcount: number;
   roles: Array<{ name: string; count: number }>;
   proposalVersion: number;
   proposalSentCount: number;
   lastProposalAt: string | null;
+  createdAt: string;
   updatedAt: string;
 };
 
