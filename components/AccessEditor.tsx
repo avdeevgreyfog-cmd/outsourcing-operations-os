@@ -71,37 +71,33 @@ export function AccessEditor({
     Object.fromEntries(users.map(item=>[item.membershipId,[...item.systemCapabilities]])),
   );
 
-  async function loadRules(membershipId:string){
-    if(demo){
-      setRules(demoRules);
-      return;
-    }
-    setRules(null);
-    setMessage("");
-    const response=await fetch(`/api/admin/access?membershipId=${membershipId}`);
-    const body=await response.json();
-    if(!response.ok){
-      setRules([]);
-      setMessage(body.error??"Не удалось загрузить права");
-      return;
-    }
-    setRules(body.items);
-    if(body.items.length&&!body.items.some((item:AccessRule)=>item.capability===capability)){
-      setCapability(body.items[0].capability);
-    }
-  }
-
   useEffect(()=>{
-    if(selectedId)void loadRules(selectedId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    if(demo||!selectedId)return;
+    let active=true;
+    fetch(`/api/admin/access?membershipId=${selectedId}`)
+      .then(async response=>{
+        const body=await response.json();
+        if(!response.ok)throw new Error(body.error??"Не удалось загрузить права");
+        if(!active)return;
+        const nextRules=body.items as AccessRule[];
+        setRules(nextRules);
+        setMessage("");
+        const first=nextRules[0];
+        if(first){
+          setCapability(first.capability);
+          setEffect(first.effect);
+          setScope(first.scopeType??"assigned_to_me");
+        }
+      })
+      .catch(error=>{
+        if(!active)return;
+        setRules([]);
+        setMessage(error instanceof Error?error.message:"Не удалось загрузить права");
+      });
+    return()=>{active=false};
   },[selectedId,demo]);
 
   const selectedRule=rules?.find(item=>item.capability===capability);
-  useEffect(()=>{
-    if(!selectedRule)return;
-    setEffect(selectedRule.effect);
-    setScope(selectedRule.scopeType??"assigned_to_me");
-  },[selectedRule]);
 
   const groupedRules=useMemo(()=>{
     const map=new Map<string,AccessRule[]>();
@@ -134,7 +130,19 @@ export function AccessEditor({
     const body=await response.json();
     setBusy(false);
     setMessage(response.ok?"Изменение сохранено. Новые права применятся со следующего запроса.":body.error??"Не удалось сохранить");
-    if(response.ok)void loadRules(selectedId);
+    if(response.ok){
+      const refreshed=await fetch(`/api/admin/access?membershipId=${selectedId}`);
+      const refreshedBody=await refreshed.json();
+      if(refreshed.ok){
+        const nextRules=refreshedBody.items as AccessRule[];
+        setRules(nextRules);
+        const next=nextRules.find(item=>item.capability===capability);
+        if(next){
+          setEffect(next.effect);
+          setScope(next.scopeType??"assigned_to_me");
+        }
+      }
+    }
   }
 
   async function toggleSystem(systemCapability:string,enabled:boolean){
@@ -177,7 +185,18 @@ export function AccessEditor({
         type="button"
         key={item.membershipId}
         className={item.membershipId===selectedId?"active":""}
-        onClick={()=>setSelectedId(item.membershipId)}
+        onClick={()=>{
+          setSelectedId(item.membershipId);
+          setMessage("");
+          if(!demo)setRules(null);
+          else {
+            const first=demoRules[0];
+            setRules(demoRules);
+            setCapability(first.capability);
+            setEffect(first.effect);
+            setScope(first.scopeType??"assigned_to_me");
+          }
+        }}
       >
         <span className="avatar">{item.name.split(" ").map(part=>part[0]).join("").slice(0,2)}</span>
         <span>
@@ -231,7 +250,14 @@ export function AccessEditor({
         </div>
         <div className="access-form">
           <label>Разрешение
-            <select value={capability} onChange={event=>setCapability(event.target.value)} disabled={!rules?.length}>
+            <select value={capability} onChange={event=>{
+              const next=rules?.find(item=>item.capability===event.target.value);
+              setCapability(event.target.value);
+              if(next){
+                setEffect(next.effect);
+                setScope(next.scopeType??"assigned_to_me");
+              }
+            }} disabled={!rules?.length}>
               {groupedRules.map(([domain,items])=><optgroup key={domain} label={domainLabels[domain]??domain}>
                 {items.map(item=><option key={item.capability} value={item.capability}>{item.description||item.capability}</option>)}
               </optgroup>)}
