@@ -12,7 +12,7 @@ import { RecruitingAnalyticsTrendChart } from "@/components/RecruitingAnalyticsT
 import type { RecruitingAnalyticsData, RecruitingAnalyticsFilters } from "@/lib/recruiting/analytics";
 import {
   recruitingMetricCatalog, recruitingMetricDefinition, type RecruitingMetricKey, type RecruitingMetricPreference,
-} from "@/lib/recruiting/analytics-metrics";
+} from "@/lib/recruiting/analytics-metric-registry";
 import type { RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 
 type FunnelMode="candidates"|"conversion"|"losses"|"time";
