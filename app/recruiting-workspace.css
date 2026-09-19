@@ -269,3 +269,63 @@
  .needs-analytics-funnel-card .sales-funnel-step.has-index{grid-template-columns:22px minmax(0,1fr) 46px}
  .needs-analytics-funnel-card .sales-funnel-index{width:18px;height:18px}
 }
+
+
+/* Needs analytics visual polish — keep the screen dense and consistent with OPERIS workspaces. */
+.needs-analytics-primary-grid{grid-template-columns:minmax(540px,1.42fr) minmax(320px,.78fr);align-items:stretch}
+.needs-analytics-funnel-card,.needs-analytics-kpi-panel,.needs-loss-card,.needs-trend-card,.needs-stage-details-card{box-shadow:none}
+.needs-analytics-card-head{background:var(--panel);border-bottom:1px solid var(--border)}
+.needs-analytics-side-title{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid var(--border);background:var(--panel);font-size:12px;font-weight:700}
+.needs-analytics-side-title small{font-size:9px;line-height:1.3;color:var(--muted);font-weight:500;white-space:nowrap}
+.needs-analytics-kpi-panel{grid-template-rows:auto 1fr;background:var(--panel-2)}
+.needs-kpi-grid{align-content:stretch;grid-auto-rows:minmax(76px,1fr);padding:9px;gap:7px}
+.needs-kpi-card{height:100%;min-height:76px;border-color:var(--border);background:var(--panel);border-radius:var(--radius-control)}
+.needs-kpi-card:hover{border-color:var(--border-strong);background:color-mix(in srgb,var(--panel-2) 45%,var(--panel))}
+.needs-kpi-icon{background:var(--panel-2);color:var(--muted);border:1px solid var(--border)}
+.needs-kpi-card strong{letter-spacing:-.025em}
+.needs-kpi-card small.good,.needs-kpi-card small.bad,.needs-kpi-card small.neutral{font-weight:600}
+
+.needs-analytics-funnel-card .sales-funnel{max-width:700px;padding:7px 16px 12px}
+.needs-analytics-funnel-card .sales-funnel-step{min-height:38px;padding:5px 34px;border-color:color-mix(in srgb,var(--accent) 16%,var(--border));clip-path:polygon(2% 0,98% 0,94% 100%,6% 100%)}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(1){background:color-mix(in srgb,var(--accent) 5%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(2){background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(3){background:color-mix(in srgb,var(--accent) 9%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(4){background:color-mix(in srgb,var(--accent) 11%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(5){background:color-mix(in srgb,var(--accent) 13%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(6){background:color-mix(in srgb,var(--accent) 15%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(7){background:color-mix(in srgb,var(--accent) 17%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(8){background:color-mix(in srgb,var(--accent) 19%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:hover{background:color-mix(in srgb,var(--accent) 12%,var(--panel));border-color:color-mix(in srgb,var(--accent) 34%,var(--border))}
+.needs-analytics-funnel-card .sales-funnel-index{border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));background:var(--panel);color:var(--muted)}
+.needs-analytics-funnel-card .sales-funnel-label{font-weight:650}
+.needs-analytics-funnel-card .sales-funnel-copy small{color:var(--soft)}
+.needs-funnel-column-head{max-width:700px;padding-inline:62px 34px;color:var(--soft)}
+
+.needs-analytics-bottom-grid{align-items:stretch}
+.needs-loss-card,.needs-trend-card,.needs-stage-details-card{background:var(--panel)}
+.needs-loss-list{padding:4px 0 7px}
+.needs-loss-row{min-height:42px}
+.needs-loss-rank{background:var(--panel-2);border:1px solid var(--border)}
+.needs-loss-copy i{height:4px;background:var(--panel-3)}
+.needs-loss-copy i span{background:var(--accent)}
+.needs-loss-row>b small{color:var(--muted)}
+.needs-trend-chart{height:210px}
+.needs-stage-table thead th{background:var(--panel-2);color:var(--muted);font-weight:650}
+.needs-stage-table tbody tr:hover{background:var(--panel-2)}
+
+.needs-date-filter,.needs-period-presets,.needs-auto-compare,.needs-analytics-filters>select{box-shadow:none}
+.needs-auto-compare{background:var(--panel)}
+.needs-auto-compare span{color:var(--soft)}
+.needs-auto-compare small{color:var(--soft)}
+.needs-period-presets button.active{background:var(--panel);box-shadow:0 0 0 1px var(--border)}
+.needs-mini-segments{background:var(--panel-2)}
+.needs-mini-segments button.active{background:var(--text);color:var(--panel)}
+
+@media(max-width:1380px){
+ .needs-analytics-primary-grid{grid-template-columns:minmax(500px,1.35fr) minmax(300px,.85fr)}
+ .needs-analytics-funnel-card .sales-funnel,.needs-funnel-column-head{max-width:660px}
+}
+@media(max-width:1080px){
+ .needs-analytics-primary-grid{grid-template-columns:1fr}
+ .needs-analytics-funnel-card .sales-funnel,.needs-funnel-column-head{max-width:700px}
+}
