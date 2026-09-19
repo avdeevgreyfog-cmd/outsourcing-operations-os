@@ -9,16 +9,17 @@ import { SalesMetrics, SalesSearch, SalesSegments } from "@/components/sales/Sal
 import { RecruitingNeedsAnalytics } from "@/components/RecruitingNeedsAnalytics";
 import type { RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 import type { RecruitingAnalyticsData } from "@/lib/recruiting/analytics";
+import type { RecruitingMetricPreference } from "@/lib/recruiting/analytics-metrics";
 import { needPriorityLabels, needSourceLabels } from "@/lib/recruiting/model";
 
-type Props={rows:RecruitingNeedRow[];options:RecruitingOptions;analytics:RecruitingAnalyticsData;initialView:View;canCreate:boolean;canManage:boolean;demo:boolean};
+type Props={rows:RecruitingNeedRow[];options:RecruitingOptions;analytics:RecruitingAnalyticsData;metricPreferences:RecruitingMetricPreference[];initialView:View;canCreate:boolean;canManage:boolean;canConfigureAnalytics:boolean;demo:boolean};
 type View="objects"|"needs"|"analytics"; type Bucket="active"|"attention"|"closed"|"all";
 type NeedForm={title:string;specialtyId:string;objectId:string;regionId:string;countRequired:string;deadline:string;sourceKind:string;priority:string;location:string;schedule:string;workerPay:string;dailyAllowanceProvided:string;dailyAllowanceAmount:string;shift:string;housing:string;housingProvided:string;travel:string;travelProvided:string;shuttle:string;shuttleProvided:string;meals:string;mealsProvided:string;ppe:string;ppeProvided:string;medical:string;medicalProvided:string;tools:string;toolsProvided:string;citizenship:string;requirements:string;comment:string};
 const emptyForm:NeedForm={title:"",specialtyId:"",objectId:"",regionId:"",countRequired:"",deadline:"",sourceKind:"manual",priority:"normal",location:"",schedule:"",workerPay:"",dailyAllowanceProvided:"unknown",dailyAllowanceAmount:"",shift:"",housing:"",housingProvided:"unknown",travel:"",travelProvided:"unknown",shuttle:"",shuttleProvided:"unknown",meals:"",mealsProvided:"unknown",ppe:"",ppeProvided:"unknown",medical:"",medicalProvided:"unknown",tools:"",toolsProvided:"unknown",citizenship:"",requirements:"",comment:""};
 const storageKey="operis.recruiting.needs.v1";
 const activeStatuses=new Set(["open","in_progress","paused"]); const closedStatuses=new Set(["filled","cancelled"]);
 
-export function RecruitingNeedsWorkspace({rows,options,analytics,initialView,canCreate,canManage,demo}:Props){
+export function RecruitingNeedsWorkspace({rows,options,analytics,metricPreferences,initialView,canCreate,canManage,canConfigureAnalytics,demo}:Props){
  const router=useRouter();const [view,setView]=useState<View>(initialView);const [bucket,setBucket]=useState<Bucket>("active");const [query,setQuery]=useState("");const [source,setSource]=useState("all");const [objectFilter,setObjectFilter]=useState("all");const [specialtyFilter,setSpecialtyFilter]=useState("all");const [recruiterFilter,setRecruiterFilter]=useState("all");const [selected,setSelected]=useState<RecruitingNeedRow|null>(null);const [showCreate,setShowCreate]=useState(false);const [showEdit,setShowEdit]=useState(false);const [form,setForm]=useState<NeedForm>(emptyForm);const [editForm,setEditForm]=useState<NeedForm>(emptyForm);const [editStatus,setEditStatus]=useState("open");const [editRecruiter,setEditRecruiter]=useState("");const [saving,setSaving]=useState(false);const [error,setError]=useState("");const [localRows,setLocalRows]=useState<RecruitingNeedRow[]>([]);
  useEffect(()=>{if(!demo)return;let frame=0;try{const value=localStorage.getItem(storageKey);if(value){const parsed=JSON.parse(value) as RecruitingNeedRow[];frame=requestAnimationFrame(()=>setLocalRows(parsed));}}catch{}return()=>{if(frame)cancelAnimationFrame(frame)}},[demo]);
  const allRows=useMemo(()=>[...localRows,...rows.filter(row=>!localRows.some(local=>local.id===row.id))],[localRows,rows]);
