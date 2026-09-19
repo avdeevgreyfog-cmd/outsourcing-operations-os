@@ -146,7 +146,7 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
         </div>):<div className="needs-analytics-empty">Потерь между этапами за период нет.</div>}</div>
       </section>
 
-      <RecruitingAnalyticsTrendChart rows={data.daily}/>
+      <RecruitingAnalyticsTrendChart rows={data.daily} comparisonRows={data.comparisonDaily}/>
 
       <section className="needs-stage-details-card">
         <div className="needs-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Конверсия, скорость прохождения и потери.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
