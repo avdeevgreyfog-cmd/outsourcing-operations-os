@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, CheckCircle2, Clock3, Download, Lightbulb, RotateCcw, TrendingUp, UserRoundCheck, UsersRound } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Download, RotateCcw, TrendingUp, UserRoundCheck, UsersRound } from "lucide-react";
 import { SalesFunnel } from "@/components/sales/SalesUI";
 import { RecruitingAnalyticsTrendChart } from "@/components/RecruitingAnalyticsTrendChart";
 import type { RecruitingAnalyticsData, RecruitingAnalyticsFilters } from "@/lib/recruiting/analytics";
@@ -128,15 +128,11 @@ export function RecruitingNeedsAnalytics({data,options}:{data:RecruitingAnalytic
       </section>
 
       <aside className="needs-analytics-kpi-panel">
-        <div className="needs-analytics-side-title">Ключевые показатели</div>
+        <div className="needs-analytics-side-title"><span>Ключевые показатели</span><small>{formatRange(filters.from,filters.to)}</small></div>
         <div className="needs-kpi-grid">{kpis.map(item=><div className="needs-kpi-card" key={item.label}>
           <span className="needs-kpi-icon">{item.icon}</span>
           <div><span>{item.label}</span><strong>{item.value}</strong><small className={item.delta.tone}>{item.delta.text}</small></div>
         </div>)}</div>
-        <div className="needs-analytics-insight">
-          <Lightbulb size={18}/>
-          <div><strong>{data.summary.title}</strong><p>{data.summary.text}</p></div>
-        </div>
       </aside>
     </div>
 
