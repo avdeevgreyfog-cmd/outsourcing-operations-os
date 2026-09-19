@@ -94,17 +94,15 @@ export function defaultRecruitingAnalyticsFilters(now = new Date()): RecruitingA
   return {from,to,compareFrom,compareTo,objectId:null,specialtyId:null,recruiterId:null,source:null};
 }
 
-export function normalizeRecruitingAnalyticsFilters(input: Partial<Record<"from"|"to"|"compareFrom"|"compareTo"|"object"|"specialty"|"recruiter"|"source",string|undefined>>): RecruitingAnalyticsFilters {
+export function normalizeRecruitingAnalyticsFilters(input: Partial<Record<"from"|"to"|"object"|"specialty"|"recruiter"|"source",string|undefined>>): RecruitingAnalyticsFilters {
   const defaults=defaultRecruitingAnalyticsFilters();
   let from=validDay(input.from)?input.from!:defaults.from;
   let to=validDay(input.to)?input.to!:defaults.to;
   if(parseDay(from)>parseDay(to)) [from,to]=[to,from];
   const span=Math.max(0,Math.min(365,Math.round((parseDay(to).getTime()-parseDay(from).getTime())/86400000)));
-  const fallbackCompareTo=addDays(from,-1);
-  const fallbackCompareFrom=addDays(fallbackCompareTo,-span);
-  let compareFrom=validDay(input.compareFrom)?input.compareFrom!:fallbackCompareFrom;
-  let compareTo=validDay(input.compareTo)?input.compareTo!:fallbackCompareTo;
-  if(parseDay(compareFrom)>parseDay(compareTo)) [compareFrom,compareTo]=[compareTo,compareFrom];
+  // Comparison is always the immediately preceding period of exactly the same inclusive length.
+  const compareTo=addDays(from,-1);
+  const compareFrom=addDays(compareTo,-span);
   return {
     from,to,compareFrom,compareTo,
     objectId:input.object||null,
