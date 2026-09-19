@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
-import { withTenant } from "@/lib/db/client";
+import { withTenant } from "@/lib/db/client";\nimport { isSystemOnlyCapability } from "@/lib/access/system";
 
 const schema=z.object({
   targetType:z.enum(["position","process_role"]),
   targetId:z.string().uuid(),
   capability:z.string().min(3).max(160),
   effect:z.enum(["inherit","allow","deny"]),
-  scopeType:z.enum(["self","own_created","assigned_to_me","team","org_unit","region","objects","clients","all_org"]).optional(),
+  scopeType:z.enum(["self","own_created","assigned_to_me","team","org_unit","org_unit_subtree","region","objects","clients","all_org"]).optional(),
   scopeIds:z.array(z.string().uuid()).max(200).default([]),
 });
 
@@ -22,7 +22,7 @@ export async function GET(request:Request){
     const items=await withTenant(actor.organizationId,actor.userId,async sql=>{
       const table=targetType==="position"?"position_permission_grants":"process_role_permission_grants";const column=targetType==="position"?"position_id":"process_role_id";
       return sql.unsafe<Array<{capability:string;description:string;domain:string;effect:string;scopeType:string|null;scopeIds:string[]}>>(`SELECT d.capability,d.description,d.domain,COALESCE(g.effect,'inherit') effect,g.scope_type "scopeType",COALESCE(g.scope_ids,'{}'::uuid[]) "scopeIds" FROM permission_definitions d LEFT JOIN ${table} g ON g.capability=d.capability AND g.${column}=$1::uuid ORDER BY d.domain,d.capability`,[targetId]);
-    });return NextResponse.json({items});
+    });return NextResponse.json({items:items.filter(item=>!isSystemOnlyCapability(item.capability))});
   }catch(error){if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});console.error(error);return NextResponse.json({error:"Не удалось загрузить права"},{status:500})}
 }
 
