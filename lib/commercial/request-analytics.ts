@@ -189,10 +189,15 @@ function makeDemoRows(actor:Actor,from:string,to:string,comparison=false):{rows:
   for(let index=0;index<18;index++){
     const base=demo.requests[index%demo.requests.length],offset=(index*2)%span,created=addDays(to,-offset),maxRank=Math.max(0,Math.min(stageCodes.length-1,(index+(comparison?0:2))%stageCodes.length));
     const headcount=Math.max(3,base.roles.reduce((sum,role)=>sum+role.count,0)-index%5*2);
-    const rawStage=stageCodes[maxRank]??"new",id=`demo-request-${comparison?"prev":"cur"}-${index}`;
-    const acceptedAt=rawStage==="agreed"?`${addDays(created,Math.min(8,maxRank+2))}T15:00:00.000Z`:null;
-    rows.push({id,organizationId:base.organizationId,clientId:base.clientId??null,client:base.client??"Без клиента",ownerUserId:base.ownerUserId??actor.userId,owner:actor.displayName,regionId:base.regionId??null,source:index%3===0?"public_form":"manual",createdByUserId:base.createdByUserId,rawStage,lossReasonCode:null,headcount,specialtyIds:base.roles.map(role=>demoSpecialtyId(role.name)),createdAt:`${created}T09:00:00.000Z`,updatedAt:`${addDays(created,Math.min(maxRank,6))}T16:00:00.000Z`,firstProposalAt:maxRank>=5?`${addDays(created,4)}T12:00:00.000Z`:null,acceptedAt});
+    const isLost=index%7===0;
+    const reachedStage=stageCodes[maxRank]??"new";
+    const rawStage=isLost?"not_agreed":reachedStage,id=`demo-request-${comparison?"prev":"cur"}-${index}`;
+    const demoLossCodes=["price","competitor","timing","no_response"];
+    const lossReasonCode=isLost?demoLossCodes[index%demoLossCodes.length]:null;
+    const acceptedAt=!isLost&&reachedStage==="agreed"?`${addDays(created,Math.min(8,maxRank+2))}T15:00:00.000Z`:null;
+    rows.push({id,organizationId:base.organizationId,clientId:base.clientId??null,client:base.client??"Без клиента",ownerUserId:base.ownerUserId??actor.userId,owner:actor.displayName,regionId:base.regionId??null,source:index%3===0?"public_form":"manual",createdByUserId:base.createdByUserId,rawStage,lossReasonCode,headcount,specialtyIds:base.roles.map(role=>demoSpecialtyId(role.name)),createdAt:`${created}T09:00:00.000Z`,updatedAt:`${addDays(created,Math.min(maxRank+1,7))}T16:00:00.000Z`,firstProposalAt:maxRank>=5?`${addDays(created,4)}T12:00:00.000Z`:null,acceptedAt});
     for(let stageIndex=0;stageIndex<=maxRank;stageIndex++)history.push({requestId:id,toStageCode:stageCodes[stageIndex],lossReasonCode:null,createdAt:`${addDays(created,stageIndex)}T10:00:00.000Z`});
+    if(isLost)history.push({requestId:id,toStageCode:"not_agreed",lossReasonCode,createdAt:`${addDays(created,Math.min(maxRank+1,8))}T14:00:00.000Z`});
   }
   return {rows,history};
 }
@@ -201,7 +206,8 @@ function demoAnalytics(actor:Actor,filters:RequestAnalyticsFilters):RequestAnaly
   const currentRows=currentDemo.rows.filter(row=>matchesFilters(row,filters)),previousRows=previousDemo.rows.filter(row=>matchesFilters(row,filters));
   const current=buildPeriodAnalytics(currentRows,currentDemo.history,filters.from,filters.to,defaultRequestStages,currentRows);
   const previous=buildPeriodAnalytics(previousRows,previousDemo.history,filters.compareFrom,filters.compareTo,defaultRequestStages,previousRows);
-  return {filters,stages:current.stages,metrics:current.metrics,comparison:previous.metrics,daily:current.daily,comparisonDaily:previous.daily,breakdowns:current.breakdowns,lossReasons:[]};
+  const demoLabels:Record<string,string>={price:"Цена / экономика",competitor:"Выбран другой подрядчик",timing:"Не устроили сроки",no_response:"Нет ответа заказчика"};
+  return {filters,stages:current.stages,metrics:current.metrics,comparison:previous.metrics,daily:current.daily,comparisonDaily:previous.daily,breakdowns:current.breakdowns,lossReasons:[...current.lossMap.entries()].map(([code,value])=>({code,label:demoLabels[code]??code,requests:value.requests,headcount:value.headcount})).sort((a,b)=>b.requests-a.requests)};
 }
 
 export async function getRequestAnalytics(actor:Actor,filters:RequestAnalyticsFilters):Promise<RequestAnalyticsData>{
