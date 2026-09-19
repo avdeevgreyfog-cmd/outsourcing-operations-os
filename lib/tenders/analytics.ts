@@ -198,8 +198,8 @@ function buildPeriodAnalytics(
 
     const decisions=decisionByTender.get(row.id)??[];
     const bidDecision=decisions.find(event=>event.toDecision==="participate"||event.toDecision==="no_bid");
-    let participateAt=decisions.find(event=>event.toDecision==="participate")?.createdAt;
-    if(!participateAt&&maxRank>=3)participateAt=firstReached.get("calculation")?new Date(firstReached.get("calculation")!).toISOString():null;
+    let participateAt:string|undefined=decisions.find(event=>event.toDecision==="participate")?.createdAt;
+    if(!participateAt&&maxRank>=3){const calculationAt=firstReached.get("calculation");if(calculationAt!=null)participateAt=new Date(calculationAt).toISOString()}
     if(participateAt){const time=new Date(participateAt).getTime();firstReached.set("participate",time);maxRank=Math.max(maxRank,2)}
     if(bidDecision){const time=new Date(bidDecision.createdAt).getTime();if(time>=createdTime)decisionHours.push((time-createdTime)/3600000)}
 
