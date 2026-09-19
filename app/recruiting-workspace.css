@@ -429,3 +429,163 @@
  .needs-metric-visible,.needs-metric-label-input,.needs-metric-target-input,.needs-metric-description{grid-column:1/-1}
  .needs-metric-order{grid-column:2;grid-row:1;align-self:start}
 }
+
+
+/* Analytics composition polish: the settings dialog and funnel use the same OPERIS work-surface rhythm. */
+.analytics-settings-backdrop{backdrop-filter:none;background:rgba(16,20,24,.38)}
+.needs-metric-settings{
+  width:min(920px,calc(100vw - 40px));
+  max-height:min(820px,calc(100dvh - 48px));
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  overflow:hidden;
+  border-radius:10px;
+  box-shadow:0 18px 48px rgba(0,0,0,.18);
+}
+.needs-metric-settings-head{position:static;padding:16px 18px 14px;background:var(--panel)}
+.needs-metric-settings-head h2{font-size:16px;line-height:1.3;font-weight:700;letter-spacing:-.015em}
+.needs-metric-settings-head p{max-width:660px;margin-top:4px;font-size:11px;line-height:1.5;color:var(--muted)}
+.needs-metric-settings-head .icon-button{width:34px;height:34px;border-color:var(--border);background:var(--panel-2);color:var(--muted)}
+.needs-metric-settings-head .icon-button:hover{color:var(--text);border-color:var(--border-strong);background:var(--panel)}
+.needs-metric-settings-body{min-height:0;max-height:none;overflow:auto;padding:12px 16px 16px;background:var(--panel-2);scrollbar-width:thin}
+.needs-metric-settings-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:36px;padding:0 2px 10px;color:var(--muted);font-size:10px}
+.needs-metric-settings-toolbar span{color:var(--muted)}
+.needs-metric-settings-toolbar strong{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+.needs-metric-settings-toolbar small{font-size:9.5px;color:var(--soft)}
+.needs-metric-settings-list{display:grid;gap:6px;border:0;border-radius:0;overflow:visible;background:transparent}
+.needs-metric-setting-row{
+  display:grid;
+  grid-template-columns:minmax(250px,1.2fr) minmax(190px,.9fr) 128px 70px;
+  gap:12px;
+  align-items:center;
+  min-height:72px;
+  padding:10px 11px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+  transition:border-color .15s ease,background .15s ease,opacity .15s ease;
+}
+.needs-metric-setting-row:last-child{border-bottom:1px solid var(--border)}
+.needs-metric-setting-row:hover{border-color:var(--border-strong);background:var(--panel)}
+.needs-metric-setting-row.is-hidden{opacity:.68;background:color-mix(in srgb,var(--panel-2) 72%,var(--panel))}
+.needs-metric-setting-row.is-hidden:hover{opacity:.86}
+.needs-metric-visible{
+  display:grid!important;
+  grid-template-columns:16px minmax(0,1fr)!important;
+  align-items:start!important;
+  gap:10px!important;
+  min-width:0;
+  color:var(--text)!important;
+}
+.needs-metric-visible input{
+  width:15px!important;
+  height:15px!important;
+  min-height:0!important;
+  margin-top:2px;
+  accent-color:var(--accent);
+}
+.needs-metric-title{display:grid;gap:3px;min-width:0}
+.needs-metric-title strong{font-size:11px;line-height:1.35;font-weight:650;color:var(--text)}
+.needs-metric-title small{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:9px;line-height:1.4;color:var(--muted);font-weight:400}
+.needs-metric-field{display:grid;gap:5px!important;min-width:0;color:var(--muted)!important;font-size:9px!important}
+.needs-metric-field>span{font-size:8.5px;line-height:1;text-transform:uppercase;letter-spacing:.04em;color:var(--soft)}
+.needs-metric-label-input,.needs-metric-target-input{
+  width:100%;
+  height:34px!important;
+  min-height:34px!important;
+  padding:6px 8px!important;
+  border:1px solid var(--border)!important;
+  border-radius:6px!important;
+  background:var(--panel-2)!important;
+  color:var(--text)!important;
+  font:inherit!important;
+  font-size:10.5px!important;
+  box-shadow:none!important;
+}
+.needs-metric-label-input:focus,.needs-metric-target-input:focus{border-color:color-mix(in srgb,var(--accent) 55%,var(--border))!important;outline:2px solid color-mix(in srgb,var(--accent) 18%,transparent)!important;outline-offset:1px}
+.needs-metric-target>div{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px}
+.needs-metric-target>div>small{min-width:36px;padding:5px 6px;border:1px solid var(--border);border-radius:5px;background:var(--panel-3);color:var(--muted);font-size:8.5px;text-align:center;white-space:nowrap}
+.needs-metric-order{display:flex;justify-content:flex-end;gap:4px}
+.needs-metric-order .icon-button{width:30px;height:30px;border-color:var(--border);background:var(--panel-2);color:var(--muted)}
+.needs-metric-order .icon-button:hover:not(:disabled){color:var(--text);border-color:var(--border-strong);background:var(--panel)}
+.needs-metric-order .icon-button:disabled{opacity:.28;background:transparent}
+.needs-metric-settings-footer{
+  display:grid;
+  grid-template-columns:auto 1fr auto auto;
+  align-items:center;
+  gap:8px;
+  margin:0;
+  padding:11px 16px 12px;
+  border-top:1px solid var(--border);
+  background:var(--panel);
+}
+.needs-metric-settings-footer .button{min-height:36px;font-size:11px}
+.needs-metric-reset{color:var(--muted)}
+.needs-metric-reset:hover{color:var(--text)}
+
+/* Funnel typography and proportions: analytical, not presentation-like. */
+.needs-analytics-funnel-card .needs-analytics-card-head{min-height:54px;padding:11px 13px}
+.needs-analytics-funnel-card .needs-analytics-card-head h3{font-size:12.5px;line-height:1.35;font-weight:680;letter-spacing:-.01em}
+.needs-analytics-funnel-card .needs-analytics-card-head p{margin-top:3px;font-size:9.5px;line-height:1.45;color:var(--muted)}
+.needs-mini-segments{gap:2px;padding:2px;border-color:var(--border);background:var(--panel-2)}
+.needs-mini-segments button{min-height:28px;padding:5px 8px;border:1px solid transparent;border-radius:5px;font-size:9.5px;font-weight:550}
+.needs-mini-segments button.active{border-color:var(--border);background:var(--panel);color:var(--text);font-weight:650}
+.needs-analytics-funnel-card .sales-funnel{max-width:650px;margin:0 auto;padding:7px 14px 11px;gap:2px}
+.needs-analytics-funnel-card .sales-funnel-step{
+  min-height:35px;
+  padding:4px 27px;
+  grid-template-columns:minmax(0,1fr) 50px 98px;
+  gap:9px;
+  clip-path:polygon(1.8% 0,98.2% 0,95% 100%,5% 100%);
+  border-color:color-mix(in srgb,var(--accent) 14%,var(--border));
+  background:color-mix(in srgb,var(--accent) 4%,var(--panel));
+}
+.needs-analytics-funnel-card .sales-funnel-step.has-index{grid-template-columns:20px minmax(0,1fr) 50px 98px}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(2){background:color-mix(in srgb,var(--accent) 5.2%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(3){background:color-mix(in srgb,var(--accent) 6.4%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(4){background:color-mix(in srgb,var(--accent) 7.6%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(5){background:color-mix(in srgb,var(--accent) 8.8%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(6){background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(7){background:color-mix(in srgb,var(--accent) 11.2%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:nth-child(8){background:color-mix(in srgb,var(--accent) 12.4%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-step:hover{background:color-mix(in srgb,var(--accent) 9%,var(--panel));border-color:color-mix(in srgb,var(--accent) 30%,var(--border))}
+.needs-analytics-funnel-card .sales-funnel-index{width:18px;height:18px;border:1px solid var(--border);background:var(--panel);color:var(--muted);font-size:8px;font-weight:700}
+.needs-analytics-funnel-card .sales-funnel-copy{gap:1px}
+.needs-analytics-funnel-card .sales-funnel-label{font-size:10.5px;line-height:1.25;font-weight:650}
+.needs-analytics-funnel-card .sales-funnel-copy small{font-size:8.3px;line-height:1.25;color:var(--soft)}
+.needs-analytics-funnel-card .sales-funnel-step strong{font-size:15.5px;line-height:1;font-weight:680}
+.needs-analytics-funnel-card .sales-funnel-aside{font-size:8.7px;line-height:1.25;color:var(--muted)}
+.needs-funnel-column-head{max-width:650px;margin:0 auto;grid-template-columns:minmax(0,1fr) 50px 98px;gap:9px;padding:6px 27px 0 56px;font-size:8px;line-height:1.2;color:var(--soft);text-transform:uppercase;letter-spacing:.035em}
+
+/* Keep analytics cards on one typographic system. */
+.needs-analytics-side-title{font-size:11.5px;font-weight:680}
+.needs-kpi-card>div>span{font-size:9px;line-height:1.3}
+.needs-kpi-card strong{font-size:19px;font-weight:680;letter-spacing:-.02em}
+.needs-kpi-card small{font-size:8.5px;line-height:1.35}
+.needs-analytics-card-head h3{font-size:12.5px;font-weight:680}
+.needs-analytics-card-head p{font-size:9.5px;line-height:1.45}
+.needs-source-table,.needs-stage-table{font-size:9.5px}
+
+@media(max-width:980px){
+  .needs-metric-settings{width:min(760px,calc(100vw - 28px))}
+  .needs-metric-setting-row{grid-template-columns:minmax(220px,1fr) minmax(180px,.9fr) 118px 70px}
+}
+@media(max-width:760px){
+  .analytics-settings-backdrop{padding:12px}
+  .needs-metric-settings{width:100%;max-height:calc(100dvh - 24px)}
+  .needs-metric-settings-head{padding:14px}
+  .needs-metric-settings-body{padding:10px}
+  .needs-metric-settings-toolbar{align-items:flex-start;flex-direction:column;gap:3px}
+  .needs-metric-setting-row{grid-template-columns:1fr 68px;gap:9px;min-height:0;padding:10px}
+  .needs-metric-visible{grid-column:1/-1}
+  .needs-metric-field{grid-column:1/-1}
+  .needs-metric-target{grid-column:1}
+  .needs-metric-order{grid-column:2;grid-row:3;align-self:end}
+  .needs-metric-settings-footer{grid-template-columns:1fr 1fr}
+  .needs-metric-settings-footer>span{display:none}
+  .needs-metric-settings-footer .needs-metric-reset{grid-column:1/-1;justify-self:start}
+  .needs-analytics-funnel-card .sales-funnel{max-width:none;padding-inline:8px}
+  .needs-analytics-funnel-card .sales-funnel-step{width:100%!important;grid-template-columns:minmax(0,1fr) 48px;padding-inline:22px}
+  .needs-analytics-funnel-card .sales-funnel-step.has-index{grid-template-columns:20px minmax(0,1fr) 48px}
+  .needs-analytics-funnel-card .sales-funnel-aside{display:none}
+}
