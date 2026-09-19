@@ -118,10 +118,11 @@ function bucketRows(rows:RecruitingAnalyticsDaily[]):ChartPoint[]{
     const first=new Date(`${bucket[0].date}T00:00:00.000Z`);
     const last=new Date(`${bucket[bucket.length-1].date}T00:00:00.000Z`);
     const label=bucket.length===1?formatter.format(first):`${formatter.format(first)}–${formatter.format(last)}`;
+    const lastPoint=bucket[bucket.length-1];
     result.push({
       label,newCandidates,ready,started,
-      readyConversion:newCandidates?Math.round(ready/newCandidates*100):0,
-      startConversion:newCandidates?Math.round(started/newCandidates*100):0,
+      readyConversion:lastPoint.readyConversion,
+      startConversion:lastPoint.startConversion,
     });
   }
   return result;
