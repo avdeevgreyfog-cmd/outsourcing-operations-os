@@ -94,4 +94,29 @@ FROM role_templates r
 WHERE r.code IN ('director','recruiting_manager')
 ON CONFLICT DO NOTHING;
 
+-- Руководитель подбора оформляется как процессная роль поверх должности, а не как отдельная параллельная система ролей.
+INSERT INTO process_roles(organization_id,code,name,description,responsibility,active)
+SELECT o.id,'recruiting-manager','Руководитель подбора',
+  'Процессная роль руководителя подразделения подбора',
+  'Управление подбором, распределением потребностей и стандартной витриной аналитики',true
+FROM organizations o
+ON CONFLICT (organization_id,code) DO UPDATE
+SET name=EXCLUDED.name,description=EXCLUDED.description,responsibility=EXCLUDED.responsibility,active=true;
+
+INSERT INTO process_role_permission_grants(organization_id,process_role_id,capability,effect,scope_type)
+SELECT pr.organization_id,pr.id,'recruiting.analytics.configure','allow','all_org'
+FROM process_roles pr
+WHERE pr.code='recruiting-manager'
+ON CONFLICT (process_role_id,capability,effect,scope_type) DO NOTHING;
+
+-- Существующий руководитель подразделения «Подбор» получает процессную роль автоматически.
+INSERT INTO membership_process_roles(organization_id,membership_id,process_role_id,org_unit_id,effective_from,assigned_by_user_id)
+SELECT ou.organization_id,ou.manager_membership_id,pr.id,ou.id,current_date,
+  COALESCE((SELECT m.user_id FROM organization_memberships m WHERE m.id=ou.manager_membership_id),
+           (SELECT m.user_id FROM organization_memberships m WHERE m.organization_id=ou.organization_id AND m.status='active' ORDER BY m.created_at LIMIT 1))
+FROM organization_units ou
+JOIN process_roles pr ON pr.organization_id=ou.organization_id AND pr.code='recruiting-manager'
+WHERE ou.code='recruiting' AND ou.manager_membership_id IS NOT NULL
+ON CONFLICT (membership_id,process_role_id,effective_from) DO NOTHING;
+
 COMMIT;
