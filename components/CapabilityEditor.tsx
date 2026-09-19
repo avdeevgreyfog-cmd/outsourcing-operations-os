@@ -10,6 +10,8 @@ type Grant={
   scopeType:string|null;
   scopeIds:string[];
 };
+type GrantState={key:string;items:Grant[]};
+type ErrorState={key:string;message:string};
 
 const domainLabels:Record<string,string>={
   home:"Главная",
@@ -38,27 +40,33 @@ const scopeOptions=[
 ];
 
 export function CapabilityEditor({targetType,targetId,canManage}:{targetType:"position"|"process_role";targetId:string;canManage:boolean}){
-  const [items,setItems]=useState<Grant[]|null>(null);
-  const [error,setError]=useState("");
+  const key=`${targetType}:${targetId}`;
+  const [data,setData]=useState<GrantState|null>(null);
+  const [errorState,setErrorState]=useState<ErrorState|null>(null);
   const [saving,setSaving]=useState("");
+  const items=data?.key===key?data.items:null;
+  const error=errorState?.key===key?errorState.message:"";
 
   useEffect(()=>{
     let active=true;
-    setItems(null);
-    setError("");
     fetch(`/api/organization/grants?targetType=${targetType}&targetId=${targetId}`)
       .then(async response=>{
         const body=await response.json();
         if(!response.ok)throw new Error(body.error);
-        if(active)setItems(body.items);
+        if(active){
+          setData({key,items:body.items});
+          setErrorState(null);
+        }
       })
-      .catch(value=>active&&setError(value.message));
+      .catch(value=>{
+        if(active)setErrorState({key,message:value.message});
+      });
     return()=>{active=false};
-  },[targetId,targetType]);
+  },[key,targetId,targetType]);
 
   async function update(item:Grant,effect:Grant["effect"],scopeType?:string){
     setSaving(item.capability);
-    setError("");
+    setErrorState(null);
     const nextScope=effect==="allow"?(scopeType??item.scopeType??"assigned_to_me"):item.scopeType;
     const response=await fetch("/api/organization/grants",{
       method:"PATCH",
@@ -75,13 +83,15 @@ export function CapabilityEditor({targetType,targetId,canManage}:{targetType:"po
     const body=await response.json();
     setSaving("");
     if(!response.ok){
-      setError(body.error);
+      setErrorState({key,message:body.error});
       return;
     }
-    setItems(value=>value?.map(entry=>entry.capability===item.capability
-      ?{...entry,effect,scopeType:effect==="allow"?nextScope:entry.scopeType}
-      :entry
-    )??null);
+    setData(value=>value?.key===key
+      ?{key,items:value.items.map(entry=>entry.capability===item.capability
+        ?{...entry,effect,scopeType:effect==="allow"?nextScope:entry.scopeType}
+        :entry)}
+      :value
+    );
   }
 
   if(error)return <p className="form-message">{error}</p>;
