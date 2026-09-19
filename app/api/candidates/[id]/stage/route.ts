@@ -8,10 +8,11 @@ import { canReadRow } from "@/lib/core/access.mjs";
 const schema=z.object({
   applicationId:z.string().uuid().optional(),
   stage:z.enum(["new","contact","interview","manager_review","approved","preparation","ready","started","rejected","no_show"]),
+  reasonCode:z.string().trim().max(80).optional(),
   reason:z.string().trim().max(1000).optional(),
   nextActionAt:z.string().datetime().nullable().optional(),
 }).superRefine((value,ctx)=>{
-  if(["rejected","no_show"].includes(value.stage)&&!value.reason?.trim())ctx.addIssue({code:"custom",path:["reason"],message:"Укажите причину"});
+  if(["rejected","no_show"].includes(value.stage)&&!value.reasonCode?.trim())ctx.addIssue({code:"custom",path:["reasonCode"],message:"Выберите причину"});
 });
 
 type ScopeRow={
@@ -40,10 +41,18 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         ORDER BY ca.updated_at DESC LIMIT 1 FOR UPDATE OF ca
       `;
       if(!current||!canReadRow(actor.access,"recruiting.candidate.edit",current,actor))throw new AccessDeniedError("recruiting.candidate.edit");
+      if(["rejected","no_show"].includes(body.stage)){
+        const [exitReason]=await tx<Array<{code:string}>>`
+          SELECT code FROM candidate_exit_reasons
+          WHERE code=${body.reasonCode??null} AND active AND kind IN (${body.stage},'both')
+          LIMIT 1
+        `;
+        if(!exitReason)throw new Error("Выбранная причина недоступна для этого этапа");
+      }
       const actualStart=body.stage==="started"?sql`now()`:sql`actual_start_at`;
       const nextAction=body.nextActionAt===undefined?sql`next_action_at`:sql`${body.nextActionAt??null}::timestamptz`;
-      await tx`UPDATE candidate_applications SET stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
-      await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,changed_by_user_id) VALUES (${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},${body.stage},${body.reason??null},${actor.userId}::uuid)`;
+      await tx`UPDATE candidate_applications SET stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},rejection_reason_code=${["rejected","no_show"].includes(body.stage)?body.reasonCode??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
+      await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,reason_code,changed_by_user_id) VALUES (${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},${body.stage},${body.reason??null},${body.reasonCode??null},${actor.userId}::uuid)`;
 
       let workerId:string|null=null;
       if(body.stage==="started"){
@@ -98,12 +107,12 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         await tx`UPDATE needs SET status=CASE WHEN status='open' THEN 'in_progress' ELSE status END WHERE id=${current.needId}::uuid`;
       }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${current.candidateId}::uuid,'stage_changed',${`Этап кандидата изменён: ${current.stage} → ${body.stage}`},${sql.json({applicationId:current.id,needId:current.needId,workerId,reason:body.reason??null})})`;
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${current.candidateId}::uuid,'stage_changed',${`Этап кандидата изменён: ${current.stage} → ${body.stage}`},${sql.json({applicationId:current.id,needId:current.needId,workerId,reasonCode:body.reasonCode??null,reason:body.reason??null})})`;
       return {candidateId:current.candidateId,applicationId:current.id,stage:body.stage,workerId};
     }));
     return NextResponse.json(result);
   }catch(error){
-    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте этап и причину",issues:error.issues},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте этап и причину выбытия",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
   }
