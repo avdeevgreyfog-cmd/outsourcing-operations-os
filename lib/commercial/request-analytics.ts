@@ -171,7 +171,7 @@ function buildPeriodAnalytics(rows:AnalyticsRequest[],history:StageEvent[],from:
     attention,unassigned:snapshot.filter(row=>!row.ownerUserId).length,
   };
 
-  const daily:RequestAnalyticsDaily[]=[];let cursor=parseDay(from),last=parseDay(to),cumNewReq=0,cumNewHead=0,cumAgreedReq=0,cumAgreedHead=0;
+  const daily:RequestAnalyticsDaily[]=[];let cursor=parseDay(from),cumNewReq=0,cumNewHead=0,cumAgreedReq=0,cumAgreedHead=0;const last=parseDay(to);
   while(cursor<=last){
     const date=isoDay(cursor),point=dailyMap.get(date)??{newRequests:0,newHeadcount:0,proposalRequests:0,proposalHeadcount:0,agreedRequests:0,agreedHeadcount:0};
     cumNewReq+=point.newRequests;cumNewHead+=point.newHeadcount;cumAgreedReq+=point.agreedRequests;cumAgreedHead+=point.agreedHeadcount;
