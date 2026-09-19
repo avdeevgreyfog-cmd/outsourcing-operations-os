@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError } from "@/lib/access/server";
-import { isRecruitingMetricKey, saveRecruitingMetricPreferences } from "@/lib/recruiting/analytics-metrics";
+import { isRecruitingMetricKey, saveRecruitingMetricPreferences, type RecruitingMetricKey } from "@/lib/recruiting/analytics-metrics";
 
 const schema=z.object({
   items:z.array(z.object({
@@ -19,7 +19,8 @@ export async function PATCH(request:Request){
     const actor=await getCurrentActor();
     if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     const body=schema.parse(await request.json());
-    const result=await saveRecruitingMetricPreferences(actor,body.items);
+    const items=body.items.map(item=>({...item,key:item.key as RecruitingMetricKey}));
+    const result=await saveRecruitingMetricPreferences(actor,items);
     return NextResponse.json(result);
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте настройки показателей",issues:error.issues},{status:400});
