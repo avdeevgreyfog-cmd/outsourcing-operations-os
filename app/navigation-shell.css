@@ -326,3 +326,35 @@
 @media(max-width:760px){
   .main-canvas::before{display:none}
 }
+
+
+/* Workspace tenant and access-preview controls. */
+.workspace-context-controls{display:flex;align-items:center;gap:7px}
+.workspace-switch{height:32px;display:flex;align-items:center;gap:6px}
+.workspace-switch>span{color:var(--soft);font-size:10px;white-space:nowrap}
+.workspace-switch select{height:32px;max-width:188px;padding:0 25px 0 8px;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--panel);color:var(--text);font-size:11px}
+.workspace-switch select:hover{border-color:var(--border-strong)}
+.access-preview-control.is-preview select{border-color:color-mix(in srgb,var(--accent) 42%,var(--border));background:var(--accent-soft);color:var(--text)}
+.access-preview-control.is-preview>span{color:var(--accent);font-weight:700}
+.access-preview-flag{height:20px;padding:0 7px;display:inline-flex;align-items:center;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:9.5px;font-weight:700;white-space:nowrap}
+.account-menu{position:relative}
+.account-popover{position:absolute;z-index:70;top:39px;right:0;width:300px;padding:12px;border:1px solid var(--border-strong);border-radius:9px;background:var(--panel);box-shadow:var(--shadow)}
+.account-popover header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.account-popover header strong,.account-popover header small{display:block}
+.account-popover header strong{font-size:12px}
+.account-popover header small{margin-top:3px;color:var(--muted);font-size:10px}
+.account-close{width:25px;height:25px;display:grid;place-items:center;border:0;border-radius:5px;background:transparent;color:var(--muted);cursor:pointer}
+.account-close:hover{background:var(--panel-2);color:var(--text)}
+.account-context{padding:10px 0;display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:10.5px}
+.account-context strong{color:var(--text);font-weight:650;text-align:right}
+.account-password-form{display:grid;gap:7px;padding:10px 0;border-top:1px solid var(--border)}
+.account-form-title{display:flex;align-items:center;gap:6px;margin-bottom:2px;color:var(--muted);font-size:10.5px;font-weight:650}
+.account-password-form input{height:32px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel-2);color:var(--text);font-size:11px}
+.account-password-form input:focus{border-color:var(--accent);outline:0;box-shadow:var(--focus)}
+.account-password-form .button{justify-self:start;margin-top:2px}
+.account-message{margin:4px 0 0;color:var(--muted);font-size:10.5px;line-height:1.4}
+.account-logout{width:100%;height:32px;margin-top:10px;padding:0 8px;display:flex;align-items:center;gap:7px;border:0;border-top:1px solid var(--border);background:transparent;color:var(--muted);font-size:11px;cursor:pointer}
+.account-logout:hover{color:var(--bad)}
+:root[data-theme=dark] .account-popover{box-shadow:0 18px 48px rgba(0,0,0,.42)}
+@media(max-width:1180px){.workspace-switch>span{display:none}.workspace-switch select{max-width:150px}}
+@media(max-width:920px){.workspace-context-controls{display:none}.access-preview-flag{display:none}}
