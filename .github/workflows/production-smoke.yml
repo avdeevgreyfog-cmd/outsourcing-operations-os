@@ -1,0 +1,52 @@
+name: Production Smoke
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  production-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      BASE_URL: https://outsourcing-operations-os-g942.vercel.app
+    steps:
+      - name: Wait for deployed runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            code="$(curl -sS -o /tmp/status.json -w '%{http_code}' "$BASE_URL/api/system/status" || true)"
+            if [ "$code" = "200" ] && grep -q '"ok":true' /tmp/status.json; then
+              cat /tmp/status.json
+              exit 0
+            fi
+            echo "attempt=$attempt status=$code"
+            sleep 10
+          done
+          echo "Production status endpoint did not become ready in time."
+          cat /tmp/status.json 2>/dev/null || true
+          exit 1
+
+      - name: Verify database-backed workspace is enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat /tmp/status.json
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const status = JSON.parse(fs.readFileSync("/tmp/status.json", "utf8"));
+          if (status.ok !== true) throw new Error("runtime status is not healthy");
+          if (status.databaseConfigured !== true) throw new Error("DATABASE_URL is not configured in production");
+          if (status.demoAvailable !== true) throw new Error("demo workspace is expected to remain available");
+          NODE
+
+      - name: Verify login surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -L -o /tmp/login.html -w '%{http_code}' "$BASE_URL/login")"
+          test "$code" = "200"
+          grep -q 'sergey-work' /tmp/login.html
+          grep -q 'Демо-организация' /tmp/login.html
