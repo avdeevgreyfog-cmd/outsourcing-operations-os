@@ -8,10 +8,13 @@ export type EffectiveAccess = {
   scopes: Record<string, ScopeGrant[]>;
 };
 
+export type AccessPreviewTargetType = "role_template" | "position" | "process_role";
+
 export type AccessPreview = {
-  roleTemplateId: string;
-  roleCode: string;
-  roleName: string;
+  targetType: AccessPreviewTargetType;
+  targetId: string;
+  code: string;
+  name: string;
 };
 
 export type Actor = {
@@ -45,17 +48,18 @@ export type WorkspaceOption = {
   kind: "demo" | "tenant";
 };
 
-export type PreviewRoleOption = {
+export type PreviewAccessOption = {
   id: string;
   code: string;
   name: string;
+  targetType: AccessPreviewTargetType;
 };
 
 export type WorkspaceContext = {
   organizations: WorkspaceOption[];
   currentOrganizationKey: string;
-  previewRoles: PreviewRoleOption[];
-  previewRoleId: string | null;
+  previewOptions: PreviewAccessOption[];
+  previewTarget: string | null;
   actualRoleName: string;
   hasRealSession: boolean;
 };
