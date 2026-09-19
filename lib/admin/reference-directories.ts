@@ -22,8 +22,8 @@ export async function listReferenceDirectories(actor:Actor){
   }
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
     const [regions,specialties]=await Promise.all([
-      sql<ReferenceRegion[]>\`SELECT id,code,name FROM regions ORDER BY name\`,
-      sql<ReferenceSpecialty[]>\`SELECT id,code,name,aliases,active FROM specialties ORDER BY active DESC,name\`,
+      sql<ReferenceRegion[]>`SELECT id,code,name FROM regions ORDER BY name`,
+      sql<ReferenceSpecialty[]>`SELECT id,code,name,aliases,active FROM specialties ORDER BY active DESC,name`,
     ]);
     return {regions,specialties};
   });
