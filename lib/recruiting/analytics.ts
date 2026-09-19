@@ -22,8 +22,8 @@ export type RecruitingAnalyticsStage = {
   candidates: number;
   shareTotal: number;
   conversion: number;
-  loss: number;
-  lossRate: number;
+  notAdvanced: number;
+  notAdvancedRate: number;
   avgHours: number | null;
 };
 
@@ -34,6 +34,10 @@ export type RecruitingAnalyticsMetrics = {
   ready: number;
   avgDaysToStart: number | null;
   started: number;
+  rejected: number;
+  noShow: number;
+  avgFirstContactHours: number | null;
+  overdueFirstContact: number;
 };
 
 export type RecruitingAnalyticsDaily = {
@@ -46,6 +50,21 @@ export type RecruitingAnalyticsDaily = {
   startConversion: number;
 };
 
+export type RecruitingAnalyticsSourceRow = {
+  source: string;
+  candidates: number;
+  approved: number;
+  started: number;
+  conversion: number;
+  avgDaysToStart: number | null;
+};
+
+export type RecruitingAnalyticsExitReason = {
+  code: string;
+  label: string;
+  count: number;
+};
+
 export type RecruitingAnalyticsData = {
   filters: RecruitingAnalyticsFilters;
   stages: RecruitingAnalyticsStage[];
@@ -53,6 +72,8 @@ export type RecruitingAnalyticsData = {
   comparison: RecruitingAnalyticsMetrics;
   daily: RecruitingAnalyticsDaily[];
   comparisonDaily: RecruitingAnalyticsDaily[];
+  sources: RecruitingAnalyticsSourceRow[];
+  exitReasons: RecruitingAnalyticsExitReason[];
   summary: { title: string; text: string; stage: string | null };
 };
 
@@ -67,6 +88,7 @@ type AnalyticsApplication = {
   managerUserId: string | null;
   assigneeUserIds: string[];
   source: string | null;
+  rejectionReasonCode: string | null;
   rawStage: string;
   createdAt: string;
   updatedAt: string;
@@ -136,9 +158,12 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
 
   const stageReachedCounts=new Map<RecruitingStage,number>(recruitingStages.map(stage=>[stage,0]));
   const stageDurations=new Map<RecruitingStage,number[]>(recruitingStages.map(stage=>[stage,[]]));
-  let inWork=0,ready=0,started=0;
+  let inWork=0,ready=0,started=0,rejected=0,noShow=0,overdueFirstContact=0;
   const toStartDays:number[]=[];
+  const firstContactHours:number[]=[];
   const dailyMap=new Map<string,{newCandidates:number;ready:number;started:number}>();
+  const sourceMap=new Map<string,{candidates:number;approved:number;started:number;startDays:number[]}>();
+  const exitReasonCounts=new Map<string,number>();
 
   for(const app of cohort){
     const createdTime=new Date(app.createdAt).getTime();
@@ -173,7 +198,22 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
       if(entered!=null&&advanced!=null&&advanced>=entered) stageDurations.get(stage)!.push((advanced-entered)/3600000);
     }
     if(asOfStage==="ready") ready++;
+    if(asOfStage==="rejected") rejected++;
+    if(asOfStage==="no_show") noShow++;
     if(!terminalStages.has(asOfStage)&&asOfStage!=="started") inWork++;
+
+    const firstContactAt=firstReached.get("contact");
+    if(firstContactAt!=null&&firstContactAt>=createdTime) firstContactHours.push((firstContactAt-createdTime)/3600000);
+    else if(asOfStage==="new"&&Math.min(end,Date.now())-createdTime>4*3600000) overdueFirstContact++;
+
+    if(terminalStages.has(asOfStage)&&app.rejectionReasonCode){
+      exitReasonCounts.set(app.rejectionReasonCode,(exitReasonCounts.get(app.rejectionReasonCode)??0)+1);
+    }
+
+    const sourceKey=app.source?.trim()||"Источник не указан";
+    const sourceStats=sourceMap.get(sourceKey)??{candidates:0,approved:0,started:0,startDays:[]};
+    sourceStats.candidates++;
+    if(maxRank>=(stageRank.get("approved")??4)) sourceStats.approved++;
 
     const createdDay=isoDay(new Date(createdTime));
     const createdPoint=dailyMap.get(createdDay)??{newCandidates:0,ready:0,started:0};
@@ -191,7 +231,10 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
     const startedAt=firstReached.get("started");
     if(startedAt!=null){
       started++;
-      toStartDays.push((startedAt-createdTime)/86400000);
+      const startDays=(startedAt-createdTime)/86400000;
+      toStartDays.push(startDays);
+      sourceStats.started++;
+      sourceStats.startDays.push(startDays);
       if(startedAt>=start&&startedAt<=end){
         const startedDay=isoDay(new Date(startedAt));
         const startedPoint=dailyMap.get(startedDay)??{newCandidates:0,ready:0,started:0};
@@ -199,6 +242,7 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
         dailyMap.set(startedDay,startedPoint);
       }
     }
+    sourceMap.set(sourceKey,sourceStats);
   }
 
   const total=cohort.length;
@@ -206,7 +250,7 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
     const candidates=stageReachedCounts.get(stage)??0;
     const previous=index===0?total:(stageReachedCounts.get(recruitingStages[index-1])??0);
     const next=index<recruitingStages.length-1?(stageReachedCounts.get(recruitingStages[index+1])??0):candidates;
-    const loss=index<recruitingStages.length-1?Math.max(0,candidates-next):0;
+    const notAdvanced=index<recruitingStages.length-1?Math.max(0,candidates-next):0;
     const durations=stageDurations.get(stage)??[];
     return {
       stage,
@@ -214,8 +258,8 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
       candidates,
       shareTotal:total?Math.round(candidates/total*100):0,
       conversion:index===0?100:(previous?Math.round(candidates/previous*100):0),
-      loss,
-      lossRate:candidates?Math.round(loss/candidates*100):0,
+      notAdvanced,
+      notAdvancedRate:candidates?Math.round(notAdvanced/candidates*100):0,
       avgHours:durations.length?Number((durations.reduce((sum,value)=>sum+value,0)/durations.length).toFixed(1)):null,
     };
   });
@@ -249,12 +293,25 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
       ready,
       avgDaysToStart:toStartDays.length?Number((toStartDays.reduce((sum,value)=>sum+value,0)/toStartDays.length).toFixed(1)):null,
       started,
+      rejected,
+      noShow,
+      avgFirstContactHours:firstContactHours.length?Number((firstContactHours.reduce((sum,value)=>sum+value,0)/firstContactHours.length).toFixed(1)):null,
+      overdueFirstContact,
     } satisfies RecruitingAnalyticsMetrics,
+    sources:[...sourceMap.entries()].map(([source,value])=>({
+      source,
+      candidates:value.candidates,
+      approved:value.approved,
+      started:value.started,
+      conversion:value.candidates?Math.round(value.started/value.candidates*100):0,
+      avgDaysToStart:value.startDays.length?Number((value.startDays.reduce((sum,item)=>sum+item,0)/value.startDays.length).toFixed(1)):null,
+    })).sort((a,b)=>b.started-a.started||b.candidates-a.candidates),
+    exitReasonCounts,
   };
 }
 
 function buildSummary(stages: RecruitingAnalyticsStage[]) {
-  const transitions=stages.slice(0,-1).map((stage,index)=>({stage,next:stages[index+1],loss:stage.loss,rate:stage.lossRate})).sort((a,b)=>b.rate-a.rate||b.loss-a.loss);
+  const transitions=stages.slice(0,-1).map((stage,index)=>({stage,next:stages[index+1],loss:stage.notAdvanced,rate:stage.notAdvancedRate})).sort((a,b)=>b.rate-a.rate||b.loss-a.loss);
   const top=transitions[0];
   if(!top||top.loss===0) return {title:"Воронка стабильна",text:"Выраженных потерь между этапами не видно. Следите за скоростью обработки новых откликов и сроком выхода.",stage:null};
   let recommendation="Проверьте причины отказов и скорость обработки на этом переходе.";
@@ -287,7 +344,7 @@ function buildDemoPeriodRows(rows: typeof demo.candidates, from: string, to: str
     applications.push({
       applicationId,organizationId:row.organizationId,objectId:row.objectId??null,specialtyId:demoSpecialtyId(row.need),
       regionId:row.regionId??null,clientId:row.clientId??null,ownerUserId:"10000000-0000-4000-8000-000000000005",managerUserId:null,
-      assigneeUserIds:row.assigneeUserIds??["10000000-0000-4000-8000-000000000005"],source:row.source??null,
+      assigneeUserIds:row.assigneeUserIds??["10000000-0000-4000-8000-000000000005"],source:row.source??null,rejectionReasonCode:null,
       rawStage:recruitingStages[rank]??"new",createdAt:created.toISOString(),
       updatedAt:new Date(Math.min(end.getTime()+12*3600000,created.getTime()+rank*30*3600000)).toISOString(),
     });
@@ -314,7 +371,11 @@ function demoAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Recru
   const compareRows=buildDemoPeriodRows(filtered,filters.compareFrom,filters.compareTo,compareScale,1);
   const current=buildPeriodAnalytics(currentRows.applications,currentRows.history,filters.from,filters.to);
   const comparison=buildPeriodAnalytics(compareRows.applications,compareRows.history,filters.compareFrom,filters.compareTo);
-  return {filters,stages:current.stages,metrics:current.metrics,comparison:comparison.metrics,daily:current.daily,comparisonDaily:comparison.daily,summary:buildSummary(current.stages)};
+  return {
+    filters,stages:current.stages,metrics:current.metrics,comparison:comparison.metrics,
+    daily:current.daily,comparisonDaily:comparison.daily,sources:current.sources,exitReasons:[],
+    summary:buildSummary(current.stages)
+  };
 }
 
 export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Promise<RecruitingAnalyticsData> {
@@ -326,7 +387,7 @@ export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAn
     const rows=await sql<AnalyticsApplication[]>`
       SELECT ca.id "applicationId",ca.organization_id "organizationId",ca.object_id "objectId",n.specialty_id "specialtyId",
         COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",ca.owner_user_id "ownerUserId",
-        ca.manager_user_id "managerUserId",c.source,ca.stage "rawStage",ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",
+        ca.manager_user_id "managerUserId",c.source,ca.rejection_reason_code "rejectionReasonCode",ca.stage "rawStage",ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",
         ARRAY_REMOVE(ARRAY[ca.owner_user_id::text,ca.manager_user_id::text],NULL)
           || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
           || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds"
@@ -348,6 +409,12 @@ export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAn
 
     const current=buildPeriodAnalytics(applications,history,filters.from,filters.to);
     const comparison=buildPeriodAnalytics(applications,history,filters.compareFrom,filters.compareTo);
+    const reasonCodes=[...current.exitReasonCounts.keys()];
+    const reasonRows=reasonCodes.length?await sql<Array<{code:string;label:string}>>`
+      SELECT code,name label FROM candidate_exit_reasons
+      WHERE code=ANY(${reasonCodes}::text[]) AND active
+    `:[];
+    const reasonLabel=new Map(reasonRows.map(row=>[row.code,row.label]));
     return {
       filters,
       stages:current.stages,
@@ -355,6 +422,8 @@ export async function getRecruitingAnalytics(actor: Actor, filters: RecruitingAn
       comparison:comparison.metrics,
       daily:current.daily,
       comparisonDaily:comparison.daily,
+      sources:current.sources,
+      exitReasons:[...current.exitReasonCounts.entries()].map(([code,count])=>({code,label:reasonLabel.get(code)??code,count})).sort((a,b)=>b.count-a.count),
       summary:buildSummary(current.stages),
     };
   });
