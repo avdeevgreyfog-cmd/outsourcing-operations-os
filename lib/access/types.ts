@@ -1,4 +1,4 @@
-export type ScopeType = "self" | "own_created" | "assigned_to_me" | "team" | "org_unit" | "region" | "objects" | "clients" | "all_org";
+export type ScopeType = "self" | "own_created" | "assigned_to_me" | "team" | "org_unit" | "org_unit_subtree" | "region" | "objects" | "clients" | "all_org";
 export type ScopeGrant = { type: ScopeType; ids: string[] };
 
 export type EffectiveAccess = {

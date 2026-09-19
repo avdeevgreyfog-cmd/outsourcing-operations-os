@@ -515,3 +515,30 @@ button,input,select,textarea{letter-spacing:inherit}
 .activation-invalid strong{display:block;font-size:12px}
 .activation-invalid p{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
 @media(max-width:760px){.activate-form{grid-template-columns:1fr}.activate-form .button,.activate-form .form-error{grid-column:1}.activation-copy h1{font-size:34px}}
+
+
+/* Access foundation: system administration stays distinct from job access. */
+.access-workspace{min-width:0}
+.system-access-block,.individual-access-block{max-width:860px;padding:18px 0;border-bottom:1px solid var(--border)}
+.individual-access-block{border-bottom:0}
+.system-access-block>header,.access-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:12px}
+.system-access-block>header h3,.access-section-heading h3{margin:0;color:var(--text);font-size:13px}
+.system-access-block>header p,.access-section-heading p{max-width:680px;margin:4px 0 0;color:var(--muted);font-size:10.5px;line-height:1.45}
+.system-access-block>header>svg{flex:none;color:var(--muted)}
+.system-access-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.system-access-item{min-height:56px;display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:7px;background:var(--panel);cursor:pointer}
+.system-access-item:has(input:checked){background:var(--panel-2);border-color:var(--border-strong)}
+.system-access-item:has(input:disabled){cursor:default}
+.system-access-item input{flex:none;margin:3px 0 0;accent-color:var(--accent)}
+.system-access-item strong,.system-access-item small{display:block}
+.system-access-item strong{color:var(--text);font-size:11px}
+.system-access-item small{margin-top:3px;color:var(--muted);font-size:9.5px;line-height:1.4}
+.individual-access-block .access-form{padding-top:0;max-width:760px}
+.capability-editor{max-height:420px}
+.capability-editor>div{grid-template-columns:18px minmax(180px,1fr) 112px minmax(150px,190px)}
+.capability-editor .capability-scope{min-width:0}
+@media(max-width:1180px){
+  .system-access-list{grid-template-columns:1fr}
+  .capability-editor>div{grid-template-columns:18px 1fr 112px}
+  .capability-editor .capability-scope{grid-column:2/-1}
+}

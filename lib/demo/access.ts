@@ -18,7 +18,7 @@ const ALL = [
   "worker.read","worker.edit","worker.compensation.read","worker.personal_docs.read","time.time_entry.read","time.time_entry.edit",
   "time.timesheet.read","time.timesheet.edit","time.timesheet.submit","time.timesheet.approve_client",
   "finance.worker_accrual.read","finance.worker_accrual.edit","finance.payments.read","finance.payments.edit","finance.client_margin.read","finance.pnl.read",
-  "analytics.portfolio.read","audit.read","admin.permissions.manage","organization.read","organization.manage","organization.unit.manage","organization.position.manage","organization.employee.manage","organization.access.manage"
+  "analytics.portfolio.read","audit.read","admin.permissions.manage","admin.system_access.manage","organization.read","organization.manage","organization.unit.manage","organization.position.manage","organization.employee.manage","organization.access.manage"
 ];
 
 function scoped(caps: string[], type: ScopeGrant["type"], ids: string[] = []): EffectiveAccess {

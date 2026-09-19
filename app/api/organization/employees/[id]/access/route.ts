@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { getCurrentActor } from "@/lib/auth/server";
 import { withTenant } from "@/lib/db/client";
+import { OWNER_SYSTEM_CAPABILITIES } from "@/lib/access/system";
+
+type AccessItem={
+  capability:string;
+  label:string;
+  effect:"allow"|"deny";
+  scopeType:string|null;
+  scopeIds:string[];
+  sourceType:string;
+  sourceName:string;
+};
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -9,13 +20,18 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     if (!actor) return NextResponse.json({ error: "Требуется вход в систему" }, { status: 401 });
     requireCapability(actor, "organization.read");
     const { id } = await context.params;
-    if (actor.demo) return NextResponse.json({ items: [] });
+    if (actor.demo) return NextResponse.json({ items: [], effective: [] });
+
     const items = await withTenant(actor.organizationId, actor.userId, async (sql) => {
-      const [target] = await sql<Array<{ roleTemplateId: string }>>`
-        SELECT role_template_id "roleTemplateId" FROM organization_memberships WHERE id=${id}::uuid
+      const [target] = await sql<Array<{ roleTemplateId: string; isOwner:boolean }>>`
+        SELECT m.role_template_id "roleTemplateId",
+               EXISTS(SELECT 1 FROM organization_owners oo WHERE oo.membership_id=m.id) "isOwner"
+        FROM organization_memberships m
+        WHERE m.id=${id}::uuid
       `;
       if (!target) throw new Error("NOT_FOUND");
-      return sql<Array<{ capability: string; label: string; effect: string; scopeType: string | null; scopeIds: string[]; sourceType: string; sourceName: string }>>`
+
+      const inherited=await sql<AccessItem[]>`
         SELECT g.capability,COALESCE(d.description,g.capability) label,g.effect,g.scope_type "scopeType",g.scope_ids "scopeIds",'role_template' "sourceType",rt.name "sourceName"
         FROM permission_grants g JOIN role_templates rt ON rt.id=g.role_template_id LEFT JOIN permission_definitions d ON d.capability=g.capability
         WHERE g.role_template_id=${target.roleTemplateId}::uuid
@@ -33,10 +49,37 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         SELECT o.capability,COALESCE(d.description,o.capability),o.effect,o.scope_type,o.scope_ids,'individual','Индивидуальное исключение'
         FROM user_permission_overrides o LEFT JOIN permission_definitions d ON d.capability=o.capability
         WHERE o.membership_id=${id}::uuid AND (o.effective_from IS NULL OR o.effective_from<=current_date) AND (o.effective_to IS NULL OR o.effective_to>=current_date)
+        UNION ALL
+        SELECT sg.capability,COALESCE(d.description,sg.capability),'allow','all_org','{}'::uuid[],'system_admin','Системное полномочие'
+        FROM membership_system_grants sg LEFT JOIN permission_definitions d ON d.capability=sg.capability
+        WHERE sg.membership_id=${id}::uuid AND sg.valid_from<=now() AND (sg.valid_to IS NULL OR sg.valid_to>now())
         ORDER BY capability,"sourceType"
       `;
+
+      if(!target.isOwner)return inherited;
+      const ownerItems=await sql.unsafe<AccessItem[]>(
+        `SELECT d.capability,COALESCE(d.description,d.capability) label,'allow' effect,'all_org' "scopeType",'{}'::uuid[] "scopeIds",'owner' "sourceType",'Владелец организации' "sourceName"
+         FROM permission_definitions d
+         WHERE d.capability=ANY($1::text[])
+         ORDER BY d.capability`,
+        [[...OWNER_SYSTEM_CAPABILITIES]],
+      );
+      return [...inherited,...ownerItems];
     });
-    const effective=[...new Set(items.map(item=>item.capability))].map(capability=>{const sources=items.filter(item=>item.capability===capability);const denied=sources.some(item=>item.effect==="deny");return {capability,label:sources[0]?.label??capability,effect:denied?"deny":"allow",scopeTypes:[...new Set(sources.filter(item=>item.effect==="allow").map(item=>item.scopeType).filter(Boolean))],scopeIds:[...new Set(sources.filter(item=>item.effect==="allow").flatMap(item=>item.scopeIds))],sources:sources.length}});
+
+    const effective=[...new Set(items.map(item=>item.capability))].map(capability=>{
+      const sources=items.filter(item=>item.capability===capability);
+      const systemAllow=sources.some(item=>["owner","system_admin"].includes(item.sourceType)&&item.effect==="allow");
+      const denied=!systemAllow&&sources.some(item=>item.effect==="deny");
+      return {
+        capability,
+        label:sources[0]?.label??capability,
+        effect:denied?"deny":"allow",
+        scopeTypes:[...new Set(sources.filter(item=>item.effect==="allow").map(item=>item.scopeType).filter(Boolean))],
+        scopeIds:[...new Set(sources.filter(item=>item.effect==="allow").flatMap(item=>item.scopeIds))],
+        sources:sources.length,
+      };
+    });
     return NextResponse.json({ items, effective });
   } catch (error) {
     if (error instanceof AccessDeniedError) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });

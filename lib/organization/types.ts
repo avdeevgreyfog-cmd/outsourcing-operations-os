@@ -98,7 +98,7 @@ export type AccessSourceRow = {
   effect: "allow" | "deny";
   scopeType: string | null;
   scopeIds: string[];
-  sourceType: "role_template" | "job_profile" | "process_role" | "individual";
+  sourceType: "role_template" | "job_profile" | "process_role" | "individual" | "system_admin" | "owner";
   sourceName: string;
 };
 

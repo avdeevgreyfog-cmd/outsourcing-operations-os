@@ -1,33 +1,291 @@
 "use client";
-import { useState } from "react";
-import { Save, ShieldAlert } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Save, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Status } from "@/components/UI";
 import type { AccessUserRow } from "@/lib/data/service";
+import { SYSTEM_ADMIN_CAPABILITIES } from "@/lib/access/system";
 
-const capabilityGroups = [
-  { label: "Продажи", items: ["sales.client.read", "sales.request.read", "calculation.scenario.read", "calculation.scenario.approve"] },
-  { label: "Операции", items: ["operations.object.read", "operations.need.read", "operations.shift.read", "time.timesheet.read", "time.timesheet.edit"] },
-  { label: "Люди", items: ["recruiting.candidate.read", "recruiting.candidate.edit", "worker.read", "worker.compensation.read"] },
-  { label: "Финансы", items: ["finance.worker_accrual.read", "finance.payments.read", "finance.client_margin.read", "finance.pnl.read"] },
-  { label: "Организация", items: ["organization.read", "organization.unit.manage", "organization.position.manage", "organization.employee.manage", "organization.access.manage"] },
-  { label: "Администрирование", items: ["admin.permissions.manage", "audit.read"] },
-];
-const capabilityLabels: Record<string, string> = {
-  "sales.client.read": "Просмотр клиентов", "sales.request.read": "Просмотр заявок", "calculation.scenario.read": "Просмотр расчётов", "calculation.scenario.approve": "Согласование расчётов",
-  "operations.object.read": "Просмотр объектов", "operations.need.read": "Просмотр потребностей", "operations.shift.read": "Просмотр смен", "time.timesheet.read": "Просмотр табелей", "time.timesheet.edit": "Редактирование табелей",
-  "recruiting.candidate.read": "Просмотр кандидатов", "recruiting.candidate.edit": "Редактирование кандидатов", "worker.read": "Просмотр сотрудников", "worker.compensation.read": "Просмотр ставок и начислений",
-  "finance.worker_accrual.read": "Просмотр начислений", "finance.payments.read": "Просмотр выплат", "finance.client_margin.read": "Просмотр маржи по клиентам", "finance.pnl.read": "Просмотр прибылей и убытков",
-  "organization.read": "Просмотр структуры", "organization.unit.manage": "Управление подразделениями", "organization.position.manage": "Управление должностями и ролями", "organization.employee.manage": "Управление сотрудниками компании", "organization.access.manage": "Управление наследуемыми правами",
-  "admin.permissions.manage": "Управление индивидуальными правами", "audit.read": "Просмотр журнала изменений",
+type AccessRule={
+  capability:string;
+  description:string|null;
+  domain:string;
+  resource:string;
+  action:string;
+  fieldSensitive:boolean;
+  effect:"inherit"|"allow"|"deny";
+  scopeType:string|null;
+  scopeIds:string[];
 };
-const scopes = [{ value: "all_org", label: "Вся компания" }, { value: "region", label: "Регион сотрудника" }, { value: "org_unit", label: "Подразделение сотрудника" }, { value: "team", label: "Команда сотрудника" }, { value: "assigned_to_me", label: "Назначенные записи" }, { value: "self", label: "Только свои данные" }, { value: "own_created", label: "Созданные сотрудником" }];
 
-export function AccessEditor({ users, demo }: { users: AccessUserRow[]; demo: boolean }) {
-  const [selectedId, setSelectedId] = useState(users[0]?.membershipId ?? "");
-  const user = users.find((item) => item.membershipId === selectedId);
-  const [capability, setCapability] = useState(capabilityGroups[0].items[0]);
-  const [effect, setEffect] = useState<"inherit" | "allow" | "deny">("inherit"); const [scope, setScope] = useState("assigned_to_me"); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
-  async function save() { if (demo) { setMessage("В демонстрационном режиме изменения не сохраняются. Подключите PostgreSQL и войдите как администратор."); return } setBusy(true); setMessage(""); const response = await fetch("/api/admin/access", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ membershipId: selectedId, capability, effect, scopeType: effect === "allow" ? scope : undefined }) }); const body = await response.json(); setMessage(response.ok ? "Изменение сохранено. Новые права применятся со следующего запроса." : body.error ?? "Не удалось сохранить"); setBusy(false) }
+const domainLabels:Record<string,string>={
+  home:"Главная",
+  control:"Задачи и контроль",
+  sales:"Коммерция",
+  calculation:"Экономика",
+  operations:"Операции",
+  recruiting:"Подбор",
+  worker:"Сотрудники",
+  time:"Табели",
+  finance:"Финансы",
+  analytics:"Аналитика",
+  organization:"Организация",
+  admin:"Администрирование",
+};
 
-  return <div className="access-editor"><aside className="access-users">{users.map((item) => <button type="button" key={item.membershipId} className={item.membershipId === selectedId ? "active" : ""} onClick={() => setSelectedId(item.membershipId)}><span className="avatar">{item.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><span><strong>{item.name}</strong><small>{item.role} · {item.processRoles.length} доп. ролей</small></span></button>)}</aside><div className="access-workspace"><div className="access-person"><div><h2>{user?.name ?? "Пользователь не выбран"}</h2><p>{user?.email} · должность {user?.role}{user?.processRoles.length ? " · роли: "+user.processRoles.join(", ") : ""}</p></div><Status tone={demo ? "warn" : "good"}>{demo ? "preview" : "active"}</Status></div><div className="access-form"><label>Разрешение<select value={capability} onChange={(event) => setCapability(event.target.value)}>{capabilityGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.items.map((item) => <option key={item} value={item}>{capabilityLabels[item]}</option>)}</optgroup>)}</select></label><label>Индивидуальное исключение<select value={effect} onChange={(event) => setEffect(event.target.value as typeof effect)}><option value="inherit">Наследовать должность и роли</option><option value="allow">Разрешить дополнительно</option><option value="deny">Запретить индивидуально</option></select></label>{effect === "allow" && <label>Область данных<select value={scope} onChange={(event) => setScope(event.target.value)}>{scopes.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label>}<div className="access-warning"><ShieldAlert size={16}/><span>Эффективный доступ складывается из должности и процессных ролей. Индивидуальное исключение применяется последним и не изменяет шаблон для коллег.</span></div><button className="button primary" type="button" disabled={busy || !user} onClick={save}><Save size={14}/>{busy ? "Сохранение…" : "Сохранить исключение"}</button>{message && <p className="form-message">{message}</p>}</div></div></div>;
+const scopes=[
+  {value:"assigned_to_me",label:"Назначенные мне"},
+  {value:"org_unit_subtree",label:"Подразделение и вложенные"},
+  {value:"org_unit",label:"Моё подразделение"},
+  {value:"region",label:"Мой регион"},
+  {value:"team",label:"Моя команда"},
+  {value:"self",label:"Только свои данные"},
+  {value:"own_created",label:"Созданные сотрудником"},
+  {value:"all_org",label:"Вся организация"},
+];
+
+const demoRules:AccessRule[]=[
+  {capability:"sales.request.read",description:"Просмотр заявок",domain:"sales",resource:"request",action:"read",fieldSensitive:false,effect:"inherit",scopeType:null,scopeIds:[]},
+  {capability:"operations.object.read",description:"Просмотр объектов",domain:"operations",resource:"object",action:"read",fieldSensitive:false,effect:"inherit",scopeType:null,scopeIds:[]},
+  {capability:"operations.need.read",description:"Просмотр потребностей",domain:"operations",resource:"need",action:"read",fieldSensitive:false,effect:"inherit",scopeType:null,scopeIds:[]},
+  {capability:"recruiting.candidate.read",description:"Просмотр кандидатов",domain:"recruiting",resource:"candidate",action:"read",fieldSensitive:false,effect:"inherit",scopeType:null,scopeIds:[]},
+  {capability:"worker.read",description:"Просмотр сотрудников",domain:"worker",resource:"profile",action:"read",fieldSensitive:false,effect:"inherit",scopeType:null,scopeIds:[]},
+  {capability:"finance.pnl.read",description:"Просмотр прибылей и убытков",domain:"finance",resource:"pnl",action:"read",fieldSensitive:true,effect:"inherit",scopeType:null,scopeIds:[]},
+];
+
+export function AccessEditor({
+  users,
+  demo,
+  canManageSystemAccess,
+  currentIsOwner,
+}:{users:AccessUserRow[];demo:boolean;canManageSystemAccess:boolean;currentIsOwner:boolean}){
+  const [selectedId,setSelectedId]=useState(users[0]?.membershipId??"");
+  const user=users.find(item=>item.membershipId===selectedId);
+  const [rules,setRules]=useState<AccessRule[]|null>(demo?demoRules:null);
+  const [capability,setCapability]=useState(demoRules[0].capability);
+  const [effect,setEffect]=useState<"inherit"|"allow"|"deny">("inherit");
+  const [scope,setScope]=useState("assigned_to_me");
+  const [message,setMessage]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [systemBusy,setSystemBusy]=useState("");
+  const [systemAccess,setSystemAccess]=useState<Record<string,string[]>>(
+    Object.fromEntries(users.map(item=>[item.membershipId,[...item.systemCapabilities]])),
+  );
+
+  useEffect(()=>{
+    if(demo||!selectedId)return;
+    let active=true;
+    fetch(`/api/admin/access?membershipId=${selectedId}`)
+      .then(async response=>{
+        const body=await response.json();
+        if(!response.ok)throw new Error(body.error??"Не удалось загрузить права");
+        if(!active)return;
+        const nextRules=body.items as AccessRule[];
+        setRules(nextRules);
+        setMessage("");
+        const first=nextRules[0];
+        if(first){
+          setCapability(first.capability);
+          setEffect(first.effect);
+          setScope(first.scopeType??"assigned_to_me");
+        }
+      })
+      .catch(error=>{
+        if(!active)return;
+        setRules([]);
+        setMessage(error instanceof Error?error.message:"Не удалось загрузить права");
+      });
+    return()=>{active=false};
+  },[selectedId,demo]);
+
+  const selectedRule=rules?.find(item=>item.capability===capability);
+
+  const groupedRules=useMemo(()=>{
+    const map=new Map<string,AccessRule[]>();
+    for(const item of rules??[]){
+      const list=map.get(item.domain)??[];
+      list.push(item);
+      map.set(item.domain,list);
+    }
+    return [...map.entries()];
+  },[rules]);
+
+  async function save(){
+    if(demo){
+      setMessage("В демонстрационном режиме изменения не сохраняются.");
+      return;
+    }
+    if(!user||!selectedRule)return;
+    setBusy(true);
+    setMessage("");
+    const response=await fetch("/api/admin/access",{
+      method:"PATCH",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        membershipId:selectedId,
+        capability,
+        effect,
+        scopeType:effect==="allow"?scope:undefined,
+      }),
+    });
+    const body=await response.json();
+    setBusy(false);
+    setMessage(response.ok?"Изменение сохранено. Новые права применятся со следующего запроса.":body.error??"Не удалось сохранить");
+    if(response.ok){
+      const refreshed=await fetch(`/api/admin/access?membershipId=${selectedId}`);
+      const refreshedBody=await refreshed.json();
+      if(refreshed.ok){
+        const nextRules=refreshedBody.items as AccessRule[];
+        setRules(nextRules);
+        const next=nextRules.find(item=>item.capability===capability);
+        if(next){
+          setEffect(next.effect);
+          setScope(next.scopeType??"assigned_to_me");
+        }
+      }
+    }
+  }
+
+  async function toggleSystem(systemCapability:string,enabled:boolean){
+    if(demo){
+      setMessage("В демонстрационном режиме изменения не сохраняются.");
+      return;
+    }
+    if(!user||!canManageSystemAccess)return;
+    setSystemBusy(systemCapability);
+    setMessage("");
+    const response=await fetch("/api/admin/system-access",{
+      method:"PATCH",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        membershipId:selectedId,
+        capability:systemCapability,
+        enabled,
+        reason:"Изменено в разделе «Пользователи и права»",
+      }),
+    });
+    const body=await response.json();
+    setSystemBusy("");
+    if(!response.ok){
+      setMessage(body.error??"Не удалось изменить системные полномочия");
+      return;
+    }
+    setSystemAccess(value=>{
+      const current=new Set(value[selectedId]??[]);
+      if(enabled)current.add(systemCapability);else current.delete(systemCapability);
+      return {...value,[selectedId]:[...current]};
+    });
+    setMessage("Системные полномочия обновлены.");
+  }
+
+  const activeSystem=new Set(systemAccess[selectedId]??[]);
+
+  return <div className="access-editor">
+    <aside className="access-users">
+      {users.map(item=><button
+        type="button"
+        key={item.membershipId}
+        className={item.membershipId===selectedId?"active":""}
+        onClick={()=>{
+          setSelectedId(item.membershipId);
+          setMessage("");
+          if(!demo)setRules(null);
+          else {
+            const first=demoRules[0];
+            setRules(demoRules);
+            setCapability(first.capability);
+            setEffect(first.effect);
+            setScope(first.scopeType??"assigned_to_me");
+          }
+        }}
+      >
+        <span className="avatar">{item.name.split(" ").map(part=>part[0]).join("").slice(0,2)}</span>
+        <span>
+          <strong>{item.name}</strong>
+          <small>{item.role} · {item.isOwner?"владелец":item.systemCapabilities.length?"системных прав: "+item.systemCapabilities.length:"доп. ролей: "+item.processRoles.length}</small>
+        </span>
+      </button>)}
+    </aside>
+
+    <div className="access-workspace">
+      <div className="access-person">
+        <div>
+          <h2>{user?.name??"Пользователь не выбран"}</h2>
+          <p>{user?.email} · должность {user?.role}{user?.processRoles.length?" · роли: "+user.processRoles.join(", "):""}</p>
+        </div>
+        <Status tone={user?.isOwner?"info":demo?"warn":"good"}>{user?.isOwner?"Владелец":demo?"Предпросмотр":"Активен"}</Status>
+      </div>
+
+      <section className="system-access-block">
+        <header>
+          <div>
+            <h3>Системные полномочия</h3>
+            <p>Отдельны от должности. Используются для администрирования организации и не открывают бизнес-данные сами по себе.</p>
+          </div>
+          <ShieldCheck size={18}/>
+        </header>
+        <div className="system-access-list">
+          {SYSTEM_ADMIN_CAPABILITIES.map(item=>{
+            const checked=user?.isOwner||activeSystem.has(item.capability);
+            const disabled=demo||!canManageSystemAccess||Boolean(user?.isOwner)||systemBusy===item.capability||Boolean(item.ownerOnly&&!currentIsOwner);
+            return <label className="system-access-item" key={item.capability}>
+              <input
+                type="checkbox"
+                checked={Boolean(checked)}
+                disabled={disabled}
+                onChange={event=>toggleSystem(item.capability,event.target.checked)}
+              />
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.description}{item.ownerOnly?" Только владелец может делегировать это право.":""}</small>
+              </span>
+            </label>;
+          })}
+        </div>
+      </section>
+
+      <section className="individual-access-block">
+        <div className="access-section-heading">
+          <h3>Индивидуальное исключение</h3>
+          <p>Используйте только когда доступ конкретного сотрудника должен отличаться от его должности и процессных ролей.</p>
+        </div>
+        <div className="access-form">
+          <label>Разрешение
+            <select value={capability} onChange={event=>{
+              const next=rules?.find(item=>item.capability===event.target.value);
+              setCapability(event.target.value);
+              if(next){
+                setEffect(next.effect);
+                setScope(next.scopeType??"assigned_to_me");
+              }
+            }} disabled={!rules?.length}>
+              {groupedRules.map(([domain,items])=><optgroup key={domain} label={domainLabels[domain]??domain}>
+                {items.map(item=><option key={item.capability} value={item.capability}>{item.description||item.capability}</option>)}
+              </optgroup>)}
+            </select>
+          </label>
+          <label>Правило
+            <select value={effect} onChange={event=>setEffect(event.target.value as typeof effect)} disabled={!selectedRule}>
+              <option value="inherit">Наследовать должность и роли</option>
+              <option value="allow">Разрешить дополнительно</option>
+              <option value="deny">Запретить индивидуально</option>
+            </select>
+          </label>
+          {effect==="allow"&&<label>Область данных
+            <select value={scope} onChange={event=>setScope(event.target.value)}>
+              {scopes.map(item=><option value={item.value} key={item.value}>{item.label}</option>)}
+            </select>
+          </label>}
+          <div className="access-warning">
+            <ShieldAlert size={16}/>
+            <span>Рабочий доступ должен в основном приходить из должности. Индивидуальное правило применяется только к выбранному сотруднику; системное администрирование настраивается выше.</span>
+          </div>
+          <button className="button primary" type="button" disabled={busy||!user||!selectedRule} onClick={save}>
+            <Save size={14}/>{busy?"Сохранение…":"Сохранить исключение"}
+          </button>
+          {rules===null&&<p className="form-message">Загрузка каталога прав…</p>}
+          {message&&<p className="form-message">{message}</p>}
+        </div>
+      </section>
+    </div>
+  </div>;
 }
