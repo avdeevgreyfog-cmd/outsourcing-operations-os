@@ -93,16 +93,17 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
     const share=unit==="requests"?stage.shareRequests:stage.shareHeadcount;
     const conversion=unit==="requests"?stage.conversionRequests:stage.conversionHeadcount;
     const notAdvanced=unit==="requests"?stage.notAdvancedRequests:stage.notAdvancedHeadcount;
+    const notAdvancedRate=unit==="requests"?stage.notAdvancedRate:stage.notAdvancedHeadcountRate;
     return {
       key:stage.code,label:stage.label,value,note:`${share}% от входящего объёма`,
-      aside:mode==="share"?`${share}%`:mode==="conversion"?`${conversion}%`:mode==="not_advanced"?(stage.code===analytics.stages.at(-1)?.code?"—":`−${notAdvanced} · ${stage.notAdvancedRate}%`):formatDuration(stage.avgHours),
+      aside:mode==="share"?`${share}%`:mode==="conversion"?`${conversion}%`:mode==="not_advanced"?(stage.code===analytics.stages.at(-1)?.code?"—":`−${notAdvanced} · ${notAdvancedRate}%`):formatDuration(stage.avgHours),
     };
   }),[analytics.stages,unit,mode]);
 
   const gaps=useMemo(()=>analytics.stages.slice(0,-1).map((stage,index)=>({
     from:stage.label,to:analytics.stages[index+1]?.label??"",
     count:unit==="requests"?stage.notAdvancedRequests:stage.notAdvancedHeadcount,
-    rate:stage.notAdvancedRate,
+    rate:unit==="requests"?stage.notAdvancedRate:stage.notAdvancedHeadcountRate,
   })).sort((a,b)=>b.rate-a.rate||b.count-a.count).slice(0,5),[analytics.stages,unit]);
 
   const visibleMetrics=useMemo(()=>preferences.filter(item=>item.visible).sort((a,b)=>a.position-b.position),[preferences]);
@@ -216,7 +217,7 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
 
       <section className="request-analytics-card request-stage-details">
         <div className="request-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Конверсия, скорость и разрыв по каждой ступени коммерческого процесса.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
-        <div className="request-stage-table-wrap"><table className="data-table request-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Заявки</th><th>Численность</th><th>Конверсия</th><th>Не перешли</th><th>Ср. время</th></tr></thead><tbody>{analytics.stages.map((stage,index)=><tr key={stage.code}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.requests}</td><td>{stage.headcount}</td><td>{unit==="requests"?stage.conversionRequests:stage.conversionHeadcount}%</td><td>{index===analytics.stages.length-1?"—":unit==="requests"?`${stage.notAdvancedRequests} (${stage.notAdvancedRate}%)`:`${stage.notAdvancedHeadcount} чел.`}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
+        <div className="request-stage-table-wrap"><table className="data-table request-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Заявки</th><th>Численность</th><th>Конверсия</th><th>Не перешли</th><th>Ср. время</th></tr></thead><tbody>{analytics.stages.map((stage,index)=><tr key={stage.code}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.requests}</td><td>{stage.headcount}</td><td>{unit==="requests"?stage.conversionRequests:stage.conversionHeadcount}%</td><td>{index===analytics.stages.length-1?"—":unit==="requests"?`${stage.notAdvancedRequests} (${stage.notAdvancedRate}%)`:`${stage.notAdvancedHeadcount} (${stage.notAdvancedHeadcountRate}%)`}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
       </section>
     </div>
 
@@ -225,7 +226,7 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
 }
 
 function BreakdownTable({rows,unit}:{rows:RequestAnalyticsBreakdownRow[];unit:RequestAnalyticsUnit}){
-  return <div className="request-breakdown-table-wrap"><table className="data-table request-breakdown-table"><thead><tr><th>Контур</th><th>{unit==="requests"?"Заявки":"Численность"}</th><th>Согласовано</th><th>Конверсия</th><th>Ср. цикл</th></tr></thead><tbody>{rows.length?rows.slice(0,10).map(row=><tr key={row.key}><td><strong>{row.label}</strong></td><td>{unit==="requests"?row.requests:row.headcount}</td><td>{unit==="requests"?row.agreed:row.agreedHeadcount}</td><td>{row.conversion}%</td><td>{row.avgCycleDays==null?"—":`${formatNumber(row.avgCycleDays)} дн.`}</td></tr>):<tr><td colSpan={5}>Нет данных для выбранного разреза</td></tr>}</tbody></table></div>;
+  return <div className="request-breakdown-table-wrap"><table className="data-table request-breakdown-table"><thead><tr><th>Контур</th><th>{unit==="requests"?"Заявки":"Численность"}</th><th>Согласовано</th><th>Конверсия</th><th>Ср. цикл</th></tr></thead><tbody>{rows.length?rows.slice(0,10).map(row=><tr key={row.key}><td><strong>{row.label}</strong></td><td>{unit==="requests"?row.requests:row.headcount}</td><td>{unit==="requests"?row.agreed:row.agreedHeadcount}</td><td>{unit==="requests"?row.conversion:row.headcountConversion}%</td><td>{row.avgCycleDays==null?"—":`${formatNumber(row.avgCycleDays)} дн.`}</td></tr>):<tr><td colSpan={5}>Нет данных для выбранного разреза</td></tr>}</tbody></table></div>;
 }
 
 function camelMetricKey(key:RequestAnalyticsMetricKey):keyof RequestAnalyticsData["metrics"]{
