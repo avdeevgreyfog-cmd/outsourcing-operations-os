@@ -173,14 +173,31 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
     }
     if(asOfStage==="ready") ready++;
     if(!terminalStages.has(asOfStage)&&asOfStage!=="started") inWork++;
+
+    const createdDay=isoDay(new Date(createdTime));
+    const createdPoint=dailyMap.get(createdDay)??{newCandidates:0,ready:0,started:0};
+    createdPoint.newCandidates++;
+    dailyMap.set(createdDay,createdPoint);
+
+    const readyAt=firstReached.get("ready");
+    if(readyAt!=null&&readyAt>=start&&readyAt<=end){
+      const readyDay=isoDay(new Date(readyAt));
+      const readyPoint=dailyMap.get(readyDay)??{newCandidates:0,ready:0,started:0};
+      readyPoint.ready++;
+      dailyMap.set(readyDay,readyPoint);
+    }
+
     const startedAt=firstReached.get("started");
-    if(startedAt!=null){started++;toStartDays.push((startedAt-createdTime)/86400000)}
-    const day=isoDay(new Date(createdTime));
-    const point=dailyMap.get(day)??{newCandidates:0,ready:0,started:0};
-    point.newCandidates++;
-    if(maxRank>=(stageRank.get("ready")??6)) point.ready++;
-    if(maxRank>=(stageRank.get("started")??7)) point.started++;
-    dailyMap.set(day,point);
+    if(startedAt!=null){
+      started++;
+      toStartDays.push((startedAt-createdTime)/86400000);
+      if(startedAt>=start&&startedAt<=end){
+        const startedDay=isoDay(new Date(startedAt));
+        const startedPoint=dailyMap.get(startedDay)??{newCandidates:0,ready:0,started:0};
+        startedPoint.started++;
+        dailyMap.set(startedDay,startedPoint);
+      }
+    }
   }
 
   const total=cohort.length;
@@ -205,14 +222,18 @@ function buildPeriodAnalytics(applications: AnalyticsApplication[], history: Ana
   const daily:RecruitingAnalyticsDaily[]=[];
   let cursor=parseDay(from);
   const last=parseDay(to);
+  let cumulativeNew=0,cumulativeReady=0,cumulativeStarted=0;
   while(cursor<=last){
     const date=isoDay(cursor), point=dailyMap.get(date)??{newCandidates:0,ready:0,started:0};
+    cumulativeNew+=point.newCandidates;
+    cumulativeReady+=point.ready;
+    cumulativeStarted+=point.started;
     daily.push({
       date,
       label:new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"}).format(cursor),
       ...point,
-      readyConversion:point.newCandidates?Math.round(point.ready/point.newCandidates*100):0,
-      startConversion:point.newCandidates?Math.round(point.started/point.newCandidates*100):0,
+      readyConversion:cumulativeNew?Math.round(cumulativeReady/cumulativeNew*100):0,
+      startConversion:cumulativeNew?Math.round(cumulativeStarted/cumulativeNew*100):0,
     });
     cursor=new Date(cursor.getTime()+86400000);
   }
