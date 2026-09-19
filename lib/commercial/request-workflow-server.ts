@@ -16,9 +16,32 @@ function canConfigurePipeline(actor:Actor){return actor.roleCode==="director"||h
 function rule(intake:RequestIntake,key:"housing"|"travel"|"shuttle"|"workwear"|"ppe"|"medical"|"medbook"|"tools"){return intake.provision[key].provider;}
 
 export async function getRequestWorkspaceOptions(actor:Actor):Promise<RequestWorkspaceOptions>{
-  if(actor.demo)return {clients:demo.clients.map((item)=>({id:item.id,name:item.name})),regions:[{id:"30000000-0000-4000-8000-000000000001",name:"Москва"},{id:"30000000-0000-4000-8000-000000000002",name:"Московская область"},{id:"30000000-0000-4000-8000-000000000003",name:"Псковская область"}],specialties:[{id:"60000000-0000-4000-8000-000000000001",name:"Комплектовщик",stats:{sampleCount:7,clientRateMin:610,clientRateMedian:660,clientRateMax:720,workerPayMin:360,workerPayMax:420}},{id:"60000000-0000-4000-8000-000000000002",name:"Грузчик",stats:{sampleCount:5,clientRateMin:580,clientRateMedian:630,clientRateMax:690,workerPayMin:330,workerPayMax:390}},{id:"60000000-0000-4000-8000-000000000003",name:"Сборщик мебели",stats:{sampleCount:2,clientRateMin:710,clientRateMedian:740,clientRateMax:770,workerPayMin:430,workerPayMax:470}}],members:[{id:actor.userId,name:actor.displayName,role:actor.roleName}],currentUserId:actor.userId,canAssign:canAssignRequests(actor),canConfigurePipeline:canConfigurePipeline(actor)};
+  if(actor.demo)return {
+    clients:demo.clients.map((item)=>({id:item.id,name:item.name})),
+    regions:[{id:"30000000-0000-4000-8000-000000000001",name:"Москва"},{id:"30000000-0000-4000-8000-000000000002",name:"Московская область"},{id:"30000000-0000-4000-8000-000000000003",name:"Псковская область"}],
+    specialties:[
+      {id:"60000000-0000-4000-8000-000000000001",name:"Комплектовщик",stats:{sampleCount:7,clientRateMin:610,clientRateMedian:660,clientRateMax:720,workerPayMin:360,workerPayMax:420}},
+      {id:"60000000-0000-4000-8000-000000000002",name:"Грузчик",stats:{sampleCount:5,clientRateMin:580,clientRateMedian:630,clientRateMax:690,workerPayMin:330,workerPayMax:390}},
+      {id:"60000000-0000-4000-8000-000000000003",name:"Сборщик мебели",stats:{sampleCount:2,clientRateMin:710,clientRateMedian:740,clientRateMax:770,workerPayMin:430,workerPayMax:470}},
+    ],
+    members:[{id:actor.userId,name:actor.displayName,role:actor.roleName}],
+    currentUserId:actor.userId,
+    canAssign:canAssignRequests(actor),
+    canConfigurePipeline:canConfigurePipeline(actor),
+    sources:["manual","public_form"],
+    lossReasons:[
+      {code:"price",name:"Цена / экономика"},
+      {code:"competitor",name:"Выбран другой подрядчик"},
+      {code:"cancelled",name:"Потребность отменена"},
+      {code:"timing",name:"Не устроили сроки"},
+      {code:"terms",name:"Не устроили условия"},
+      {code:"no_response",name:"Нет ответа заказчика"},
+      {code:"staffing_failure",name:"Не смогли обеспечить персонал"},
+      {code:"other",name:"Другое"},
+    ],
+  };
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-    const [clients,regions,specialties,allMembers]=await Promise.all([
+    const [clients,regions,specialties,allMembers,sources,lossReasons]=await Promise.all([
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM client_companies WHERE status<>'archived' ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;sampleCount:number;clientRateMin:number|null;clientRateMedian:number|null;clientRateMax:number|null;workerPayMin:number|null;workerPayMax:number|null}>>`
@@ -32,8 +55,10 @@ export async function getRequestWorkspaceOptions(actor:Actor):Promise<RequestWor
         FROM specialties s LEFT JOIN request_roles rr ON rr.specialty_id=s.id LEFT JOIN calculation_scenarios cs ON cs.request_role_id=rr.id
         WHERE s.active GROUP BY s.id,s.name ORDER BY s.name`,
       sql<Array<{id:string;name:string;role:string}>>`SELECT m.user_id id,u.display_name name,r.name role FROM organization_memberships m JOIN app_users u ON u.id=m.user_id JOIN role_templates r ON r.id=m.role_template_id WHERE m.status='active' ORDER BY u.display_name`,
+      sql<Array<{source:string}>>`SELECT DISTINCT source FROM requests WHERE source IS NOT NULL AND btrim(source)<>'' ORDER BY source`,
+      sql<Array<{code:string;name:string}>>`SELECT code,name FROM request_loss_reasons WHERE active ORDER BY sort_order,name`,
     ]);
-    return {clients,regions,specialties:specialties.map((item)=>({id:item.id,name:item.name,stats:{sampleCount:item.sampleCount??0,clientRateMin:item.clientRateMin,clientRateMedian:item.clientRateMedian,clientRateMax:item.clientRateMax,workerPayMin:item.workerPayMin,workerPayMax:item.workerPayMax}})),members:canAssignRequests(actor)?allMembers:allMembers.filter((item)=>item.id===actor.userId),currentUserId:actor.userId,canAssign:canAssignRequests(actor),canConfigurePipeline:canConfigurePipeline(actor)};
+    return {clients,regions,specialties:specialties.map((item)=>({id:item.id,name:item.name,stats:{sampleCount:item.sampleCount??0,clientRateMin:item.clientRateMin,clientRateMedian:item.clientRateMedian,clientRateMax:item.clientRateMax,workerPayMin:item.workerPayMin,workerPayMax:item.workerPayMax}})),members:canAssignRequests(actor)?allMembers:allMembers.filter((item)=>item.id===actor.userId),currentUserId:actor.userId,canAssign:canAssignRequests(actor),canConfigurePipeline:canConfigurePipeline(actor),sources:sources.map((item)=>item.source),lossReasons};
   });
 }
 
@@ -41,9 +66,13 @@ export async function listRequestStages(actor:Actor):Promise<RequestStageDefinit
 
 export async function listRequestBoard(actor:Actor):Promise<RequestBoardRow[]>{
   requireCapability(actor,"sales.request.read");
-  if(actor.demo)return demo.requests.map((item,index)=>({id:item.id,organizationId:item.organizationId,title:item.title,client:item.client??"Без клиента",clientId:item.clientId??null,status:item.status,workflowStageCode:["new","clarification","calculation","proposal_client","negotiation"][index%5],location:item.location,regionId:item.regionId??null,region:null,ownerUserId:item.ownerUserId??actor.userId,owner:actor.displayName,createdByUserId:item.createdByUserId,start:item.start??null,source:"manual",archivedAt:null,closedAt:null,lossReason:null,headcount:item.roles.reduce((sum,role)=>sum+role.count,0),roles:item.roles,proposalVersion:index===0?3:index===1?1:0,proposalSentCount:index===0?2:index===1?1:0,lastProposalAt:null,updatedAt:new Date().toISOString()})) as RequestBoardRow[];
+  if(actor.demo)return demo.requests.map((item,index)=>{
+    const createdAt=index===0?"2026-09-02T09:15:00.000Z":"2026-09-08T10:40:00.000Z";
+    const workflowStageCode=["negotiation","proposal_client"][index%2];
+    return {id:item.id,organizationId:item.organizationId,title:item.title,client:item.client??"Без клиента",clientId:item.clientId??null,status:item.status,workflowStageCode,location:item.location,regionId:item.regionId??null,region:index===0?"Москва":"Калужская область",ownerUserId:item.ownerUserId??actor.userId,owner:actor.displayName,createdByUserId:item.createdByUserId,start:item.start??null,source:index===0?"manual":"public_form",archivedAt:null,closedAt:null,lossReason:null,lossReasonCode:null,headcount:item.roles.reduce((sum,role)=>sum+role.count,0),roles:item.roles,proposalVersion:index===0?3:1,proposalSentCount:index===0?2:1,lastProposalAt:index===0?"2026-09-12T13:00:00.000Z":"2026-09-15T11:30:00.000Z",createdAt,updatedAt:index===0?"2026-09-18T14:20:00.000Z":"2026-09-17T16:10:00.000Z"} as RequestBoardRow;
+  });
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{const rows=await sql<RequestBoardRow[]>`
-    SELECT r.id,r.organization_id "organizationId",r.title,COALESCE(c.name,'Без клиента') client,r.client_company_id "clientId",r.status,COALESCE(r.workflow_stage_code,'new') "workflowStageCode",COALESCE(r.location_text,'') location,r.region_id "regionId",rg.name region,r.owner_user_id "ownerUserId",owner.display_name owner,r.created_by_user_id "createdByUserId",r.expected_start_date::text start,r.source,r.archived_at::text "archivedAt",r.closed_at::text "closedAt",r.loss_reason "lossReason",r.updated_at::text "updatedAt",
+    SELECT r.id,r.organization_id "organizationId",r.title,COALESCE(c.name,'Без клиента') client,r.client_company_id "clientId",r.status,COALESCE(r.workflow_stage_code,'new') "workflowStageCode",COALESCE(r.location_text,'') location,r.region_id "regionId",rg.name region,r.owner_user_id "ownerUserId",owner.display_name owner,r.created_by_user_id "createdByUserId",r.expected_start_date::text start,r.source,r.archived_at::text "archivedAt",r.closed_at::text "closedAt",r.loss_reason "lossReason",r.loss_reason_code "lossReasonCode",r.created_at::text "createdAt",r.updated_at::text "updatedAt",
     COALESCE((SELECT sum(rr.count_required)::int FROM request_roles rr WHERE rr.request_id=r.id),0) headcount,
     COALESCE((SELECT jsonb_agg(jsonb_build_object('name',s.name,'count',rr.count_required) ORDER BY rr.created_at) FROM request_roles rr JOIN specialties s ON s.id=rr.specialty_id WHERE rr.request_id=r.id),'[]'::jsonb) roles,
     COALESCE((SELECT max(p.version) FROM proposals p WHERE p.request_id=r.id),0)::int "proposalVersion",COALESCE((SELECT count(*) FROM proposals p WHERE p.request_id=r.id AND p.sent_at IS NOT NULL),0)::int "proposalSentCount",(SELECT max(COALESCE(p.sent_at,p.created_at))::text FROM proposals p WHERE p.request_id=r.id) "lastProposalAt"
