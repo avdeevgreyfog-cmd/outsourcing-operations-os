@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -22,16 +23,17 @@ const booleanMap = (value: unknown): Record<string, boolean> => value && typeof 
 
 export function WorkspaceNavigation({ actor, sections }: { actor: Actor; sections: NavigationSection[] }) {
   const pathname = usePathname(); const router = useRouter(); const currentView = useSearchParams().get("view") ?? "portfolio";
-  const activeSection = sections.find(section => section.groups.some(group => group.items.some(item => sameRoute(pathname, item.href, currentView))))?.id;
+  const activeSectionData = sections.find(section => section.groups.some(group => group.items.some(item => sameRoute(pathname, item.href, currentView))));
+  const activeSection = activeSectionData?.id;
+  const activeSectionLabel = activeSectionData?.label ?? "Рабочий контур";
   const activeGroup = sections.flatMap(section => section.groups).find(group => group.items.some(item => sameRoute(pathname, item.href, currentView)))?.id;
   const items = useMemo(() => sections.flatMap(section => section.groups.flatMap(group => group.items.map(item => ({ ...item, section: section.label, group: group.label })))), [sections]);
-  const defaults: Preferences = { sections: {}, groups: activeGroup ? { [activeGroup]: true } : {}, compact: false, pins: ["/", "/analytics"].filter(href => items.some(item => item.href === href)) };
+  const defaults: Preferences = { sections: activeSection ? { [activeSection]: true } : {}, groups: activeGroup ? { [activeGroup]: true } : {}, compact: false, pins: [] };
   const [prefs, setPrefs] = useState(defaults);
   const [loaded, setLoaded] = useState(false);
   const [palette, setPalette] = useState(false); const [mobileOpen, setMobileOpen] = useState(false); const [query, setQuery] = useState("");
   const restoredScroll = useRef(0);
   const navRef = useRef<HTMLElement>(null); const searchRef = useRef<HTMLButtonElement>(null);
-  const previousRoute = useRef(`${pathname}?${currentView}`);
   const storageKey = `operis.navigation.v4:${actor.organizationId}:${actor.membershipId}`;
   const compact = prefs.compact;
   // Hydrate before writing: default state must never overwrite a stored preference.
@@ -57,12 +59,19 @@ export function WorkspaceNavigation({ actor, sections }: { actor: Actor; section
     try { window.localStorage.setItem(storageKey, JSON.stringify(prefs)); } catch { /* Continue in memory. */ }
   }, [loaded, prefs, storageKey]);
   useEffect(() => {
-    const route = `${pathname}?${currentView}`;
-    if (previousRoute.current === route) return;
-    previousRoute.current = route;
-    const timer = window.setTimeout(() => setPrefs(current => ({ ...current, sections: activeSection ? { ...current.sections, [activeSection]: true } : current.sections, groups: activeGroup ? { ...current.groups, [activeGroup]: true } : current.groups })), 0);
+    if (!loaded) return;
+    const timer = window.setTimeout(() => setPrefs(current => {
+      const sectionAlreadyOpen = !activeSection || current.sections[activeSection] === true;
+      const groupAlreadyOpen = !activeGroup || current.groups[activeGroup] === true;
+      if (sectionAlreadyOpen && groupAlreadyOpen) return current;
+      return {
+        ...current,
+        sections: activeSection ? { ...current.sections, [activeSection]: true } : current.sections,
+        groups: activeGroup ? { ...current.groups, [activeGroup]: true } : current.groups,
+      };
+    }), 0);
     return () => window.clearTimeout(timer);
-  }, [pathname, currentView, activeSection, activeGroup]);
+  }, [loaded, pathname, currentView, activeSection, activeGroup]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPalette(true); }
@@ -85,12 +94,12 @@ export function WorkspaceNavigation({ actor, sections }: { actor: Actor; section
   return <>
     {mobileOpen && <button className="sales-nav-backdrop" onClick={() => setMobileOpen(false)} aria-label="Закрыть меню"/>}
     <aside className={`sidebar ${compact ? "sidebar-compact" : ""} ${mobileOpen ? "sales-mobile-open" : ""}`}>
-      <div className="brand"><span className="brand-mark">O</span>{!compact && <div><strong>OPERIS</strong><small>Операционная система</small></div>}</div>
+      <div className="brand"><span className="brand-mark"><Image src="/operis-symbol.svg" alt="" width={24} height={24} priority/></span>{!compact && <div><strong>OPERIS</strong><small>Операционная система</small></div>}</div>
       <button ref={searchRef} className="nav-search" type="button" onClick={() => setPalette(true)} aria-label="Быстрый переход" title="Быстрый переход (Ctrl+K)"><Search size={16}/>{!compact && <><span>Найти раздел</span><kbd>Ctrl K</kbd></>}</button>
       <nav ref={navRef} className="nav-groups" aria-label="Основная навигация" onScroll={() => { if (loaded) { try { window.sessionStorage.setItem(`${storageKey}:scroll`, String(navRef.current?.scrollTop ?? 0)); } catch {} } }}>
-        {!compact && <div className="nav-shortcuts"><div className="nav-shortcuts-heading"><Pin size={12}/><span>Закреплённое</span></div>{pinnedItems.map(item => itemRow(item, true))}{!pinnedItems.length && <p>Закрепите нужные страницы кнопкой рядом с названием.</p>}</div>}
+        {!compact && pinnedItems.length > 0 && <div className="nav-shortcuts"><div className="nav-shortcuts-heading"><Pin size={12}/><span>Быстрый доступ</span></div>{pinnedItems.map(item => itemRow(item, true))}</div>}
         {sections.map(section => {
-          const Icon = icons[section.icon as keyof typeof icons] ?? Activity; const expanded = prefs.sections[section.id] !== false;
+          const Icon = icons[section.icon as keyof typeof icons] ?? Activity; const expanded = prefs.sections[section.id] === true;
           return <div className="nav-section" key={section.id}>
             <button type="button" className={`nav-section-button ${activeSection === section.id ? "is-current" : ""}`} onClick={() => {
               const narrow = window.matchMedia("(max-width: 1050px)").matches;
@@ -106,7 +115,7 @@ export function WorkspaceNavigation({ actor, sections }: { actor: Actor; section
       </nav>
       <div className="sidebar-foot"><div className="avatar">{actor.displayName.split(" ").map(x => x[0]).join("").slice(0, 2)}</div>{!compact && <div className="who"><strong>{actor.displayName}</strong><span>{currentRole}</span></div>}<button type="button" className="sidebar-collapse" onClick={() => setPrefs(current => ({ ...current, compact: !current.compact }))} aria-label={compact ? "Развернуть меню" : "Свернуть меню"}>{compact ? <PanelLeftOpen size={16}/> : <PanelLeftClose size={16}/>}</button></div>
     </aside>
-    <header className={`topbar ${compact ? "topbar-compact" : ""}`}><button className="mobile-menu" type="button" onClick={() => { setPrefs(current => ({ ...current, compact: false })); setMobileOpen(v => !v); }} aria-label="Меню" aria-expanded={mobileOpen}><Menu size={18}/></button><div className="topbar-context"><span className="live-dot"/> Рабочий контур · {currentRole}</div><div className="topbar-actions">{actor.demo && <DemoRoleSwitch current={actor.roleCode === "object_manager" ? "object" : actor.roleCode === "sales_manager" ? "sales" : actor.roleCode === "regional_manager" ? "regional" : actor.roleCode}/>}<ThemeToggle/><Link className="icon-button" href="/tasks" aria-label="Задачи"><Activity size={16}/></Link></div></header>
+    <header className={`topbar ${compact ? "topbar-compact" : ""}`}><button className="mobile-menu" type="button" onClick={() => { setPrefs(current => ({ ...current, compact: false })); setMobileOpen(v => !v); }} aria-label="Меню" aria-expanded={mobileOpen}><Menu size={18}/></button><div className="topbar-context"><span className="live-dot"/><strong>{activeSectionLabel}</strong><span className="topbar-separator">·</span><span>{currentRole}</span></div><div className="topbar-actions">{actor.demo && <DemoRoleSwitch current={actor.roleCode === "object_manager" ? "object" : actor.roleCode === "sales_manager" ? "sales" : actor.roleCode === "regional_manager" ? "regional" : actor.roleCode}/>}<ThemeToggle/><Link className="icon-button" href="/tasks" aria-label="Задачи"><Activity size={16}/></Link></div></header>
     {palette && <NavigationSearch query={query} setQuery={setQuery} results={results} open={open} close={() => { setPalette(false); setQuery(""); searchRef.current?.focus(); }}/>}
   </>;
 }
