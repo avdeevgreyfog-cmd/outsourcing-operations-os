@@ -26,7 +26,7 @@ export function WorkspaceContextControls({ context, demo }: { context: Workspace
     const response=await fetch("/api/session/access-preview",{
       method:"POST",
       headers:{"content-type":"application/json"},
-      body:JSON.stringify({roleTemplateId:value || null}),
+      body:JSON.stringify({target:value || null}),
     });
     setBusy(false);
     if(!response.ok) return;
@@ -41,8 +41,8 @@ export function WorkspaceContextControls({ context, demo }: { context: Workspace
         {context.organizations.map((organization)=><option key={organization.key} value={organization.key}>{organization.name}</option>)}
       </select>
     </label>}
-    {!demo&&context.previewRoles.length>0&&<label className={"workspace-switch access-preview-control "+(context.previewRoleId?"is-preview":"")}>
-      <span>{context.previewRoleId?"Режим проверки":"Доступ"}</span>
+    {!demo&&context.previewOptions.length>0&&<label className={"workspace-switch access-preview-control "+(context.previewTarget?"is-preview":"")}>
+      <span>{context.previewTarget?"Режим проверки":"Доступ"}</span>
       <select disabled={busy} value={context.previewRoleId??""} onChange={(event)=>changePreview(event.target.value)} aria-label="Проверить интерфейс как роль">
         <option value="">Моя роль · {context.actualRoleName}</option>
         {context.previewRoles.map((role)=><option key={role.id} value={role.id}>Как {role.name}</option>)}
