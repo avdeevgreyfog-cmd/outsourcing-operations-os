@@ -14,6 +14,44 @@ const schema=z.object({
   scopeIds:z.array(z.string().uuid()).max(200).optional(),
 });
 
+export async function GET(request:Request){
+  try{
+    const actor=await getCurrentActor();
+    if(!actor)return NextResponse.json({error:"Требуется вход в систему"},{status:401});
+    requireCapability(actor,"admin.permissions.manage");
+    const membershipId=new URL(request.url).searchParams.get("membershipId");
+    if(!membershipId||!/^[0-9a-f-]{36}$/i.test(membershipId))return NextResponse.json({error:"Некорректный сотрудник"},{status:400});
+    if(actor.demo)return NextResponse.json({items:[]});
+
+    const items=await withTenant(actor.organizationId,actor.userId,async sql=>{
+      const [target]=await sql<Array<{id:string}>>`
+        SELECT id FROM organization_memberships
+        WHERE id=${membershipId}::uuid
+          AND organization_id=${actor.organizationId}::uuid
+      `;
+      if(!target)throw new Error("NOT_FOUND");
+      return sql<Array<{capability:string;description:string|null;domain:string;resource:string;action:string;fieldSensitive:boolean;effect:"inherit"|"allow"|"deny";scopeType:string|null;scopeIds:string[]}>>`
+        SELECT d.capability,d.description,d.domain,d.resource,d.action,d.field_sensitive "fieldSensitive",
+               COALESCE(o.effect,'inherit') effect,o.scope_type "scopeType",COALESCE(o.scope_ids,'{}'::uuid[]) "scopeIds"
+        FROM permission_definitions d
+        LEFT JOIN user_permission_overrides o
+          ON o.capability=d.capability
+         AND o.membership_id=${membershipId}::uuid
+         AND (o.effective_from IS NULL OR o.effective_from<=current_date)
+         AND (o.effective_to IS NULL OR o.effective_to>=current_date)
+        ORDER BY d.domain,d.resource,d.action,d.capability
+      `;
+    });
+
+    return NextResponse.json({items:items.filter(item=>!isSystemAdminCapability(item.capability))});
+  }catch(error){
+    if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
+    if(error instanceof Error&&error.message==="NOT_FOUND")return NextResponse.json({error:"Сотрудник не найден"},{status:404});
+    console.error(error);
+    return NextResponse.json({error:"Не удалось загрузить индивидуальные правила"},{status:500});
+  }
+}
+
 export async function PATCH(request:Request){
   try{
     const actor=await getCurrentActor();
