@@ -13,11 +13,7 @@ export const OWNER_SYSTEM_CAPABILITIES = SYSTEM_ADMIN_CAPABILITIES.map((item) =>
 
 export const SYSTEM_ADMIN_CAPABILITY_SET = new Set<string>(OWNER_SYSTEM_CAPABILITIES);
 
-export const SYSTEM_ONLY_CAPABILITY_SET = new Set<string>([
-  "organization.access.manage",
-  "admin.permissions.manage",
-  "admin.system_access.manage",
-]);
+export const SYSTEM_ONLY_CAPABILITY_SET = new Set<string>(OWNER_SYSTEM_CAPABILITIES);
 
 export function isSystemAdminCapability(capability: string) {
   return SYSTEM_ADMIN_CAPABILITY_SET.has(capability);
