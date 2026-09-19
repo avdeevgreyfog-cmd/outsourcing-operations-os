@@ -336,7 +336,8 @@ function buildDemoPeriodRows(rows: typeof demo.candidates, from: string, to: str
   const history:AnalyticsHistory[]=[];
   rows.slice(0,count).forEach((row,index)=>{
     const current=normalizeRecruitingStage(row.stage);
-    const baseRank=stageRank.get(current)??0;
+    const reachedStage=normalizeRecruitingStage((row as {reachedStage?:string}).reachedStage??row.stage);
+    const baseRank=stageRank.get(reachedStage)??0;
     const rank=Math.max(0,baseRank-(rankPenalty>0&&index%3===0?rankPenalty:0));
     const offset=Math.min(span-1,(index*2+rank)%span);
     const created=new Date(end.getTime()-offset*86400000);
@@ -344,8 +345,8 @@ function buildDemoPeriodRows(rows: typeof demo.candidates, from: string, to: str
     applications.push({
       applicationId,organizationId:row.organizationId,objectId:row.objectId??null,specialtyId:demoSpecialtyId(row.need),
       regionId:row.regionId??null,clientId:row.clientId??null,ownerUserId:"10000000-0000-4000-8000-000000000005",managerUserId:null,
-      assigneeUserIds:row.assigneeUserIds??["10000000-0000-4000-8000-000000000005"],source:row.source??null,rejectionReasonCode:null,
-      rawStage:recruitingStages[rank]??"new",createdAt:created.toISOString(),
+      assigneeUserIds:row.assigneeUserIds??["10000000-0000-4000-8000-000000000005"],source:row.source??null,rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null,
+      rawStage:terminalStages.has(current)?current:(recruitingStages[rank]??"new"),createdAt:created.toISOString(),
       updatedAt:new Date(Math.min(end.getTime()+12*3600000,created.getTime()+rank*30*3600000)).toISOString(),
     });
     for(let stageIndex=0;stageIndex<=rank;stageIndex++){
