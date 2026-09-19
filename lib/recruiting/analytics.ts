@@ -372,9 +372,16 @@ function demoAnalytics(actor: Actor, filters: RecruitingAnalyticsFilters): Recru
   const compareRows=buildDemoPeriodRows(filtered,filters.compareFrom,filters.compareTo,compareScale,1);
   const current=buildPeriodAnalytics(currentRows.applications,currentRows.history,filters.from,filters.to);
   const comparison=buildPeriodAnalytics(compareRows.applications,compareRows.history,filters.compareFrom,filters.compareTo);
+  const demoReasonLabels:Record<string,string>={
+    pay:"Не устроила зарплата",schedule:"Не устроил график",housing:"Не устроило проживание",location:"Не устроила локация",
+    other_offer:"Нашёл другую работу",security:"Не прошёл проверку / СБ",documents:"Проблемы с документами",no_contact:"Не выходит на связь",
+    changed_mind:"Передумал",client_rejected:"Отказ клиента / объекта",transport:"Проблема с проездом / логистикой",
+    shift_confirm:"Не подтвердил выход / смену",no_show:"Не вышел без предупреждения",other:"Другое",
+  };
   return {
     filters,stages:current.stages,metrics:current.metrics,comparison:comparison.metrics,
-    daily:current.daily,comparisonDaily:comparison.daily,sources:current.sources,exitReasons:[],
+    daily:current.daily,comparisonDaily:comparison.daily,sources:current.sources,
+    exitReasons:[...current.exitReasonCounts.entries()].map(([code,count])=>({code,label:demoReasonLabels[code]??code,count})).sort((a,b)=>b.count-a.count),
     summary:buildSummary(current.stages)
   };
 }
