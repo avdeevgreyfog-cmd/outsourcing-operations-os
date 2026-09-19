@@ -104,11 +104,12 @@ AS $$
 BEGIN
   IF TG_OP='INSERT' THEN
     INSERT INTO request_stage_history(
-      organization_id,request_id,from_stage_code,to_stage_code,loss_reason_code,comment,created_at
+      organization_id,request_id,from_stage_code,to_stage_code,loss_reason_code,comment,changed_by_user_id,created_at
     ) VALUES (
       NEW.organization_id,NEW.id,NULL,COALESCE(NULLIF(NEW.workflow_stage_code,''),'new'),
       CASE WHEN NEW.workflow_stage_code='not_agreed' THEN NEW.loss_reason_code ELSE NULL END,
       CASE WHEN NEW.workflow_stage_code='not_agreed' THEN NEW.loss_reason ELSE NULL END,
+      NULLIF(current_setting('app.user_id',true),'')::uuid,
       COALESCE(NEW.created_at,now())
     );
     RETURN NEW;
@@ -116,11 +117,12 @@ BEGIN
 
   IF OLD.workflow_stage_code IS DISTINCT FROM NEW.workflow_stage_code THEN
     INSERT INTO request_stage_history(
-      organization_id,request_id,from_stage_code,to_stage_code,loss_reason_code,comment,created_at
+      organization_id,request_id,from_stage_code,to_stage_code,loss_reason_code,comment,changed_by_user_id,created_at
     ) VALUES (
       NEW.organization_id,NEW.id,OLD.workflow_stage_code,NEW.workflow_stage_code,
       CASE WHEN NEW.workflow_stage_code='not_agreed' THEN NEW.loss_reason_code ELSE NULL END,
       CASE WHEN NEW.workflow_stage_code='not_agreed' THEN NEW.loss_reason ELSE NULL END,
+      NULLIF(current_setting('app.user_id',true),'')::uuid,
       now()
     );
   END IF;
