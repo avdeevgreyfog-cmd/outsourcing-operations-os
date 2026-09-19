@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError } from "@/lib/access/server";
-import { isRecruitingMetricKey, saveRecruitingMetricPreferences, type RecruitingMetricKey } from "@/lib/recruiting/analytics-metrics";
+import { saveRecruitingMetricPreferences } from "@/lib/recruiting/analytics-metrics";
+import { isRecruitingMetricKey, type RecruitingMetricKey } from "@/lib/recruiting/analytics-metric-registry";
 
 const schema=z.object({
   items:z.array(z.object({
