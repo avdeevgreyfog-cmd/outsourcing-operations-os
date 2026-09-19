@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/UI";
 import { RecruitingNeedsWorkspace } from "@/components/RecruitingNeedsWorkspace";
 import { getRecruitingOptions, listRecruitingNeeds } from "@/lib/recruiting/service";
 import { getRecruitingAnalytics, normalizeRecruitingAnalyticsFilters } from "@/lib/recruiting/analytics";
+import { getRecruitingMetricPreferences } from "@/lib/recruiting/analytics-metrics";
 
 type SearchParams = {
   view?: string;
@@ -21,16 +22,18 @@ export default async function Needs({searchParams}:{searchParams:Promise<SearchP
   const actor=await requireActor();
   const params=await searchParams;
   const analyticsFilters=normalizeRecruitingAnalyticsFilters(params);
-  const [rows,options,analytics]=await Promise.all([
+  const [rows,options,analytics,metricPreferences]=await Promise.all([
     listRecruitingNeeds(actor),
     getRecruitingOptions(actor),
     getRecruitingAnalytics(actor,analyticsFilters),
+    getRecruitingMetricPreferences(actor),
   ]);
   const canCreate=hasCapability(actor.access,"operations.need.create");
   const canManage=hasCapability(actor.access,"operations.need.edit");
+  const canConfigureAnalytics=hasCapability(actor.access,"recruiting.analytics.configure");
   const initialView=params.view==="analytics"?"analytics":params.view==="needs"?"needs":"objects";
   return <>
     <PageHeader eyebrow="Подбор" title="Потребности" subtitle="Рабочий центр подбора: объекты, дефицит персонала, ответственные, кандидаты и готовность к выходу." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]}/>
-    <RecruitingNeedsWorkspace rows={rows} options={options} analytics={analytics} initialView={initialView} canCreate={canCreate} canManage={canManage} demo={actor.demo}/>
+    <RecruitingNeedsWorkspace rows={rows} options={options} analytics={analytics} metricPreferences={metricPreferences} initialView={initialView} canCreate={canCreate} canManage={canManage} canConfigureAnalytics={canConfigureAnalytics} demo={actor.demo}/>
   </>;
 }
