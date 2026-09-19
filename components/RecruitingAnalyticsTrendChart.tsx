@@ -4,13 +4,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as echarts from "echarts";
 import type { RecruitingAnalyticsDaily } from "@/lib/recruiting/analytics";
 
-type Mode="candidates"|"conversion";
+type Metric="new"|"ready"|"started"|"conversion";
 type ChartPoint={label:string;newCandidates:number;ready:number;started:number;readyConversion:number;startConversion:number};
 
-export function RecruitingAnalyticsTrendChart({rows}:{rows:RecruitingAnalyticsDaily[]}){
+const metricLabels:Record<Metric,string>={
+  new:"Отклики",
+  ready:"Готовы",
+  started:"Выходы",
+  conversion:"Конверсия",
+};
+
+export function RecruitingAnalyticsTrendChart({rows,comparisonRows}:{rows:RecruitingAnalyticsDaily[];comparisonRows:RecruitingAnalyticsDaily[]}){
   const ref=useRef<HTMLDivElement>(null);
-  const [mode,setMode]=useState<Mode>("candidates");
+  const [metric,setMetric]=useState<Metric>("new");
   const points=useMemo(()=>bucketRows(rows),[rows]);
+  const comparisonPoints=useMemo(()=>bucketRows(comparisonRows),[comparisonRows]);
+
+  const currentValue=useMemo(()=>metricValue(metric,points),[metric,points]);
+  const previousValue=useMemo(()=>metricValue(metric,comparisonPoints),[metric,comparisonPoints]);
+  const delta=useMemo(()=>metricDelta(metric,currentValue,previousValue),[metric,currentValue,previousValue]);
 
   useEffect(()=>{
     if(!ref.current)return;
@@ -20,26 +32,19 @@ export function RecruitingAnalyticsTrendChart({rows}:{rows:RecruitingAnalyticsDa
       const css=getComputedStyle(document.documentElement);
       const text=css.getPropertyValue("--text").trim();
       const muted=css.getPropertyValue("--muted").trim();
+      const soft=css.getPropertyValue("--soft").trim()||muted;
       const border=css.getPropertyValue("--border").trim();
       const accent=css.getPropertyValue("--accent").trim();
-      const good=css.getPropertyValue("--good").trim();
       const panel=css.getPropertyValue("--panel").trim();
 
-      const series=mode==="candidates"
-        ?[
-          {name:"Новые кандидаты",data:points.map(row=>row.newCandidates),color:accent,area:true},
-          {name:"Вышли на работу",data:points.map(row=>row.started),color:good,area:false},
-        ]
-        :[
-          {name:"Готовы / отклики",data:points.map(row=>row.readyConversion),color:accent,area:false},
-          {name:"Вышли / отклики",data:points.map(row=>row.startConversion),color:good,area:false},
-        ];
+      const currentData=points.map(point=>pointValue(metric,point));
+      const previousData=points.map((_,index)=>comparisonPoints[index]?pointValue(metric,comparisonPoints[index]):null);
+      const isPercent=metric==="conversion";
 
       chart.setOption({
         animationDuration:220,
-        aria:{enabled:true,description:mode==="candidates"?"Динамика новых кандидатов и выходов":"Динамика конверсии в готовность и выход"},
-        color:series.map(item=>item.color),
-        grid:{left:10,right:16,top:42,bottom:10,containLabel:true},
+        aria:{enabled:true,description:`Динамика показателя «${metricLabels[metric]}»: текущий и предыдущий равный период`},
+        grid:{left:10,right:14,top:34,bottom:10,containLabel:true},
         tooltip:{
           trigger:"axis",
           backgroundColor:panel,
@@ -48,41 +53,60 @@ export function RecruitingAnalyticsTrendChart({rows}:{rows:RecruitingAnalyticsDa
           padding:[8,10],
           textStyle:{color:text,fontSize:10},
           axisPointer:{type:"line",lineStyle:{color:border,width:1}},
-          valueFormatter:(value:unknown)=>mode==="conversion"?`${value}%`:String(value),
+          valueFormatter:(value:unknown)=>isPercent?`${value}%`:String(value),
         },
-        legend:{top:5,left:4,itemWidth:14,itemHeight:7,itemGap:14,textStyle:{color:muted,fontSize:9.5},data:series.map(item=>item.name)},
+        legend:{
+          top:2,left:4,itemWidth:16,itemHeight:7,itemGap:16,
+          textStyle:{color:muted,fontSize:9.5},
+          data:["Текущий период","Предыдущий период"],
+        },
         xAxis:{
           type:"category",
           boundaryGap:false,
-          data:points.map(row=>row.label),
+          data:points.map(point=>point.label),
           axisLine:{lineStyle:{color:border}},
           axisTick:{show:false},
-          axisLabel:{color:muted,fontSize:9,interval:Math.max(0,Math.ceil(points.length/6)-1),hideOverlap:true},
+          axisLabel:{color:muted,fontSize:9,interval:Math.max(0,Math.ceil(points.length/7)-1),hideOverlap:true},
         },
         yAxis:{
           type:"value",
           min:0,
-          max:mode==="conversion"?100:undefined,
-          minInterval:mode==="candidates"?1:undefined,
+          max:isPercent?100:undefined,
+          minInterval:isPercent?undefined:1,
           splitNumber:4,
-          splitLine:{lineStyle:{color:border,type:"dashed",opacity:.65}},
+          splitLine:{lineStyle:{color:border,type:"dashed",opacity:.55}},
           axisLine:{show:false},
           axisTick:{show:false},
-          axisLabel:{color:muted,fontSize:9,formatter:mode==="conversion"?"{value}%":"{value}"},
+          axisLabel:{color:muted,fontSize:9,formatter:isPercent?"{value}%":"{value}"},
         },
-        series:series.map(item=>({
-          name:item.name,
-          type:"line",
-          smooth:.3,
-          showSymbol:false,
-          symbol:"circle",
-          symbolSize:6,
-          data:item.data,
-          lineStyle:{width:item.name==="Новые кандидаты"?2.2:2,color:item.color},
-          itemStyle:{color:item.color},
-          areaStyle:item.area?{color:item.color,opacity:.07}:undefined,
-          emphasis:{focus:"series",scale:true},
-        })),
+        series:[
+          {
+            name:"Текущий период",
+            type:"line",
+            smooth:.28,
+            showSymbol:false,
+            symbol:"circle",
+            symbolSize:6,
+            data:currentData,
+            lineStyle:{width:2.2,color:accent},
+            itemStyle:{color:accent},
+            areaStyle:isPercent?undefined:{color:accent,opacity:.055},
+            emphasis:{focus:"series",scale:true},
+          },
+          {
+            name:"Предыдущий период",
+            type:"line",
+            smooth:.28,
+            showSymbol:false,
+            symbol:"circle",
+            symbolSize:5,
+            data:previousData,
+            lineStyle:{width:1.6,color:soft,type:"dashed"},
+            itemStyle:{color:soft},
+            emphasis:{focus:"series",scale:true},
+            connectNulls:false,
+          },
+        ],
       },true);
     };
     draw();
@@ -91,19 +115,51 @@ export function RecruitingAnalyticsTrendChart({rows}:{rows:RecruitingAnalyticsDa
     observer.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
     window.addEventListener("resize",resize);
     return()=>{window.removeEventListener("resize",resize);observer.disconnect();chart.dispose()};
-  },[points,mode]);
+  },[points,comparisonPoints,metric]);
 
   return <div className="needs-trend-card">
     <div className="needs-analytics-card-head">
-      <div><h3>Динамика воронки</h3><p>{points.length<rows.length?"Данные сгруппированы, чтобы показать тренд без дневного шума.":"Динамика по дням выбранного периода."}</p></div>
-      <div className="needs-mini-segments" role="group" aria-label="Режим графика">
-        <button type="button" className={mode==="candidates"?"active":""} onClick={()=>setMode("candidates")}>Кандидаты</button>
-        <button type="button" className={mode==="conversion"?"active":""} onClick={()=>setMode("conversion")}>Конверсия</button>
+      <div><h3>Динамика подбора</h3><p>Текущий период против предыдущего равного периода.</p></div>
+      <div className="needs-mini-segments" role="group" aria-label="Показатель графика">
+        {(Object.keys(metricLabels) as Metric[]).map(value=><button type="button" key={value} className={metric===value?"active":""} onClick={()=>setMetric(value)}>{metricLabels[value]}</button>)}
       </div>
+    </div>
+    <div className="needs-trend-summary">
+      <div><span>{metricLabels[metric]} · текущий период</span><strong>{formatMetric(metric,currentValue)}</strong></div>
+      <div><span>Предыдущий период</span><strong>{formatMetric(metric,previousValue)}</strong></div>
+      <div className={`needs-trend-delta ${delta.tone}`}><span>Изменение</span><strong>{delta.text}</strong></div>
     </div>
     <div ref={ref} className="needs-trend-chart"/>
   </div>;
 }
+
+function pointValue(metric:Metric,point:ChartPoint){
+  if(metric==="new")return point.newCandidates;
+  if(metric==="ready")return point.ready;
+  if(metric==="started")return point.started;
+  return point.startConversion;
+}
+
+function metricValue(metric:Metric,points:ChartPoint[]){
+  if(!points.length)return 0;
+  if(metric==="conversion")return points.at(-1)?.startConversion??0;
+  return points.reduce((sum,point)=>sum+pointValue(metric,point),0);
+}
+
+function metricDelta(metric:Metric,current:number,previous:number){
+  const diff=current-previous;
+  if(diff===0)return {text:"без изменений",tone:"neutral"};
+  if(metric==="conversion")return {text:`${diff>0?"+":""}${formatNumber(diff)} п.п.`,tone:diff>0?"good":"bad"};
+  if(previous===0)return {text:current>0?"новое значение":"—",tone:"neutral"};
+  const percent=diff/previous*100;
+  const tone=metric==="new"?"neutral":diff>0?"good":"bad";
+  return {text:`${percent>0?"+":""}${formatNumber(percent)}%`,tone};
+}
+
+function formatMetric(metric:Metric,value:number){
+  return metric==="conversion"?`${formatNumber(value)}%`:new Intl.NumberFormat("ru-RU").format(value);
+}
+function formatNumber(value:number){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1}).format(value)}
 
 function bucketRows(rows:RecruitingAnalyticsDaily[]):ChartPoint[]{
   if(!rows.length)return[];
