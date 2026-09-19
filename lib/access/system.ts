@@ -1,4 +1,11 @@
-export const SYSTEM_ADMIN_CAPABILITIES = [
+export type SystemAdminCapabilityDefinition = {
+  capability: string;
+  label: string;
+  description: string;
+  ownerOnly?: boolean;
+};
+
+export const SYSTEM_ADMIN_CAPABILITIES: readonly SystemAdminCapabilityDefinition[] = [
   { capability: "organization.manage", label: "Настройки организации", description: "Общие настройки рабочей организации." },
   { capability: "organization.unit.manage", label: "Структура и подразделения", description: "Создание и изменение подразделений и оргструктуры." },
   { capability: "organization.position.manage", label: "Должности и роли", description: "Должностные профили, штатные позиции и процессные роли." },
@@ -7,7 +14,7 @@ export const SYSTEM_ADMIN_CAPABILITIES = [
   { capability: "admin.permissions.manage", label: "Индивидуальные исключения", description: "Персональные разрешения и запреты поверх наследуемого доступа." },
   { capability: "audit.read", label: "Журнал действий", description: "Просмотр высокорисковых и системных изменений." },
   { capability: "admin.system_access.manage", label: "Делегирование администраторов", description: "Назначение системных полномочий другим сотрудникам.", ownerOnly: true },
-] as const;
+];
 
 export const OWNER_SYSTEM_CAPABILITIES = SYSTEM_ADMIN_CAPABILITIES.map((item) => item.capability);
 
