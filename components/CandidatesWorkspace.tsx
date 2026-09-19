@@ -22,7 +22,7 @@ export function CandidatesWorkspace({rows,demo,exitReasons,canEdit,canConvert}:{
   if(queue==='active'&&!isActiveStage(row.stage))return false;
   return `${row.fullName} ${row.phone??''} ${row.email??''} ${row.need} ${row.city??''} ${row.object??''} ${row.source??''} ${row.sourceCampaign??''}`.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru').trim());
  }).sort((a,b)=>(Number(isActiveStage(b.stage))-Number(isActiveStage(a.stage)))||(a.nextActionAt??'9999').localeCompare(b.nextActionAt??'9999'));
- const display=view==='applications'?matching:[...new Map([...matching].reverse().map(row=>[row.candidateId,row])).values()];
+ const display=view==='applications'?matching:matching.filter((row,index)=>matching.findIndex(x=>x.candidateId===row.candidateId)===index);
  const options=(field:'objectId'|'ownerUserId'|'source',name:'object'|'owner'|'source')=>[...new Map(all.filter(x=>x[field]).map(x=>[x[field]!,x[name]??'—'])).entries()];
  return <div className="recruiting-workspace">
  <div className="recruiting-summary"><div><span>Людей в базе</span><strong>{people.size}</strong></div><div><span>Активно в подборе</span><strong>{new Set(all.filter(x=>isActiveStage(x.stage)).map(x=>x.candidateId)).size}</strong></div><div><span>Вышли</span><strong>{new Set(all.filter(x=>x.stage==='started').map(x=>x.candidateId)).size}</strong></div><div><span>Повторные обращения</span><strong>{[...people].filter(id=>all.filter(x=>x.candidateId===id).length>1).length}</strong></div></div>

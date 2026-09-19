@@ -9,6 +9,7 @@ export type StageChange = { stage: RecruitingStage; reason?: string; reasonCode?
 export const reserveReasons = ["Кандидат готов позже", "Нет свободных мест", "Ожидание другой потребности", "Не подходит объект", "Другая специальность"];
 export function isActiveStage(stage: string) { return !["started", "rejected", "no_show", "reserve"].includes(stage); }
 export function needsTransitionDetails(from: RecruitingStage, to: RecruitingStage) {
+  if(recruitingStages.indexOf(to as typeof recruitingStages[number]) < recruitingStages.indexOf(from as typeof recruitingStages[number])) return true;
   return ["manager_review","approved","preparation","ready","started","rejected","no_show","reserve"].includes(to) || Math.abs(recruitingStages.indexOf(to as typeof recruitingStages[number])-recruitingStages.indexOf(from as typeof recruitingStages[number])) > 1;
 }
 export function validateStageChange(row: WorkflowRow, change: StageChange, now = Date.now()): string | null {

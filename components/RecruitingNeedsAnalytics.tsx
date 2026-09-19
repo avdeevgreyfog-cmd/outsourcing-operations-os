@@ -186,11 +186,11 @@ export function RecruitingNeedsAnalytics({applications,data:serverData,options,n
       <section className="needs-analytics-funnel-card">
         <div className="needs-analytics-card-head">
           <div><h3>{analysisView==="current"?"Сейчас на этапах":"Конверсия набора"}</h3><p>{analysisView==="current"?"Текущие заявки выбранного объекта, рекрутера и источника.":"Заявки, созданные за период. Переходы учитываются по записанной истории."}</p></div>
-          <div className="needs-analytics-head-actions"><Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть кандидатов</Link><div className="needs-mini-segments" role="group" aria-label="Режим воронки">{([
+          <div className="needs-analytics-head-actions"><Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть кандидатов</Link>{analysisView==="cohort"&&<div className="needs-mini-segments" role="group" aria-label="Режим воронки">{([
             ["candidates","Доля"],["conversion","Конверсия"],["losses","Не перешли"],["time","Среднее время"],
-          ] as const).map(([value,label])=><button key={value} type="button" className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}</div></div>
+          ] as const).map(([value,label])=><button key={value} type="button" className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}</div>}</div>
         </div>
-        <div className="needs-funnel-column-head"><span>Этап</span><span>Кандидаты</span><span>{modeLabel(mode)}</span></div>
+        <div className="needs-funnel-column-head"><span>Этап</span><span>Кандидаты</span><span>{analysisView==="current"?"Требуют действия":modeLabel(mode)}</span></div>
         <p className="cell-sub">Нажмите на этап, чтобы открыть его текущую очередь.</p><SalesFunnel label="Воронка кандидатов" steps={funnelSteps} onStep={key=>router.push(`${funnelHref}${funnelHref.includes("?")?"&":"?"}stage=${key}&queue=${key==="started"?"closed":"active"}`)} showIndex/>
       </section>
 
