@@ -14,7 +14,7 @@ const ALL = [
   "sales.client.read","sales.client.create","sales.client.edit","sales.request.read","sales.request.create","sales.request.edit",...COMMERCIAL,
   "calculation.scenario.read","calculation.scenario.create","calculation.scenario.edit","calculation.scenario.approve","calculation.rate_reference.read","calculation.rate_reference.edit","calculation.rules.read","calculation.rules.manage",
   "operations.object.read","operations.object.edit","operations.need.read","operations.need.create","operations.need.edit","operations.shift.read","operations.shift.edit",
-  "recruiting.candidate.read","recruiting.candidate.create","recruiting.candidate.edit","recruiting.candidate.assign",
+  "recruiting.candidate.read","recruiting.candidate.create","recruiting.candidate.edit","recruiting.candidate.assign","recruiting.analytics.configure",
   "worker.read","worker.edit","worker.compensation.read","worker.personal_docs.read","time.time_entry.read","time.time_entry.edit",
   "time.timesheet.read","time.timesheet.edit","time.timesheet.submit","time.timesheet.approve_client",
   "finance.worker_accrual.read","finance.worker_accrual.edit","finance.payments.read","finance.payments.edit","finance.client_margin.read","finance.pnl.read",
