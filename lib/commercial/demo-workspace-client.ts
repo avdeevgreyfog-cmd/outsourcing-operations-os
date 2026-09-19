@@ -77,11 +77,13 @@ export function saveDemoRequest(payload: DemoRequestPayload, options: { id?: str
     archivedAt: options.base?.archivedAt ?? null,
     closedAt: options.base?.closedAt ?? null,
     lossReason: current?.board.lossReason ?? options.base?.lossReason ?? null,
+    lossReasonCode: current?.board.lossReasonCode ?? options.base?.lossReasonCode ?? null,
     headcount: roles.reduce((sum, role) => sum + role.count, 0),
     roles,
     proposalVersion: options.base?.proposalVersion ?? 0,
     proposalSentCount: options.base?.proposalSentCount ?? 0,
     lastProposalAt: options.base?.lastProposalAt ?? null,
+    createdAt: options.base?.createdAt ?? current?.board.createdAt ?? now,
     updatedAt: now,
   };
   const next: DemoRequestRecord = { id, payload, board, updatedAt: now };
@@ -89,7 +91,7 @@ export function saveDemoRequest(payload: DemoRequestPayload, options: { id?: str
   return next;
 }
 
-export function updateDemoRequestStage(id: string, workflowStageCode: string, lossReason: string | null = null, base?: RequestBoardRow) {
+export function updateDemoRequestStage(id: string, workflowStageCode: string, lossReason: string | null = null, base?: RequestBoardRow, lossReasonCode: string | null = null) {
   const records = loadDemoRequests();
   const now = new Date().toISOString();
   if (!records.some((item) => item.id === id) && base) {
@@ -98,11 +100,11 @@ export function updateDemoRequestStage(id: string, workflowStageCode: string, lo
       durationText: null, schedule: {}, intake: {}, lunchPaid: false, vatMode: "with_vat", comments: null, ownerUserId: base.ownerUserId, observerUserIds: [],
       roles: base.roles.map((role) => ({ specialtyName: role.name, count: role.count, schedule: {}, requirements: {}, targetClientRate: null })),
     };
-    const created: DemoRequestRecord = { id, payload, board: { ...base, workflowStageCode, lossReason, updatedAt: now }, updatedAt: now };
+    const created: DemoRequestRecord = { id, payload, board: { ...base, workflowStageCode, lossReason, lossReasonCode, updatedAt: now }, updatedAt: now };
     save([created, ...records]);
     return created;
   }
-  const next = records.map((item) => item.id === id ? { ...item, updatedAt: now, board: { ...item.board, workflowStageCode, lossReason, updatedAt: now } } : item);
+  const next = records.map((item) => item.id === id ? { ...item, updatedAt: now, board: { ...item.board, workflowStageCode, lossReason, lossReasonCode, updatedAt: now } } : item);
   save(next);
   return next.find((item) => item.id === id) ?? null;
 }
