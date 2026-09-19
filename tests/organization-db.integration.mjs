@@ -23,6 +23,10 @@ try {
     migrations.some((row) => row.filename === "0013_request_intake_public_form.sql"),
     "request intake migration must be applied",
   );
+  assert.ok(
+    migrations.some((row) => row.filename === "0030_access_foundation.sql"),
+    "access foundation migration must be applied",
+  );
 
   await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
 
@@ -32,7 +36,8 @@ try {
   const [personalWorkspace] = await sql`
     SELECT o.name,o.slug,u.email,m.status,r.code role_code,m.position_id::text position_id,
            (SELECT count(*)::int FROM permission_grants pg WHERE pg.role_template_id=r.id) grant_count,
-           (SELECT count(*)::int FROM permission_definitions) definition_count,
+           (SELECT count(*)::int FROM permission_definitions WHERE capability<>'admin.system_access.manage') legacy_definition_count,
+           EXISTS(SELECT 1 FROM organization_owners oo WHERE oo.organization_id=o.id AND oo.membership_id=m.id) is_owner,
            (SELECT count(*)::int FROM candidates c WHERE c.organization_id=o.id) candidate_count,
            (SELECT count(*)::int FROM client_companies c WHERE c.organization_id=o.id) client_count
     FROM organizations o
@@ -47,7 +52,8 @@ try {
   assert.equal(personalWorkspace?.status,"active");
   assert.equal(personalWorkspace?.role_code,"director");
   assert.equal(personalWorkspace?.position_id,"41000000-0000-4000-8000-000000000101");
-  assert.equal(personalWorkspace?.grant_count,personalWorkspace?.definition_count,"director must receive every declared capability");
+  assert.equal(personalWorkspace?.grant_count,personalWorkspace?.legacy_definition_count,"legacy director grants must retain existing business capabilities");
+  assert.equal(personalWorkspace?.is_owner,true,"personal workspace creator must be organization owner");
   assert.equal(personalWorkspace?.candidate_count,0,"personal workspace starts without demo candidates");
   assert.equal(personalWorkspace?.client_count,0,"personal workspace starts without demo clients");
   await sql`SELECT set_config(\'app.organization_id\',${org1},false),set_config(\'app.user_id\',${user1},false)`;
@@ -68,6 +74,26 @@ try {
   await sql`INSERT INTO positions(id,organization_id,code,name) VALUES(${org2Profile}::uuid,${org2}::uuid,'profile','Tenant B Profile')`;
   await sql`INSERT INTO process_roles(id,organization_id,code,name) VALUES(${org2Role}::uuid,${org2}::uuid,'role','Tenant B Role')`;
   await sql`INSERT INTO organization_units(id,organization_id,code,name,kind) VALUES(${org2Unit}::uuid,${org2}::uuid,'root','Tenant B','company')`;
+
+  await sql`INSERT INTO position_permission_grants(organization_id,position_id,capability,effect,scope_type,scope_ids)
+    VALUES(${org2}::uuid,${org2Profile}::uuid,'organization.read','allow','org_unit_subtree',ARRAY[${org2Unit}::uuid])`;
+  const [subtreeGrant]=await sql`SELECT scope_type,scope_ids FROM position_permission_grants WHERE position_id=${org2Profile}::uuid AND capability='organization.read'`;
+  assert.equal(subtreeGrant?.scope_type,"org_unit_subtree","hierarchical scope must persist");
+
+  await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
+  const [demoOwner]=await sql`SELECT membership_id FROM organization_owners WHERE organization_id=${org1}::uuid`;
+  assert.equal(demoOwner?.membership_id,member1,"demo seed must designate an organization owner");
+
+  await sql`INSERT INTO membership_system_grants(organization_id,membership_id,capability,granted_by_user_id,reason)
+    VALUES(${org1}::uuid,${member2}::uuid,'organization.employee.manage',${user1}::uuid,'Integration test')`;
+  const [systemGrant]=await sql`SELECT capability FROM membership_system_grants WHERE membership_id=${member2}::uuid AND valid_to IS NULL`;
+  assert.equal(systemGrant?.capability,"organization.employee.manage","administrative capability can be delegated independently from position");
+
+  await rejectsConstraint(
+    () => sql`INSERT INTO membership_system_grants(organization_id,membership_id,capability,granted_by_user_id,reason)
+      VALUES(${org1}::uuid,${member2}::uuid,'recruiting.candidate.read',${user1}::uuid,'Invalid system grant')`,
+    /administrative capability/,
+  );
 
   await rejectsConstraint(
     () => sql`INSERT INTO organization_units(organization_id,parent_id,code,name,kind) VALUES(${org1}::uuid,${org2Unit}::uuid,${`bad-${randomUUID()}`},'Cross tenant','team')`,
