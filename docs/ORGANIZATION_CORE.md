@@ -16,18 +16,23 @@ Organization Core is the canonical company structure and authorization foundatio
 - `organization_change_sets` and `organization_change_items` stage atomic, effective-dated reorganizations with impact payloads.
 - `responsibility_rules` resolve process owners, executors, approvers, observers and fallbacks by role, seat, unit or employee.
 - `position_permission_grants` and `process_role_permission_grants` feed effective access.
-- `user_permission_overrides` remains the final employee-level allow/deny exception.
+- `user_permission_overrides` remains the final employee-level business allow/deny exception.\n- `organization_owners` stores the tenant owner independently from job title or org-chart position.\n- `membership_system_grants` stores delegated administrative capabilities independently from business roles.
 
 ## Effective access
 
-The server merges grants in this order:
+The server evaluates business grants in this order:
 
-1. legacy role template grants;
+1. legacy role template grants (compatibility only);
 2. job-profile grants (legacy table `positions`);
 3. all assigned process-role grants;
 4. individual overrides.
 
-An individual override replaces inherited treatment for that capability; explicit deny wins. Every scope stays capability-specific. Tenant isolation remains enforced by PostgreSQL RLS and server checks.
+It then applies the independent system-administration layer:
+
+5. delegated `membership_system_grants`;
+6. owner system capabilities from `organization_owners`.
+
+Within business access, an individual override replaces inherited treatment for that capability and explicit deny wins. Owner/system grants cannot be removed by a job deny. Every scope stays capability-specific. Tenant isolation remains enforced by PostgreSQL RLS and server checks.
 
 ## Routes
 
@@ -49,7 +54,7 @@ The module does not replace users, sessions, outsourced workers, teams, regions 
 - An employee can have one primary and several additional or acting assignments.
 - Organization hierarchy, position hierarchy, direct manager and responsibility routing are separate relations.
 - Significant future changes are staged as a change set; records are archived or ended, not hard-deleted.
-- Individual access exceptions must have a reason and may have effective dates and an approver.
+- Individual access exceptions must have a reason and may have effective dates and an approver.\n- Organization ownership is not inferred from a title such as CEO/director.\n- System administration is delegated to a membership, not embedded into a job profile.\n- `org_unit_subtree` follows the current unit hierarchy and is resolved server-side.
 
 ## Production hardening (migration 0007)
 
