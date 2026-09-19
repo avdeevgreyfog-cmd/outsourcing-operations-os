@@ -79,7 +79,7 @@ export async function PATCH(request:Request){
         await sql.unsafe(
           `INSERT INTO ${table}(organization_id,${column},capability,effect,scope_type,scope_ids)
            VALUES($1,$2,$3,$4,$5,$6::uuid[])`,
-          [actor.organizationId,body.targetId,body.capability,body.effect,body.scopeType??"assigned_to_me",body.scopeIds],
+          [actor.organizationId,body.targetId,body.capability,body.effect,body.effect==="allow"?body.scopeType??"assigned_to_me":"all_org",body.scopeIds],
         );
       }
     });
