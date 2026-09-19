@@ -16,7 +16,7 @@ import {
   type RequestAnalyticsMetricKey,
   type RequestAnalyticsMetricPreference,
 } from "@/lib/commercial/request-analytics-metric-registry";
-import type { RequestStageDefinition, RequestWorkspaceOptions } from "@/lib/commercial/request-workflow";
+import type { RequestWorkspaceOptions } from "@/lib/commercial/request-workflow";
 
 export const lossLabels: Record<string, string> = {
   price:"Цена / экономика",
@@ -40,7 +40,6 @@ type FunnelMode="share"|"conversion"|"not_advanced"|"time";
 type BreakdownMode="clients"|"owners"|"sources";
 type Props={
   analytics:RequestAnalyticsData;
-  stages:RequestStageDefinition[];
   options:RequestWorkspaceOptions;
   metricPreferences:RequestAnalyticsMetricPreference[];
   canConfigureMetrics:boolean;
@@ -50,7 +49,7 @@ type Props={
 
 const demoMetricStorageKey="operis.requests.analytics.metrics.v1";
 
-export function RequestInsights({analytics,stages,options,metricPreferences,canConfigureMetrics,demo,onStage}:Props){
+export function RequestInsights({analytics,options,metricPreferences,canConfigureMetrics,demo,onStage}:Props){
   const router=useRouter();
   const [unit,setUnit]=useState<RequestAnalyticsUnit>("requests");
   const [mode,setMode]=useState<FunnelMode>("conversion");
