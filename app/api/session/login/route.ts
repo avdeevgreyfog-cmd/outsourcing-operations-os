@@ -24,6 +24,8 @@ export async function POST(request: Request) {
   const hash = hashSessionToken(raw);
   await sql`INSERT INTO sessions (organization_id,user_id,token_hash,expires_at) VALUES (${row.organization_id}::uuid,${row.user_id}::uuid,${hash},now()+interval '12 hours')`;
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60*60*12 });\n  response.cookies.set(WORKSPACE_MODE_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });\n  response.cookies.set(ACCESS_PREVIEW_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+  response.cookies.set(SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60*60*12 });
+  response.cookies.set(WORKSPACE_MODE_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+  response.cookies.set(ACCESS_PREVIEW_COOKIE, "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
   return response;
 }
