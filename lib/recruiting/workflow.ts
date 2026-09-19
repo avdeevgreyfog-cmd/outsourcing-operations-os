@@ -43,4 +43,4 @@ export function workRisks(row: WorkflowRow, now = Date.now()): string[] {
   if(row.stage==="manager_review" && row.workflow?.reviewDueAt && Date.parse(row.workflow.reviewDueAt)<now) result.push("Просрочено согласование");
   return result;
 }
-export function formatWorkDate(value?: string | null) { return value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}).format(new Date(value)) : "—"; }
+export function formatWorkDate(value?: string | null) { return value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"}).format(new Date(value)) : "—"; }

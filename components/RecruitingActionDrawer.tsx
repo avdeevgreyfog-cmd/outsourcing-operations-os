@@ -14,7 +14,7 @@ export function RecruitingActionDrawer({row,initialStage,exitReasons,demo,canEdi
  return <SalesDrawer title={row.fullName} subtitle={`${row.need} · ${row.object??'Без объекта'}`} onClose={()=>{if(!busy)onClose();}}><form onSubmit={save} className="recruiting-form">
  <p>{row.phone??row.email??'Контакт не указан'} · {row.owner??'Рекрутер не назначен'}</p>
  {risks.length>0&&<p className="needs-overdue">{risks.join(' · ')}</p>}
- <p className="cell-sub">На этапе с {formatWorkDate(row.stageEnteredAt)}</p>
+ <p className="cell-sub">На этапе с {formatWorkDate(row.stageEnteredAt)} МСК. Даты в полях ввода — по времени вашего устройства.</p>
  {error&&<div role="alert" className="recruiting-error">{error}</div>}
  <fieldset disabled={busy||!canEdit} className="recruiting-action-fields">
  <label>Этап<select value={stage} onChange={e=>setStage(e.target.value as RecruitingStage)}>{[...recruitingStages,...recruitingTerminalStages].map(value=><option key={value} value={value} disabled={(value==='started'&&!canConvert)||(row.stage==='started'&&value!=='started')}>{recruitingStageLabels[value]}</option>)}</select></label>

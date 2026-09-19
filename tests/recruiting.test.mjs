@@ -8,7 +8,7 @@ function loadSource(file, dependencies={}) {
  return 'data:text/javascript;base64,'+Buffer.from(source).toString('base64');
 }
 const model=loadSource('model.ts');
-const {validateStageChange,workRisks}=await import(loadSource('workflow.ts',{'./model':model}));
+const {validateStageChange,workRisks,formatWorkDate}=await import(loadSource('workflow.ts',{'./model':model}));
 const {buildPeriodAnalytics}=await import(loadSource('analytics-engine.ts',{'./model':model}));
 const now=Date.parse('2026-09-19T12:00:00Z');
 test('actual start requires ready stage and a nonfuture fact; completed placement cannot be dragged back',()=>{
@@ -33,4 +33,10 @@ test('cohort separates waiting, reserve and loss and never invents skipped stage
  assert.equal(result.stages.find(x=>x.stage==='interview').conversion,0);
  assert.equal(buildPeriodAnalytics(apps,events,'2026-08-01','2026-08-31').metrics.totalCandidates,0);
  assert.equal(buildPeriodAnalytics(apps,events,'2026-09-01','2026-09-11').metrics.rejected,0);
+});
+
+test('work dates render identically on server and browser time zones',()=>{
+ const previous=process.env.TZ;
+ try{process.env.TZ='UTC';const server=formatWorkDate('2026-09-19T06:00:00Z');process.env.TZ='Europe/Berlin';assert.equal(formatWorkDate('2026-09-19T06:00:00Z'),server);assert.ok(server.includes('09:00'));}
+ finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
 });
