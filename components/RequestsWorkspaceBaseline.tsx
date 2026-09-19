@@ -111,7 +111,8 @@ export function RequestsWorkspaceBaseline({ rows, stages, options, analytics, me
     } catch (e) { setError(e instanceof Error ? e.message : "Не удалось сохранить этапы"); } finally { setBusyId(""); }
   }
   function openStage(code: string) {
-    setBucket(["agreed", "not_agreed"].includes(code) ? "completed" : "active"); resetFilters(); setStageFilter(code); setMode("list");
+    setBucket(["agreed", "not_agreed"].includes(code) ? "completed" : "active");
+    resetFilters();setStageFilter(code);setMode("list");onModeChange?.("list");router.replace("/requests",{scroll:false});
   }
 
   return <div className="sales-registry">
