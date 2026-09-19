@@ -502,3 +502,16 @@ button,input,select,textarea{letter-spacing:inherit}
  .nav-pin{opacity:1;min-width:30px;min-height:34px}
 }
 @media(prefers-reduced-motion:reduce){.sidebar,.main-canvas,.topbar,.nav-section-button svg,.nav-subgroup svg{transition:none}}
+
+
+/* Account activation */
+.activation-copy{margin-bottom:24px}
+.activate-form{width:min(100%,510px);display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.activate-form label{color:var(--muted);font-size:9px}
+.activate-form input{width:100%;height:35px;margin-top:5px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)}
+.activate-form input:focus{border-color:var(--accent);outline:0;box-shadow:var(--focus)}
+.activate-form .button,.activate-form .form-error{grid-column:1/-1}
+.activation-invalid{max-width:510px;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2)}
+.activation-invalid strong{display:block;font-size:12px}
+.activation-invalid p{margin:5px 0 0;color:var(--muted);font-size:11px;line-height:1.5}
+@media(max-width:760px){.activate-form{grid-template-columns:1fr}.activate-form .button,.activate-form .form-error{grid-column:1}.activation-copy h1{font-size:34px}}
