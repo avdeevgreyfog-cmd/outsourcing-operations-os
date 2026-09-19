@@ -132,3 +132,22 @@ origin only. Local demo environment settings are ignored, never published as sec
   to object headcounts; known source-request links exclude converted records.
   Demo data and missing periods are visibly identified. No speculative forecasts,
   fake payment totals or inferred actual shift attendance are presented.
+
+
+## Shell visual composition (19 September 2026)
+
+- The 238 px sidebar keeps the canonical three-level IA and capability filtering, but
+  inactive top-level areas start collapsed. The current area and current group are
+  opened automatically; user collapse/expand choices remain presentation preferences.
+- Global navigation no longer paints parent areas as competing active cards. The final
+  destination owns the orange active marker; area and subgroup states remain quiet.
+- Pinned destinations remain available, but the sidebar does not render an empty
+  “pinned” block and new users start without decorative shortcuts.
+- Sidebar and working canvas are distinct neutral surfaces. A low-opacity workflow
+  network is permitted only as shell-level ambient graphics; it never sits behind
+  tables, forms, or dense operational content.
+- The page-top ambient network and the lower-sidebar network share one motif:
+  connected entities, routes and active orange nodes. Separate light/dark SVG assets
+  are used instead of CSS inversion.
+- The product symbol is intentionally compact and name-agnostic. It is safe for the
+  30 px collapsed sidebar mark while the final product name remains a separate decision.
