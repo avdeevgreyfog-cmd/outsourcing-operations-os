@@ -99,7 +99,7 @@ export function normalizeRecruitingAnalyticsFilters(input: Partial<Record<"from"
   let from=validDay(input.from)?input.from!:defaults.from;
   let to=validDay(input.to)?input.to!:defaults.to;
   if(parseDay(from)>parseDay(to)) [from,to]=[to,from];
-  const span=Math.max(0,Math.min(365,Math.round((parseDay(to).getTime()-parseDay(from).getTime())/86400000)));
+  const span=Math.max(0,Math.round((parseDay(to).getTime()-parseDay(from).getTime())/86400000));
   // Comparison is always the immediately preceding period of exactly the same inclusive length.
   const compareTo=addDays(from,-1);
   const compareFrom=addDays(compareTo,-span);
