@@ -11,7 +11,7 @@ export type RequestAnalyticsFilters={
 };
 export type RequestAnalyticsStage={
   code:string;label:string;requests:number;headcount:number;shareRequests:number;shareHeadcount:number;
-  conversionRequests:number;conversionHeadcount:number;notAdvancedRequests:number;notAdvancedHeadcount:number;notAdvancedRate:number;avgHours:number|null;
+  conversionRequests:number;conversionHeadcount:number;notAdvancedRequests:number;notAdvancedHeadcount:number;notAdvancedRate:number;notAdvancedHeadcountRate:number;avgHours:number|null;
 };
 export type RequestAnalyticsMetrics={
   newRequests:number;newHeadcount:number;agreedRequests:number;agreedHeadcount:number;conversionRequests:number;conversionHeadcount:number;
@@ -23,7 +23,7 @@ export type RequestAnalyticsDaily={
   agreedRequests:number;agreedHeadcount:number;conversionRequests:number;conversionHeadcount:number;
 };
 export type RequestAnalyticsBreakdownRow={
-  key:string;label:string;requests:number;headcount:number;agreed:number;agreedHeadcount:number;conversion:number;avgCycleDays:number|null;
+  key:string;label:string;requests:number;headcount:number;agreed:number;agreedHeadcount:number;conversion:number;headcountConversion:number;avgCycleDays:number|null;
 };
 export type RequestAnalyticsLossReason={code:string;label:string;requests:number;headcount:number};
 export type RequestAnalyticsData={
@@ -40,7 +40,6 @@ type AnalyticsRequest={
 };
 type StageEvent={requestId:string;toStageCode:string;createdAt:string};
 
-const activeStages=new Set(["new","clarification","ready_calc","calculation","proposal_prep","proposal_client","negotiation"]);
 function isoDay(date:Date){return date.toISOString().slice(0,10)}
 function parseDay(value:string){return new Date(`${value}T00:00:00.000Z`)}
 function endOfDay(value:string){return new Date(`${value}T23:59:59.999Z`)}
@@ -153,10 +152,11 @@ function buildPeriodAnalytics(rows:AnalyticsRequest[],history:StageEvent[],from:
     const nextRequests=index<stageOrder.length-1?(reachedRequests.get(stageCodes[index+1])??0):requests,nextHeadcount=index<stageOrder.length-1?(reachedHeadcount.get(stageCodes[index+1])??0):headcount;
     const notAdvancedRequests=index<stageOrder.length-1?Math.max(0,requests-nextRequests):0,notAdvancedHeadcount=index<stageOrder.length-1?Math.max(0,headcount-nextHeadcount):0;
     const values=durations.get(stage.code)??[];
-    return {code:stage.code,label:stage.label,requests,headcount,shareRequests:totalRequests?Math.round(requests/totalRequests*100):0,shareHeadcount:totalHeadcount?Math.round(headcount/totalHeadcount*100):0,conversionRequests:index===0?100:(previousRequests?Math.round(requests/previousRequests*100):0),conversionHeadcount:index===0?100:(previousHeadcount?Math.round(headcount/previousHeadcount*100):0),notAdvancedRequests,notAdvancedHeadcount,notAdvancedRate:requests?Math.round(notAdvancedRequests/requests*100):0,avgHours:values.length?Number((average(values)!).toFixed(1)):null};
+    return {code:stage.code,label:stage.label,requests,headcount,shareRequests:totalRequests?Math.round(requests/totalRequests*100):0,shareHeadcount:totalHeadcount?Math.round(headcount/totalHeadcount*100):0,conversionRequests:index===0?100:(previousRequests?Math.round(requests/previousRequests*100):0),conversionHeadcount:index===0?100:(previousHeadcount?Math.round(headcount/previousHeadcount*100):0),notAdvancedRequests,notAdvancedHeadcount,notAdvancedRate:requests?Math.round(notAdvancedRequests/requests*100):0,notAdvancedHeadcountRate:headcount?Math.round(notAdvancedHeadcount/headcount*100):0,avgHours:values.length?Number((average(values)!).toFixed(1)):null};
   });
 
-  const snapshot=snapshotRows.filter(row=>activeStages.has(row.rawStage));
+  const activeCodes=new Set(stageDefinitions.filter(stage=>stage.terminalKind==="active").map(stage=>stage.code));
+  const snapshot=snapshotRows.filter(row=>activeCodes.has(row.rawStage));
   const attention=snapshot.filter(row=>!row.ownerUserId||(Date.now()-new Date(row.updatedAt).getTime())>=7*86400000).length;
   const metrics:RequestAnalyticsMetrics={
     newRequests:totalRequests,newHeadcount:totalHeadcount,
@@ -178,7 +178,7 @@ function buildPeriodAnalytics(rows:AnalyticsRequest[],history:StageEvent[],from:
     daily.push({date,label:new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"}).format(cursor),...point,conversionRequests:cumNewReq?Math.round(cumAgreedReq/cumNewReq*100):0,conversionHeadcount:cumNewHead?Math.round(cumAgreedHead/cumNewHead*100):0});
     cursor=new Date(cursor.getTime()+86400000);
   }
-  const toBreakdown=(map:Map<string,BreakdownAccumulator>):RequestAnalyticsBreakdownRow[]=>[...map.entries()].map(([key,value])=>({key,label:value.label,requests:value.requests,headcount:value.headcount,agreed:value.agreed,agreedHeadcount:value.agreedHeadcount,conversion:value.requests?Math.round(value.agreed/value.requests*100):0,avgCycleDays:value.cycle.length?Number((average(value.cycle)!).toFixed(1)):null})).sort((a,b)=>b.agreed-a.agreed||b.requests-a.requests);
+  const toBreakdown=(map:Map<string,BreakdownAccumulator>):RequestAnalyticsBreakdownRow[]=>[...map.entries()].map(([key,value])=>({key,label:value.label,requests:value.requests,headcount:value.headcount,agreed:value.agreed,agreedHeadcount:value.agreedHeadcount,conversion:value.requests?Math.round(value.agreed/value.requests*100):0,headcountConversion:value.headcount?Math.round(value.agreedHeadcount/value.headcount*100):0,avgCycleDays:value.cycle.length?Number((average(value.cycle)!).toFixed(1)):null})).sort((a,b)=>b.agreed-a.agreed||b.requests-a.requests);
   return {stages,metrics,daily,breakdowns:{clients:toBreakdown(clientMap),owners:toBreakdown(ownerMap),sources:toBreakdown(sourceMap)},lossMap};
 }
 
