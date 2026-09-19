@@ -1,5 +1,5 @@
 import type { Sql } from "postgres";
-import type { Actor, EffectiveAccess, ScopeGrant } from "@/lib/access/types";
+import type { AccessPreviewTargetType, Actor, EffectiveAccess, ScopeGrant } from "@/lib/access/types";
 
 type GrantRow = {
   capability: string;
@@ -84,13 +84,30 @@ export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTe
   return access;
 }
 
-export async function loadRoleTemplateAccess(sql: Sql, roleTemplateId: string, membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
-  const grants = await sql<GrantRow[]>`
-    SELECT capability,effect,scope_type,scope_ids
-    FROM permission_grants
-    WHERE role_template_id=${roleTemplateId}::uuid
-    ORDER BY created_at ASC
-  `;
+export async function loadPreviewAccess(sql: Sql, targetType: AccessPreviewTargetType, targetId: string, membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
+  let grants: GrantRow[];
+  if (targetType === "role_template") {
+    grants = await sql<GrantRow[]>`
+      SELECT capability,effect,scope_type,scope_ids
+      FROM permission_grants
+      WHERE role_template_id=${targetId}::uuid
+      ORDER BY created_at ASC
+    `;
+  } else if (targetType === "position") {
+    grants = await sql<GrantRow[]>`
+      SELECT capability,effect,scope_type,scope_ids
+      FROM position_permission_grants
+      WHERE position_id=${targetId}::uuid
+      ORDER BY created_at ASC
+    `;
+  } else {
+    grants = await sql<GrantRow[]>`
+      SELECT capability,effect,scope_type,scope_ids
+      FROM process_role_permission_grants
+      WHERE process_role_id=${targetId}::uuid
+      ORDER BY created_at ASC
+    `;
+  }
   return evaluateGrants(grants, membershipRegionIds, membershipOrgUnitIds);
 }
 
