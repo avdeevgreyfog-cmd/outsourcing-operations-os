@@ -30,7 +30,7 @@ try {
   const personalUser = "10000000-0000-4000-8000-000000000101";
   await sql`SELECT set_config(\'app.organization_id\',${personalOrg},false),set_config(\'app.user_id\',${personalUser},false)`;
   const [personalWorkspace] = await sql`
-    SELECT o.name,o.slug,u.email,m.status,r.code role_code,p.name position_name,
+    SELECT o.name,o.slug,u.email,m.status,r.code role_code,m.position_id::text position_id,
            (SELECT count(*)::int FROM permission_grants pg WHERE pg.role_template_id=r.id) grant_count,
            (SELECT count(*)::int FROM permission_definitions) definition_count,
            (SELECT count(*)::int FROM candidates c WHERE c.organization_id=o.id) candidate_count,
@@ -39,7 +39,6 @@ try {
     JOIN organization_memberships m ON m.organization_id=o.id
     JOIN app_users u ON u.id=m.user_id
     JOIN role_templates r ON r.id=m.role_template_id
-    LEFT JOIN positions p ON p.id=m.position_id
     WHERE o.id=${personalOrg}::uuid AND lower(u.email::text)='avdeevgreyfog@gmail.com'
     LIMIT 1
   `;
@@ -47,7 +46,7 @@ try {
   assert.equal(personalWorkspace?.slug,"sergey-work");
   assert.equal(personalWorkspace?.status,"active");
   assert.equal(personalWorkspace?.role_code,"director");
-  assert.equal(personalWorkspace?.position_name,"Генеральный директор");
+  assert.equal(personalWorkspace?.position_id,"41000000-0000-4000-8000-000000000101");
   assert.equal(personalWorkspace?.grant_count,personalWorkspace?.definition_count,"director must receive every declared capability");
   assert.equal(personalWorkspace?.candidate_count,0,"personal workspace starts without demo candidates");
   assert.equal(personalWorkspace?.client_count,0,"personal workspace starts without demo clients");
