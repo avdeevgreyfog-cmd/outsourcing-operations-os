@@ -21,29 +21,29 @@ export async function POST(request:Request){
     const body=bodySchema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async(sql)=>sql.begin(async(tx)=>{
       if(body.kind==="region"){
-        const [duplicate]=await tx<Array<{id:string}>>\`SELECT id FROM regions WHERE lower(name)=lower(\${body.name}) LIMIT 1\`;
+        const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM regions WHERE lower(name)=lower(${body.name}) LIMIT 1`;
         if(duplicate)throw new Error("Такой регион уже существует");
-        const [row]=await tx<Array<{id:string}>>\`
+        const [row]=await tx<Array<{id:string}>>`
           INSERT INTO regions(organization_id,code,name)
-          VALUES(\${actor.organizationId}::uuid,'region-'||substr(replace(gen_random_uuid()::text,'-',''),1,12),\${body.name})
+          VALUES(${actor.organizationId}::uuid,'region-'||substr(replace(gen_random_uuid()::text,'-',''),1,12),${body.name})
           RETURNING id
-        \`;
+        `;
         const summary="Добавлен регион: "+body.name;
-        await tx\`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
-          VALUES(\${actor.organizationId}::uuid,\${actor.userId}::uuid,'directory_region',\${row.id}::uuid,'created',\${summary})\`;
+        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'directory_region',${row.id}::uuid,'created',${summary})`;
         return row;
       }
-      const [duplicate]=await tx<Array<{id:string}>>\`SELECT id FROM specialties WHERE lower(name)=lower(\${body.name}) LIMIT 1\`;
+      const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE lower(name)=lower(${body.name}) LIMIT 1`;
       if(duplicate)throw new Error("Такая специальность уже существует");
       const aliases=[...new Set((body.aliases??[]).map(item=>item.trim()).filter(Boolean))];
-      const [row]=await tx<Array<{id:string}>>\`
+      const [row]=await tx<Array<{id:string}>>`
         INSERT INTO specialties(organization_id,code,name,aliases,active)
-        VALUES(\${actor.organizationId}::uuid,'specialty-'||substr(replace(gen_random_uuid()::text,'-',''),1,12),\${body.name},\${aliases}::text[],true)
+        VALUES(${actor.organizationId}::uuid,'specialty-'||substr(replace(gen_random_uuid()::text,'-',''),1,12),${body.name},${aliases}::text[],true)
         RETURNING id
-      \`;
+      `;
       const summary="Добавлена специальность: "+body.name;
-      await tx\`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
-        VALUES(\${actor.organizationId}::uuid,\${actor.userId}::uuid,'directory_specialty',\${row.id}::uuid,'created',\${summary})\`;
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'directory_specialty',${row.id}::uuid,'created',${summary})`;
       return row;
     }));
     return NextResponse.json(result,{status:201});
@@ -64,31 +64,31 @@ export async function PATCH(request:Request){
     const body=bodySchema.extend({id:z.string().uuid()}).parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async(sql)=>sql.begin(async(tx)=>{
       if(body.kind==="region"){
-        const [duplicate]=await tx<Array<{id:string}>>\`SELECT id FROM regions WHERE lower(name)=lower(\${body.name}) AND id<>\${body.id}::uuid LIMIT 1\`;
+        const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM regions WHERE lower(name)=lower(${body.name}) AND id<>${body.id}::uuid LIMIT 1`;
         if(duplicate)throw new Error("Такой регион уже существует");
-        const [row]=await tx<Array<{id:string}>>\`UPDATE regions SET name=\${body.name} WHERE id=\${body.id}::uuid RETURNING id\`;
+        const [row]=await tx<Array<{id:string}>>`UPDATE regions SET name=${body.name} WHERE id=${body.id}::uuid RETURNING id`;
         if(!row)return null;
         const summary="Изменён регион: "+body.name;
-        await tx\`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
-          VALUES(\${actor.organizationId}::uuid,\${actor.userId}::uuid,'directory_region',\${body.id}::uuid,'updated',\${summary})\`;
+        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'directory_region',${body.id}::uuid,'updated',${summary})`;
         return row;
       }
-      const [duplicate]=await tx<Array<{id:string}>>\`SELECT id FROM specialties WHERE lower(name)=lower(\${body.name}) AND id<>\${body.id}::uuid LIMIT 1\`;
+      const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE lower(name)=lower(${body.name}) AND id<>${body.id}::uuid LIMIT 1`;
       if(duplicate)throw new Error("Такая специальность уже существует");
       const active=body.active??true;
       if(!active){
-        const [usage]=await tx<Array<{count:number}>>\`SELECT count(*)::int count FROM needs WHERE specialty_id=\${body.id}::uuid AND status IN ('open','in_progress','paused')\`;
+        const [usage]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM needs WHERE specialty_id=${body.id}::uuid AND status IN ('open','in_progress','paused')`;
         if((usage?.count??0)>0)throw new Error("Нельзя отключить специальность, пока есть активные потребности");
       }
       const aliases=[...new Set((body.aliases??[]).map(item=>item.trim()).filter(Boolean))];
-      const [row]=await tx<Array<{id:string}>>\`
-        UPDATE specialties SET name=\${body.name},aliases=\${aliases}::text[],active=\${active}
-        WHERE id=\${body.id}::uuid RETURNING id
-      \`;
+      const [row]=await tx<Array<{id:string}>>`
+        UPDATE specialties SET name=${body.name},aliases=${aliases}::text[],active=${active}
+        WHERE id=${body.id}::uuid RETURNING id
+      `;
       if(!row)return null;
       const summary="Изменена специальность: "+body.name;
-      await tx\`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
-        VALUES(\${actor.organizationId}::uuid,\${actor.userId}::uuid,'directory_specialty',\${body.id}::uuid,'updated',\${summary})\`;
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'directory_specialty',${body.id}::uuid,'updated',${summary})`;
       return row;
     }));
     if(!result)return NextResponse.json({error:"Запись не найдена"},{status:404});
