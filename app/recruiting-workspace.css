@@ -201,3 +201,71 @@
  .needs-analytics-funnel-card .sales-funnel-aside{display:none}
  .needs-kpi-grid{grid-template-columns:1fr 1fr}
 }
+
+
+/* Analytics refinement: denser funnel, automatic comparison, quieter lower analytics. */
+.needs-analytics-filters{gap:7px;padding:8px 0 10px}
+.needs-date-filter{height:36px}
+.needs-date-filter input{min-width:106px}
+.needs-period-presets{display:flex;align-items:center;gap:2px;padding:2px;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--panel-2)}
+.needs-period-presets button{height:30px;padding:0 8px;border:0;border-radius:5px;background:transparent;color:var(--muted);font:inherit;font-size:9.5px;cursor:pointer;white-space:nowrap}
+.needs-period-presets button:hover{color:var(--text)}
+.needs-period-presets button.active{background:var(--panel);color:var(--text);box-shadow:0 0 0 1px var(--border);font-weight:650}
+.needs-auto-compare{min-height:36px;display:grid;grid-template-columns:auto auto;align-content:center;column-gap:6px;padding:4px 9px;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--panel-2)}
+.needs-auto-compare span{font-size:8.5px;color:var(--soft);text-transform:uppercase;letter-spacing:.04em}
+.needs-auto-compare strong{font-size:9.5px;font-weight:650;white-space:nowrap}
+.needs-auto-compare small{grid-column:1/-1;margin-top:1px;font-size:8.5px;color:var(--muted);white-space:nowrap}
+
+.needs-analytics-primary-grid{grid-template-columns:minmax(560px,1.38fr) minmax(330px,.82fr)}
+.needs-analytics-card-head{min-height:52px;padding:11px 13px}
+.needs-analytics-card-head h3{font-size:12.5px}
+.needs-analytics-card-head p{font-size:9.5px}
+.needs-analytics-funnel-card .sales-funnel{max-width:760px;margin:0 auto;padding:5px 14px 11px;gap:2px}
+.needs-analytics-funnel-card .sales-funnel-step{min-height:39px;padding:5px 40px;clip-path:polygon(2.5% 0,97.5% 0,93% 100%,7% 100%);grid-template-columns:minmax(0,1fr) 58px 112px}
+.needs-analytics-funnel-card .sales-funnel-step.has-index{grid-template-columns:23px minmax(0,1fr) 58px 112px}
+.needs-analytics-funnel-card .sales-funnel-index{width:19px;height:19px;font-size:8.5px;background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+.needs-analytics-funnel-card .sales-funnel-label{font-size:10.5px}
+.needs-analytics-funnel-card .sales-funnel-copy{gap:1px}
+.needs-analytics-funnel-card .sales-funnel-copy small{font-size:8.5px}
+.needs-analytics-funnel-card .sales-funnel-step strong{font-size:16px}
+.needs-analytics-funnel-card .sales-funnel-aside{font-size:9px}
+.needs-funnel-column-head{max-width:760px;margin:0 auto;grid-template-columns:minmax(0,1fr) 58px 112px;padding:6px 40px 0 68px;font-size:8.5px}
+
+.needs-kpi-grid{gap:6px;padding:0 9px 9px}
+.needs-kpi-card{min-height:78px;gap:8px;padding:9px}
+.needs-kpi-icon{width:30px;height:30px;flex-basis:30px}
+.needs-kpi-card>div{gap:3px}
+.needs-kpi-card>div>span{font-size:9px}
+.needs-kpi-card strong{font-size:19px}
+.needs-kpi-card small{font-size:8.5px}
+.needs-analytics-insight{margin:0 9px 9px;padding:9px 10px}
+.needs-analytics-insight strong{font-size:10px}
+.needs-analytics-insight p{font-size:9px}
+
+.needs-analytics-bottom-grid{grid-template-columns:minmax(270px,.82fr) minmax(390px,1.22fr) minmax(350px,1fr);gap:9px}
+.needs-loss-row{padding:6px 10px}
+.needs-loss-copy strong{font-size:9px}
+.needs-loss-row>b{font-size:9.5px}
+.needs-analytics-empty{padding:18px 12px;color:var(--muted);font-size:10px}
+.needs-trend-chart{height:218px}
+.needs-stage-table-wrap{max-height:280px}
+.needs-stage-table{font-size:9.5px}
+.needs-stage-table th,.needs-stage-table td{padding:6px 7px}
+
+@media(max-width:1380px){
+ .needs-analytics-primary-grid{grid-template-columns:minmax(520px,1.3fr) minmax(310px,.85fr)}
+ .needs-analytics-funnel-card .sales-funnel{max-width:700px}
+ .needs-funnel-column-head{max-width:700px}
+}
+@media(max-width:1080px){
+ .needs-analytics-primary-grid{grid-template-columns:1fr}
+ .needs-analytics-funnel-card .sales-funnel{max-width:760px}
+ .needs-funnel-column-head{max-width:760px}
+}
+@media(max-width:780px){
+ .needs-period-presets{width:100%}
+ .needs-period-presets button{flex:1}
+ .needs-auto-compare{width:100%}
+ .needs-analytics-funnel-card .sales-funnel-step.has-index{grid-template-columns:22px minmax(0,1fr) 46px}
+ .needs-analytics-funnel-card .sales-funnel-index{width:18px;height:18px}
+}
