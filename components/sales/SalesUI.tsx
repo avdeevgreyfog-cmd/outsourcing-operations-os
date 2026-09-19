@@ -26,14 +26,14 @@ export type SalesFunnelStep = {
   aside?: string;
 };
 
-export function SalesFunnel({ label, steps, onStep }: { label: string; steps: SalesFunnelStep[]; onStep?: (key: string) => void }) {
+export function SalesFunnel({ label, steps, onStep, showIndex = false }: { label: string; steps: SalesFunnelStep[]; onStep?: (key: string) => void; showIndex?: boolean }) {
   const count = Math.max(steps.length, 1);
   return <div className="sales-funnel" aria-label={label}>{steps.map((step, index) => {
     const width = Math.max(48, 100 - (index * 48 / Math.max(count - 1, 1)));
-    const content = <><span className="sales-funnel-copy"><span className="sales-funnel-label">{step.label}</span>{step.note&&<small>{step.note}</small>}</span><strong>{step.value}</strong><span className="sales-funnel-aside">{step.aside ?? step.conversion ?? ""}</span></>;
+    const content = <>{showIndex&&<span className="sales-funnel-index" aria-hidden="true">{index+1}</span>}<span className="sales-funnel-copy"><span className="sales-funnel-label">{step.label}</span>{step.note&&<small>{step.note}</small>}</span><strong>{step.value}</strong><span className="sales-funnel-aside">{step.aside ?? step.conversion ?? ""}</span></>;
     return onStep
-      ? <button type="button" key={step.key} className="sales-funnel-step" style={{ width: `${width}%` }} onClick={() => onStep(step.key)}>{content}</button>
-      : <div key={step.key} className="sales-funnel-step" style={{ width: `${width}%` }}>{content}</div>;
+      ? <button type="button" key={step.key} className={`sales-funnel-step${showIndex?" has-index":""}`} style={{ width: `${width}%` }} onClick={() => onStep(step.key)}>{content}</button>
+      : <div key={step.key} className={`sales-funnel-step${showIndex?" has-index":""}`} style={{ width: `${width}%` }}>{content}</div>;
   })}</div>;
 }
 
