@@ -60,6 +60,8 @@ ALTER TABLE candidate_applications
   ADD COLUMN IF NOT EXISTS rejection_reason_code text;
 ALTER TABLE candidate_stage_history
   ADD COLUMN IF NOT EXISTS reason_code text;
+CREATE INDEX IF NOT EXISTS idx_candidate_app_exit_reason ON candidate_applications(organization_id,rejection_reason_code) WHERE rejection_reason_code IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_candidate_stage_history_reason_code ON candidate_stage_history(organization_id,reason_code) WHERE reason_code IS NOT NULL;
 
 INSERT INTO candidate_exit_reasons(organization_id,code,name,kind,sort_order,is_system)
 SELECT o.id,v.code,v.name,v.kind,v.sort_order,true
