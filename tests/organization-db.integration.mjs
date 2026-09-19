@@ -27,6 +27,8 @@ try {
   await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
 
   const personalOrg = "00000000-0000-4000-8000-000000000002";
+  const personalUser = "10000000-0000-4000-8000-000000000101";
+  await sql`SELECT set_config(\'app.organization_id\',${personalOrg},false),set_config(\'app.user_id\',${personalUser},false)`;
   const [personalWorkspace] = await sql`
     SELECT o.name,o.slug,u.email,m.status,r.code role_code,p.name position_name,
            (SELECT count(*)::int FROM permission_grants pg WHERE pg.role_template_id=r.id) grant_count,
@@ -49,6 +51,7 @@ try {
   assert.equal(personalWorkspace?.grant_count,personalWorkspace?.definition_count,"director must receive every declared capability");
   assert.equal(personalWorkspace?.candidate_count,0,"personal workspace starts without demo candidates");
   assert.equal(personalWorkspace?.client_count,0,"personal workspace starts without demo clients");
+  await sql`SELECT set_config(\'app.organization_id\',${org1},false),set_config(\'app.user_id\',${user1},false)`;
 
   const org2 = randomUUID();
   const org2User = randomUUID();
