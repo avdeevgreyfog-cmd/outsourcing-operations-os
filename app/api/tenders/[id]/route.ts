@@ -8,7 +8,7 @@ import {withTenant} from "@/lib/db/client";
 const nullableText=(max:number)=>z.string().trim().max(max).nullable().optional();
 const coreSchema=z.object({action:z.literal("core"),title:z.string().trim().min(3).max(300),customerName:nullableText(300),clientId:z.string().uuid().nullable().optional(),platform:nullableText(160),procedureNumber:nullableText(180),sourceUrl:z.string().url().max(2000).nullable().optional(),sourceName:nullableText(180),publicationDate:z.string().date().nullable().optional(),submissionDeadline:z.string().datetime({offset:true}).nullable().optional(),initialPrice:z.number().nonnegative().nullable().optional(),billingUnit:z.enum(["unknown","hour","shift","worker_month","unit","piecework","project","mixed"]),priority:z.enum(["low","normal","high"]),potential:z.enum(["low","medium","high"]),regionId:z.string().uuid().nullable().optional(),legalEntityId:z.string().uuid().nullable().optional(),nextActionText:nullableText(1000),nextActionAt:z.string().datetime({offset:true}).nullable().optional()});
 const analysisSchema=z.object({action:z.literal("analysis"),analysisSummary:nullableText(12000),conditions:z.record(z.string(),z.json())});
-const stageSchema=z.object({action:z.literal("stage"),stage:z.enum(["new","analysis","clarification","calculation","approval","preparation","submitted","awaiting_result","completed"]),decision:z.enum(["undecided","participate","needs_clarification","no_bid"]).optional(),result:z.enum(["won","lost","no_bid","cancelled","failed"]).nullable().optional(),closeReason:nullableText(4000)});
+const stageSchema=z.object({action:z.literal("stage"),stage:z.enum(["new","analysis","clarification","calculation","approval","preparation","submitted","awaiting_result","completed"]),decision:z.enum(["undecided","participate","needs_clarification","no_bid"]).optional(),result:z.enum(["won","lost","no_bid","cancelled","failed"]).nullable().optional(),noBidReasonCode:nullableText(80),noBidComment:nullableText(4000),resultReasonCode:nullableText(80),closeReason:nullableText(4000)});
 const submissionSchema=z.object({action:z.literal("submission"),finalBidValue:z.number().nonnegative().nullable().optional(),bidReference:nullableText(500),submissionNote:nullableText(5000),checklist:z.array(z.object({id:z.string().max(100),label:z.string().trim().min(1).max(300),done:z.boolean()})).max(40),markSubmitted:z.boolean().optional()});
 const schema=z.discriminatedUnion("action",[coreSchema,analysisSchema,stageSchema,submissionSchema]);
 type ScopeRow={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;stage:string;result:string|null};
@@ -32,7 +32,50 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         const decision=body.decision??(body.result==="no_bid"?"no_bid":undefined);
         const resultValue=body.result===undefined?scope.result:body.result;
         if(body.stage==="completed"&&!resultValue)throw new Error("Для завершения тендера укажите результат");
-        await tx`UPDATE tenders SET stage=${body.stage},decision=COALESCE(${decision??null},decision),result=${resultValue??null},close_reason=${body.closeReason??null},updated_at=now() WHERE id=${id}::uuid`;
+
+        if(decision==="no_bid"){
+          const reasonCode=body.noBidReasonCode?.trim();
+          if(!reasonCode)throw new Error("Выберите причину отказа от участия");
+          const [reason]=await tx<Array<{ok:boolean}>>`
+            SELECT EXISTS(
+              SELECT 1 FROM tender_reason_catalog WHERE kind='no_bid' AND code=${reasonCode} AND active
+            ) ok
+          `;
+          if(!reason?.ok)throw new Error("Выбранная причина отказа от участия недоступна");
+        }
+        if(resultValue==="lost"){
+          const reasonCode=body.resultReasonCode?.trim();
+          if(!reasonCode)throw new Error("Выберите причину проигрыша");
+          const [reason]=await tx<Array<{ok:boolean}>>`
+            SELECT EXISTS(
+              SELECT 1 FROM tender_reason_catalog WHERE kind='lost' AND code=${reasonCode} AND active
+            ) ok
+          `;
+          if(!reason?.ok)throw new Error("Выбранная причина проигрыша недоступна");
+        }
+
+        await tx`UPDATE tenders SET
+          stage=${body.stage},
+          decision=COALESCE(${decision??null},decision),
+          no_bid_reason_code=CASE
+            WHEN ${decision??null}::text IS NULL THEN no_bid_reason_code
+            WHEN ${decision??null}='no_bid' THEN COALESCE(${body.noBidReasonCode??null},no_bid_reason_code)
+            ELSE NULL
+          END,
+          no_bid_comment=CASE
+            WHEN ${decision??null}::text IS NULL THEN no_bid_comment
+            WHEN ${decision??null}='no_bid' THEN ${body.noBidComment??null}
+            ELSE NULL
+          END,
+          result=${resultValue??null},
+          result_reason_code=CASE
+            WHEN ${body.result===undefined} THEN result_reason_code
+            WHEN ${resultValue??null}='lost' THEN ${body.resultReasonCode??null}
+            ELSE NULL
+          END,
+          close_reason=${body.closeReason??null},
+          updated_at=now()
+        WHERE id=${id}::uuid`;
         summary=`Этап тендера изменён на ${body.stage}`;
       }else{
         if(body.markSubmitted)requireCapability(actor,"sales.tender.submit");
