@@ -4,14 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpRight, ChartNoAxesCombined, Columns3, LayoutList, SlidersHorizontal, Users, CalendarDays, Eye, Plus, X } from "lucide-react";
-import { requestBucket, stageByCode, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
+import { requestBucket, stageByCode, type RequestBoardRow, type RequestStageDefinition, type RequestWorkspaceOptions } from "@/lib/commercial/request-workflow";
+import type { RequestAnalyticsData } from "@/lib/commercial/request-analytics";
+import type { RequestAnalyticsMetricPreference } from "@/lib/commercial/request-analytics-metric-registry";
 import { SalesDrawer, SalesEmpty, SalesSearch, SalesSegments } from "@/components/sales/SalesUI";
 import { daysSince, lossLabels, RequestInsights } from "@/components/sales/RequestInsights";
 import { KeyValue } from "@/components/UI";
 import { mergeDemoRequestRows, subscribeDemoRequests, updateDemoRequestStage } from "@/lib/commercial/demo-workspace-client";
 
 type LossReasonOption={code:string;name:string};
-type Props = { rows: RequestBoardRow[]; stages: RequestStageDefinition[]; lossReasons: LossReasonOption[]; canCreate: boolean; canConfigure: boolean; canEdit: boolean; now: number; demo?: boolean; initialMode?:ViewMode; onModeChange?:(mode:ViewMode)=>void };
+type Props = { rows: RequestBoardRow[]; stages: RequestStageDefinition[]; options:RequestWorkspaceOptions; analytics:RequestAnalyticsData; metricPreferences:RequestAnalyticsMetricPreference[]; canConfigureMetrics:boolean; lossReasons: LossReasonOption[]; canCreate: boolean; canConfigure: boolean; canEdit: boolean; now: number; demo?: boolean; initialMode?:ViewMode; onModeChange?:(mode:ViewMode)=>void };
 type ViewMode = "list" | "board" | "analytics";
 type Bucket = "active" | "completed" | "archive";
 function fmtDate(value: string | null) {
@@ -31,7 +33,7 @@ function StageBadge({ stage }: { stage: RequestStageDefinition }) {
   return <span className={`request-stage-badge-polished request-stage-dot-${stage.color}`}><i/>{stage.label}</span>;
 }
 
-export function RequestsWorkspaceBaseline({ rows, stages, lossReasons, canCreate, canConfigure, canEdit, now, demo = false, initialMode="list", onModeChange }: Props) {
+export function RequestsWorkspaceBaseline({ rows, stages, options, analytics, metricPreferences, canConfigureMetrics, lossReasons, canCreate, canConfigure, canEdit, now, demo = false, initialMode="list", onModeChange }: Props) {
   const router = useRouter();
   const [mode, setMode] = useState<ViewMode>(initialMode);
   const [bucket, setBucket] = useState<Bucket>("active");
@@ -134,7 +136,7 @@ export function RequestsWorkspaceBaseline({ rows, stages, lossReasons, canCreate
         return <section className="sales-board-column" key={stage.code} onDragOver={e => { if (canEdit) e.preventDefault(); }} onDrop={e => { if (!canEdit) return; e.preventDefault(); const row = liveRows.find(item => item.id === e.dataTransfer.getData("text/request-id")); if (row) void changeStage(row, stage.code); }}><header><StageBadge stage={stage}/><b>{stageRows.length}</b></header><div className="sales-board-cards">{stageRows.length ? stageRows.map(row => <article key={row.id} className="sales-board-card" aria-busy={busyId === row.id} draggable={canEdit && !busyId} onDragStart={e => e.dataTransfer.setData("text/request-id", row.id)}><div className="sales-card-heading"><Link href={requestHref(row.id)}>{row.title}</Link><button className="icon-button" onClick={() => setSelectedId(row.id)} aria-label={`Просмотр: ${row.title}`}><ArrowUpRight size={16}/></button></div><p>{row.client}<span>{row.location || "Локация уточняется"}</span></p><div className="sales-card-facts"><span><Users size={14}/>{row.headcount} чел.</span><span><CalendarDays size={14}/>{fmtDate(row.start)}</span></div><footer><span>{row.owner ?? "Не назначен"}</span><small className={(daysSince(row.updatedAt, now) ?? 0) >= 7 ? "sales-stale" : ""}>{activity(row.updatedAt, now)}</small></footer></article>) : <div className="sales-board-empty">Нет заявок</div>}</div></section>;
       })}</div>}
     </>}
-    {mode === "analytics" && <RequestInsights rows={liveRows} stages={stages} now={now} onStage={openStage}/>} 
+    {mode === "analytics" && <RequestInsights analytics={analytics} stages={stages} options={options} metricPreferences={metricPreferences} canConfigureMetrics={canConfigureMetrics} demo={demo} onStage={openStage}/>} 
     {pendingLoss&&<div className="recruiting-modal" onMouseDown={event=>{if(event.currentTarget===event.target)setPendingLoss(null)}}><form className="recruiting-modal-card request-loss-modal" onSubmit={submitLoss}><div className="recruiting-modal-head"><div><h2>Не согласовано</h2><p>Выберите причину для аналитики. Комментарий можно добавить отдельно.</p></div><button type="button" className="icon-button" onClick={()=>setPendingLoss(null)}><X size={17}/></button></div><div className="recruiting-form">{error&&<div className="recruiting-error">{error}</div>}<div className="recruiting-form-grid"><label className="wide">Причина<select required value={lossReasonCode} onChange={event=>setLossReasonCode(event.target.value)}><option value="">Выберите причину</option>{lossReasons.map(item=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label className="wide">Комментарий<textarea value={lossComment} onChange={event=>setLossComment(event.target.value)} placeholder="Дополнительный контекст, если нужен"/></label></div><div className="recruiting-form-actions"><button type="button" className="button" onClick={()=>setPendingLoss(null)}>Отмена</button><button className="button primary" disabled={busyId===pendingLoss.id}>{busyId===pendingLoss.id?"Сохраняю…":"Сохранить"}</button></div></div></form></div>}
     {selected && <SalesDrawer title={selected.title} subtitle={`${selected.client} · ${selected.location || "Локация уточняется"}`} onClose={() => setSelectedId(null)} footer={<Link className="button primary" href={requestHref(selected.id)} onClick={() => setSelectedId(null)}>{demo ? "Редактировать в демо" : "Открыть карточку"}<ArrowUpRight size={16}/></Link>}>
       <StageBadge stage={stageByCode(stages, selected.workflowStageCode)}/>
