@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, ChartNoAxesCombined, Columns3, LayoutList, SlidersHorizontal, Users, CalendarDays, Eye, Plus } from "lucide-react";
+import { ArrowUpRight, ChartNoAxesCombined, Columns3, LayoutList, SlidersHorizontal, Users, CalendarDays, Eye, Plus, X } from "lucide-react";
 import { requestBucket, stageByCode, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
 import { SalesDrawer, SalesEmpty, SalesSearch, SalesSegments } from "@/components/sales/SalesUI";
 import { daysSince, lossLabels, RequestInsights } from "@/components/sales/RequestInsights";
 import { KeyValue } from "@/components/UI";
 import { mergeDemoRequestRows, subscribeDemoRequests, updateDemoRequestStage } from "@/lib/commercial/demo-workspace-client";
 
-type Props = { rows: RequestBoardRow[]; stages: RequestStageDefinition[]; canCreate: boolean; canConfigure: boolean; canEdit: boolean; now: number; demo?: boolean };
+type LossReasonOption={code:string;name:string};
+type Props = { rows: RequestBoardRow[]; stages: RequestStageDefinition[]; lossReasons: LossReasonOption[]; canCreate: boolean; canConfigure: boolean; canEdit: boolean; now: number; demo?: boolean; initialMode?:ViewMode; onModeChange?:(mode:ViewMode)=>void };
 type ViewMode = "list" | "board" | "analytics";
 type Bucket = "active" | "completed" | "archive";
 function fmtDate(value: string | null) {
@@ -30,9 +31,9 @@ function StageBadge({ stage }: { stage: RequestStageDefinition }) {
   return <span className={`request-stage-badge-polished request-stage-dot-${stage.color}`}><i/>{stage.label}</span>;
 }
 
-export function RequestsWorkspaceBaseline({ rows, stages, canCreate, canConfigure, canEdit, now, demo = false }: Props) {
+export function RequestsWorkspaceBaseline({ rows, stages, lossReasons, canCreate, canConfigure, canEdit, now, demo = false, initialMode="list", onModeChange }: Props) {
   const router = useRouter();
-  const [mode, setMode] = useState<ViewMode>("list");
+  const [mode, setMode] = useState<ViewMode>(initialMode);
   const [bucket, setBucket] = useState<Bucket>("active");
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState("");
@@ -44,6 +45,9 @@ export function RequestsWorkspaceBaseline({ rows, stages, canCreate, canConfigur
   const [editingStages, setEditingStages] = useState(stages);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingLoss,setPendingLoss]=useState<RequestBoardRow|null>(null);
+  const [lossReasonCode,setLossReasonCode]=useState("");
+  const [lossComment,setLossComment]=useState("");
   const [demoRows, setDemoRows] = useState<RequestBoardRow[]>(rows);
   useEffect(() => {
     if (!demo) return;
@@ -76,18 +80,26 @@ export function RequestsWorkspaceBaseline({ rows, stages, canCreate, canConfigur
   }
   async function changeStage(row: RequestBoardRow, stageCode: string) {
     if (!canEdit || busyId || row.workflowStageCode === stageCode) return;
-    let lossReason: string | null = null;
-    if (stageCode === "not_agreed") { const answer = window.prompt("Почему предложение не согласовано?"); if (!answer?.trim()) return; lossReason = answer.trim(); }
-    setBusyId(row.id); setError("");
-    try {
-      if (demo) {
-        updateDemoRequestStage(row.id, stageCode, lossReason, row);
-        setDemoRows(current => current.map(item => item.id === row.id ? { ...item, workflowStageCode: stageCode, lossReason, updatedAt: new Date().toISOString() } : item));
-        return;
+    if(stageCode==="not_agreed"){setPendingLoss(row);setLossReasonCode("");setLossComment("");setError("");return}
+    await performStageChange(row,stageCode);
+  }
+  async function performStageChange(row:RequestBoardRow,stageCode:string,reasonCode?:string,reason?:string){
+    setBusyId(row.id);setError("");
+    try{
+      if(demo){
+        updateDemoRequestStage(row.id,stageCode,reason??null,row,reasonCode??null);
+        setDemoRows(current=>current.map(item=>item.id===row.id?{...item,workflowStageCode:stageCode,lossReason:reason??null,lossReasonCode:reasonCode??null,updatedAt:new Date().toISOString()}:item));
+      }else{
+        const response=await fetch(`/api/requests/${row.id}/stage`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({stageCode,lossReasonCode:reasonCode??null,lossReason:reason??null})});
+        const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить этап");router.refresh();
       }
-      const response = await fetch(`/api/requests/${row.id}/stage`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ stageCode, lossReason }) });
-      const json = await response.json().catch(() => ({})); if (!response.ok) throw new Error(json.error ?? "Не удалось изменить этап"); router.refresh();
-    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось изменить этап"); } finally { setBusyId(""); }
+      setPendingLoss(null);setLossReasonCode("");setLossComment("");
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить этап")}finally{setBusyId("")}
+  }
+  async function submitLoss(event:React.FormEvent){
+    event.preventDefault();if(!pendingLoss)return;
+    if(!lossReasonCode){setError("Выберите причину несогласования");return}
+    await performStageChange(pendingLoss,"not_agreed",lossReasonCode,lossComment.trim()||undefined);
   }
   async function savePipeline() {
     setBusyId("pipeline"); setError("");
@@ -102,7 +114,7 @@ export function RequestsWorkspaceBaseline({ rows, stages, canCreate, canConfigur
 
   return <div className="sales-registry">
     <div className="sales-toolbar">
-      <SalesSegments<ViewMode> label="Вид заявок" value={mode} onChange={setMode} items={[{ value: "list", label: "Список", icon: <LayoutList size={15}/> }, { value: "board", label: "Доска", icon: <Columns3 size={15}/> }, { value: "analytics", label: "Аналитика", icon: <ChartNoAxesCombined size={15}/> }]}/>
+      <SalesSegments<ViewMode> label="Вид заявок" value={mode} onChange={value=>{setMode(value);onModeChange?.(value);router.replace(value==="analytics"?"/requests?view=analytics":"/requests",{scroll:false})}} items={[{ value: "list", label: "Список", icon: <LayoutList size={15}/> }, { value: "board", label: "Доска", icon: <Columns3 size={15}/> }, { value: "analytics", label: "Аналитика", icon: <ChartNoAxesCombined size={15}/> }]}/>
       <div className="sales-toolbar-actions">{canConfigure && <button className="icon-button" aria-label="Настроить этапы" aria-expanded={showSettings} onClick={() => setShowSettings(v => !v)}><SlidersHorizontal size={16}/></button>}{canCreate && <button className="button" disabled={sharing} onClick={shareBlankForm}>{shareText}</button>}{canCreate && <Link className="button primary" href="/requests/new"><Plus size={16}/>Новая заявка</Link>}</div>
     </div>
     {mode !== "analytics" && <div className="sales-filterbar">
@@ -116,19 +128,20 @@ export function RequestsWorkspaceBaseline({ rows, stages, canCreate, canConfigur
     {demo && <div className="sales-notice"><strong>Демо-данные сохраняются в этом браузере.</strong><span>Создавайте и редактируйте заявки, меняйте этапы — после обновления страницы изменения останутся.</span></div>}
     {mode !== "analytics" && <div className="sales-results" aria-live="polite"><span>Показано {filtered.length} из {liveRows.filter(row => requestBucket(row) === bucket).length}</span>{filtered.length > 0 && (query || stageFilter || ownerFilter) && <button onClick={resetFilters}>Сбросить фильтры</button>}{mode === "board" && canEdit && <span className="sales-result-hint">Этап можно изменить в просмотре карточки или перетаскиванием</span>}</div>}
     {mode !== "analytics" && !filtered.length ? <SalesEmpty title={query || stageFilter || ownerFilter ? "Заявки не найдены" : "В этом разделе пока нет заявок"} text={query || stageFilter || ownerFilter ? "Измените условия поиска или сбросьте фильтры." : "Новые заявки появятся в активных. Завершённые и архивные хранятся отдельно."} onReset={query || stageFilter || ownerFilter ? resetFilters : undefined}/> : <>
-      {(mode === "list" || (mode === "board" && bucket === "archive")) && <div className="sales-table-wrap"><table className="data-table sales-request-table"><thead><tr><th>Заявка / клиент</th><th>Потребность</th><th>Этап</th><th>Ответственный</th><th>Старт</th><th>Активность</th><th><span className="sales-sr-only">Просмотр</span></th></tr></thead><tbody>{filtered.map(row => <tr key={row.id}><td><Link className="cell-title" href={requestHref(row.id)}>{row.title}</Link><span className="cell-sub">{row.client} · {row.location || "Локация уточняется"}</span></td><td><strong>{row.headcount} чел.</strong><span className="cell-sub">{row.roles.slice(0, 2).map(role => `${role.name} · ${role.count}`).join(" / ")}{row.roles.length > 2 ? ` / ещё ${row.roles.length - 2}` : ""}</span></td><td><StageBadge stage={stageByCode(stages, row.workflowStageCode)}/>{row.lossReason && <span className="cell-sub">{lossLabels[row.lossReason] ?? row.lossReason}</span>}</td><td>{row.owner ?? "Не назначен"}</td><td className="sales-nowrap">{fmtDate(row.start)}</td><td><span className={(daysSince(row.updatedAt, now) ?? 0) >= 7 && bucket === "active" ? "sales-stale" : "sales-secondary"}>{activity(row.updatedAt, now)}</span>{row.proposalVersion > 0 && <span className="cell-sub">КП №{row.proposalVersion}{row.proposalSentCount ? ` · отправок ${row.proposalSentCount}` : ""}</span>}</td><td><button className="icon-button sales-preview-button" aria-label={`Просмотр: ${row.title}`} onClick={() => setSelectedId(row.id)}><Eye size={17}/></button></td></tr>)}</tbody></table></div>}
+      {(mode === "list" || (mode === "board" && bucket === "archive")) && <div className="sales-table-wrap"><table className="data-table sales-request-table"><thead><tr><th>Заявка / клиент</th><th>Потребность</th><th>Этап</th><th>Ответственный</th><th>Старт</th><th>Активность</th><th><span className="sales-sr-only">Просмотр</span></th></tr></thead><tbody>{filtered.map(row => <tr key={row.id}><td><Link className="cell-title" href={requestHref(row.id)}>{row.title}</Link><span className="cell-sub">{row.client} · {row.location || "Локация уточняется"}</span></td><td><strong>{row.headcount} чел.</strong><span className="cell-sub">{row.roles.slice(0, 2).map(role => `${role.name} · ${role.count}`).join(" / ")}{row.roles.length > 2 ? ` / ещё ${row.roles.length - 2}` : ""}</span></td><td><StageBadge stage={stageByCode(stages, row.workflowStageCode)}/>{row.lossReasonCode && <span className="cell-sub">{lossReasons.find(item=>item.code===row.lossReasonCode)?.name ?? lossLabels[row.lossReasonCode] ?? row.lossReasonCode}</span>}</td><td>{row.owner ?? "Не назначен"}</td><td className="sales-nowrap">{fmtDate(row.start)}</td><td><span className={(daysSince(row.updatedAt, now) ?? 0) >= 7 && bucket === "active" ? "sales-stale" : "sales-secondary"}>{activity(row.updatedAt, now)}</span>{row.proposalVersion > 0 && <span className="cell-sub">КП №{row.proposalVersion}{row.proposalSentCount ? ` · отправок ${row.proposalSentCount}` : ""}</span>}</td><td><button className="icon-button sales-preview-button" aria-label={`Просмотр: ${row.title}`} onClick={() => setSelectedId(row.id)}><Eye size={17}/></button></td></tr>)}</tbody></table></div>}
       {mode === "board" && bucket !== "archive" && <div className="sales-board" aria-label="Доска заявок">{visibleStages.map(stage => {
         const stageRows = filtered.filter(row => row.workflowStageCode === stage.code);
         return <section className="sales-board-column" key={stage.code} onDragOver={e => { if (canEdit) e.preventDefault(); }} onDrop={e => { if (!canEdit) return; e.preventDefault(); const row = liveRows.find(item => item.id === e.dataTransfer.getData("text/request-id")); if (row) void changeStage(row, stage.code); }}><header><StageBadge stage={stage}/><b>{stageRows.length}</b></header><div className="sales-board-cards">{stageRows.length ? stageRows.map(row => <article key={row.id} className="sales-board-card" aria-busy={busyId === row.id} draggable={canEdit && !busyId} onDragStart={e => e.dataTransfer.setData("text/request-id", row.id)}><div className="sales-card-heading"><Link href={requestHref(row.id)}>{row.title}</Link><button className="icon-button" onClick={() => setSelectedId(row.id)} aria-label={`Просмотр: ${row.title}`}><ArrowUpRight size={16}/></button></div><p>{row.client}<span>{row.location || "Локация уточняется"}</span></p><div className="sales-card-facts"><span><Users size={14}/>{row.headcount} чел.</span><span><CalendarDays size={14}/>{fmtDate(row.start)}</span></div><footer><span>{row.owner ?? "Не назначен"}</span><small className={(daysSince(row.updatedAt, now) ?? 0) >= 7 ? "sales-stale" : ""}>{activity(row.updatedAt, now)}</small></footer></article>) : <div className="sales-board-empty">Нет заявок</div>}</div></section>;
       })}</div>}
     </>}
     {mode === "analytics" && <RequestInsights rows={liveRows} stages={stages} now={now} onStage={openStage}/>} 
+    {pendingLoss&&<div className="recruiting-modal" onMouseDown={event=>{if(event.currentTarget===event.target)setPendingLoss(null)}}><form className="recruiting-modal-card request-loss-modal" onSubmit={submitLoss}><div className="recruiting-modal-head"><div><h2>Не согласовано</h2><p>Выберите причину для аналитики. Комментарий можно добавить отдельно.</p></div><button type="button" className="icon-button" onClick={()=>setPendingLoss(null)}><X size={17}/></button></div><div className="recruiting-form">{error&&<div className="recruiting-error">{error}</div>}<div className="recruiting-form-grid"><label className="wide">Причина<select required value={lossReasonCode} onChange={event=>setLossReasonCode(event.target.value)}><option value="">Выберите причину</option>{lossReasons.map(item=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label><label className="wide">Комментарий<textarea value={lossComment} onChange={event=>setLossComment(event.target.value)} placeholder="Дополнительный контекст, если нужен"/></label></div><div className="recruiting-form-actions"><button type="button" className="button" onClick={()=>setPendingLoss(null)}>Отмена</button><button className="button primary" disabled={busyId===pendingLoss.id}>{busyId===pendingLoss.id?"Сохраняю…":"Сохранить"}</button></div></div></form></div>}
     {selected && <SalesDrawer title={selected.title} subtitle={`${selected.client} · ${selected.location || "Локация уточняется"}`} onClose={() => setSelectedId(null)} footer={<Link className="button primary" href={requestHref(selected.id)} onClick={() => setSelectedId(null)}>{demo ? "Редактировать в демо" : "Открыть карточку"}<ArrowUpRight size={16}/></Link>}>
       <StageBadge stage={stageByCode(stages, selected.workflowStageCode)}/>
       <div className="sales-drawer-facts"><KeyValue label="Ответственный" value={selected.owner ?? "Не назначен"}/><KeyValue label="Старт" value={fmtDate(selected.start)}/><KeyValue label="Потребность" value={`${selected.headcount} чел.`}/><KeyValue label="Последнее изменение" value={fmtDate(selected.updatedAt)}/><KeyValue label="Версия КП" value={selected.proposalVersion ? `№${selected.proposalVersion}` : "Нет"}/><KeyValue label="Отправки КП" value={selected.proposalSentCount}/></div>
       <h3>Позиции заявки</h3><div className="sales-drawer-roles">{selected.roles.map((role, index) => <div key={`${role.name}-${index}`}><span>{role.name}</span><strong>{role.count} чел.</strong></div>)}</div>
       {canEdit && !selected.archivedAt && !["accepted", "launched"].includes(selected.status) && <label className="sales-stage-field">Изменить этап<select value={selected.workflowStageCode} disabled={Boolean(busyId)} onChange={e => void changeStage(selected, e.target.value)}>{stages.filter(stage => stage.active || stage.code === selected.workflowStageCode).map(stage => <option key={stage.code} value={stage.code}>{stage.label}</option>)}</select></label>}
-      {selected.lossReason && <div className="sales-notice"><strong>Причина несогласования</strong><span>{lossLabels[selected.lossReason] ?? selected.lossReason}</span></div>}
+      {selected.lossReasonCode && <div className="sales-notice"><strong>Причина несогласования</strong><span>{lossReasons.find(item=>item.code===selected.lossReasonCode)?.name ?? lossLabels[selected.lossReasonCode] ?? selected.lossReasonCode}{selected.lossReason ? ` · ${selected.lossReason}` : ""}</span></div>}
       {error && <div role="alert" className="sales-notice sales-notice-error">{error}</div>}
     </SalesDrawer>}
   </div>;
