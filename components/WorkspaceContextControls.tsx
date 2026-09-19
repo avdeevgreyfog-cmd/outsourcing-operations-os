@@ -34,6 +34,10 @@ export function WorkspaceContextControls({ context, demo }: { context: Workspace
     router.refresh();
   }
 
+  const accessTemplates=context.previewOptions.filter((item)=>item.targetType==="role_template");
+  const positions=context.previewOptions.filter((item)=>item.targetType==="position");
+  const processRoles=context.previewOptions.filter((item)=>item.targetType==="process_role");
+
   return <div className="workspace-context-controls">
     {context.organizations.length>1&&<label className="workspace-switch">
       <span>Организация</span>
@@ -43,9 +47,11 @@ export function WorkspaceContextControls({ context, demo }: { context: Workspace
     </label>}
     {!demo&&context.previewOptions.length>0&&<label className={"workspace-switch access-preview-control "+(context.previewTarget?"is-preview":"")}>
       <span>{context.previewTarget?"Режим проверки":"Доступ"}</span>
-      <select disabled={busy} value={context.previewRoleId??""} onChange={(event)=>changePreview(event.target.value)} aria-label="Проверить интерфейс как роль">
+      <select disabled={busy} value={context.previewTarget??""} onChange={(event)=>changePreview(event.target.value)} aria-label="Проверить интерфейс как роль или должность">
         <option value="">Моя роль · {context.actualRoleName}</option>
-        {context.previewRoles.map((role)=><option key={role.id} value={role.id}>Как {role.name}</option>)}
+        {accessTemplates.length>0&&<optgroup label="Шаблоны доступа">{accessTemplates.map((item)=><option key={"role:"+item.id} value={"role_template:"+item.id}>Как {item.name}</option>)}</optgroup>}
+        {positions.length>0&&<optgroup label="Должности">{positions.map((item)=><option key={"position:"+item.id} value={"position:"+item.id}>Должность · {item.name}</option>)}</optgroup>}
+        {processRoles.length>0&&<optgroup label="Процессные роли">{processRoles.map((item)=><option key={"process:"+item.id} value={"process_role:"+item.id}>Роль · {item.name}</option>)}</optgroup>}
       </select>
     </label>}
   </div>;
