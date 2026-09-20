@@ -27,7 +27,7 @@ const profileStorage="operis.recruiting.profiles.v2";
 const commStorage="operis.recruiting.communications.v1";
 const terminalStages=new Set<RecruitingStage>(["rejected","no_show","reserve"]);
 const readyDocumentStatuses=new Set(["received","verified","ready","not_required"]);
-const stageAdvanceActions=new Set(["new:interview","interview:documents","documents:clearance","documents:preparation","clearance:preparation","preparation:first_shift"]);
+const stageAdvanceActions=new Set(["new:interview","interview:documents","documents:clearance","documents:preparation","clearance:preparation","preparation:first_shift","first_shift:retention_7","retention_7:retention_30"]);
 
 export function CandidateProfileWorkspace({profile,candidateId,options,needs,demo,canEdit,canConvert,exitReasons}:Props){
  const router=useRouter();
