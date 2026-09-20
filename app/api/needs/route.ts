@@ -13,6 +13,7 @@ const schema = z.object({
   deadline: z.string().date().nullable().optional(),
   sourceKind: z.enum(["object","manual","replacement","reserve","other"]).default("manual"),
   priority: z.enum(["low","normal","high","critical"]).default("normal"),
+  documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
   conditions: z.object({
     location: z.string().trim().max(500).nullable().optional(),
     schedule: z.string().trim().max(1000).nullable().optional(),
@@ -94,6 +95,21 @@ export async function POST(request: Request) {
       await tx`
         INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id)
         VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${recruiterId}::uuid,${recruiterTeamId}::uuid,${body.countRequired},${actor.userId}::uuid)
+      `;
+      if(body.documentTypeIds?.length){
+        const unique=[...new Set(body.documentTypeIds)];
+        const valid=await tx<Array<{id:string}>>`SELECT id FROM recruiting_document_types WHERE id=ANY(${unique}::uuid[]) AND active`;
+        if(valid.length!==unique.length)throw new Error("Один из типов документов недоступен");
+        for(const documentTypeId of unique){
+          await tx`
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required)
+            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${documentTypeId}::uuid,true)
+          `;
+        }
+      }
+      await tx`
+        INSERT INTO need_quantity_changes(organization_id,need_id,old_count,new_count,delta,reason,changed_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${need.id}::uuid,NULL,${body.countRequired},${body.countRequired},'Исходный объём потребности',${actor.userId}::uuid)
       `;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${need.id}::uuid,'created',${`Создана потребность: ${body.title}`},${sql.json({sourceKind:body.sourceKind,countRequired:body.countRequired,objectId:body.objectId??null,regionId})})`;

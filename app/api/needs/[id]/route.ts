@@ -43,6 +43,8 @@ const patchSchema = z.object({
     userId: z.string().uuid(),
     targetCount: z.number().int().min(1).max(10000),
   })).max(50).optional(),
+  quantityReason: z.string().trim().max(1000).nullable().optional(),
+  documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
 });
 
 type EditableNeed = {
@@ -86,6 +88,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const nextConditions = {...current.conditions,...(body.conditions ?? {})};
       const deadline = body.deadline === undefined ? current.deadline : body.deadline;
       const recruiters = body.recruiters;
+      const countChanged = countRequired !== current.countRequired;
 
       if (recruiters) {
         const totalTarget = recruiters.reduce((sum,item)=>sum+item.targetCount,0);
@@ -120,10 +123,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           count_required=${countRequired},
           deadline=${deadline}::date,
           priority=${body.priority ?? current.priority},
-          status=${body.status ?? current.status},
+          status=CASE
+            WHEN ${body.status ?? null}::text IS NOT NULL THEN ${body.status ?? null}
+            WHEN ${countChanged} AND ${countRequired}>count_filled AND status='filled' THEN 'in_progress'
+            ELSE status
+          END,
+          closed_at=CASE WHEN ${countChanged} AND ${countRequired}>count_filled THEN NULL ELSE closed_at END,
           conditions_snapshot=${sql.json(nextConditions)}
         WHERE id=${id}::uuid
       `;
+
+      if(countChanged){
+        const reason=body.quantityReason?.trim() || (countRequired>current.countRequired?"Расширение потребности":"Сокращение потребности");
+        await tx`
+          INSERT INTO need_quantity_changes(organization_id,need_id,old_count,new_count,delta,reason,changed_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${id}::uuid,${current.countRequired},${countRequired},${countRequired-current.countRequired},${reason},${actor.userId}::uuid)
+        `;
+        if(!recruiters){
+          const activeAssignments=await tx<Array<{id:string}>>`
+            SELECT id FROM need_assignments WHERE need_id=${id}::uuid AND unassigned_at IS NULL AND recruiter_user_id IS NOT NULL
+          `;
+          if(activeAssignments.length===1){
+            await tx`UPDATE need_assignments SET target_count=${countRequired} WHERE id=${activeAssignments[0].id}::uuid`;
+          }
+        }
+      }
+
+      if(body.documentTypeIds){
+        const unique=[...new Set(body.documentTypeIds)];
+        if(unique.length){
+          const valid=await tx<Array<{id:string}>>`
+            SELECT id FROM recruiting_document_types WHERE id=ANY(${unique}::uuid[]) AND active
+          `;
+          if(valid.length!==unique.length)throw new Error("Один из типов документов недоступен");
+        }
+        await tx`DELETE FROM need_document_requirements WHERE need_id=${id}::uuid`;
+        for(const documentTypeId of unique){
+          await tx`
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required)
+            VALUES(${actor.organizationId}::uuid,${id}::uuid,${documentTypeId}::uuid,true)
+          `;
+        }
+      }
 
       if (recruiters) {
         await tx`UPDATE need_assignments SET unassigned_at=now() WHERE need_id=${id}::uuid AND unassigned_at IS NULL`;
@@ -136,7 +177,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await tx`UPDATE needs SET owner_user_id=${recruiters[0]?.userId ?? null}::uuid WHERE id=${id}::uuid`;
       }
 
-      const changed = Object.keys(body).filter(key=>body[key as keyof typeof body] !== undefined);
+      const changed = Object.keys(body).filter(key=>body[key as keyof typeof body] !== undefined && !["quantityReason"].includes(key));
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${id}::uuid,'updated',

@@ -10,7 +10,7 @@ export async function saveApplicationChange(row:RecruitingApplicationRow, change
   const updated:RecruitingApplicationRow={...row,stage:change.stage,stageLabel:recruitingStageLabels[change.stage],updatedAt:now,stageEnteredAt:changed?now:row.stageEnteredAt,
     workflow:{...row.workflow,...change.workflow},nextActionAt:change.nextActionAt===undefined?row.nextActionAt:change.nextActionAt,nextAction:change.nextActionAt===undefined?row.nextAction:change.nextActionAt,
     plannedStartDate:change.plannedStartDate===undefined?row.plannedStartDate:change.plannedStartDate,
-    actualStartAt:change.stage==='started'&&changed?change.actualStartAt??null:row.actualStartAt,
+    actualStartAt:change.stage==='first_shift'&&changed?change.actualStartAt??null:row.actualStartAt,
     rejectionReason:change.reason??null,rejectionReasonCode:change.reasonCode??null,
     stageEvents:changed?[...(row.stageEvents??[]),{fromStage:row.stage,toStage:change.stage,createdAt:now,reason:change.reason,reasonCode:change.reasonCode}]:row.stageEvents};
   if(change.workflow?.lastContact?.trim() && change.workflow.lastContact!==row.workflow?.lastContact){

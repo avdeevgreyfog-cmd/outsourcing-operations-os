@@ -11,15 +11,16 @@ import { validateStageChange, type WorkflowDetails } from "@/lib/recruiting/work
 class WorkflowError extends Error {}
 const schema=z.object({
   applicationId:z.string().uuid().optional(),
-  stage:z.enum(["new","contact","interview","manager_review","approved","preparation","ready","started","rejected","no_show","reserve"]),
+  stage:z.enum(["new","interview","documents","preparation","first_shift","retention_7","retention_30","rejected","no_show","reserve"]),
   expectedStage:z.string().optional(),
   expectedUpdatedAt:z.string().optional(),
   plannedStartDate:z.iso.date().nullable().optional(),
   actualStartAt:z.string().datetime().nullable().optional(),
-  workflow:z.object({nextActionText:z.string().trim().max(1000).optional(),plannedShift:z.string().trim().max(240).optional(),confirmed:z.boolean().optional(),readiness:z.boolean().optional(),reviewRecipient:z.string().trim().max(240).optional(),reviewDueAt:z.string().datetime().optional(),reserveReason:z.string().trim().max(500).optional(),lastContact:z.string().trim().max(3000).optional()}).optional(),
+  workflow:z.object({nextActionText:z.string().trim().max(1000).optional(),plannedShift:z.string().trim().max(240).optional(),confirmed:z.boolean().optional(),readiness:z.boolean().optional(),reserveReason:z.string().trim().max(500).optional(),lastContact:z.string().trim().max(3000).optional(),contactAttempts:z.number().int().min(0).max(100).optional(),travelState:z.enum(["not_required","self","company","ticket_required","ticket_bought"]).optional(),travelNote:z.string().trim().max(1000).optional(),arrivalAt:z.string().datetime().optional(),documentsReceived:z.number().int().min(0).max(100).optional(),documentsRequired:z.number().int().min(0).max(100).optional(),missingDocuments:z.array(z.string().trim().max(160)).max(50).optional()}).optional(),
   reasonCode:z.string().trim().max(80).optional(),
   reason:z.string().trim().max(1000).optional(),
   nextActionAt:z.string().datetime().nullable().optional(),
+  ownerUserId:z.string().uuid().nullable().optional(),
 }).superRefine((value,ctx)=>{
   if(["rejected","no_show"].includes(value.stage)&&!value.reasonCode?.trim())ctx.addIssue({code:"custom",path:["reasonCode"],message:"Выберите причину"});
 });
@@ -36,7 +37,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     requireCapability(actor,"recruiting.candidate.edit");
     if(actor.demo)return NextResponse.json({error:"В демо-режиме этап сохраняется локально в браузере"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    if(body.stage==="started")requireCapability(actor,"recruiting.candidate.convert");
+    if(body.stage==="first_shift")requireCapability(actor,"recruiting.candidate.convert");
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [current]=await tx<Array<ScopeRow>>`
         SELECT ca.id,ca.candidate_id "candidateId",ca.need_id "needId",ca.organization_id "organizationId",ca.owner_user_id "ownerUserId",
@@ -68,13 +69,40 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         `;
         if(!exitReason)throw new Error("Выбранная причина недоступна для этого этапа");
       }
-      const actualStart=body.stage==="started" && changed?sql`${body.actualStartAt??null}::timestamptz`:sql`actual_start_at`;
+      if(body.ownerUserId!==undefined&&body.ownerUserId!==null){
+        const [ownerTarget]=await tx<Array<{id:string}>>`
+          SELECT DISTINCT m.user_id id
+          FROM organization_memberships m
+          LEFT JOIN role_templates rt ON rt.id=m.role_template_id
+          WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active' AND m.user_id=${body.ownerUserId}::uuid
+            AND (
+              rt.code IN ('recruiter','recruiting_manager','object_manager','regional_manager')
+              OR EXISTS (
+                SELECT 1 FROM permission_grants pg
+                WHERE pg.role_template_id=m.role_template_id
+                  AND pg.capability='recruiting.candidate.edit'
+                  AND pg.effect='allow'
+              )
+              OR EXISTS (
+                SELECT 1 FROM position_assignments pa
+                JOIN staff_positions sp ON sp.id=pa.staff_position_id
+                JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
+                WHERE pa.membership_id=m.id AND pa.status<>'ended'
+                  AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+                  AND ppg.capability='recruiting.candidate.edit' AND ppg.effect='allow'
+              )
+            )
+        `;
+        if(!ownerTarget)throw new Error("Выбранный сотрудник не может работать с кандидатами");
+      }
+      const actualStart=body.stage==="first_shift" && changed?sql`${body.actualStartAt??null}::timestamptz`:sql`actual_start_at`;
       const nextAction=body.nextActionAt===undefined?sql`next_action_at`:sql`${body.nextActionAt??null}::timestamptz`;
-      await tx`UPDATE candidate_applications SET workflow_details=${sql.json(workflow)},planned_start_date=${body.plannedStartDate === undefined?current.plannedStartDate:body.plannedStartDate}::date,stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},rejection_reason_code=${["rejected","no_show"].includes(body.stage)?body.reasonCode??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
+      const ownerUserId=body.ownerUserId===undefined?sql`owner_user_id`:sql`${body.ownerUserId??null}::uuid`;
+      await tx`UPDATE candidate_applications SET owner_user_id=${ownerUserId},workflow_details=${sql.json(workflow)},planned_start_date=${body.plannedStartDate === undefined?current.plannedStartDate:body.plannedStartDate}::date,stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},rejection_reason_code=${["rejected","no_show"].includes(body.stage)?body.reasonCode??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage}='rejected' THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
       if(changed) await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,reason_code,changed_by_user_id) VALUES (${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},${body.stage},${body.reason??null},${body.reasonCode??null},${actor.userId}::uuid)`;
 
       let workerId:string|null=null;
-      if(body.stage==="started" && changed){
+      if(body.stage==="first_shift" && changed){
         if(!current.objectId)throw new Error("Перед фактическим выходом назначьте кандидату объект");
         const [candidate]=await tx<Array<{fullName:string;phone:string|null;source:string|null;originalRecruiterUserId:string|null}>>`
           SELECT full_name "fullName",phone,source,original_recruiter_user_id "originalRecruiterUserId" FROM candidates WHERE id=${current.candidateId}::uuid FOR UPDATE
@@ -126,7 +154,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         await tx`UPDATE needs SET status=CASE WHEN status='open' THEN 'in_progress' ELSE status END WHERE id=${current.needId}::uuid`;
       }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${current.candidateId}::uuid,'stage_changed',${changed?`Этап кандидата: ${recruitingStageLabels[normalizeRecruitingStage(current.stage)]} → ${recruitingStageLabels[body.stage]}`:"Обновлены рабочие действия по кандидату"},${sql.json({applicationId:current.id,needId:current.needId,workerId,reasonCode:body.reasonCode??null,reason:body.reason??null})})`;
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${current.candidateId}::uuid,'stage_changed',${changed?`Этап кандидата: ${recruitingStageLabels[normalizeRecruitingStage(current.stage)]} → ${recruitingStageLabels[body.stage]}`:"Обновлены рабочие действия по кандидату"},${sql.json({applicationId:current.id,needId:current.needId,workerId,reasonCode:body.reasonCode??null,reason:body.reason??null,ownerUserId:body.ownerUserId??current.ownerUserId})})`;
       return {candidateId:current.candidateId,applicationId:current.id,stage:body.stage,workerId};
     }));
     if("conflict" in result) return NextResponse.json({error:"Заявка уже изменена. Обновите страницу перед сохранением."},{status:409});

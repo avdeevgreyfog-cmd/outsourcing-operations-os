@@ -8,6 +8,9 @@ import * as demo from "@/lib/demo/data";
 import { needSourceLabels, normalizeRecruitingStage, recruitingStageLabels, type RecruitingStage } from "./model";
 
 export type NeedRecruiterAssignment = { userId: string; name: string; targetCount: number };
+export type RecruitingFunnelStageSetting = { code: RecruitingStage; label: string; sortOrder: number; active: boolean; systemType: string };
+export type RecruitingSourceOption = { id:string; code:string; name:string; kind:string; active:boolean };
+export type NeedQuantityChange = { id:string; oldCount:number|null; newCount:number; delta:number; reason:string|null; changedAt:string; changedBy:string };
 
 export type RecruitingNeedRow = {
   id: string;
@@ -45,6 +48,8 @@ export type RecruitingNeedRow = {
   conditionVersion: number;
   stageCounts: Partial<Record<RecruitingStage, number>>;
   funnelReached: Partial<Record<RecruitingStage, number>>;
+  quantityHistory: NeedQuantityChange[];
+  requiredDocumentTypeIds: string[];
 };
 
 export type RecruitingApplicationRow = {
@@ -87,6 +92,8 @@ export type RecruitingApplicationRow = {
   rejectionReason: string | null;
   rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
+  recentCommunications?: Array<{id:string;channel:string;summary:string;happenedAt:string;author:string}>;
+  documentSummary?: {required:number;received:number;missing:string[]};
 };
 
 export type CandidateCommunication = {
@@ -137,11 +144,14 @@ export type RecruitingOptions = {
   objects: Array<{id:string;name:string;regionId:string;region:string}>;
   recruiters: Array<{id:string;name:string}>;
   sources: string[];
+  sourceCatalog: RecruitingSourceOption[];
+  funnelStages: RecruitingFunnelStageSetting[];
+  documentTypes: Array<{id:string;code:string;name:string}>;
   exitReasons: Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>;
 };
 
 
-const recruitingStageOrder: RecruitingStage[]=["new","contact","interview","manager_review","approved","preparation","ready","started"];
+const recruitingStageOrder: RecruitingStage[]=["new","interview","documents","preparation","first_shift","retention_7","retention_30"];
 function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
   return recruitingStageOrder.reduce<Partial<Record<RecruitingStage,number>>>((acc,stage,index)=>{
     acc[stage]=stages.filter(value=>{const normalizedIndex=recruitingStageOrder.indexOf(value);return normalizedIndex>=index}).length;
@@ -152,8 +162,8 @@ function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingS
 function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
   return demo.needs.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor)).map((row) => {
     const related = demo.candidates.filter((candidate) => candidate.objectId === row.objectId && candidate.need === row.specialty);
-    const ready = related.filter((candidate) => normalizeRecruitingStage(candidate.stage) === "ready").length;
-    const started = related.filter((candidate) => normalizeRecruitingStage(candidate.stage) === "started").length;
+    const ready = related.filter((candidate) => normalizeRecruitingStage(candidate.stage) === "preparation").length;
+    const started = related.filter((candidate) => ["first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length;
     const working = row.filled;
     const recruiterId = row.ownerUserId ?? "10000000-0000-4000-8000-000000000005";
     const recruiterName = "Ольга Новикова";
@@ -170,8 +180,8 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       recruiters: [{userId:recruiterId,name:recruiterName,targetCount:Math.max(row.deficit,1)}],
       conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
-      approved: related.filter((candidate) => ["approved","preparation","ready","started"].includes(normalizeRecruitingStage(candidate.stage))).length,
-      ready, started, conditionVersion: 1,
+      approved: related.filter((candidate) => ["documents","preparation","first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length,
+      ready, started, conditionVersion: 1, quantityHistory:[], requiredDocumentTypeIds:[],
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
@@ -197,7 +207,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
         COALESCE(funnel."stageCounts",'{}'::jsonb) "stageCounts",
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
-        COALESCE(versions.version,1)::int "conditionVersion"
+        COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=n.object_id
@@ -214,43 +224,55 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
       ) workforce ON true
       LEFT JOIN LATERAL (
         SELECT count(*)::int candidates,
-          count(*) FILTER (WHERE f.stage IN ('approved','preparation','ready','started','documents','first_shift'))::int approved,
-          count(*) FILTER (WHERE f.stage IN ('ready','documents'))::int ready,
-          count(*) FILTER (WHERE f.stage IN ('started','first_shift'))::int started,
+          count(*) FILTER (WHERE f.stage IN ('documents','preparation','first_shift','retention_7','retention_30','manager_review','approved','ready','started'))::int approved,
+          count(*) FILTER (WHERE f.stage IN ('preparation','ready'))::int ready,
+          count(*) FILTER (WHERE f.stage IN ('first_shift','retention_7','retention_30','started'))::int started,
           jsonb_build_object(
-            'new',count(*) FILTER (WHERE f.stage='new'),
-            'contact',count(*) FILTER (WHERE f.stage IN ('contact','call')),
-            'interview',count(*) FILTER (WHERE f.stage='interview'),
-            'manager_review',count(*) FILTER (WHERE f.stage='manager_review'),
-            'approved',count(*) FILTER (WHERE f.stage='approved'),
-            'preparation',count(*) FILTER (WHERE f.stage IN ('preparation','documents')),
-            'ready',count(*) FILTER (WHERE f.stage='ready'),
-            'started',count(*) FILTER (WHERE f.stage IN ('started','first_shift')),
+            'new',count(*) FILTER (WHERE f.normalized_stage='new'),
+            'interview',count(*) FILTER (WHERE f.normalized_stage='interview'),
+            'documents',count(*) FILTER (WHERE f.normalized_stage='documents'),
+            'preparation',count(*) FILTER (WHERE f.normalized_stage='preparation'),
+            'first_shift',count(*) FILTER (WHERE f.normalized_stage='first_shift'),
+            'retention_7',count(*) FILTER (WHERE f.normalized_stage='retention_7'),
+            'retention_30',count(*) FILTER (WHERE f.normalized_stage='retention_30'),
             'rejected',count(*) FILTER (WHERE f.stage='rejected'),
             'no_show',count(*) FILTER (WHERE f.stage='no_show')
           ) "stageCounts",
           jsonb_build_object(
             'new',count(*),
-            'contact',count(*) FILTER (WHERE f.max_rank>=2),
-            'interview',count(*) FILTER (WHERE f.max_rank>=3),
-            'manager_review',count(*) FILTER (WHERE f.max_rank>=4),
-            'approved',count(*) FILTER (WHERE f.max_rank>=5),
-            'preparation',count(*) FILTER (WHERE f.max_rank>=6),
-            'ready',count(*) FILTER (WHERE f.max_rank>=7),
-            'started',count(*) FILTER (WHERE f.max_rank>=8)
+            'interview',count(*) FILTER (WHERE f.max_rank>=2),
+            'documents',count(*) FILTER (WHERE f.max_rank>=3),
+            'preparation',count(*) FILTER (WHERE f.max_rank>=4),
+            'first_shift',count(*) FILTER (WHERE f.max_rank>=5),
+            'retention_7',count(*) FILTER (WHERE f.max_rank>=6),
+            'retention_30',count(*) FILTER (WHERE f.max_rank>=7)
           ) "reachedCounts"
         FROM (
           SELECT ca.stage,
+            CASE ca.stage
+              WHEN 'new' THEN 'new'
+              WHEN 'contact' THEN 'interview' WHEN 'call' THEN 'interview' WHEN 'interview' THEN 'interview'
+              WHEN 'manager_review' THEN 'documents' WHEN 'approved' THEN 'documents' WHEN 'documents' THEN 'documents'
+              WHEN 'ready' THEN 'preparation' WHEN 'preparation' THEN 'preparation'
+              WHEN 'started' THEN 'first_shift' WHEN 'first_shift' THEN 'first_shift'
+              WHEN 'retention_7' THEN 'retention_7' WHEN 'retention_30' THEN 'retention_30'
+              ELSE ca.stage END normalized_stage,
             GREATEST(
               CASE ca.stage
-                WHEN 'new' THEN 1 WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 3
-                WHEN 'manager_review' THEN 4 WHEN 'approved' THEN 5 WHEN 'preparation' THEN 6 WHEN 'documents' THEN 6
-                WHEN 'ready' THEN 7 WHEN 'started' THEN 8 WHEN 'first_shift' THEN 8 ELSE 1 END,
+                WHEN 'new' THEN 1
+                WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 2
+                WHEN 'manager_review' THEN 3 WHEN 'approved' THEN 3 WHEN 'documents' THEN 3
+                WHEN 'ready' THEN 4 WHEN 'preparation' THEN 4
+                WHEN 'started' THEN 5 WHEN 'first_shift' THEN 5
+                WHEN 'retention_7' THEN 6 WHEN 'retention_30' THEN 7 ELSE 1 END,
               COALESCE((
                 SELECT max(CASE h.to_stage
-                  WHEN 'new' THEN 1 WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 3
-                  WHEN 'manager_review' THEN 4 WHEN 'approved' THEN 5 WHEN 'preparation' THEN 6 WHEN 'documents' THEN 6
-                  WHEN 'ready' THEN 7 WHEN 'started' THEN 8 WHEN 'first_shift' THEN 8 ELSE 1 END)
+                  WHEN 'new' THEN 1
+                  WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 2
+                  WHEN 'manager_review' THEN 3 WHEN 'approved' THEN 3 WHEN 'documents' THEN 3
+                  WHEN 'ready' THEN 4 WHEN 'preparation' THEN 4
+                  WHEN 'started' THEN 5 WHEN 'first_shift' THEN 5
+                  WHEN 'retention_7' THEN 6 WHEN 'retention_30' THEN 7 ELSE 1 END)
                 FROM candidate_stage_history h WHERE h.application_id=ca.id
               ),1)
             ) max_rank
@@ -268,6 +290,15 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
       LEFT JOIN LATERAL (
         SELECT max(nv.version)::int version FROM need_versions nv WHERE nv.need_id=n.id
       ) versions ON true
+      LEFT JOIN LATERAL (
+        SELECT jsonb_agg(jsonb_build_object(
+          'id',q.id,'oldCount',q.old_count,'newCount',q.new_count,'delta',q.delta,'reason',q.reason,
+          'changedAt',to_char(q.created_at,'DD.MM.YYYY HH24:MI'),'changedBy',u.display_name
+        ) ORDER BY q.created_at DESC) history
+        FROM need_quantity_changes q
+        JOIN app_users u ON u.id=q.changed_by_user_id
+        WHERE q.need_id=n.id
+      ) quantity ON true
       ORDER BY n.status IN ('open','in_progress','paused') DESC,n.deadline NULLS LAST,n.created_at DESC
     `;
     return rows.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor))
@@ -286,7 +317,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
       object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId: row.ownerUserId ?? null,
       owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
-      nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
+      nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: ["first_shift","retention_7","retention_30"].includes(stage) ? "2026-09-12" : null,
       rejectionReason: (row as {rejectionReason?:string}).rejectionReason??null, rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null, conditions: need?.conditions ?? {},
       ...demoApplicationDetails(row,demo.candidates.findIndex(x=>x.id===row.id)),
     };
@@ -309,7 +340,21 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",ca.next_action_at::text "nextActionAt",ca.workflow_details workflow,
         (SELECT max(h.created_at)::text FROM candidate_stage_history h WHERE h.application_id=ca.id) "stageEnteredAt",
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
-        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions
+        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
+        COALESCE((
+          SELECT jsonb_agg(jsonb_build_object('id',x.id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)
+          FROM (
+            SELECT cc.id,cc.channel,cc.summary,to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') happened_at,u.display_name author,cc.happened_at sort_at
+            FROM candidate_communications cc JOIN app_users u ON u.id=cc.created_by_user_id
+            WHERE cc.candidate_id=c.id AND (cc.application_id=ca.id OR cc.application_id IS NULL)
+            ORDER BY cc.happened_at DESC LIMIT 5
+          ) x
+        ),'[]'::jsonb) "recentCommunications",
+        jsonb_build_object(
+          'required',(SELECT count(*)::int FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required),
+          'received',(SELECT count(*)::int FROM candidate_application_documents cad WHERE cad.application_id=ca.id AND cad.status IN ('received','verified')),
+          'missing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,'missing') NOT IN ('received','verified','not_required')),'[]'::jsonb)
+        ) "documentSummary"
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
       JOIN needs n ON n.id=ca.need_id
@@ -378,6 +423,30 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
     recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
     sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
+    sourceCatalog: [
+      {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
+      {id:"demo-source-hh",code:"hh",name:"hh.ru",kind:"job_site",active:true},
+      {id:"demo-source-telegram",code:"telegram",name:"Telegram",kind:"social",active:true},
+      {id:"demo-source-referral",code:"referral",name:"Рекомендация",kind:"referral",active:true},
+      {id:"demo-source-partner",code:"partner",name:"Партнёр / подрядчик",kind:"partner",active:true},
+    ],
+    funnelStages: [
+      {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
+      {code:"interview",label:"Интервью",sortOrder:20,active:true,systemType:"qualification"},
+      {code:"documents",label:"Документы",sortOrder:30,active:true,systemType:"documents"},
+      {code:"preparation",label:"Подготовка к выходу",sortOrder:40,active:true,systemType:"preparation"},
+      {code:"first_shift",label:"Первый выход",sortOrder:50,active:true,systemType:"start"},
+      {code:"retention_7",label:"7 дней",sortOrder:60,active:true,systemType:"retention"},
+      {code:"retention_30",label:"30 дней",sortOrder:70,active:true,systemType:"retention_final"},
+    ],
+    documentTypes: [
+      {id:"demo-doc-passport",code:"passport",name:"Паспорт"},
+      {id:"demo-doc-snils",code:"snils",name:"СНИЛС"},
+      {id:"demo-doc-inn",code:"inn",name:"ИНН"},
+      {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты"},
+      {id:"demo-doc-medical",code:"medical",name:"Медицинские документы"},
+      {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск"},
+    ],
     exitReasons: [
       {code:"pay",name:"Не устроила зарплата",kind:"rejected"},
       {code:"schedule",name:"Не устроил график",kind:"rejected"},
@@ -396,7 +465,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     ],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [specialties,regions,objects,recruiters,sources,exitReasons] = await Promise.all([
+    const [specialties,regions,objects,recruiters,sources,sourceCatalog,funnelStages,documentTypes,exitReasons] = await Promise.all([
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;regionId:string;region:string}>>`
@@ -423,6 +492,28 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
                 AND pg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
                 AND pg.effect='allow'
             )
+            OR EXISTS (
+              SELECT 1
+              FROM position_assignments pa
+              JOIN staff_positions sp ON sp.id=pa.staff_position_id
+              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
+              WHERE pa.membership_id=m.id
+                AND pa.status<>'ended'
+                AND pa.effective_from<=current_date
+                AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+                AND ppg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
+                AND ppg.effect='allow'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM membership_process_roles mpr
+              JOIN process_role_permission_grants prg ON prg.process_role_id=mpr.process_role_id
+              WHERE mpr.membership_id=m.id
+                AND mpr.effective_from<=current_date
+                AND (mpr.effective_to IS NULL OR mpr.effective_to>=current_date)
+                AND prg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
+                AND prg.effect='allow'
+            )
             OR (m.user_id=${actor.userId}::uuid AND ${hasCapability(actor.access,"recruiting.candidate.edit")})
           )
           AND (${actor.access.allOrg} OR mr.region_id=ANY(${actor.regionIds}::uuid[]) OR m.user_id=${actor.userId}::uuid)
@@ -434,12 +525,25 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
         WHERE c.source IS NOT NULL AND btrim(c.source)<>''
         ORDER BY c.source
       `,
+      sql<RecruitingSourceOption[]>`
+        SELECT id,code,name,kind,active
+        FROM recruiting_candidate_sources
+        WHERE active ORDER BY sort_order,name
+      `,
+      sql<RecruitingFunnelStageSetting[]>`
+        SELECT code,label,sort_order "sortOrder",active,system_type "systemType"
+        FROM recruiting_funnel_stages
+        WHERE active ORDER BY sort_order,created_at
+      `,
+      sql<Array<{id:string;code:string;name:string}>>`
+        SELECT id,code,name FROM recruiting_document_types WHERE active ORDER BY sort_order,name
+      `,
       sql<Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>>`
         SELECT code,name,kind FROM candidate_exit_reasons
         WHERE active ORDER BY sort_order,name
       `,
     ]);
-    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source),exitReasons};
+    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source),sourceCatalog,funnelStages,documentTypes,exitReasons};
 
   });
 }
