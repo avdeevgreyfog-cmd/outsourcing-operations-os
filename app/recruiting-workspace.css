@@ -945,6 +945,8 @@
 .candidate-profile-v2 .candidate-current-state .key-value>span{font-size:12px}
 .candidate-profile-v2 .candidate-current-state .key-value>strong,.candidate-profile-v2 .candidate-current-state .key-value>div{font-size:13px}
 .candidate-profile-v2 .candidate-current-state>.button{min-height:38px;margin-top:12px}
+.candidate-current-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px}
+.candidate-current-actions .button{min-height:38px}
 .candidate-profile-v2 .candidate-history-item{grid-template-columns:150px minmax(0,1fr);gap:16px;padding:13px 18px}
 .candidate-profile-v2 .candidate-history-item time{font-size:12px}
 .candidate-profile-v2 .candidate-history-item strong{font-size:13px;line-height:1.4}
