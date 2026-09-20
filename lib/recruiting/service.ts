@@ -16,6 +16,7 @@ export type RecruitingDocumentType = {
 };
 export type NeedDocumentRequirement = {
   documentTypeId:string; provider:"candidate"|"company"|"client";
+  requiredBy:"employment"|"first_shift"|"day7"|"day30"|"non_blocking";
 };
 export type NeedQuantityChange = { id:string; oldCount:number|null; newCount:number; delta:number; reason:string|null; changedAt:string; changedBy:string };
 
@@ -109,6 +110,55 @@ export type RecruitingApplicationRow = {
   };
 };
 
+export type CandidateContact = {
+  id:string;
+  kind:"phone"|"telegram"|"whatsapp"|"max"|"email"|"other";
+  value:string;
+  label:string|null;
+  isPrimary:boolean;
+  isPreferred:boolean;
+};
+
+export type CandidateDocumentRecord = {
+  id:string;
+  applicationId:string|null;
+  needId:string|null;
+  need:string|null;
+  documentTypeId:string;
+  name:string;
+  groupType:"employment"|"clearance";
+  provider:"candidate"|"company"|"client";
+  requiredBy:"employment"|"first_shift"|"day7"|"day30"|"non_blocking";
+  status:string;
+  note:string|null;
+};
+
+export type CandidateDirectoryRow = {
+  id:string;
+  fullName:string;
+  phone:string|null;
+  email:string|null;
+  city:string|null;
+  preferredChannel:string|null;
+  preferredContact:string|null;
+  source:string|null;
+  status:string;
+  applicationCount:number;
+  activeApplicationCount:number;
+  latestApplicationId:string|null;
+  latestStage:RecruitingStage|null;
+  latestStageLabel:string|null;
+  latestNeed:string|null;
+  latestObject:string|null;
+  latestOwner:string|null;
+  lastContactAt:string|null;
+  lastContactSummary:string|null;
+  workerId:string|null;
+  archivedAt:string|null;
+  createdAt:string;
+  updatedAt:string;
+};
+
 export type CandidateCommunication = {
   id: string;
   applicationId: string | null;
@@ -146,6 +196,9 @@ export type CandidateProfile = {
   sourceReference: string | null;
   notes: string | null;
   status: string;
+  workerId:string|null;
+  contacts:CandidateContact[];
+  documents:CandidateDocumentRecord[];
   applications: RecruitingApplicationRow[];
   communications: CandidateCommunication[];
   history: CandidateStageEvent[];
