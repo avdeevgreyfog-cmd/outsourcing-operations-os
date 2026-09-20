@@ -197,6 +197,11 @@ export function RecruitingActionDrawer({
     }
 
     if(action==="preparation_save"||action==="ready_for_start"){
+      if(action==="ready_for_start"){
+        const blocking=(documents??[]).filter(item=>item.groupType==="clearance"&&item.blocksProgress&&isDueBy(item.requiredByStage,"first_shift"));
+        const pending=blocking.filter(item=>!["received","verified","ready","not_required"].includes(item.status));
+        if(pending.length)throw new Error("Не готовы блокирующие документы: "+pending.map(item=>item.name).join(", "));
+      }
       targetStage=action==="ready_for_start"?"first_shift":"preparation";
       workflow.outcomeCode=action;
       workflow.travelState=travelState;
@@ -425,6 +430,11 @@ function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingAppli
   </section>;
 }
 
+function isDueBy(value:DocumentRow["requiredByStage"],target:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"){
+  if(!value||value==="none")return false;
+  const order=["documents","preparation","first_shift","retention_7","retention_30"];
+  return order.indexOf(value)<=order.indexOf(target);
+}
 function preferredContact(row:RecruitingApplicationRow){
   if(row.preferredContact)return row.preferredContact;
   if(row.preferredChannel==="telegram")return row.telegram??row.phone??"Не указан";
