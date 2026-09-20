@@ -358,3 +358,111 @@ export async function listCrews(actor:Actor):Promise<CrewRow[]>{
     return rows.filter(row=>canReadRow(actor.access,"operations.crew.read",row,actor));
   });
 }
+
+
+export type HousingSiteRow = {
+  id:string;
+  organizationId:string;
+  name:string;
+  address:string|null;
+  vendor:string|null;
+  rateModel:"bed_day"|"room_day"|"room_month"|"site_period";
+  rateAmount:number;
+  objectId:string|null;
+  object:string|null;
+  responsibleUserId:string|null;
+  responsible:string|null;
+  ownerUserId:string|null;
+  assigneeUserIds:string[];
+  capacity:number;
+  occupied:number;
+  available:number;
+  monthlyForecast:number;
+};
+
+export type HousingStayRow = {
+  id:string;
+  organizationId:string;
+  workerId:string;
+  worker:string;
+  objectId:string|null;
+  object:string|null;
+  siteId:string;
+  site:string;
+  unitId:string|null;
+  unit:string|null;
+  bedLabel:string|null;
+  checkIn:string;
+  checkOut:string|null;
+  status:string;
+  ownerUserId:string|null;
+  assigneeUserIds:string[];
+};
+
+export type HousingSnapshot = {sites:HousingSiteRow[];stays:HousingStayRow[]};
+
+export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
+  requireCapability(actor,"supply.housing.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>canReadRow(actor.access,"operations.object.read",row,actor))??demo.objects[0];
+    const workers=demo.workers.filter(row=>row.objectId===object.id).slice(0,3);
+    const site:HousingSiteRow={
+      id:"demo-housing-1",organizationId:object.organizationId,name:"Общежитие рядом с объектом",address:null,vendor:"Демо-поставщик",
+      rateModel:"bed_day",rateAmount:700,objectId:object.id,object:object.name,responsibleUserId:object.ownerUserId??null,responsible:null,
+      ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],capacity:6,occupied:workers.length,available:6-workers.length,monthlyForecast:workers.length*700*30,
+    };
+    return {sites:[site],stays:workers.map((worker,index)=>({id:`demo-stay-${index+1}`,organizationId:object.organizationId,workerId:worker.id,worker:worker.fullName,objectId:object.id,object:object.name,siteId:site.id,site:site.name,unitId:null,unit:"Комната 1",bedLabel:String(index+1),checkIn:"01.09.2026",checkOut:null,status:"active",ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[]}))};
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const siteRows=await sql<Array<HousingSiteRow & {regionId:string|null}>>`
+      SELECT hs.id,hs.organization_id "organizationId",hs.name,hs.address_text address,hs.vendor,
+        hs.rate_model "rateModel",hs.rate_amount::numeric "rateAmount",hs.primary_object_id "objectId",o.name object,
+        hs.responsible_user_id "responsibleUserId",u.display_name responsible,
+        COALESCE(hs.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=hs.primary_object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+          || CASE WHEN hs.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[hs.responsible_user_id::text] END "assigneeUserIds",
+        COALESCE(units.capacity,0)::int capacity,COALESCE(occupancy.occupied,0)::int occupied,
+        GREATEST(COALESCE(units.capacity,0)-COALESCE(occupancy.occupied,0),0)::int available,
+        CASE hs.rate_model
+          WHEN 'bed_day' THEN COALESCE(occupancy.occupied,0)*hs.rate_amount*30
+          WHEN 'room_day' THEN COALESCE(units.active_units,0)*hs.rate_amount*30
+          WHEN 'room_month' THEN COALESCE(units.active_units,0)*hs.rate_amount
+          ELSE hs.rate_amount
+        END::numeric "monthlyForecast"
+      FROM housing_sites hs
+      LEFT JOIN objects o ON o.id=hs.primary_object_id
+      LEFT JOIN app_users u ON u.id=hs.responsible_user_id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(sum(hu.capacity),0)::int capacity,count(*) FILTER (WHERE hu.active)::int active_units
+        FROM housing_units hu WHERE hu.site_id=hs.id AND hu.active
+      ) units ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int occupied FROM housing_stays st
+        WHERE st.site_id=hs.id AND st.status='active' AND st.check_in<=current_date AND (st.check_out IS NULL OR st.check_out>=current_date)
+      ) occupancy ON true
+      WHERE hs.active
+      ORDER BY hs.name
+    `;
+    const sites=siteRows.filter(row=>canReadRow(actor.access,"supply.housing.read",row,actor)).map(({regionId:_,...row})=>({...row,rateAmount:Number(row.rateAmount),monthlyForecast:Number(row.monthlyForecast)}));
+    const siteIds=sites.map(row=>row.id);
+    if(!siteIds.length)return {sites,stays:[]};
+    const stays=await sql<HousingStayRow[]>`
+      SELECT st.id,st.organization_id "organizationId",st.worker_id "workerId",w.full_name worker,
+        st.object_id "objectId",o.name object,st.site_id "siteId",hs.name site,st.unit_id "unitId",hu.name unit,st.bed_label "bedLabel",
+        to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status,
+        COALESCE(o.owner_user_id,hs.responsible_user_id) "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=st.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+          || CASE WHEN hs.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[hs.responsible_user_id::text] END "assigneeUserIds"
+      FROM housing_stays st
+      JOIN worker_profiles w ON w.id=st.worker_id
+      JOIN housing_sites hs ON hs.id=st.site_id
+      LEFT JOIN housing_units hu ON hu.id=st.unit_id
+      LEFT JOIN objects o ON o.id=st.object_id
+      WHERE st.site_id=ANY(${siteIds}::uuid[])
+      ORDER BY st.status='active' DESC,st.check_in DESC,w.full_name
+    `;
+    return {sites,stays:stays.filter(row=>canReadRow(actor.access,"supply.housing.read",row,actor))};
+  });
+}
