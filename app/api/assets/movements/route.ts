@@ -65,7 +65,7 @@ export async function POST(request:Request){
       if(type==="return"&&body.writeoffAfterReturn){
         await tx`
           INSERT INTO inventory_movements(organization_id,item_id,variant,movement_type,quantity,from_location_id,item_condition,note,created_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${body.itemId}::uuid,${body.variant},'writeoff',${body.quantity},${body.toLocationId}::uuid,${body.condition??"unusable"},${body.note?body.note+" · Списание после возврата":"Списание после возврата"},${actor.userId}::uuid)
+          VALUES(${actor.organizationId}::uuid,${body.itemId}::uuid,${body.variant},'writeoff',${body.quantity},${body.toLocationId!}::uuid,${body.condition??"unusable"},${body.note?body.note+" · Списание после возврата":"Списание после возврата"},${actor.userId}::uuid)
         `;
       }
       await tx`
