@@ -42,7 +42,7 @@ UPDATE recruiting_document_types SET group_type='employment',default_provider='c
 WHERE code IN ('passport','snils','inn','bank_details');
 UPDATE recruiting_document_types SET group_type='clearance',default_provider='company'
 WHERE code='medical';
-UPDATE recruiting_document_types SET group_type='clearance',default_provider='candidate'
+UPDATE recruiting_document_types SET group_type='clearance',default_provider='candidate',default_required=false
 WHERE code='qualification';
 
 INSERT INTO recruiting_document_types(organization_id,code,name,group_type,default_provider,default_required,sort_order)
