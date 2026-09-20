@@ -9,7 +9,7 @@ import { RecruitingActionDrawer } from "./RecruitingActionDrawer";
 import { useRecruitingApplications, saveDemoApplication } from "@/lib/recruiting/demo-client";
 import { isActiveStage, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
 import type { RecruitingApplicationRow, RecruitingNeedRow, RecruitingOptions, RecruitingFunnelStageSetting, RecruitingSourceOption } from "@/lib/recruiting/service";
-import { recruitingStageLabels, recruitingStages, type RecruitingStage } from "@/lib/recruiting/model";
+import { recruitingStageLabels, type RecruitingStage } from "@/lib/recruiting/model";
 
 type Props={
   rows:RecruitingApplicationRow[];
@@ -60,7 +60,7 @@ export function RecruitingFunnelWorkspace({
   const [specialtyFilter,setSpecialtyFilter]=useState(initialSpecialty??"all");
   const [recruiterFilter,setRecruiterFilter]=useState(initialRecruiter??"all");
   const [sourceFilter,setSourceFilter]=useState(initialSource??"all");
-  const [stageFilter,setStageFilter]=useState(initialStage??"all");
+  const [stageFilter]=useState(initialStage??"all");
   const [queue,setQueue]=useState(initialQueue??"active");
   const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
   const [targetStage,setTargetStage]=useState<RecruitingStage|undefined>();
@@ -91,8 +91,8 @@ export function RecruitingFunnelWorkspace({
 
   useEffect(()=>{
     const phone=form.phone.trim();const fullName=form.fullName.trim();
-    if(!phone&&fullName.length<3){setDuplicateMatches({exact:[],possible:[]});return;}
     const timer=setTimeout(async()=>{
+      if(!phone&&fullName.length<3){setDuplicateMatches({exact:[],possible:[]});return;}
       if(demo){
         const digits=(value:string)=>value.replace(/\D/g,"");
         const exact=allRows.filter(row=>phone&&digits(row.phone??"")===digits(phone)).filter((row,index,array)=>array.findIndex(item=>item.candidateId===row.candidateId)===index).slice(0,3).map(row=>({id:row.candidateId,fullName:row.fullName,phone:row.phone,need:row.need,object:row.object}));
@@ -397,6 +397,5 @@ function NeedCallCheatSheet({need}:{need:RecruitingNeedRow|null}){
   return <aside className="candidate-need-sheet"><header><span>Условия вакансии</span><strong>{need.title}</strong><small>{[need.object,need.region].filter(Boolean).join(" · ")}</small></header><div className="candidate-need-pay"><span>На руки</span><strong>{displayCondition(c.workerPay)}</strong></div><dl><div><dt>График</dt><dd>{displayCondition(c.schedule)}</dd></div><div><dt>Смена</dt><dd>{displayCondition(c.shift)}</dd></div><div><dt>Проживание</dt><dd>{provisionLabel(c,"housing")}</dd></div><div><dt>Питание</dt><dd>{provisionLabel(c,"meals")}</dd></div><div><dt>Проезд</dt><dd>{provisionLabel(c,"travel")}</dd></div><div><dt>Развозка</dt><dd>{provisionLabel(c,"shuttle")}</dd></div><div><dt>СИЗ</dt><dd>{provisionLabel(c,"ppe")}</dd></div><div><dt>Медосмотр</dt><dd>{provisionLabel(c,"medical")}</dd></div></dl><div className="candidate-need-staffing"><span>Нужно <b>{need.required}</b></span><span>Работает <b>{need.working}</b></span><span>Найти <b>{need.toRecruit}</b></span></div>{displayCondition(c.requirements)!=="—"&&<p><strong>Требования:</strong> {displayCondition(c.requirements)}</p>}{displayCondition(c.comment)!=="—"&&<p><strong>Комментарий:</strong> {displayCondition(c.comment)}</p>}</aside>;
 }
 
-function travelLabel(value:unknown){return value==="ticket_required"?"Билет: нужно купить":value==="ticket_bought"?"Билет куплен":value==="company"?"Проезд организует компания":value==="self"?"Добирается самостоятельно":value==="not_required"?"Проезд не требуется":"Логистика не указана";}
 function displayCondition(value:unknown){if(value==null||value==="")return"—";if(typeof value==="string"||typeof value==="number")return String(value);if(typeof value==="boolean")return value?"Да":"Нет";return JSON.stringify(value);}
 function provisionLabel(conditions:Record<string,unknown>,key:string){const explicit=conditions[`${key}Provided`];const detail=displayCondition(conditions[key]);if(explicit===true)return detail==="—"?"Предоставляется":detail;if(explicit===false)return detail==="—"?"Не предоставляется":detail;return detail;}
