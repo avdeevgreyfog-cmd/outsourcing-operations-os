@@ -5,7 +5,7 @@ import {createPortal} from 'react-dom';
 import {useEffect,useMemo,useState} from 'react';
 import {Download,FileSpreadsheet,Upload,X} from 'lucide-react';
 import type {CandidateDirectoryRow,RecruitingApplicationRow,RecruitingNeedRow,RecruitingOptions} from '@/lib/recruiting/service';
-import {contactChannelLabels} from '@/lib/recruiting/model';
+import {contactChannelLabels,type RecruitingStage} from '@/lib/recruiting/model';
 import {useRecruitingApplications,saveDemoApplication} from '@/lib/recruiting/demo-client';
 import {formatWorkDate} from '@/lib/recruiting/workflow';
 import {Status} from './UI';
@@ -17,9 +17,9 @@ type ImportRow={
 type CandidateBucket='new'|'recruiting'|'post_exit'|'inactive';
 type OperationalBucket=CandidateBucket|'employee';
 const directoryStorage='operis.recruiting.directory.imports.v1';
-const recruitingStages=new Set(['interview','documents','clearance','preparation']);
-const postExitStages=new Set(['first_shift','retention_7']);
-const terminalStages=new Set(['reserve','rejected','no_show']);
+const recruitingStages=new Set<RecruitingStage>(['interview','documents','clearance','preparation']);
+const postExitStages=new Set<RecruitingStage>(['first_shift','retention_7']);
+const terminalStages=new Set<RecruitingStage>(['reserve','rejected','no_show']);
 
 export function CandidatesWorkspace({
  rows,directory,needs,options,initialQueue,demo,canCreate,
@@ -279,7 +279,7 @@ function matchesCandidateQuery(row:CandidateDirectoryRow,app:RecruitingApplicati
 }
 function stageOptionsFor(bucket:CandidateBucket,options:RecruitingOptions):Array<[string,string]>{
  const labels=new Map(options.funnelStages.map(row=>[row.code,row.label]));
- const codes=bucket==='new'?['new']:
+ const codes:RecruitingStage[]=bucket==='new'?['new']:
   bucket==='recruiting'?['interview','documents','clearance','preparation']:
   bucket==='post_exit'?['first_shift','retention_7']:
   ['reserve','rejected','no_show'];
