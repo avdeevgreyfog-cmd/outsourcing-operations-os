@@ -256,8 +256,8 @@ function candidateStatusLabel(row:CandidateDirectoryRow,latest?:RecruitingApplic
 }
 function candidateStatusTone(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow):'good'|'warn'|'bad'|'info'|'neutral'{
  const value=candidateBucket(row,latest);
- if(value==='employee'||value==='post_exit')return'good';
- if(value==='new'||value==='recruiting')return'info';
+ if(value==='employee')return'good';
+ if(value==='new'||value==='recruiting'||value==='post_exit')return'neutral';
  if(latest?.stage==='reserve'||row.status==='reserve')return'warn';
  if(latest?.stage==='no_show'||latest?.stage==='rejected')return'bad';
  return'neutral';
