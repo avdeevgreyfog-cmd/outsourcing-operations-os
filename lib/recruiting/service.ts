@@ -10,6 +10,13 @@ import { needSourceLabels, normalizeRecruitingStage, recruitingStageLabels, type
 export type NeedRecruiterAssignment = { userId: string; name: string; targetCount: number };
 export type RecruitingFunnelStageSetting = { code: RecruitingStage; label: string; sortOrder: number; active: boolean; systemType: string };
 export type RecruitingSourceOption = { id:string; code:string; name:string; kind:string; active:boolean };
+export type RecruitingDocumentType = {
+  id:string; code:string; name:string; groupType:"employment"|"clearance";
+  defaultProvider:"candidate"|"company"|"client"; defaultRequired:boolean; active?:boolean;
+};
+export type NeedDocumentRequirement = {
+  documentTypeId:string; provider:"candidate"|"company"|"client";
+};
 export type NeedQuantityChange = { id:string; oldCount:number|null; newCount:number; delta:number; reason:string|null; changedAt:string; changedBy:string };
 
 export type RecruitingNeedRow = {
@@ -50,6 +57,7 @@ export type RecruitingNeedRow = {
   funnelReached: Partial<Record<RecruitingStage, number>>;
   quantityHistory: NeedQuantityChange[];
   requiredDocumentTypeIds: string[];
+  documentRequirements: NeedDocumentRequirement[];
 };
 
 export type RecruitingApplicationRow = {
@@ -88,12 +96,17 @@ export type RecruitingApplicationRow = {
   stageEvents?: Array<{toStage:string;fromStage?:string|null;createdAt:string;reason?:string|null;reasonCode?:string|null}>;
   nextAction: string | null;
   plannedStartDate: string | null;
+  plannedArrivalAt: string | null;
   actualStartAt: string | null;
   rejectionReason: string | null;
   rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
   recentCommunications?: Array<{id:string;channel:string;summary:string;happenedAt:string;author:string}>;
-  documentSummary?: {required:number;received:number;missing:string[]};
+  documentSummary?: {
+    required:number; received:number; missing:string[];
+    employmentRequired:number; employmentReady:number; employmentMissing:string[];
+    clearanceRequired:number; clearanceReady:number; clearancePending:string[];
+  };
 };
 
 export type CandidateCommunication = {
@@ -146,18 +159,26 @@ export type RecruitingOptions = {
   sources: string[];
   sourceCatalog: RecruitingSourceOption[];
   funnelStages: RecruitingFunnelStageSetting[];
-  documentTypes: Array<{id:string;code:string;name:string}>;
+  documentTypes: RecruitingDocumentType[];
   exitReasons: Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>;
 };
 
 
-const recruitingStageOrder: RecruitingStage[]=["new","interview","documents","preparation","first_shift","retention_7","retention_30"];
+const recruitingStageOrder: RecruitingStage[]=["new","interview","documents","clearance","preparation","first_shift","retention_7","retention_30"];
 const demoUserNames:Record<string,string>={
   "10000000-0000-4000-8000-000000000003":"Дмитрий Орлов",
   "10000000-0000-4000-8000-000000000004":"Алексей Волков",
   "10000000-0000-4000-8000-000000000005":"Ольга Новикова",
 };
-const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical"];
+const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical","demo-doc-qualification"];
+const demoDocumentRequirements:NeedDocumentRequirement[]=[
+  {documentTypeId:"demo-doc-passport",provider:"candidate"},
+  {documentTypeId:"demo-doc-snils",provider:"candidate"},
+  {documentTypeId:"demo-doc-inn",provider:"candidate"},
+  {documentTypeId:"demo-doc-bank",provider:"candidate"},
+  {documentTypeId:"demo-doc-medical",provider:"company"},
+  {documentTypeId:"demo-doc-qualification",provider:"candidate"},
+];
 
 function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
   return recruitingStageOrder.reduce<Partial<Record<RecruitingStage,number>>>((acc,stage,index)=>{
@@ -187,7 +208,7 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       recruiters: [{userId:recruiterId,name:recruiterName,targetCount:Math.max(row.deficit,1)}],
       conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
-      approved: related.filter((candidate) => ["documents","preparation","first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length,
+      approved: related.filter((candidate) => ["documents","clearance","preparation","first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length,
       ready, started, conditionVersion: 2,
       quantityHistory: row.specialty==="Комплектовщик"
         ? [
@@ -201,6 +222,7 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
             ]
           : [{id:`demo-qty-${row.id}-1`,oldCount:null,newCount:row.required,delta:row.required,reason:"Исходный объём потребности",changedAt:"03.09.2026 10:30",changedBy:"Алексей Волков"}],
       requiredDocumentTypeIds:demoDocumentIds,
+      documentRequirements:demoDocumentRequirements,
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
@@ -226,7 +248,11 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
         COALESCE(funnel."stageCounts",'{}'::jsonb) "stageCounts",
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
-        COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds"
+        COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",
+        ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds",
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider) ORDER BY dt.sort_order)
+          FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+          WHERE ndr.need_id=n.id AND ndr.required),'[]'::jsonb) "documentRequirements"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=n.object_id
@@ -243,13 +269,14 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
       ) workforce ON true
       LEFT JOIN LATERAL (
         SELECT count(*)::int candidates,
-          count(*) FILTER (WHERE f.stage IN ('documents','preparation','first_shift','retention_7','retention_30','manager_review','approved','ready','started'))::int approved,
+          count(*) FILTER (WHERE f.stage IN ('documents','clearance','preparation','first_shift','retention_7','retention_30','manager_review','approved','ready','started'))::int approved,
           count(*) FILTER (WHERE f.stage IN ('preparation','ready'))::int ready,
           count(*) FILTER (WHERE f.stage IN ('first_shift','retention_7','retention_30','started'))::int started,
           jsonb_build_object(
             'new',count(*) FILTER (WHERE f.normalized_stage='new'),
             'interview',count(*) FILTER (WHERE f.normalized_stage='interview'),
             'documents',count(*) FILTER (WHERE f.normalized_stage='documents'),
+            'clearance',count(*) FILTER (WHERE f.normalized_stage='clearance'),
             'preparation',count(*) FILTER (WHERE f.normalized_stage='preparation'),
             'first_shift',count(*) FILTER (WHERE f.normalized_stage='first_shift'),
             'retention_7',count(*) FILTER (WHERE f.normalized_stage='retention_7'),
@@ -261,10 +288,11 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
             'new',count(*),
             'interview',count(*) FILTER (WHERE f.max_rank>=2),
             'documents',count(*) FILTER (WHERE f.max_rank>=3),
-            'preparation',count(*) FILTER (WHERE f.max_rank>=4),
-            'first_shift',count(*) FILTER (WHERE f.max_rank>=5),
-            'retention_7',count(*) FILTER (WHERE f.max_rank>=6),
-            'retention_30',count(*) FILTER (WHERE f.max_rank>=7)
+            'clearance',count(*) FILTER (WHERE f.max_rank>=4),
+            'preparation',count(*) FILTER (WHERE f.max_rank>=5),
+            'first_shift',count(*) FILTER (WHERE f.max_rank>=6),
+            'retention_7',count(*) FILTER (WHERE f.max_rank>=7),
+            'retention_30',count(*) FILTER (WHERE f.max_rank>=8)
           ) "reachedCounts"
         FROM (
           SELECT ca.stage,
@@ -272,6 +300,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
               WHEN 'new' THEN 'new'
               WHEN 'contact' THEN 'interview' WHEN 'call' THEN 'interview' WHEN 'interview' THEN 'interview'
               WHEN 'manager_review' THEN 'documents' WHEN 'approved' THEN 'documents' WHEN 'documents' THEN 'documents'
+              WHEN 'clearance' THEN 'clearance'
               WHEN 'ready' THEN 'preparation' WHEN 'preparation' THEN 'preparation'
               WHEN 'started' THEN 'first_shift' WHEN 'first_shift' THEN 'first_shift'
               WHEN 'retention_7' THEN 'retention_7' WHEN 'retention_30' THEN 'retention_30'
@@ -281,17 +310,19 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
                 WHEN 'new' THEN 1
                 WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 2
                 WHEN 'manager_review' THEN 3 WHEN 'approved' THEN 3 WHEN 'documents' THEN 3
-                WHEN 'ready' THEN 4 WHEN 'preparation' THEN 4
-                WHEN 'started' THEN 5 WHEN 'first_shift' THEN 5
-                WHEN 'retention_7' THEN 6 WHEN 'retention_30' THEN 7 ELSE 1 END,
+                WHEN 'clearance' THEN 4
+                WHEN 'ready' THEN 5 WHEN 'preparation' THEN 5
+                WHEN 'started' THEN 6 WHEN 'first_shift' THEN 6
+                WHEN 'retention_7' THEN 7 WHEN 'retention_30' THEN 8 ELSE 1 END,
               COALESCE((
                 SELECT max(CASE h.to_stage
                   WHEN 'new' THEN 1
                   WHEN 'contact' THEN 2 WHEN 'call' THEN 2 WHEN 'interview' THEN 2
                   WHEN 'manager_review' THEN 3 WHEN 'approved' THEN 3 WHEN 'documents' THEN 3
-                  WHEN 'ready' THEN 4 WHEN 'preparation' THEN 4
-                  WHEN 'started' THEN 5 WHEN 'first_shift' THEN 5
-                  WHEN 'retention_7' THEN 6 WHEN 'retention_30' THEN 7 ELSE 1 END)
+                  WHEN 'clearance' THEN 4
+                  WHEN 'ready' THEN 5 WHEN 'preparation' THEN 5
+                  WHEN 'started' THEN 6 WHEN 'first_shift' THEN 6
+                  WHEN 'retention_7' THEN 7 WHEN 'retention_30' THEN 8 ELSE 1 END)
                 FROM candidate_stage_history h WHERE h.application_id=ca.id
               ),1)
             ) max_rank
@@ -344,7 +375,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
       object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId,
       owner, managerUserId, manager:managerUserId?owner:null, assigneeUserIds: row.assigneeUserIds ?? [],
-      nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: ["first_shift","retention_7","retention_30"].includes(stage) ? "2026-09-12" : null,
+      nextAction: row.nextAction ?? null, plannedStartDate: null, plannedArrivalAt:null, actualStartAt: ["first_shift","retention_7","retention_30"].includes(stage) ? "2026-09-12" : null,
       rejectionReason: seed.rejectionReason??null, rejectionReasonCode:seed.rejectionReasonCode??null, conditions: need?.conditions ?? {},
       ...demoApplicationDetails(row,index),
     };
@@ -367,7 +398,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",ca.next_action_at::text "nextActionAt",ca.workflow_details workflow,
         (SELECT max(h.created_at)::text FROM candidate_stage_history h WHERE h.application_id=ca.id) "stageEnteredAt",
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
-        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
+        ca.planned_arrival_at::text "plannedArrivalAt",ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
         COALESCE((
           SELECT jsonb_agg(jsonb_build_object('id',x.id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)
           FROM (
@@ -379,8 +410,14 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         ),'[]'::jsonb) "recentCommunications",
         jsonb_build_object(
           'required',(SELECT count(*)::int FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required),
-          'received',(SELECT count(*)::int FROM candidate_application_documents cad WHERE cad.application_id=ca.id AND cad.status IN ('received','verified')),
-          'missing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,'missing') NOT IN ('received','verified','not_required')),'[]'::jsonb)
+          'received',(SELECT count(*)::int FROM need_document_requirements ndr LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')),
+          'missing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')),'[]'::jsonb),
+          'employmentRequired',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'),
+          'employmentReady',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment' AND COALESCE(cad.status,'missing') IN ('received','verified','ready')),
+          'employmentMissing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment' AND COALESCE(cad.status,'missing') NOT IN ('received','verified','ready','not_required')),'[]'::jsonb),
+          'clearanceRequired',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'),
+          'clearanceReady',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')),
+          'clearancePending',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')),'[]'::jsonb)
         ) "documentSummary"
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
@@ -489,19 +526,20 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     funnelStages: [
       {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
       {code:"interview",label:"Интервью",sortOrder:20,active:true,systemType:"qualification"},
-      {code:"documents",label:"Документы",sortOrder:30,active:true,systemType:"documents"},
-      {code:"preparation",label:"Подготовка к выходу",sortOrder:40,active:true,systemType:"preparation"},
-      {code:"first_shift",label:"Первый выход",sortOrder:50,active:true,systemType:"start"},
-      {code:"retention_7",label:"7 дней",sortOrder:60,active:true,systemType:"retention"},
-      {code:"retention_30",label:"30 дней",sortOrder:70,active:true,systemType:"retention_final"},
+      {code:"documents",label:"Документы для оформления",sortOrder:30,active:true,systemType:"documents"},
+      {code:"clearance",label:"Оформление и допуски",sortOrder:40,active:true,systemType:"clearance"},
+      {code:"preparation",label:"Подготовка к выходу",sortOrder:50,active:true,systemType:"preparation"},
+      {code:"first_shift",label:"Первый выход",sortOrder:60,active:true,systemType:"start"},
+      {code:"retention_7",label:"7 дней",sortOrder:70,active:true,systemType:"retention"},
+      {code:"retention_30",label:"30 дней",sortOrder:80,active:true,systemType:"retention_final"},
     ],
     documentTypes: [
-      {id:"demo-doc-passport",code:"passport",name:"Паспорт"},
-      {id:"demo-doc-snils",code:"snils",name:"СНИЛС"},
-      {id:"demo-doc-inn",code:"inn",name:"ИНН"},
-      {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты"},
-      {id:"demo-doc-medical",code:"medical",name:"Медицинские документы"},
-      {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск"},
+      {id:"demo-doc-passport",code:"passport",name:"Паспорт",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-snils",code:"snils",name:"СНИЛС",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-inn",code:"inn",name:"ИНН",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:true},
+      {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск",groupType:"clearance",defaultProvider:"candidate",defaultRequired:false},
     ],
     exitReasons: [
       {code:"pay",name:"Не устроила зарплата",kind:"rejected"},
@@ -591,8 +629,10 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
         FROM recruiting_funnel_stages
         WHERE active ORDER BY sort_order,created_at
       `,
-      sql<Array<{id:string;code:string;name:string}>>`
-        SELECT id,code,name FROM recruiting_document_types WHERE active ORDER BY sort_order,name
+      sql<RecruitingDocumentType[]>`
+        SELECT id,code,name,group_type "groupType",default_provider "defaultProvider",default_required "defaultRequired",active
+        FROM recruiting_document_types WHERE active
+        ORDER BY CASE group_type WHEN 'employment' THEN 1 ELSE 2 END,sort_order,name
       `,
       sql<Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>>`
         SELECT code,name,kind FROM candidate_exit_reasons
