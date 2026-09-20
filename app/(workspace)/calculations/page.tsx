@@ -1,3 +1,4 @@
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -14,7 +15,7 @@ import { CalculatorWorkspaceWithRateMemory } from "@/components/CalculatorWorksp
 
 export default async function Calculations({searchParams}:{searchParams:Promise<{request?:string;tender?:string}>}) {
   const actor = await requireActor();
-  const query = await searchParams;
+  const query = isGithubPagesDemo() ? {} : await searchParams;
   if (actor.demo && query.tender && !actor.access.capabilities.includes("sales.tender.read")) actor.access.capabilities.push("sales.tender.read");
 
   const rows = await listCommercialCalculations(actor);
