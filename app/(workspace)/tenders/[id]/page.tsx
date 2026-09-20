@@ -23,7 +23,7 @@ export function generateStaticParams(){
 }
 
 export default async function TenderPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
-  const {id}=await params;const query=await searchParams;const actor=await requireActor();
+  const {id}=await params;const query=isGithubPagesDemo()?{}:await searchParams;const actor=await requireActor();
   if(actor.demo&&!actor.access.capabilities.includes("sales.tender.read"))actor.access.capabilities.push("sales.tender.read");
   const tender=await getTender(actor,id);if(!tender)notFound();
   const active=query.tab&&query.tab in tabs?query.tab as keyof typeof tabs:"overview";
