@@ -466,3 +466,46 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
     return {sites,stays:stays.filter(row=>canReadRow(actor.access,"supply.housing.read",row,actor))};
   });
 }
+
+
+export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null};
+export type WorkerAbsenceRow={id:string;absenceType:string;status:string;plannedFrom:string;plannedTo:string|null;actualFrom:string|null;actualTo:string|null;flexibleReturn:boolean;note:string|null};
+export type WorkerOperationsDetails={assignments:WorkerAssignmentHistoryRow[];absences:WorkerAbsenceRow[]};
+
+export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Promise<WorkerOperationsDetails>{
+  requireCapability(actor,"worker.read");
+  if(actor.demo){
+    const worker=demo.workers.find(row=>row.id===workerId);
+    if(!worker)return {assignments:[],absences:[]};
+    return {
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:null,specialty:null,effectiveFrom:"01.09.2026",effectiveTo:null,manager:null}]:[],
+      absences:[],
+    };
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const [scope]=await sql<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+      SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM worker_profiles w
+      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) a ON true
+      LEFT JOIN objects o ON o.id=a.object_id
+      WHERE w.id=${workerId}::uuid
+    `;
+    if(!scope||!canReadRow(actor.access,"worker.read",{...scope,objectId:scope.objectId??undefined,ownerUserId:scope.ownerUserId??undefined,regionId:scope.regionId??undefined},actor))return {assignments:[],absences:[]};
+    const [assignments,absences]=await Promise.all([
+      sql<WorkerAssignmentHistoryRow[]>`
+        SELECT a.id,a.object_id "objectId",o.name object,a.specialty_id "specialtyId",s.name specialty,
+          to_char(a.effective_from,'DD.MM.YYYY') "effectiveFrom",to_char(a.effective_to,'DD.MM.YYYY') "effectiveTo",u.display_name manager
+        FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
+        LEFT JOIN specialties s ON s.id=a.specialty_id LEFT JOIN app_users u ON u.id=a.manager_user_id
+        WHERE a.worker_id=${workerId}::uuid ORDER BY a.effective_from DESC
+      `,
+      sql<WorkerAbsenceRow[]>`
+        SELECT id,absence_type "absenceType",status,to_char(planned_from,'DD.MM.YYYY') "plannedFrom",to_char(planned_to,'DD.MM.YYYY') "plannedTo",
+          to_char(actual_from,'DD.MM.YYYY') "actualFrom",to_char(actual_to,'DD.MM.YYYY') "actualTo",flexible_return "flexibleReturn",note
+        FROM worker_absence_plans WHERE worker_id=${workerId}::uuid ORDER BY planned_from DESC
+      `,
+    ]);
+    return {assignments,absences};
+  });
+}
