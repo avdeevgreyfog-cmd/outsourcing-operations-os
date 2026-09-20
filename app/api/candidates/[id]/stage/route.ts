@@ -20,12 +20,13 @@ const schema=z.object({
   reasonCode:z.string().trim().max(80).optional(),
   reason:z.string().trim().max(1000).optional(),
   nextActionAt:z.string().datetime().nullable().optional(),
+  responsibleUserId:z.string().uuid().nullable().optional(),
 }).superRefine((value,ctx)=>{
   if(["rejected","no_show"].includes(value.stage)&&!value.reasonCode?.trim())ctx.addIssue({code:"custom",path:["reasonCode"],message:"Выберите причину"});
 });
 
 type ScopeRow={
-  id:string;candidateId:string;needId:string;organizationId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;
+  id:string;candidateId:string;needId:string;organizationId:string;ownerUserId:string|null;managerUserId:string|null;responsibleUserId:string|null;objectId:string|null;
   workflow:WorkflowDetails;plannedStartDate:string|null;updatedAt:string;
   clientId:string|null;regionId:string|null;assigneeUserIds:string[];stage:string;specialtyId:string;objectOwnerId:string|null;sourceRequestRoleId:string|null;
 };
@@ -40,8 +41,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [current]=await tx<Array<ScopeRow>>`
         SELECT ca.id,ca.candidate_id "candidateId",ca.need_id "needId",ca.organization_id "organizationId",ca.owner_user_id "ownerUserId",
-          ca.manager_user_id "managerUserId",ca.object_id "objectId",o.client_company_id "clientId",COALESCE(n.region_id,o.region_id) "regionId",
-          ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
+          ca.manager_user_id "managerUserId",ca.responsible_user_id "responsibleUserId",ca.object_id "objectId",o.client_company_id "clientId",COALESCE(n.region_id,o.region_id) "regionId",
+          ARRAY[ca.owner_user_id::text,ca.manager_user_id::text,ca.responsible_user_id::text]
             || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
             || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
           ca.stage,ca.workflow_details workflow,ca.planned_start_date::text "plannedStartDate",ca.updated_at::text "updatedAt",n.specialty_id "specialtyId",o.owner_user_id "objectOwnerId",n.source_request_role_id "sourceRequestRoleId"
@@ -56,6 +57,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       if(message) throw new WorkflowError(message);
       const workflow={...current.workflow,...body.workflow};
       const changed=normalizeRecruitingStage(current.stage)!==body.stage;
+      if(body.responsibleUserId!==undefined&&body.responsibleUserId!==current.responsibleUserId){
+        if(body.responsibleUserId){
+          const [membership]=await tx<Array<{id:string}>>`SELECT id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${body.responsibleUserId}::uuid AND status='active' LIMIT 1`;
+          if(!membership)throw new Error("Ответственный сотрудник не найден в организации");
+        }
+        await tx`INSERT INTO candidate_application_assignment_history(organization_id,application_id,from_user_id,to_user_id,reason,changed_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${current.id}::uuid,${current.responsibleUserId}::uuid,${body.responsibleUserId??null}::uuid,${body.reason??null},${actor.userId}::uuid)`;
+      }
       if(body.workflow?.lastContact?.trim() && body.workflow.lastContact!==current.workflow?.lastContact){
         await tx`INSERT INTO candidate_communications(organization_id,candidate_id,application_id,channel,direction,summary,happened_at,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${current.candidateId}::uuid,${current.id}::uuid,'note','internal',${body.workflow.lastContact},now(),${actor.userId}::uuid)`;
@@ -70,7 +79,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       }
       const actualStart=body.stage==="started" && changed?sql`${body.actualStartAt??null}::timestamptz`:sql`actual_start_at`;
       const nextAction=body.nextActionAt===undefined?sql`next_action_at`:sql`${body.nextActionAt??null}::timestamptz`;
-      await tx`UPDATE candidate_applications SET workflow_details=${sql.json(workflow)},planned_start_date=${body.plannedStartDate === undefined?current.plannedStartDate:body.plannedStartDate}::date,stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},rejection_reason_code=${["rejected","no_show"].includes(body.stage)?body.reasonCode??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
+      await tx`UPDATE candidate_applications SET workflow_details=${sql.json(workflow)},responsible_user_id=CASE WHEN ${body.responsibleUserId!==undefined} THEN ${body.responsibleUserId??null}::uuid ELSE responsible_user_id END,planned_start_date=${body.plannedStartDate === undefined?current.plannedStartDate:body.plannedStartDate}::date,stage=${body.stage},next_action_at=${nextAction},rejection_reason=${["rejected","no_show"].includes(body.stage)?body.reason??null:null},rejection_reason_code=${["rejected","no_show"].includes(body.stage)?body.reasonCode??null:null},actual_start_at=${actualStart},manager_decision_at=CASE WHEN ${body.stage} IN ('approved','rejected') THEN now() ELSE manager_decision_at END,updated_at=now() WHERE id=${current.id}::uuid`;
       if(changed) await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,reason_code,changed_by_user_id) VALUES (${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},${body.stage},${body.reason??null},${body.reasonCode??null},${actor.userId}::uuid)`;
 
       let workerId:string|null=null;
