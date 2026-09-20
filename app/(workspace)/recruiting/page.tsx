@@ -10,7 +10,7 @@ export default async function Recruiting({searchParams}:{searchParams:Promise<{n
   const {need,object,specialty,recruiter,source,queue,stage}=isGithubPagesDemo()?{}:await searchParams;
   const [rows,needs,options]=await Promise.all([listRecruitingApplications(actor),listRecruitingNeeds(actor),getRecruitingOptions(actor)]);
   return <>
-    <PageHeader eyebrow="Подбор" title="Воронка подбора" subtitle="Рабочее пространство рекрутера: контакт, интервью, документы, подготовка, выход и удержание." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Воронка"}]}/>
+    <PageHeader eyebrow="Подбор" title="Воронка подбора" subtitle="Работа с кандидатами от первого контакта до первого выхода." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Воронка"}]}/>
     <RecruitingFunnelWorkspace
       rows={rows}
       needs={needs}

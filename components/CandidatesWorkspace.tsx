@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {createPortal} from 'react-dom';
 import {useEffect,useMemo,useState} from 'react';
-import {Download,FileSpreadsheet,Upload,X} from 'lucide-react';
+import {Download,FileSpreadsheet,Filter,Upload,X} from 'lucide-react';
 import type {CandidateDirectoryRow,RecruitingApplicationRow,RecruitingNeedRow,RecruitingOptions} from '@/lib/recruiting/service';
 import {contactChannelLabels,type RecruitingStage} from '@/lib/recruiting/model';
 import {useRecruitingApplications,saveDemoApplication} from '@/lib/recruiting/demo-client';
@@ -167,7 +167,7 @@ export function CandidatesWorkspace({
  }
 
  return <div className="recruiting-workspace candidate-directory candidate-directory-v2">
-  <div className="candidate-directory-actions">
+  <div className="candidate-directory-viewbar">
    <SalesSegments label="Состояние кандидатов" value={bucket} onChange={value=>{setBucket(value);setStage('all')}} items={[
     {value:'new',label:`Новые · ${counts.new}`},
     {value:'recruiting',label:`В подборе · ${counts.recruiting}`},
@@ -177,23 +177,22 @@ export function CandidatesWorkspace({
    <div className="candidate-directory-buttons">{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></div>
   </div>
 
-  <div className="candidate-directory-search">
-   <SalesSearch value={query} onChange={setQuery} placeholder="Найти по ФИО, телефону, email или мессенджеру"/>
-   {searchActive&&<span>Поиск по всей базе, включая сотрудников.</span>}
-  </div>
-
-  <div className="candidate-directory-filters candidate-directory-filters-v2">
-   <select aria-label="Этап" value={stage} onChange={e=>setStage(e.target.value)}><option value="all">Все этапы</option>{stageOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-   <select aria-label="Объект" value={object} onChange={e=>setObject(e.target.value)}><option value="all">Объект: все</option>{objectOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-   <select aria-label="Рекрутер" value={owner} onChange={e=>setOwner(e.target.value)}><option value="all">Ответственный: все</option>{ownerOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-   <select aria-label="Источник" value={source} onChange={e=>setSource(e.target.value)}><option value="all">Источник: все</option>{sourceOptions.map(v=><option key={v} value={v}>{v}</option>)}</select>
-   <button className="button" onClick={()=>{setQuery('');setStage('all');setObject('all');setOwner('all');setSource('all');}}>Сбросить</button>
+  <div className="candidate-directory-filterbar">
+   <div className="candidate-directory-filter-controls">
+    <Filter size={14}/>
+    <select aria-label="Этап" value={stage} onChange={e=>setStage(e.target.value)}><option value="all">Все этапы</option>{stageOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+    <select aria-label="Объект" value={object} onChange={e=>setObject(e.target.value)}><option value="all">Все объекты</option>{objectOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+    <select aria-label="Рекрутер" value={owner} onChange={e=>setOwner(e.target.value)}><option value="all">Все ответственные</option>{ownerOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+    <select aria-label="Источник" value={source} onChange={e=>setSource(e.target.value)}><option value="all">Все источники</option>{sourceOptions.map(v=><option key={v} value={v}>{v}</option>)}</select>
+    <button className="button" onClick={()=>{setQuery('');setStage('all');setObject('all');setOwner('all');setSource('all');}}>Сбросить</button>
+   </div>
+   <SalesSearch value={query} onChange={setQuery} placeholder="ФИО, телефон, email или мессенджер"/>
   </div>
 
   <CandidatePeopleTable rows={filteredPeople} applications={all} demo={demo}/>
   {showImport&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowImport(false)}}>
    <div className="recruiting-modal-card candidate-import-modal">
-    <div className="recruiting-modal-head"><div><h2>Импорт базы кандидатов</h2><p>Загрузите Excel. Система проверит существующие контакты и не создаст новую карточку при точном совпадении телефона, email или мессенджера.</p></div><button className="icon-button" onClick={()=>setShowImport(false)}><X size={17}/></button></div>
+    <div className="recruiting-modal-head"><div><h2>Импорт базы кандидатов</h2><p>Загрузите Excel. Совпадения по контактам будут объединены с существующими карточками.</p></div><button className="icon-button" onClick={()=>setShowImport(false)}><X size={17}/></button></div>
     <div className="candidate-import-body">
      <section className="candidate-import-template"><div><FileSpreadsheet size={20}/><span><strong>Шаблон OPERIS</strong><small>ФИО, телефон, email, город, Telegram, WhatsApp, MAX и предпочтительный канал.</small></span></div><button className="button" onClick={()=>void downloadTemplate()}><Download size={14}/> Скачать .xlsx</button></section>
      <label className="candidate-import-drop"><Upload size={18}/><strong>Выберите Excel-файл</strong><span>.xlsx или .xls · до 1000 строк за загрузку</span><input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void readImportFile(file)}}/></label>

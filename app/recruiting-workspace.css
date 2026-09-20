@@ -1103,3 +1103,49 @@
  .candidate-document-row-actions{justify-content:flex-start}
  .candidate-document-comment-editor{grid-column:auto}
 }
+
+
+/* Recruiting final UI consistency pass — 2026-09-20 */
+.recruiting-funnel-workspace{gap:18px}
+.recruiting-funnel-viewbar,.candidate-directory-viewbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.recruiting-funnel-viewbar>.sales-segments,.candidate-directory-viewbar>.sales-segments{min-width:0}
+.recruiting-funnel-actions,.candidate-directory-buttons{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.recruiting-funnel-filterbar,.candidate-directory-filterbar{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.recruiting-funnel-filter-controls,.candidate-directory-filter-controls{display:flex;align-items:center;gap:8px;flex:1;min-width:0;color:var(--muted)}
+.recruiting-funnel-filter-controls select,.candidate-directory-filter-controls select{min-width:145px;min-height:38px;padding:7px 30px 7px 10px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);font:inherit;font-size:13px}
+.recruiting-funnel-filter-controls select:first-of-type{min-width:220px}
+.recruiting-funnel-filterbar>.sales-search,.candidate-directory-filterbar>.sales-search{flex:0 1 360px;min-width:240px;margin-left:auto}
+.candidate-directory-filter-controls .button{min-height:38px;white-space:nowrap}
+.candidate-directory-v2 .candidate-directory-viewbar{margin-bottom:0}
+.candidate-directory-v2 .candidate-directory-filterbar{margin-top:0}
+
+.candidate-work-stagebar{display:flex;align-items:center;gap:8px;min-height:36px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)}
+.candidate-work-stagebar>span:first-child{font-size:10px;color:var(--muted)}
+.candidate-work-stagebar .status{margin-left:0}
+.candidate-work-stagebar small{margin-left:auto;font-size:9.5px;color:var(--muted);white-space:nowrap}
+.candidate-work-history>header{align-items:center}
+.candidate-action-footer{display:flex;justify-content:flex-end;align-items:center;padding-top:10px}
+.candidate-action-footer .button{min-height:38px}
+
+.candidate-document-meta{align-content:center}
+.candidate-document-meta small{margin-top:3px;color:var(--warn);font-size:9px}
+.candidate-document-blocking{display:inline-flex!important;width:max-content;margin-top:4px;padding:2px 6px;border-radius:999px;background:color-mix(in srgb,var(--warn) 10%,var(--panel));color:var(--warn)!important;font-size:10px!important;font-weight:650}
+.candidate-document-edit-row .candidate-document-copy>span:not(.candidate-document-blocking){font-size:11px;line-height:1.35;color:var(--muted)}
+.candidate-document-row-actions .button.button-quiet{padding-left:8px;padding-right:8px}
+
+@media(max-width:1180px){
+ .recruiting-funnel-filterbar,.candidate-directory-filterbar{align-items:stretch;flex-direction:column}
+ .recruiting-funnel-filter-controls,.candidate-directory-filter-controls{width:100%;flex-wrap:wrap}
+ .recruiting-funnel-filter-controls select,.candidate-directory-filter-controls select{flex:1;min-width:160px}
+ .recruiting-funnel-filterbar>.sales-search,.candidate-directory-filterbar>.sales-search{width:100%;max-width:none;flex:0 0 auto;min-width:0;margin-left:0}
+}
+@media(max-width:760px){
+ .recruiting-funnel-viewbar,.candidate-directory-viewbar{align-items:stretch;flex-direction:column}
+ .recruiting-funnel-viewbar>.sales-segments,.candidate-directory-viewbar>.sales-segments{width:100%}
+ .recruiting-funnel-actions,.candidate-directory-buttons{justify-content:flex-start}
+ .recruiting-funnel-filter-controls,.candidate-directory-filter-controls{display:grid;grid-template-columns:1fr}
+ .recruiting-funnel-filter-controls>svg,.candidate-directory-filter-controls>svg{display:none}
+ .recruiting-funnel-filter-controls select,.candidate-directory-filter-controls select,.recruiting-funnel-filter-controls select:first-of-type{width:100%;min-width:0}
+ .candidate-work-stagebar{align-items:flex-start;flex-wrap:wrap}
+ .candidate-work-stagebar small{width:100%;margin-left:0}
+}
