@@ -80,12 +80,13 @@
 .sales-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:36px 24px;text-align:center;color:var(--muted);background:var(--panel)}
 .sales-empty>svg{color:var(--muted)}.sales-empty strong{font-size:14px;font-weight:600;color:var(--text)}.sales-empty p{max-width:420px;margin:0;font-size:13px;line-height:1.6}
 .sales-workspace .empty-inline,.sales-workspace .commercial-empty{padding:28px 20px;color:var(--muted);text-align:center;font-size:13px}
-.sales-board{display:flex;gap:14px;overflow-x:auto;padding:0 0 18px;scrollbar-width:thin;scroll-snap-type:x proximity;align-items:stretch}
-.sales-board-column{width:272px;min-width:272px;scroll-snap-align:start;background:var(--panel-2);border:1px solid var(--border);border-radius:10px}
-.sales-board-column>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 12px;border-bottom:1px solid var(--border);min-height:60px}
-.sales-board-column>header>b{display:grid;place-items:center;font-size:12px;font-weight:600;min-width:23px;height:23px;border-radius:5px;background:var(--panel-3);color:var(--muted)}
-.sales-board-cards{padding:9px;display:grid;align-content:start;gap:10px;min-height:170px}
-.sales-board-card{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px;transition:border-color .15s,box-shadow .15s}
+.sales-board{display:flex;gap:10px;overflow-x:auto;padding:0 0 12px;scrollbar-width:thin;scroll-snap-type:x proximity;align-items:stretch}
+.sales-board-column{width:272px;min-width:272px;scroll-snap-align:start;background:var(--panel-2);border:1px solid var(--border);border-radius:8px}
+.sales-board-column>header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border);min-height:44px}
+.sales-board-column>header>span,.sales-board-column>header>strong{font-size:13px;font-weight:650;color:var(--text)}
+.sales-board-column>header>b{display:grid;place-items:center;font-size:11px;font-weight:600;min-width:23px;height:23px;border-radius:5px;background:var(--panel-3);color:var(--muted)}
+.sales-board-cards{padding:8px;display:grid;align-content:start;gap:8px;min-height:170px}
+.sales-board-card{border:1px solid var(--border);border-radius:7px;background:var(--panel);padding:11px;transition:border-color .15s,box-shadow .15s}
 .sales-board-card:hover{border-color:var(--border-strong);box-shadow:0 3px 10px #00000009}
 .sales-board-card[draggable=true]{cursor:grab}.sales-board-card[aria-busy=true]{opacity:.6;cursor:progress}
 .sales-card-heading{display:flex;gap:7px;align-items:flex-start}.sales-card-heading>a{flex:1;font-size:14px;font-weight:600;line-height:1.45}.sales-card-heading>a:hover{text-decoration:underline}
@@ -443,3 +444,11 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .tender-deadline-risk>div{min-height:56px;border-right:0;border-bottom:1px solid var(--border)}
   .tender-deadline-risk>div:last-child{border-bottom:0}
 }
+
+
+/* Shared board adapters: requests, tenders and recruiting use one visual grammar. */
+.sales-board.tender-board .tender-board-card{padding:0;overflow:hidden}
+.sales-board.tender-board .tender-board-card>a,
+.sales-board.tender-board .tender-board-static{display:grid;gap:7px;padding:11px;color:inherit;text-decoration:none}
+.sales-board.tender-board .tender-board-stack footer{margin-top:1px}
+.sales-board.tender-board .tender-board-empty{padding:22px 12px}
