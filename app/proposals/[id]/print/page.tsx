@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { getCommercialProposalDetail, proposalPresentation } from "@/lib/commercial/proposal-document";
@@ -5,6 +7,10 @@ import { ProposalPrintButton } from "@/components/ProposalPrintButton";
 import { rub } from "@/lib/ui/format";
 
 const unitLabels:Record<string,string>={hour:"чел./час",shift:"чел./смена",unit:"единица",worker_month:"чел./месяц",project_month:"проект/месяц",project_fixed:"проект",mixed:"сдельно",piece:"за единицу",piecework:"сдельно"};
+
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.proposals.map((id)=>({id})) : [];
+}
 
 export default async function ProposalPrintPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;const actor=await requireActor();const proposal=await getCommercialProposalDetail(actor,id);if(!proposal)notFound();
