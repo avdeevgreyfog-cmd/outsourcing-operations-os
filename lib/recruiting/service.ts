@@ -788,7 +788,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-employment-record",code:"employment_record",name:"Трудовая книжка / СТД",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-military",code:"military_id",name:"Военный билет / документ воинского учёта",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
-      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:true},
+      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
       {id:"demo-doc-medical-book",code:"medical_book",name:"Медицинская книжка",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
       {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск",groupType:"clearance",defaultProvider:"candidate",defaultRequired:false},
       {id:"demo-doc-training",code:"training",name:"Обучение / аттестация",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
