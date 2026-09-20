@@ -10,7 +10,7 @@ const schema=z.object({
   subjectId:z.string().uuid(),
   processCode:z.enum(["tender_participation","tender_bid","tender_submission"]).optional(),
 });
-type SubjectContext={sourceType:"request"|"tender"|"supply_request";sourceId:string;regionId:string|null;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;clientId:string|null;status:string};
+type SubjectContext={sourceType:"request"|"tender"|"supply_request";sourceId:string;regionId:string|null;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;clientId:string|null;status:string;assigneeUserIds?:string[]};
 
 export async function POST(request:Request){
   try{
@@ -55,7 +55,10 @@ export async function POST(request:Request){
         const [row]=await tx<Array<SubjectContext>>`
           SELECT 'supply_request' "sourceType",r.id "sourceId",o.region_id "regionId",r.organization_id "organizationId",
             COALESCE(o.owner_user_id,r.created_by_user_id) "ownerUserId",r.created_by_user_id "createdByUserId",
-            NULL::uuid "teamId",o.client_company_id "clientId",r.status
+            NULL::uuid "teamId",o.client_company_id "clientId",r.status,
+            ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+              WHERE oa.object_id=r.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+              || ARRAY[r.created_by_user_id::text] "assigneeUserIds"
           FROM supply_requests r LEFT JOIN objects o ON o.id=r.object_id
           WHERE r.id=${body.subjectId}::uuid
         `;context=row;
