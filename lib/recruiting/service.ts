@@ -478,7 +478,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"10000000-0000-4000-8000-000000000004",name:"Алексей Волков"},
       {id:"10000000-0000-4000-8000-000000000003",name:"Дмитрий Орлов"},
     ],
-    sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
+    sources: [...new Set(demo.candidates.map((row)=>row.source))].sort((a,b)=>a.localeCompare(b,"ru")),
     sourceCatalog: [
       {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
       {id:"demo-source-hh",code:"hh",name:"hh.ru",kind:"job_site",active:true},
