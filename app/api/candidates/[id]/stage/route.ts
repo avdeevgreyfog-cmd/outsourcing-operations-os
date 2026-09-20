@@ -16,7 +16,7 @@ const schema=z.object({
   expectedUpdatedAt:z.string().optional(),
   plannedStartDate:z.iso.date().nullable().optional(),
   actualStartAt:z.string().datetime().nullable().optional(),
-  workflow:z.object({nextActionText:z.string().trim().max(1000).optional(),plannedShift:z.string().trim().max(240).optional(),confirmed:z.boolean().optional(),readiness:z.boolean().optional(),reviewRecipient:z.string().trim().max(240).optional(),reviewDueAt:z.string().datetime().optional(),reserveReason:z.string().trim().max(500).optional(),lastContact:z.string().trim().max(3000).optional()}).optional(),
+  workflow:z.object({nextActionText:z.string().trim().max(1000).optional(),plannedShift:z.string().trim().max(240).optional(),confirmed:z.boolean().optional(),readiness:z.boolean().optional(),reviewRecipient:z.string().trim().max(240).optional(),reviewDueAt:z.string().datetime().optional(),reserveReason:z.string().trim().max(500).optional(),lastContact:z.string().trim().max(3000).optional(),contactOutcome:z.enum(["interested","callback","no_answer","declined","documents_requested","documents_received","other"]).optional(),travelStatus:z.enum(["not_required","planning","ticket_required","ticket_purchased","travelling","arrived"]).optional(),arrivalDetails:z.string().trim().max(1000).optional()}).optional(),
   reasonCode:z.string().trim().max(80).optional(),
   reason:z.string().trim().max(1000).optional(),
   nextActionAt:z.string().datetime().nullable().optional(),
