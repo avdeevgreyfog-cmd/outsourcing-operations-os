@@ -157,6 +157,27 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         if(!exitReason)throw new Error("Выбранная причина недоступна для этого этапа");
       }
 
+      const milestone=body.stage==="first_shift"?"first_shift":body.stage==="retention_7"?"day7":body.stage==="retention_30"?"day30":null;
+      const leavingEmploymentDocuments=normalizedCurrent==="documents"&&body.stage!=="documents"&&!["rejected","no_show","reserve"].includes(body.stage);
+      if(leavingEmploymentDocuments||milestone){
+        const milestones=leavingEmploymentDocuments?["employment"]:(milestone==="first_shift"?["employment","first_shift"]:milestone==="day7"?["employment","first_shift","day7"]:["employment","first_shift","day7","day30"]);
+        const pending=await tx<Array<{name:string}>>`
+          SELECT dt.name
+          FROM need_document_requirements ndr
+          JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+          LEFT JOIN candidate_documents cd ON cd.candidate_id=${current.candidateId}::uuid AND cd.document_type_id=dt.id
+          LEFT JOIN candidate_application_documents cad ON cad.application_id=${current.id}::uuid AND cad.document_type_id=dt.id
+          WHERE ndr.need_id=${current.needId}::uuid AND ndr.required AND ndr.required_by=ANY(${milestones}::text[])
+            AND (
+              (dt.group_type='employment' AND COALESCE(cd.status,'missing') NOT IN ('received','verified','not_required'))
+              OR
+              (dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required'))
+            )
+          ORDER BY dt.sort_order,dt.name
+        `;
+        if(pending.length)throw new WorkflowError("Не закрыты обязательные документы: "+pending.map(item=>item.name).join(", "));
+      }
+
       const nextAction=body.nextActionAt===undefined?sql`next_action_at`:sql`${body.nextActionAt??null}::timestamptz`;
       const ownerUserId=body.ownerUserId===undefined?sql`owner_user_id`:sql`${body.ownerUserId??null}::uuid`;
       await tx`
