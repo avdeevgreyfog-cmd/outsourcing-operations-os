@@ -175,6 +175,7 @@ export type RecruitingOptions = {
   regions: Array<{id:string;name:string}>;
   objects: Array<{id:string;name:string;regionId:string;region:string}>;
   recruiters: Array<{id:string;name:string}>;
+  responsibles: Array<{id:string;name:string}>;
   sources: string[];
   sourceCatalog: Array<{id:string;name:string;kind:string}>;
   exitReasons: Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>;
@@ -472,6 +473,10 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     ],
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
     recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
+    responsibles: [
+      {id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"},
+      {id:"10000000-0000-4000-8000-000000000004",name:"Дмитрий Волков"},
+    ],
     sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
     sourceCatalog: [
       {id:"demo-source-avito",name:"Авито",kind:"job_board"},
@@ -498,7 +503,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     ],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [specialties,regions,objects,recruiters,sourceCatalog,exitReasons] = await Promise.all([
+    const [specialties,regions,objects,recruiters,responsibles,sourceCatalog,exitReasons] = await Promise.all([
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;regionId:string;region:string}>>`
@@ -530,6 +535,13 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
           AND (${actor.access.allOrg} OR mr.region_id=ANY(${actor.regionIds}::uuid[]) OR m.user_id=${actor.userId}::uuid)
         ORDER BY u.display_name
       `,
+      sql<Array<{id:string;name:string}>>`
+        SELECT DISTINCT m.user_id id,u.display_name name
+        FROM organization_memberships m
+        JOIN app_users u ON u.id=m.user_id
+        WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
+        ORDER BY u.display_name
+      `,
       sql<Array<{id:string;name:string;kind:string}>>`
         SELECT id,name,kind
         FROM candidate_source_catalog
@@ -541,7 +553,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
         WHERE active ORDER BY sort_order,name
       `,
     ]);
-    return {specialties,regions,objects,recruiters,sources:sourceCatalog.map((row)=>row.name),sourceCatalog,exitReasons};
+    return {specialties,regions,objects,recruiters,responsibles,sources:sourceCatalog.map((row)=>row.name),sourceCatalog,exitReasons};
 
   });
 }
