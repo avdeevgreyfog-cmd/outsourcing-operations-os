@@ -92,6 +92,7 @@ export function RecruitingActionDrawer({
     "new:interview":"take_in_work",
     "interview:documents":"interested",
     "documents:clearance":"documents_complete",
+    "documents:preparation":"documents_complete",
     "clearance:preparation":"clearance_complete",
     "preparation:first_shift":"ready_for_start",
   }[row.stage+":"+initialStage]??"";
@@ -294,9 +295,11 @@ export function RecruitingActionDrawer({
   return <SalesDrawer title={row.fullName} subtitle={row.need+" · "+(row.object??"Без объекта")} onClose={()=>{if(!busy)onClose();}}>
     <div className="candidate-work-drawer">
       <section className="candidate-work-identity">
-        <div><span>Телефон</span><strong>{row.phone??"Не указан"}</strong></div>
+        <div><span>{row.stage==="new"?"Телефон":"Связь"}</span><strong>{row.stage==="new"?(row.phone??"Не указан"):preferredContact(row)}</strong></div>
         <div><span>Город</span><strong>{row.city??"Не указан"}</strong></div>
-        <div><span>Источник</span><strong>{[row.source,row.sourceChannel].filter(Boolean).join(" · ")||"Не указан"}</strong></div>
+        {row.stage==="new"
+          ? <div><span>Источник</span><strong>{sourceDisplay(row)}</strong></div>
+          : <div><span>Канал связи</span><strong>{contactChannelLabel(row.preferredChannel)}</strong></div>}
         <div><span>Ответственный</span><strong>{row.owner??"Не назначен"}</strong></div>
       </section>
 
@@ -421,6 +424,16 @@ function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingAppli
     <dl><div><dt>График</dt><dd>{display(c.schedule)}</dd></div><div><dt>Смена</dt><dd>{display(c.shift)}</dd></div><div><dt>Проживание</dt><dd>{provision(c,"housing")}</dd></div><div><dt>Питание</dt><dd>{provision(c,"meals")}</dd></div><div><dt>Проезд</dt><dd>{provision(c,"travel")}</dd></div><div><dt>Развозка</dt><dd>{provision(c,"shuttle")}</dd></div></dl>
   </section>;
 }
+
+function preferredContact(row:RecruitingApplicationRow){
+  if(row.preferredContact)return row.preferredContact;
+  if(row.preferredChannel==="telegram")return row.telegram??row.phone??"Не указан";
+  if(row.preferredChannel==="whatsapp")return row.whatsapp??row.phone??"Не указан";
+  if(row.preferredChannel==="email")return row.email??row.phone??"Не указан";
+  return row.phone??row.email??"Не указан";
+}
+function contactChannelLabel(value:string|null){return value==="telegram"?"Telegram":value==="whatsapp"?"WhatsApp":value==="max"?"MAX":value==="email"?"Email":value==="phone"?"Телефон":"Контакт";}
+function sourceDisplay(row:RecruitingApplicationRow){const source=row.source?.trim()??"";const channel=row.sourceChannel?.trim()??"";return !source&&!channel?"Не указан":source&&channel&&source.toLocaleLowerCase("ru")===channel.toLocaleLowerCase("ru")?source:[source,channel].filter(Boolean).join(" · ");}
 
 function deadlineLabel(value:string){return value==="documents"?"до оформления":value==="preparation"?"до подготовки":value==="first_shift"?"до первого выхода":value==="retention_7"?"до 7-го дня":value==="retention_30"?"до 30-го дня":"без жёсткого срока";}
 function provision(c:Record<string,unknown>,key:string){const explicit=c[key+"Provided"];const detail=display(c[key]);if(explicit===true)return detail==="—"?"Предоставляется":detail;if(explicit===false)return detail==="—"?"Не предоставляется":detail;return detail;}
