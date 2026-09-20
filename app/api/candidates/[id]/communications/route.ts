@@ -7,7 +7,7 @@ import { withTenant } from "@/lib/db/client";
 
 const schema=z.object({
   applicationId:z.string().uuid().nullable().optional(),
-  channel:z.enum(["phone","whatsapp","telegram","email","meeting","note","other"]),
+  channel:z.enum(["phone","whatsapp","telegram","max","email","meeting","note","other"]),
   direction:z.enum(["inbound","outbound","internal"]).default("internal"),
   summary:z.string().trim().min(2).max(3000),
   happenedAt:z.string().datetime().nullable().optional(),
