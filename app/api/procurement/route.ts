@@ -32,6 +32,17 @@ export async function POST(request:Request){
         `;
         if(!object||!canReadRow(actor.access,"procurement.manage",object,actor))throw new AccessDeniedError("procurement.manage");
       }
+      if(body.locationId){
+        const [location]=await tx<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+          SELECT l.organization_id "organizationId",l.object_id "objectId",COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+            ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+              || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds"
+          FROM storage_locations l LEFT JOIN objects o ON o.id=l.object_id
+          WHERE l.id=${body.locationId}::uuid AND l.active
+        `;
+        if(!location||!canReadRow(actor.access,"procurement.manage",{...location,objectId:location.objectId??undefined,ownerUserId:location.ownerUserId??undefined,regionId:location.regionId??undefined},actor))throw new AccessDeniedError("procurement.manage");
+        if(body.objectId&&location.objectId&&location.objectId!==body.objectId)throw new Error("Место получения относится к другому объекту");
+      }
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO supply_requests(organization_id,object_id,request_type,title,description,item_id,location_id,quantity,unit,amount,vendor,needed_by,status,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${body.requestType},${body.title},${body.description??null},${body.itemId??null}::uuid,${body.locationId??null}::uuid,${body.quantity??null},${body.unit??null},${body.amount??null},${body.vendor??null},${body.neededBy??null}::date,'submitted',${actor.userId}::uuid)
