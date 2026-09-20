@@ -39,7 +39,7 @@ export function RecruitingActionDrawer({
   const [code,setCode]=useState(row.rejectionReasonCode??"");
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
-  const [documents,setDocuments]=useState<DocumentRow[]|null>(null);
+  const [documents,setDocuments]=useState<DocumentRow[]|null>(()=>demo&&showDocumentsAtStage(row.stage)?buildDemoDocuments(row):null);
   const risks=workRisks(row);
   const orderedStages=useMemo(()=>(stages?.length?stages:[
     {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
@@ -54,7 +54,7 @@ export function RecruitingActionDrawer({
   const nextStage=orderedStages[Math.min(Math.max(orderedStages.findIndex(x=>x.code===row.stage)+1,0),orderedStages.length-1)]?.code;
 
   useEffect(()=>{
-    if(demo||!["documents","preparation"].includes(row.stage))return;
+    if(demo||!showDocumentsAtStage(row.stage))return;
     let active=true;
     fetch(`/api/candidates/${row.candidateId}/documents?applicationId=${row.applicationId}`)
       .then(async response=>{const body=await response.json();if(!response.ok)throw new Error(body.error);if(active)setDocuments(body.items);})
@@ -175,6 +175,13 @@ export function RecruitingActionDrawer({
       </form>
     </div>
   </SalesDrawer>;
+}
+
+function showDocumentsAtStage(stage:RecruitingStage){return ["documents","preparation","first_shift","retention_7","retention_30"].includes(stage);}
+function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
+  const names=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Медицинские документы"];
+  const received=Math.min(row.documentSummary?.received??0,names.length);
+  return names.map((name,index)=>({documentTypeId:`demo-doc-${index+1}`,name,status:index<received?"received":row.stage==="documents"?"requested":"missing",note:null}));
 }
 
 function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingApplicationRow}){
