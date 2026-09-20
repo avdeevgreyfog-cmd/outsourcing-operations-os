@@ -167,7 +167,7 @@ export default async function RequestPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab } = isGithubPagesDemo() ? {} : await searchParams;
   const requestedTab = rawTab && tabLabels[rawTab] ? rawTab : "overview";
   const actor = await requireActor();
   const canEdit = hasCapability(actor.access, "sales.request.edit");
