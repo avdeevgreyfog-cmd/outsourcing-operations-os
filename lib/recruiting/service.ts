@@ -9,6 +9,39 @@ import { needSourceLabels, normalizeRecruitingStage, recruitingStageLabels, type
 
 export type NeedRecruiterAssignment = { userId: string; name: string; targetCount: number };
 
+export type RecruitingPipelineStage = {
+  stageCode: string;
+  label: string;
+  stageKind: "new_contact"|"interview"|"documents"|"approval"|"preparation"|"first_shift"|"retention"|"custom";
+  sortOrder: number;
+  active: boolean;
+  virtual: boolean;
+  isSystem: boolean;
+};
+
+export type CandidateDocumentChecklistItem = {
+  id: string;
+  applicationId: string;
+  documentName: string;
+  status: "missing"|"requested"|"received"|"verified"|"not_required";
+  required: boolean;
+  note: string | null;
+  sortOrder: number;
+  updatedAt: string;
+};
+
+export type NeedHeadcountChange = {
+  id: string;
+  previousCount: number;
+  newCount: number;
+  delta: number;
+  responsibleUserId: string | null;
+  responsible: string | null;
+  reason: string | null;
+  createdBy: string;
+  createdAt: string;
+};
+
 export type RecruitingNeedRow = {
   id: string;
   organizationId: string;
@@ -35,6 +68,8 @@ export type RecruitingNeedRow = {
   owner: string | null;
   managerUserId: string | null;
   manager: string | null;
+  responsibleUserId: string | null;
+  responsible: string | null;
   assigneeUserIds: string[];
   recruiters: NeedRecruiterAssignment[];
   conditions: Record<string, unknown>;
@@ -45,6 +80,7 @@ export type RecruitingNeedRow = {
   conditionVersion: number;
   stageCounts: Partial<Record<RecruitingStage, number>>;
   funnelReached: Partial<Record<RecruitingStage, number>>;
+  lastHeadcountChange?: NeedHeadcountChange | null;
 };
 
 export type RecruitingApplicationRow = {
@@ -87,6 +123,8 @@ export type RecruitingApplicationRow = {
   rejectionReason: string | null;
   rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
+  documentsReceived: number;
+  documentsRequired: number;
 };
 
 export type CandidateCommunication = {
@@ -129,6 +167,7 @@ export type CandidateProfile = {
   applications: RecruitingApplicationRow[];
   communications: CandidateCommunication[];
   history: CandidateStageEvent[];
+  documents: CandidateDocumentChecklistItem[];
 };
 
 export type RecruitingOptions = {
@@ -137,6 +176,7 @@ export type RecruitingOptions = {
   objects: Array<{id:string;name:string;regionId:string;region:string}>;
   recruiters: Array<{id:string;name:string}>;
   sources: string[];
+  sourceCatalog: Array<{id:string;name:string;kind:string}>;
   exitReasons: Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>;
 };
 
@@ -285,9 +325,10 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       source: row.source ?? null, sourceChannel: row.source ?? null, sourceCampaign: null, sourceReference: null,
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
       object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId: row.ownerUserId ?? null,
-      owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
+      owner: "Ольга Новикова", managerUserId: null, manager: null, responsibleUserId: row.ownerUserId ?? null, responsible: "Ольга Новикова", assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
       rejectionReason: (row as {rejectionReason?:string}).rejectionReason??null, rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null, conditions: need?.conditions ?? {},
+      documentsReceived: stage==="preparation"?2:0, documentsRequired: stage==="preparation"?4:0,
       ...demoApplicationDetails(row,demo.candidates.findIndex(x=>x.id===row.id)),
     };
   });
@@ -303,13 +344,16 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         ca.source_snapshot->>'campaign' "sourceCampaign",ca.source_snapshot->>'reference' "sourceReference",ca.stage "rawStage",ca.need_id "needId",
         COALESCE(n.title,s.name) need,ca.object_id "objectId",o.name object,COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ca.owner_user_id "ownerUserId",owner.display_name owner,ca.manager_user_id "managerUserId",manager.display_name manager,
-        ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
+        ca.responsible_user_id "responsibleUserId",responsible.display_name responsible,
+        ARRAY[ca.owner_user_id::text,ca.manager_user_id::text,ca.responsible_user_id::text]
           || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
           || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
         ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",ca.next_action_at::text "nextActionAt",ca.workflow_details workflow,
         (SELECT max(h.created_at)::text FROM candidate_stage_history h WHERE h.application_id=ca.id) "stageEnteredAt",
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
-        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions
+        ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
+        (SELECT count(*)::int FROM candidate_application_documents d WHERE d.application_id=ca.id AND d.required AND d.status IN ('received','verified')) "documentsReceived",
+        (SELECT count(*)::int FROM candidate_application_documents d WHERE d.application_id=ca.id AND d.required AND d.status<>'not_required') "documentsRequired"
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
       JOIN needs n ON n.id=ca.need_id
@@ -317,6 +361,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
       LEFT JOIN objects o ON o.id=ca.object_id
       LEFT JOIN app_users owner ON owner.id=ca.owner_user_id
       LEFT JOIN app_users manager ON manager.id=ca.manager_user_id
+      LEFT JOIN app_users responsible ON responsible.id=ca.responsible_user_id
       ORDER BY ca.updated_at DESC
     `;
     return rows.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row) => {
@@ -336,16 +381,17 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
     sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:null, status:"active", applications,
     communications: [], history: applications.map((application, index) => ({id:`demo-history-${index}`,applicationId:application.applicationId,fromStage:null,toStage:application.stage,reason:null,reasonCode:null,changedAt:"Демо",changedBy:"Ольга Новикова"})),
+    documents: [],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history">>>`
+    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"documents">>>`
       SELECT id,full_name "fullName",phone,email,preferred_channel "preferredChannel",telegram,whatsapp,city,birth_date::text "birthDate",
         source,source_channel "sourceChannel",source_campaign "sourceCampaign",source_reference "sourceReference",notes,status
       FROM candidates WHERE id=${id}::uuid
     `;
     if (!candidate) return null;
     const applicationIds = applications.map((application) => application.applicationId);
-    const [communications, history] = await Promise.all([
+    const [communications, history, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
         SELECT cc.id,cc.application_id "applicationId",cc.channel,cc.direction,cc.summary,
           to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') "happenedAt",u.display_name author
@@ -358,9 +404,38 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         FROM candidate_stage_history h JOIN app_users u ON u.id=h.changed_by_user_id
         WHERE h.application_id=ANY(${applicationIds}::uuid[]) ORDER BY h.created_at DESC LIMIT 100
       `,
+      sql<CandidateDocumentChecklistItem[]>`
+        SELECT d.id,d.application_id "applicationId",d.document_name "documentName",d.status,d.required,d.note,d.sort_order "sortOrder",
+          to_char(d.updated_at,'DD.MM.YYYY HH24:MI') "updatedAt"
+        FROM candidate_application_documents d
+        WHERE d.application_id=ANY(${applicationIds}::uuid[])
+        ORDER BY d.application_id,d.sort_order,d.document_name
+      `,
     ]);
-    return {...candidate, applications, communications, history};
+    return {...candidate, applications, communications, history, documents};
   });
+}
+
+
+export async function getRecruitingPipeline(actor: Actor): Promise<RecruitingPipelineStage[]> {
+  requireCapability(actor,"recruiting.candidate.read");
+  if(actor.demo) return [
+    {stageCode:"new",label:"Новый контакт",stageKind:"new_contact",sortOrder:10,active:true,virtual:false,isSystem:true},
+    {stageCode:"contact",label:"Интервью",stageKind:"interview",sortOrder:20,active:true,virtual:false,isSystem:true},
+    {stageCode:"interview",label:"Документы",stageKind:"documents",sortOrder:30,active:true,virtual:false,isSystem:true},
+    {stageCode:"manager_review",label:"Согласование",stageKind:"approval",sortOrder:35,active:false,virtual:false,isSystem:true},
+    {stageCode:"approved",label:"Согласован",stageKind:"approval",sortOrder:36,active:false,virtual:false,isSystem:true},
+    {stageCode:"preparation",label:"Подготовка к выходу",stageKind:"preparation",sortOrder:40,active:true,virtual:false,isSystem:true},
+    {stageCode:"ready",label:"Готов к выходу",stageKind:"preparation",sortOrder:45,active:false,virtual:false,isSystem:true},
+    {stageCode:"started",label:"Первый выход",stageKind:"first_shift",sortOrder:50,active:true,virtual:false,isSystem:true},
+    {stageCode:"retention_7",label:"7 дней",stageKind:"retention",sortOrder:60,active:true,virtual:true,isSystem:true},
+    {stageCode:"retention_30",label:"30 дней",stageKind:"retention",sortOrder:70,active:true,virtual:true,isSystem:true},
+  ];
+  return withTenant(actor.organizationId,actor.userId,async sql=>sql<RecruitingPipelineStage[]>`
+    SELECT stage_code "stageCode",label,stage_kind "stageKind",sort_order "sortOrder",active,virtual,is_system "isSystem"
+    FROM recruiting_pipeline_stage_settings
+    ORDER BY sort_order,created_at
+  `);
 }
 
 export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOptions> {
@@ -378,6 +453,13 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
     recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
     sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
+    sourceCatalog: [
+      {id:"demo-source-avito",name:"Авито",kind:"job_board"},
+      {id:"demo-source-hh",name:"hh.ru",kind:"job_board"},
+      {id:"demo-source-telegram",name:"Telegram",kind:"messenger"},
+      {id:"demo-source-referral",name:"Рекомендация",kind:"referral"},
+      {id:"demo-source-partner",name:"Партнёр / агентство",kind:"partner"},
+    ],
     exitReasons: [
       {code:"pay",name:"Не устроила зарплата",kind:"rejected"},
       {code:"schedule",name:"Не устроил график",kind:"rejected"},
@@ -396,7 +478,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     ],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [specialties,regions,objects,recruiters,sources,exitReasons] = await Promise.all([
+    const [specialties,regions,objects,recruiters,sourceCatalog,exitReasons] = await Promise.all([
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;regionId:string;region:string}>>`
@@ -428,18 +510,18 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
           AND (${actor.access.allOrg} OR mr.region_id=ANY(${actor.regionIds}::uuid[]) OR m.user_id=${actor.userId}::uuid)
         ORDER BY u.display_name
       `,
-      sql<Array<{source:string}>>`
-        SELECT DISTINCT c.source
-        FROM candidates c
-        WHERE c.source IS NOT NULL AND btrim(c.source)<>''
-        ORDER BY c.source
+      sql<Array<{id:string;name:string;kind:string}>>`
+        SELECT id,name,kind
+        FROM candidate_source_catalog
+        WHERE active
+        ORDER BY sort_order,name
       `,
       sql<Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>>`
         SELECT code,name,kind FROM candidate_exit_reasons
         WHERE active ORDER BY sort_order,name
       `,
     ]);
-    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source),exitReasons};
+    return {specialties,regions,objects,recruiters,sources:sourceCatalog.map((row)=>row.name),sourceCatalog,exitReasons};
 
   });
 }
