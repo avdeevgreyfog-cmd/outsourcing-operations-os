@@ -22,6 +22,30 @@ UPDATE recruiting_document_types
 SET default_required=true
 WHERE code IN ('passport','snils','inn','bank_details','employment_record','military_id');
 
+UPDATE recruiting_document_types
+SET default_required=false
+WHERE group_type='clearance';
+
+-- Preserve explicitly configured historical needs. Only needs with no employment
+-- requirements receive the current organization baseline automatically.
+INSERT INTO need_document_requirements(
+  organization_id,need_id,document_type_id,required,provider,required_by_stage,blocks_progress
+)
+SELECT n.organization_id,n.id,dt.id,true,dt.default_provider,'documents',true
+FROM needs n
+JOIN recruiting_document_types dt
+  ON dt.organization_id=n.organization_id
+ AND dt.active
+ AND dt.group_type='employment'
+ AND dt.default_required
+WHERE NOT EXISTS(
+  SELECT 1
+  FROM need_document_requirements existing
+  JOIN recruiting_document_types edt ON edt.id=existing.document_type_id
+  WHERE existing.need_id=n.id AND existing.required AND edt.group_type='employment'
+)
+ON CONFLICT(need_id,document_type_id) DO NOTHING;
+
 ALTER TABLE need_document_requirements
   ADD COLUMN IF NOT EXISTS required_by_stage text NOT NULL DEFAULT 'first_shift',
   ADD COLUMN IF NOT EXISTS blocks_progress boolean NOT NULL DEFAULT true;
