@@ -72,13 +72,15 @@ async function syncDocumentTask(tx:Sql,actor:{organizationId:string;userId:strin
     if(existing)await tx`UPDATE tasks SET status=${done?"done":"cancelled"},updated_at=now() WHERE id=${existing.id}::uuid`;
     return;
   }
-  const [membership]=await tx<Array<{id:string}>>`SELECT id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${responsibleUserId}::uuid AND status='active'`;
+  const assigneeUserId=responsibleUserId as string;
+  const deadline=dueAt as string;
+  const [membership]=await tx<Array<{id:string}>>`SELECT id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${assigneeUserId}::uuid AND status='active'`;
   if(!membership)throw new Error("Ответственный по документу не является активным сотрудником организации");
   const title=`Подготовить документ: ${documentName}`;
-  if(existing)await tx`UPDATE tasks SET title=${title},status=${done?"done":"open"},priority='high',assignee_user_id=${responsibleUserId}::uuid,due_at=${dueAt}::timestamptz,updated_at=now() WHERE id=${existing.id}::uuid`;
+  if(existing)await tx`UPDATE tasks SET title=${title},status=${done?"done":"open"},priority='high',assignee_user_id=${assigneeUserId}::uuid,due_at=${deadline}::timestamptz,updated_at=now() WHERE id=${existing.id}::uuid`;
   else await tx`
     INSERT INTO tasks(organization_id,title,status,priority,assignee_user_id,due_at,entity_type,entity_id,checklist_json,created_by_user_id)
-    VALUES(${actor.organizationId}::uuid,${title},${done?"done":"open"},'high',${responsibleUserId}::uuid,${dueAt}::timestamptz,'candidate_application',${row.id}::uuid,
+    VALUES(${actor.organizationId}::uuid,${title},${done?"done":"open"},'high',${assigneeUserId}::uuid,${deadline}::timestamptz,'candidate_application',${row.id}::uuid,
       ${tx.json({kind,documentTypeId,candidateId:row.candidateId})},${actor.userId}::uuid)
   `;
 }
