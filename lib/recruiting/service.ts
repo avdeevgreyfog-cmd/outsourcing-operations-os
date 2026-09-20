@@ -152,6 +152,13 @@ export type RecruitingOptions = {
 
 
 const recruitingStageOrder: RecruitingStage[]=["new","interview","documents","preparation","first_shift","retention_7","retention_30"];
+const demoUserNames:Record<string,string>={
+  "10000000-0000-4000-8000-000000000003":"Дмитрий Орлов",
+  "10000000-0000-4000-8000-000000000004":"Алексей Волков",
+  "10000000-0000-4000-8000-000000000005":"Ольга Новикова",
+};
+const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical"];
+
 function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
   return recruitingStageOrder.reduce<Partial<Record<RecruitingStage,number>>>((acc,stage,index)=>{
     acc[stage]=stages.filter(value=>{const normalizedIndex=recruitingStageOrder.indexOf(value);return normalizedIndex>=index}).length;
@@ -181,7 +188,19 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
       approved: related.filter((candidate) => ["documents","preparation","first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length,
-      ready, started, conditionVersion: 1, quantityHistory:[], requiredDocumentTypeIds:[],
+      ready, started, conditionVersion: 2,
+      quantityHistory: row.specialty==="Комплектовщик"
+        ? [
+            {id:`demo-qty-${row.id}-2`,oldCount:16,newCount:row.required,delta:row.required-16,reason:"Заказчик расширил заявку после запуска",changedAt:"18.09.2026 11:20",changedBy:"Алексей Волков"},
+            {id:`demo-qty-${row.id}-1`,oldCount:null,newCount:16,delta:16,reason:"Исходный объём потребности",changedAt:"02.09.2026 09:10",changedBy:"Алексей Волков"},
+          ]
+        : row.specialty==="Сборщик мебели"
+          ? [
+              {id:`demo-qty-${row.id}-2`,oldCount:3,newCount:row.required,delta:row.required-3,reason:"Добавлены дополнительные места на объекте",changedAt:"17.09.2026 16:40",changedBy:"Дмитрий Орлов"},
+              {id:`demo-qty-${row.id}-1`,oldCount:null,newCount:3,delta:3,reason:"Исходный объём потребности",changedAt:"04.09.2026 10:00",changedBy:"Дмитрий Орлов"},
+            ]
+          : [{id:`demo-qty-${row.id}-1`,oldCount:null,newCount:row.required,delta:row.required,reason:"Исходный объём потребности",changedAt:"03.09.2026 10:30",changedBy:"Алексей Волков"}],
+      requiredDocumentTypeIds:demoDocumentIds,
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
@@ -307,19 +326,27 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
 }
 
 function demoApplications(actor: Actor): RecruitingApplicationRow[] {
-  return demo.candidates.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row) => {
+  return demo.candidates.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row,index) => {
+    const seed=row as typeof row & {
+      email?:string|null;preferredChannel?:string|null;telegram?:string|null;whatsapp?:string|null;city?:string|null;
+      sourceChannel?:string|null;sourceCampaign?:string|null;sourceReference?:string|null;rejectionReason?:string;rejectionReasonCode?:string;
+    };
     const stage = normalizeRecruitingStage(row.stage);
     const need = demo.needs.find((item) => item.objectId === row.objectId && item.specialty === row.need);
+    const ownerUserId=row.ownerUserId??null;
+    const owner=ownerUserId?demoUserNames[ownerUserId]??"Сотрудник":null;
+    const managerUserId=ownerUserId&&ownerUserId!=="10000000-0000-4000-8000-000000000005"?ownerUserId:null;
     return {
       applicationId: `demo-application-${row.id}`, candidateId: row.id, organizationId: row.organizationId,
-      fullName: row.fullName, phone: row.phone ?? null, email: null, preferredChannel: "phone", telegram: null, whatsapp: null, city: null,
-      source: row.source ?? null, sourceChannel: row.source ?? null, sourceCampaign: null, sourceReference: null,
+      fullName: row.fullName, phone: row.phone ?? null, email: seed.email??null, preferredChannel: seed.preferredChannel??"phone",
+      telegram:seed.telegram??null,whatsapp:seed.whatsapp??null,city:seed.city??null,
+      source: row.source ?? null, sourceChannel:seed.sourceChannel??row.source??null, sourceCampaign:seed.sourceCampaign??null, sourceReference:seed.sourceReference??null,
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
-      object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId: row.ownerUserId ?? null,
-      owner: "Ольга Новикова", managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [],
+      object: row.object ?? null, regionId: row.regionId ?? null, clientId: row.clientId ?? null, ownerUserId,
+      owner, managerUserId, manager:managerUserId?owner:null, assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: ["first_shift","retention_7","retention_30"].includes(stage) ? "2026-09-12" : null,
-      rejectionReason: (row as {rejectionReason?:string}).rejectionReason??null, rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null, conditions: need?.conditions ?? {},
-      ...demoApplicationDetails(row,demo.candidates.findIndex(x=>x.id===row.id)),
+      rejectionReason: seed.rejectionReason??null, rejectionReasonCode:seed.rejectionReasonCode??null, conditions: need?.conditions ?? {},
+      ...demoApplicationDetails(row,index),
     };
   });
 }
@@ -376,12 +403,37 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
   const applications = (await listRecruitingApplications(actor)).filter((row) => row.candidateId === id);
   if (!applications.length) return null;
   const first = applications[0];
-  if (actor.demo) return {
-    id, fullName:first.fullName, phone:first.phone, email:first.email, preferredChannel:first.preferredChannel, telegram:first.telegram,
-    whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
-    sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:null, status:"active", applications,
-    communications: [], history: applications.map((application, index) => ({id:`demo-history-${index}`,applicationId:application.applicationId,fromStage:null,toStage:application.stage,reason:null,reasonCode:null,changedAt:"Демо",changedBy:"Ольга Новикова"})),
-  };
+  if (actor.demo) {
+    const communications=applications.flatMap((application)=>(
+      application.recentCommunications??[]
+    ).map((item,index)=>({
+      id:item.id||`demo-communication-${application.applicationId}-${index}`,
+      applicationId:application.applicationId,
+      channel:item.channel,
+      direction:"outbound",
+      summary:item.summary,
+      happenedAt:item.happenedAt,
+      author:item.author,
+    })));
+    const history=applications.flatMap((application)=>(application.stageEvents??[]).map((item,index)=>({
+      id:`demo-history-${application.applicationId}-${index}`,
+      applicationId:application.applicationId,
+      fromStage:item.fromStage??null,
+      toStage:item.toStage,
+      reason:item.reason??null,
+      reasonCode:item.reasonCode??null,
+      changedAt:new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"}).format(new Date(item.createdAt)),
+      changedBy:application.owner??"Ольга Новикова",
+    })));
+    const status=applications.some(application=>["first_shift","retention_7","retention_30"].includes(application.stage))?"worker":applications.every(application=>["rejected","no_show"].includes(application.stage))?"inactive":"active";
+    return {
+      id, fullName:first.fullName, phone:first.phone, email:first.email, preferredChannel:first.preferredChannel, telegram:first.telegram,
+      whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
+      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status, applications,
+      communications:communications.sort((a,b)=>b.happenedAt.localeCompare(a.happenedAt)),
+      history:history.reverse(),
+    };
+  }
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history">>>`
       SELECT id,full_name "fullName",phone,email,preferred_channel "preferredChannel",telegram,whatsapp,city,birth_date::text "birthDate",
@@ -421,7 +473,11 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"30000000-0000-4000-8000-000000000002",name:"Калужская область"},
     ],
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
-    recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
+    recruiters: [
+      {id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"},
+      {id:"10000000-0000-4000-8000-000000000004",name:"Алексей Волков"},
+      {id:"10000000-0000-4000-8000-000000000003",name:"Дмитрий Орлов"},
+    ],
     sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
     sourceCatalog: [
       {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
