@@ -460,14 +460,74 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         ),'[]'::jsonb) "recentCommunications",
         jsonb_build_object(
           'required',(SELECT count(*)::int FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required),
-          'received',(SELECT count(*)::int FROM need_document_requirements ndr LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')),
-          'missing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')),'[]'::jsonb),
-          'employmentRequired',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'),
-          'employmentReady',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment' AND COALESCE(cad.status,'missing') IN ('received','verified','ready')),
-          'employmentMissing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment' AND COALESCE(cad.status,'missing') NOT IN ('received','verified','ready','not_required')),'[]'::jsonb),
-          'clearanceRequired',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'),
-          'clearanceReady',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')),
-          'clearancePending',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')),'[]'::jsonb)
+          'received',(
+            SELECT count(*)::int
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required
+              AND CASE WHEN dt.group_type='employment'
+                THEN COALESCE(cd.status,cad.status,'missing')
+                ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
+              END IN ('received','verified','ready')
+          ),
+          'missing',COALESCE((
+            SELECT jsonb_agg(dt.name ORDER BY dt.sort_order)
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required
+              AND CASE WHEN dt.group_type='employment'
+                THEN COALESCE(cd.status,cad.status,'missing')
+                ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
+              END NOT IN ('received','verified','ready','not_required')
+          ),'[]'::jsonb),
+          'employmentRequired',(
+            SELECT count(*)::int FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'
+          ),
+          'employmentReady',(
+            SELECT count(*)::int
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'
+              AND COALESCE(cd.status,cad.status,'missing') IN ('received','verified','ready')
+          ),
+          'employmentMissing',COALESCE((
+            SELECT jsonb_agg(dt.name ORDER BY dt.sort_order)
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'
+              AND COALESCE(cd.status,cad.status,'missing') NOT IN ('received','verified','ready','not_required')
+          ),'[]'::jsonb),
+          'clearanceRequired',(
+            SELECT count(*)::int FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'
+          ),
+          'clearanceReady',(
+            SELECT count(*)::int
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'
+              AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')
+          ),
+          'clearancePending',COALESCE((
+            SELECT jsonb_agg(dt.name ORDER BY dt.sort_order)
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'
+              AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')
+          ),'[]'::jsonb)
         ) "documentSummary"
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
