@@ -83,7 +83,14 @@ export function RecruitingActionDrawer({
   onSaved?:()=>void;
 }){
   const router=useRouter();
-  const [action,setAction]=useState("");
+  const impliedAction=initialStage===undefined?"":{
+    "new:interview":"take_in_work",
+    "interview:documents":"interested",
+    "documents:clearance":"documents_complete",
+    "clearance:preparation":"clearance_complete",
+    "preparation:first_shift":"ready_for_start",
+  }[row.stage+":"+initialStage]??"";
+  const [action,setAction]=useState(impliedAction);
   const [ownerUserId,setOwnerUserId]=useState(row.ownerUserId??"");
   const [comment,setComment]=useState("");
   const [nextAt,setNextAt]=useState(localDate(row.nextActionAt));
@@ -143,11 +150,11 @@ export function RecruitingActionDrawer({
     let reasonValue:string|undefined;
     const workflow={...row.workflow,actionCode:action,additionalComment:comment.trim()||undefined};
 
-    if(action==="take_in_work"){targetStage="interview";workflow.outcomeCode="taken_in_work";nextAction=null;}
+    if(action==="take_in_work"){if(!ownerUserId)throw new Error("Назначьте ответственного за контакт.");targetStage="interview";workflow.outcomeCode="taken_in_work";nextAction=null;}
     if(action==="invalid_contact"){targetStage="rejected";reasonValue="invalid_contact";reason="Некорректный контакт";workflow.outcomeCode="invalid_contact";}
     if(action==="duplicate"){targetStage="rejected";reasonValue="duplicate";reason="Дубликат контакта";workflow.outcomeCode="duplicate";}
 
-    if(action==="interested"){targetStage="documents";workflow.outcomeCode="interested";workflow.managerInterviewState="not_required";}
+    if(action==="interested"){targetStage="documents";workflow.outcomeCode="interested";workflow.managerInterviewState=row.workflow?.managerInterviewState==="pending"?"completed":"not_required";}
     if(action==="callback"){targetStage="interview";workflow.outcomeCode="callback";nextAction=requireNext();}
     if(action==="no_answer"){targetStage="interview";workflow.outcomeCode="no_answer";workflow.contactAttempts=(row.workflow?.contactAttempts??0)+1;nextAction=requireNext();}
     if(action==="manager_interview"){
@@ -297,7 +304,7 @@ export function RecruitingActionDrawer({
           <div className="candidate-action-grid">{(stageActions[row.stage]??[]).map(option=><button type="button" key={option.code} className={"candidate-action-choice "+(action===option.code?"active ":"")+(option.tone==="danger"?"danger":"")} onClick={()=>{setAction(option.code);setError("")}} disabled={!canEdit}><strong>{option.label}</strong><small>{option.hint}</small></button>)}</div>
 
           <div className="candidate-action-fields">
-            {recruiters.length>0&&row.stage==="new"&&<label>Ответственный<select value={ownerUserId} onChange={e=>setOwnerUserId(e.target.value)}><option value="">Не назначен</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+            {recruiters.length>0&&<label>Текущий ответственный<select value={ownerUserId} onChange={e=>setOwnerUserId(e.target.value)}><option value="">Не назначен</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
 
             {["callback","no_answer","manager_interview","documents_wait","clearance_progress"].includes(action)&&<label>Когда вернуться к кандидату<input type="datetime-local" value={nextAt} onChange={e=>setNextAt(e.target.value)}/></label>}
             {action==="manager_interview"&&<label>Кто проводит дополнительное интервью<select value={managerInterviewUserId} onChange={e=>setManagerInterviewUserId(e.target.value)}><option value="">Выберите</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
