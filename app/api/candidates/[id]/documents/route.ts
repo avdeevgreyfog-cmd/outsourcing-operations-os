@@ -5,10 +5,11 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
+const status=z.enum(["missing","requested","received","verified","rejected","not_required","to_prepare","in_progress","ready"]);
 const patchSchema=z.object({
   applicationId:z.string().uuid(),
   documentTypeId:z.string().uuid(),
-  status:z.enum(["missing","requested","received","verified","rejected","not_required"]),
+  status,
   note:z.string().trim().max(1000).nullable().optional(),
 });
 
@@ -28,14 +29,15 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         WHERE ca.id=${applicationId}::uuid AND ca.candidate_id=${id}::uuid
       `;
       if(!row||!canReadRow(actor.access,"recruiting.candidate.read",row,actor))throw new AccessDeniedError("recruiting.candidate.read");
-      return sql<Array<{documentTypeId:string;name:string;status:string;note:string|null}>>`
-        SELECT dt.id "documentTypeId",dt.name,COALESCE(cad.status,'missing') status,cad.note
+      return sql<Array<{documentTypeId:string;name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client";status:string;note:string|null}>>`
+        SELECT dt.id "documentTypeId",dt.name,dt.group_type "groupType",ndr.provider,
+          COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) status,cad.note
         FROM need_document_requirements ndr
         JOIN candidate_applications ca ON ca.need_id=ndr.need_id AND ca.id=${applicationId}::uuid
         JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
         LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
         WHERE ndr.required
-        ORDER BY dt.sort_order,dt.name
+        ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,dt.name
       `;
     });
     return NextResponse.json({items});
@@ -49,7 +51,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется вход в систему"},{status:401});
     requireCapability(actor,"recruiting.candidate.edit");
-    if(actor.demo)return NextResponse.json({error:"В демонстрационном режиме документы не сохраняются"},{status:409});
+    if(actor.demo)return NextResponse.json({error:"В демонстрационном режиме документы сохраняются локально"},{status:409});
     const {id}=await params;const body=patchSchema.parse(await request.json());
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [row]=await tx<Array<{id:string;candidateId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
@@ -60,6 +62,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         WHERE ca.id=${body.applicationId}::uuid AND ca.candidate_id=${id}::uuid
       `;
       if(!row||!canReadRow(actor.access,"recruiting.candidate.edit",row,actor))throw new AccessDeniedError("recruiting.candidate.edit");
+      const [requirement]=await tx<Array<{provider:string;name:string}>>`
+        SELECT ndr.provider,dt.name FROM candidate_applications ca
+        JOIN need_document_requirements ndr ON ndr.need_id=ca.need_id AND ndr.document_type_id=${body.documentTypeId}::uuid
+        JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+        WHERE ca.id=${body.applicationId}::uuid AND ndr.required
+      `;
+      if(!requirement)throw new Error("Документ не входит в требования потребности");
       await tx`
         INSERT INTO candidate_application_documents(organization_id,application_id,document_type_id,status,note,updated_by_user_id)
         VALUES(${actor.organizationId}::uuid,${body.applicationId}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${actor.userId}::uuid)
@@ -67,13 +76,15 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       `;
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${id}::uuid,'document_updated','Обновлён статус документа кандидата',${sql.json({applicationId:body.applicationId,documentTypeId:body.documentTypeId,status:body.status})})
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${id}::uuid,'document_updated',
+          ${`Документ «${requirement.name}»: ${body.status}`},
+          ${sql.json({applicationId:body.applicationId,documentTypeId:body.documentTypeId,status:body.status,provider:requirement.provider})})
       `;
     }));
     return NextResponse.json({ok:true});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте статус документа",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:"Не удалось сохранить документ"},{status:500});
+    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось сохранить документ"},{status:500});
   }
 }

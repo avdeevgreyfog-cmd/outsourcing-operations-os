@@ -4,14 +4,14 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
-const stageCode=z.enum(["new","interview","documents","preparation","first_shift","retention_7","retention_30"]);
+const stageCode=z.enum(["new","interview","documents","clearance","preparation","first_shift","retention_7","retention_30"]);
 const patchSchema=z.object({
   stages:z.array(z.object({
     code:stageCode,
     label:z.string().trim().min(1).max(80),
     sortOrder:z.number().int().min(0).max(999),
     active:z.boolean(),
-  })).length(7),
+  })).length(8),
 });
 
 export async function GET(){
@@ -40,7 +40,7 @@ export async function PATCH(request:Request){
     if(actor.demo)return NextResponse.json({error:"В демонстрационном режиме настройки не сохраняются"},{status:409});
     const body=patchSchema.parse(await request.json());
     const uniqueCodes=new Set(body.stages.map(item=>item.code));
-    if(uniqueCodes.size!==7)return NextResponse.json({error:"Набор этапов неполный"},{status:400});
+    if(uniqueCodes.size!==8)return NextResponse.json({error:"Набор этапов неполный"},{status:400});
     if(!body.stages.find(item=>item.code==="new")?.active)return NextResponse.json({error:"Этап входящего контакта нельзя отключить"},{status:400});
     if(!body.stages.find(item=>item.code==="first_shift")?.active)return NextResponse.json({error:"Этап первого выхода нельзя отключить"},{status:400});
     await withTenant(actor.organizationId,actor.userId,sql=>sql.begin(async tx=>{

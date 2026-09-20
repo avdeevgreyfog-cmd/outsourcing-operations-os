@@ -14,6 +14,10 @@ const schema = z.object({
   sourceKind: z.enum(["object","manual","replacement","reserve","other"]).default("manual"),
   priority: z.enum(["low","normal","high","critical"]).default("normal"),
   documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
+  documentRequirements: z.array(z.object({
+    documentTypeId:z.string().uuid(),
+    provider:z.enum(["candidate","company","client"]),
+  })).max(50).optional(),
   conditions: z.object({
     location: z.string().trim().max(500).nullable().optional(),
     schedule: z.string().trim().max(1000).nullable().optional(),
@@ -96,14 +100,20 @@ export async function POST(request: Request) {
         INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id)
         VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${recruiterId}::uuid,${recruiterTeamId}::uuid,${body.countRequired},${actor.userId}::uuid)
       `;
-      if(body.documentTypeIds?.length){
-        const unique=[...new Set(body.documentTypeIds)];
-        const valid=await tx<Array<{id:string}>>`SELECT id FROM recruiting_document_types WHERE id=ANY(${unique}::uuid[]) AND active`;
-        if(valid.length!==unique.length)throw new Error("Один из типов документов недоступен");
-        for(const documentTypeId of unique){
+      const requestedDocs=body.documentRequirements?.length
+        ? body.documentRequirements
+        : (body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const}));
+      if(requestedDocs.length){
+        const ids=[...new Set(requestedDocs.map(item=>item.documentTypeId))];
+        if(ids.length!==requestedDocs.length)throw new Error("Документ указан несколько раз");
+        const valid=await tx<Array<{id:string;defaultProvider:"candidate"|"company"|"client"}>>`
+          SELECT id,default_provider "defaultProvider" FROM recruiting_document_types WHERE id=ANY(${ids}::uuid[]) AND active
+        `;
+        if(valid.length!==ids.length)throw new Error("Один из типов документов недоступен");
+        for(const requirement of requestedDocs){
           await tx`
-            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required)
-            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${documentTypeId}::uuid,true)
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider)
+            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider})
           `;
         }
       }

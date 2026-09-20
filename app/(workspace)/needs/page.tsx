@@ -33,9 +33,10 @@ export default async function Needs({searchParams}:{searchParams:Promise<SearchP
   const canCreate=hasCapability(actor.access,"operations.need.create");
   const canManage=hasCapability(actor.access,"operations.need.edit");
   const canConfigureAnalytics=hasCapability(actor.access,"recruiting.analytics.configure");
+  const canManageDocuments=hasCapability(actor.access,"recruiting.documents.manage");
   const initialView=params.view==="analytics"?"analytics":params.view==="needs"?"needs":"objects";
   return <>
     <PageHeader eyebrow="Подбор" title="Потребности" subtitle="Рабочий центр подбора: объекты, дефицит персонала, ответственные, кандидаты и готовность к выходу." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]}/>
-    <RecruitingNeedsWorkspace applications={applications} rows={rows} options={options} analytics={analytics} metricPreferences={metricPreferences} initialView={initialView} canCreate={canCreate} canManage={canManage} canConfigureAnalytics={canConfigureAnalytics} demo={actor.demo}/>
+    <RecruitingNeedsWorkspace applications={applications} rows={rows} options={options} analytics={analytics} metricPreferences={metricPreferences} initialView={initialView} canCreate={canCreate} canManage={canManage} canConfigureAnalytics={canConfigureAnalytics} canManageDocuments={canManageDocuments} demo={actor.demo}/>
   </>;
 }

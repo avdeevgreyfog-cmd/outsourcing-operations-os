@@ -43,7 +43,7 @@ export const needs = [
 ];
 
 const candidateStageLabels: Record<string,string> = {
- new:"Новый контакт",interview:"Интервью",documents:"Документы",preparation:"Подготовка к выходу",
+ new:"Новый контакт",interview:"Интервью",documents:"Документы для оформления",clearance:"Оформление и допуски",preparation:"Подготовка к выходу",
  first_shift:"Первый выход",retention_7:"7 дней",retention_30:"30 дней",rejected:"Отказ",no_show:"Не вышел",reserve:"Резерв",
 };
 
@@ -72,11 +72,11 @@ const demoCandidateBlueprints = [
  {name:"Георгий Мельников",stage:"documents",need:2,source:"Авито",city:"Калуга",channel:"whatsapp"},
  {name:"Станислав Прохоров",stage:"documents",need:0,source:"hh.ru",city:"Тула",channel:"phone"},
  {name:"Артур Киселёв",stage:"documents",need:1,source:"Авито",city:"Липецк",channel:"phone"},
- {name:"Виталий Савельев",stage:"documents",need:2,source:"ООО «Регион Персонал»",city:"Курск",channel:"whatsapp"},
- {name:"Данила Фролов",stage:"documents",need:0,source:"Telegram",city:"Москва",channel:"telegram"},
+ {name:"Виталий Савельев",stage:"clearance",need:2,source:"ООО «Регион Персонал»",city:"Курск",channel:"whatsapp"},
+ {name:"Данила Фролов",stage:"clearance",need:0,source:"Telegram",city:"Москва",channel:"telegram"},
 
- {name:"Илья Котов",stage:"preparation",need:0,source:"Рекомендация",city:"Ярославль",channel:"phone",owner:"object"},
- {name:"Антон Зайцев",stage:"preparation",need:1,source:"Авито",city:"Омск",channel:"whatsapp",owner:"object"},
+ {name:"Илья Котов",stage:"clearance",need:0,source:"Рекомендация",city:"Ярославль",channel:"phone",owner:"object"},
+ {name:"Антон Зайцев",stage:"clearance",need:1,source:"Авито",city:"Омск",channel:"whatsapp",owner:"object"},
  {name:"Фёдор Данилов",stage:"preparation",need:1,source:"Telegram",city:"Самара",channel:"telegram",owner:"object"},
  {name:"Лев Соколов",stage:"preparation",need:2,source:"hh.ru",city:"Калуга",channel:"phone",owner:"regional"},
  {name:"Артём Комаров",stage:"preparation",need:0,source:"Авито",city:"Псков",channel:"phone",owner:"object"},

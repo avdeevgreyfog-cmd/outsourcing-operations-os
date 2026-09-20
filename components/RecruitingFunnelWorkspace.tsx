@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import { Plus, Settings2, X } from "lucide-react";
 import { RecruitingActionDrawer } from "./RecruitingActionDrawer";
 import { useRecruitingApplications, saveDemoApplication } from "@/lib/recruiting/demo-client";
-import { isActiveStage, needsTransitionDetails, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
-import { saveApplicationChange } from "@/lib/recruiting/client-actions";
+import { isActiveStage, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
 import type { RecruitingApplicationRow, RecruitingNeedRow, RecruitingOptions, RecruitingFunnelStageSetting, RecruitingSourceOption } from "@/lib/recruiting/service";
 import { recruitingStageLabels, recruitingStages, type RecruitingStage } from "@/lib/recruiting/model";
 
@@ -41,9 +41,8 @@ type CandidateForm={
   sourceChannel:string;
   sourceCampaign:string;
   sourceReference:string;
-  nextAction:string;
 };
-const blank:CandidateForm={needId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:"",nextAction:""};
+const blank:CandidateForm={needId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
 
 const sourceKindLabels:Record<string,string>={
   job_site:"Работный сайт",social:"Соцсеть",referral:"Рекомендация",partner:"Партнёр",offline:"Оффлайн",internal:"Внутренний",other:"Другое",
@@ -115,7 +114,7 @@ export function RecruitingFunnelWorkspace({
     queue==="closed"?["rejected","no_show"].includes(row.stage):
     queue==="attention"?workRisks(row).length>0:
     queue==="today"?Boolean(row.nextActionAt&&new Date(row.nextActionAt).toDateString()===new Date().toDateString()):
-    queue==="missing"?["new","interview","documents","preparation"].includes(row.stage)&&!row.nextActionAt:
+    queue==="missing"?["interview","documents","clearance","preparation"].includes(row.stage)&&!row.nextActionAt:
     isActiveStage(row.stage)
   );
   const hasContext=needFilter!=="all"||objectFilter!=="all"||specialtyFilter!=="all"||recruiterFilter!=="all"||sourceFilter!=="all";
@@ -127,11 +126,7 @@ export function RecruitingFunnelWorkspace({
     const row=allRows.find(x=>x.applicationId===dragged);
     setDragged(null);
     if(!row||row.stage===stage||!canEdit||busy)return;
-    if(needsTransitionDetails(row.stage,stage)){setTargetStage(stage);setSelected(row);return;}
-    setBusy(row.applicationId);setError("");
-    try{await saveApplicationChange(row,{stage},demo);router.refresh();}
-    catch(e){setError(e instanceof Error?e.message:"Не удалось переместить");}
-    finally{setBusy("");}
+    setTargetStage(stage);setSelected(row);
   }
 
   async function createCandidate(event:React.FormEvent){
@@ -154,17 +149,17 @@ export function RecruitingFunnelWorkspace({
           source:form.source||"Ручной ввод",sourceChannel:form.sourceChannel||null,sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,
           stage,stageLabel:stageLabelByCode.get(stage)??recruitingStageLabels[stage],needId:need.id,need:need.title,objectId:need.objectId,object:need.object,
           regionId:need.regionId,clientId:need.clientId,ownerUserId:need.ownerUserId,owner:need.owner,managerUserId:need.managerUserId,manager:need.manager,
-          assigneeUserIds:need.assigneeUserIds,nextAction:form.nextAction||null,plannedStartDate:null,actualStartAt:null,rejectionReason:null,rejectionReasonCode:null,
-          conditions:need.conditions,workflow:{nextActionText:"Провести первичное интервью"},recentCommunications:[],documentSummary:{required:0,received:0,missing:[]},
+          assigneeUserIds:need.assigneeUserIds,nextAction:null,plannedStartDate:null,plannedArrivalAt:null,actualStartAt:null,rejectionReason:null,rejectionReasonCode:null,
+          conditions:need.conditions,workflow:{actionCode:"inbound_contact",outcomeCode:"unprocessed"},recentCommunications:[],
         };
         if(allRows.some(x=>x.candidateId===created.candidateId&&x.needId===created.needId))throw new Error("У кандидата уже есть заявка на эту потребность");
-        const now=new Date().toISOString();created.createdAt=now;created.updatedAt=now;created.stageEnteredAt=now;created.nextActionAt=form.nextAction?new Date(form.nextAction).toISOString():null;created.stageEvents=[{toStage:"new",createdAt:now}];
+        const now=new Date().toISOString();created.createdAt=now;created.updatedAt=now;created.stageEnteredAt=now;created.nextActionAt=null;created.stageEvents=[{toStage:"new",createdAt:now}];
         saveDemoApplication(created);
       }else{
         const response=await fetch("/api/candidates",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           fullName:form.fullName||"Без имени",phone:form.phone,email:email||null,preferredChannel:form.preferredChannel||"phone",
           telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,source:form.source||null,sourceChannel:form.sourceChannel||null,
-          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,nextActionAt:form.nextAction?new Date(form.nextAction).toISOString():null,
+          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,
         })});
         const json=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(json.error??"Не удалось добавить кандидата");
@@ -264,6 +259,7 @@ export function RecruitingFunnelWorkspace({
       need={needById.get(selected.needId)??null}
       stages={activeStages}
       recruiters={options.recruiters}
+      needs={needs}
       initialStage={targetStage}
       demo={demo}
       canEdit={canEdit}
@@ -273,7 +269,7 @@ export function RecruitingFunnelWorkspace({
       onSaved={()=>router.refresh()}
     />}
 
-    {showCreate&&<div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowCreate(false)}}>
+    {showCreate&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowCreate(false)}}>
       <form className="recruiting-modal-card recruiting-candidate-create" onSubmit={createCandidate}>
         <div className="recruiting-modal-head"><div><h2>Добавить кандидата</h2><p>Быстрый ввод во время звонка. Условия выбранной потребности всегда перед глазами.</p></div><button className="icon-button" type="button" onClick={()=>setShowCreate(false)}><X size={17}/></button></div>
         <div className="candidate-create-layout">
@@ -292,41 +288,51 @@ export function RecruitingFunnelWorkspace({
             </div>
             {showSourceCreate&&<div className="candidate-source-create"><input value={newSourceName} onChange={e=>setNewSourceName(e.target.value)} placeholder="Например, ООО «Регион Персонал»"/><select value={newSourceKind} onChange={e=>setNewSourceKind(e.target.value)}>{Object.entries(sourceKindLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><button className="button" type="button" disabled={busy==="source"} onClick={addSource}>Сохранить источник</button></div>}
             <details className="candidate-source-details"><summary>Детали источника</summary><div className="candidate-create-grid"><label>Канал / площадка<input value={form.sourceChannel} onChange={e=>setForm(x=>({...x,sourceChannel:e.target.value}))}/></label><label>Кампания / объявление<input value={form.sourceCampaign} onChange={e=>setForm(x=>({...x,sourceCampaign:e.target.value}))}/></label><label className="wide">Ссылка / идентификатор<input value={form.sourceReference} onChange={e=>setForm(x=>({...x,sourceReference:e.target.value}))}/></label></div></details>
-            <label>Первое следующее действие<input type="datetime-local" value={form.nextAction} onChange={e=>setForm(x=>({...x,nextAction:e.target.value}))}/></label>
           </div>
           <NeedCallCheatSheet need={selectedNeed??null}/>
         </div>
         <div className="recruiting-form-actions"><button type="button" className="button" onClick={()=>setShowCreate(false)}>Отмена</button><button className="button primary" disabled={busy==="create"}>{busy==="create"?"Сохраняю…":"Добавить кандидата"}</button></div>
       </form>
-    </div>}
+    </div></RecruitingPortal>}
 
-    {showStageSettings&&<div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStageSettings(false)}}>
+    {showStageSettings&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStageSettings(false)}}>
       <div className="recruiting-modal-card recruiting-stage-settings">
         <div className="recruiting-modal-head"><div><h2>Настройка воронки</h2><p>Название можно менять под терминологию компании. Системный смысл этапа сохраняется для аналитики и автоматизаций.</p></div><button className="icon-button" onClick={()=>setShowStageSettings(false)}><X size={17}/></button></div>
         <div className="stage-settings-list">{stageSettings.map((stage,index)=><div className="stage-settings-row" key={stage.code}><span className="stage-settings-index">{index+1}</span><input value={stage.label} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,label:e.target.value}:x))}/><small>{stage.code}</small><label><input type="checkbox" checked={stage.active} disabled={stage.code==="new"||stage.code==="first_shift"} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,active:e.target.checked}:x))}/> Показывать</label><div><button className="icon-button" type="button" disabled={index===0} onClick={()=>moveStage(index,-1)}>↑</button><button className="icon-button" type="button" disabled={index===stageSettings.length-1} onClick={()=>moveStage(index,1)}>↓</button></div></div>)}</div>
         <div className="recruiting-form-actions"><button className="button" type="button" onClick={()=>setShowStageSettings(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="stages"} onClick={saveStageSettings}>{busy==="stages"?"Сохраняю…":"Сохранить настройку"}</button></div>
       </div>
-    </div>}
+    </div></RecruitingPortal>}
   </div>;
 }
 
+function RecruitingPortal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body);}
+
 function CompactCandidateCard({row,showOwner,busy,draggable,onDragStart,onDragEnd,onOpen}:{row:RecruitingApplicationRow;showOwner:boolean;busy:boolean;draggable:boolean;onDragStart:()=>void;onDragEnd:()=>void;onOpen:()=>void}){
-  const risk=workRisks(row)[0];
+  const risks=workRisks(row);
+  const risk=risks[0];
+  const urgent=Boolean(risk&&risk!=="Нужно взять в работу"&&risk!=="Ожидается подтверждение выхода");
   const docs=row.documentSummary;
   const retentionDays=row.stage==="retention_30"?"30+":row.stage==="retention_7"?"7+":"—";
   let middle:React.ReactNode;
   if(row.stage==="new")middle=<><span>{row.phone??row.email??"Контакт не указан"}</span><span>{[row.source,row.city].filter(Boolean).join(" · ")||"Источник не указан"}</span></>;
-  else if(row.stage==="interview")middle=<><span>{row.workflow?.lastContact||"Интервью ещё не зафиксировано"}</span><span>{row.workflow?.nextActionText||"Уточнить интерес и условия"}</span></>;
-  else if(row.stage==="documents")middle=<><span>Документы: <b>{docs?.received??row.workflow?.documentsReceived??0}/{docs?.required??row.workflow?.documentsRequired??0}</b></span><span>{docs?.missing?.length?`Нет: ${docs.missing.slice(0,2).join(", ")}`:row.workflow?.missingDocuments?.length?`Нет: ${row.workflow.missingDocuments.slice(0,2).join(", ")}`:"Чек-лист не заполнен"}</span></>;
-  else if(row.stage==="preparation")middle=<><span>План выхода: <b>{row.plannedStartDate??"не назначен"}</b></span><span>{travelLabel(row.workflow?.travelState)}</span></>;
-  else if(row.stage==="first_shift")middle=<><span>Первый выход: <b>{row.actualStartAt?formatWorkDate(row.actualStartAt):"ожидается"}</b></span><span>{row.workflow?.plannedShift||"Смена не указана"}</span></>;
+  else if(row.stage==="interview")middle=<><span>{row.workflow?.managerInterviewState==="pending"?"Ожидает интервью мастера":row.workflow?.outcomeCode==="interested"?"Кандидат заинтересован":row.workflow?.lastContact||"Нужно провести интервью"}</span><span>{row.nextActionAt?`Следующее: ${formatWorkDate(row.nextActionAt)}`:"Решение ещё не зафиксировано"}</span></>;
+  else if(row.stage==="documents"){
+    const ready=docs?.employmentReady??0,required=docs?.employmentRequired??0,missing=docs?.employmentMissing??[];
+    middle=<><span>Для оформления: <b>{ready}/{required}</b></span><span>{missing.length?`Осталось ${missing.length} док.`:"Комплект готов"}</span></>;
+  }
+  else if(row.stage==="clearance"){
+    const ready=docs?.clearanceReady??0,required=docs?.clearanceRequired??0,pending=docs?.clearancePending??[];
+    middle=<><span>Допуски: <b>{ready}/{required}</b></span><span>{pending.length?`В работе: ${pending.length}`:"Всё готово"}</span></>;
+  }
+  else if(row.stage==="preparation")middle=<><span>Прибытие: <b>{row.plannedArrivalAt?formatWorkDate(row.plannedArrivalAt):"не назначено"}</b></span><span>{row.workflow?.housingState==="needs_booking"?"Нужно подтвердить жильё":row.workflow?.travelState==="ticket_required"?"Нужно купить билет":row.plannedStartDate?`Выход: ${row.plannedStartDate}`:"Дата выхода не назначена"}</span></>;
+  else if(row.stage==="first_shift")middle=<><span>Первый выход: <b>{row.workflow?.firstShiftOutcome==="worked"?"подтверждён":"ожидается"}</b></span><span>{row.actualStartAt?formatWorkDate(row.actualStartAt):row.plannedStartDate?`План: ${row.plannedStartDate}`:"Дата не назначена"}</span></>;
   else if(row.stage==="retention_7"||row.stage==="retention_30")middle=<><span>Работает: <b>{retentionDays} дн.</b></span><span>Первый выход: {row.actualStartAt?formatWorkDate(row.actualStartAt):"—"}</span></>;
   else middle=<><span>{row.rejectionReason??"Заявка завершена"}</span><span>{row.object??row.need}</span></>;
-  return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`recruiting-card recruiting-card-compact${risk?" is-overdue":""}`} onClick={onOpen}>
+  return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`recruiting-card recruiting-card-compact${urgent?" is-overdue":""}`} onClick={onOpen}>
     <div className="recruiting-card-title"><strong>{row.fullName}</strong>{row.nextActionAt&&<time>{formatWorkDate(row.nextActionAt)}</time>}</div>
     <span className="recruiting-card-vacancy">{row.need}{row.object?` · ${row.object}`:""}</span>
     <div className="recruiting-card-stage-info">{middle}</div>
-    <div className="recruiting-card-footer">{showOwner&&<span>{row.owner??"Без ответственного"}</span>}{risk&&<span className="needs-overdue">{risk}</span>}</div>
+    <div className="recruiting-card-footer">{showOwner&&<span>{row.owner??"Без ответственного"}</span>}{risk&&<span className={urgent?"needs-overdue":"recruiting-card-signal"}>{risk}</span>}</div>
   </button>;
 }
 
