@@ -2,6 +2,7 @@ export const recruitingStages = [
   "new",
   "interview",
   "documents",
+  "clearance",
   "preparation",
   "first_shift",
   "retention_7",
@@ -14,7 +15,8 @@ export type RecruitingStage = typeof recruitingStages[number] | typeof recruitin
 export const recruitingStageLabels: Record<RecruitingStage, string> = {
   new: "Новый контакт",
   interview: "Интервью",
-  documents: "Документы",
+  documents: "Документы для оформления",
+  clearance: "Оформление и допуски",
   preparation: "Подготовка к выходу",
   first_shift: "Первый выход",
   retention_7: "7 дней",
