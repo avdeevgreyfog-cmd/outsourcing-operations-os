@@ -45,6 +45,10 @@ const patchSchema = z.object({
   })).max(50).optional(),
   quantityReason: z.string().trim().max(1000).nullable().optional(),
   documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
+  documentRequirements: z.array(z.object({
+    documentTypeId:z.string().uuid(),
+    provider:z.enum(["candidate","company","client"]),
+  })).max(50).optional(),
 });
 
 type EditableNeed = {
@@ -149,19 +153,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       }
 
-      if(body.documentTypeIds){
-        const unique=[...new Set(body.documentTypeIds)];
-        if(unique.length){
+      if(body.documentRequirements!==undefined||body.documentTypeIds!==undefined){
+        const requestedDocs=body.documentRequirements??(body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const}));
+        const ids=[...new Set(requestedDocs.map(item=>item.documentTypeId))];
+        if(ids.length!==requestedDocs.length)throw new Error("Документ указан несколько раз");
+        if(ids.length){
           const valid=await tx<Array<{id:string}>>`
-            SELECT id FROM recruiting_document_types WHERE id=ANY(${unique}::uuid[]) AND active
+            SELECT id FROM recruiting_document_types WHERE id=ANY(${ids}::uuid[]) AND active
           `;
-          if(valid.length!==unique.length)throw new Error("Один из типов документов недоступен");
+          if(valid.length!==ids.length)throw new Error("Один из типов документов недоступен");
         }
         await tx`DELETE FROM need_document_requirements WHERE need_id=${id}::uuid`;
-        for(const documentTypeId of unique){
+        for(const requirement of requestedDocs){
           await tx`
-            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required)
-            VALUES(${actor.organizationId}::uuid,${id}::uuid,${documentTypeId}::uuid,true)
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider)
+            VALUES(${actor.organizationId}::uuid,${id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider})
           `;
         }
       }
