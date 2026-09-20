@@ -8,7 +8,7 @@ export type WorkflowDetails = {
   arrivalDetails?: string;
 };
 export type WorkflowRow = { stage: RecruitingStage; nextActionAt?: string | null; plannedStartDate: string | null; stageEnteredAt?: string | null; workflow?: WorkflowDetails };
-export type StageChange = { stage: RecruitingStage; reason?: string; reasonCode?: string; nextActionAt?: string | null; plannedStartDate?: string | null; actualStartAt?: string | null; workflow?: WorkflowDetails; expectedStage?: string; expectedUpdatedAt?: string };
+export type StageChange = { stage: RecruitingStage; reason?: string; reasonCode?: string; nextActionAt?: string | null; plannedStartDate?: string | null; actualStartAt?: string | null; responsibleUserId?: string | null; workflow?: WorkflowDetails; expectedStage?: string; expectedUpdatedAt?: string };
 export const reserveReasons = ["Кандидат готов позже", "Нет свободных мест", "Ожидание другой потребности", "Не подходит объект", "Другая специальность"];
 export function isActiveStage(stage: string) { return !["started", "rejected", "no_show", "reserve"].includes(stage); }
 export function needsTransitionDetails(from: RecruitingStage, to: RecruitingStage) {
@@ -23,14 +23,15 @@ export function validateStageChange(row: WorkflowRow, change: StageChange, now =
   if(change.stage === "approved" && row.stage !== "approved" && !change.reason?.trim()) return "Зафиксируйте решение согласующего.";
   if(change.stage === "ready" && (!planned || !details.plannedShift?.trim() || !details.confirmed || !details.readiness)) return "Для готовности нужны дата, смена, подтверждение кандидата и проверка подготовки.";
   if(change.stage === "started" && row.stage !== "started") {
-    if(row.stage !== "ready") return "Сначала подтвердите готовность к выходу.";
+    if(!["preparation","ready"].includes(row.stage)) return "Перед первым выходом переведите кандидата в подготовку к выходу.";
+    if(!details.confirmed || !details.readiness) return "Перед первым выходом подтвердите дату/смену и готовность документов и логистики.";
     if(!change.actualStartAt || !Number.isFinite(Date.parse(change.actualStartAt)) || Date.parse(change.actualStartAt)>now) return "Укажите фактическое время выхода, не позднее текущего.";
   }
   if(["rejected","no_show"].includes(change.stage) && !change.reasonCode) return "Выберите причину выбытия.";
   if(change.stage === "reserve" && (!details.reserveReason?.trim() || !change.nextActionAt)) return "Укажите причину резерва и дату повторного контакта.";
   const from=recruitingStages.indexOf(row.stage as typeof recruitingStages[number]);
   const to=recruitingStages.indexOf(change.stage as typeof recruitingStages[number]);
-  if(from>=0 && to>=0 && (to<from || to>from+1) && !change.reason?.trim()) return "Укажите причину возврата или пропуска этапов.";
+  if(from>=0 && to>=0 && to<from && !change.reason?.trim()) return "Укажите причину возврата на предыдущий этап.";
   return null;
 }
 export function workRisks(row: WorkflowRow, now = Date.now()): string[] {
