@@ -11,7 +11,7 @@ type MovementType="receipt"|"transfer"|"issue"|"return"|"writeoff";
 const categoryLabels:Record<string,string>={workwear:"Спецодежда",ppe:"СИЗ",tool:"Инструмент",equipment:"Оборудование",consumable:"Расходник",other:"Другое"};
 const locationLabels:Record<string,string>={office:"Офис",manager:"Запас менеджера",object:"Объект",housing:"Жильё",vehicle:"Автомобиль",other:"Другое"};
 
-export function InventoryWorkspace({snapshot,options,canManage,demo}:{snapshot:InventorySnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean}){
+export function InventoryWorkspace({snapshot,options,canManage,demo,initialWorkerId}:{snapshot:InventorySnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean;initialWorkerId?:string|null}){
   const [showMovement,setShowMovement]=useState(false);
   const [showLocation,setShowLocation]=useState(false);
   const [showItem,setShowItem]=useState(false);
@@ -21,7 +21,7 @@ export function InventoryWorkspace({snapshot,options,canManage,demo}:{snapshot:I
   const [quantity,setQuantity]=useState("1");
   const [fromLocationId,setFromLocationId]=useState("");
   const [toLocationId,setToLocationId]=useState(snapshot.locations[0]?.id??"");
-  const [workerId,setWorkerId]=useState("");
+  const [workerId,setWorkerId]=useState(initialWorkerId??"");
   const [condition,setCondition]=useState("good");
   const [note,setNote]=useState("");
   const [writeoffAfterReturn,setWriteoffAfterReturn]=useState(false);
