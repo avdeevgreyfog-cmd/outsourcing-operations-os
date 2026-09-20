@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'preview/github-pages-alias.html'
+      - 'preview/recruiting-v2/**'
       - '.github/workflows/deploy-tender-preview-pages.yml'
   workflow_dispatch:
 
@@ -36,6 +37,8 @@ jobs:
           mkdir -p .pages-site
           cp preview/github-pages-alias.html .pages-site/index.html
           cp preview/github-pages-alias.html .pages-site/404.html
+          mkdir -p .pages-site/recruiting-preview
+          cp -R preview/recruiting-v2/. .pages-site/recruiting-preview/
           touch .pages-site/.nojekyll
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
