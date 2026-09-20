@@ -1,3 +1,4 @@
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -8,7 +9,7 @@ import { PageHeader } from "@/components/UI";
 
 export default async function NewRequestPage({ searchParams }: { searchParams: Promise<{ draft?: string }> }) {
   const actor = await requireActor();
-  const query = await searchParams;
+  const query = isGithubPagesDemo() ? {} : await searchParams;
   if (!hasCapability(actor.access, "sales.request.create")) redirect("/requests");
   let options = await getRequestWorkspaceOptions(actor);
   if (!actor.demo && hasCapability(actor.access,"calculation.rate_reference.read")) {
