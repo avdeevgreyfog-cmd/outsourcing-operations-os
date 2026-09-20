@@ -4,6 +4,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import { getCandidateProfile } from "@/lib/recruiting/service";
 
 const schema = z.object({
   fullName: z.string().trim().min(2).max(240),
@@ -20,6 +21,22 @@ const schema = z.object({
   sourceReference: z.string().trim().max(500).nullable().optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
 });
+
+export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
+  try{
+    const actor=await getCurrentActor();
+    if(!actor)return NextResponse.json({error:"Требуется вход в систему"},{status:401});
+    requireCapability(actor,"recruiting.candidate.read");
+    const {id}=await params;
+    const profile=await getCandidateProfile(actor,id);
+    if(!profile)return NextResponse.json({error:"Кандидат не найден"},{status:404});
+    return NextResponse.json(profile);
+  }catch(error){
+    if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
+    console.error(error);
+    return NextResponse.json({error:"Не удалось загрузить карточку кандидата"},{status:500});
+  }
+}
 
 export async function PATCH(request: Request,{params}:{params:Promise<{id:string}>}) {
   try {
