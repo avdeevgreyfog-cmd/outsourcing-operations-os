@@ -21,8 +21,28 @@ export async function POST(request:Request){
         WHERE w.id=${body.workerId}::uuid
       `;
       if(!worker||!worker.objectId||!canReadRow(actor.access,"supply.housing.manage",{organizationId:actor.organizationId,objectId:worker.objectId,ownerUserId:worker.ownerUserId,regionId:worker.regionId,assigneeUserIds:worker.assigneeUserIds},actor))throw new AccessDeniedError("supply.housing.manage");
-      const [site]=await tx<Array<{id:string}>>`SELECT id FROM housing_sites WHERE id=${body.siteId}::uuid AND active`;
+      const [site]=await tx<Array<{id:string;organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];capacity:number}>>`
+        SELECT hs.id,hs.organization_id "organizationId",hs.primary_object_id "objectId",
+          COALESCE(hs.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+          ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=hs.primary_object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+            || CASE WHEN hs.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[hs.responsible_user_id::text] END "assigneeUserIds",
+          COALESCE((SELECT sum(hu.capacity)::int FROM housing_units hu WHERE hu.site_id=hs.id AND hu.active),0)::int capacity
+        FROM housing_sites hs LEFT JOIN objects o ON o.id=hs.primary_object_id
+        WHERE hs.id=${body.siteId}::uuid AND hs.active
+      `;
       if(!site)throw new Error("Место проживания не найдено");
+      if(!canReadRow(actor.access,"supply.housing.manage",{...site,objectId:site.objectId??undefined,ownerUserId:site.ownerUserId??undefined,regionId:site.regionId??undefined},actor))throw new AccessDeniedError("supply.housing.manage");
+      if(body.unitId){
+        const [unit]=await tx<Array<{id:string}>>`SELECT id FROM housing_units WHERE id=${body.unitId}::uuid AND site_id=${body.siteId}::uuid AND active`;
+        if(!unit)throw new Error("Комната или блок не найдены в выбранном жилье");
+      }
+      const [occupancy]=await tx<Array<{count:number}>>`
+        SELECT count(*)::int count FROM housing_stays st
+        WHERE st.site_id=${body.siteId}::uuid AND st.status IN ('planned','active')
+          AND st.check_in<=COALESCE(${body.checkOut??null}::date,'infinity'::date)
+          AND COALESCE(st.check_out,'infinity'::date)>=${body.checkIn}::date
+      `;
+      if((occupancy?.count??0)>=site.capacity)throw new Error("В выбранном жилье нет свободных мест на этот период");
       const [active]=await tx<Array<{id:string}>>`SELECT id FROM housing_stays WHERE worker_id=${body.workerId}::uuid AND status IN ('planned','active') LIMIT 1`;
       if(active)throw new Error("У сотрудника уже есть активное или плановое заселение");
       const [stay]=await tx<Array<{id:string}>>`
