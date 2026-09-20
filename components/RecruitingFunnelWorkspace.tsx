@@ -29,7 +29,7 @@ type Props={
   initialQueue?:string;
   initialStage?:string;
 };
-type ContactKind="telegram"|"whatsapp"|"email";
+type ContactKind="telegram"|"whatsapp"|"max"|"email";
 type ExtraContact={kind:ContactKind;value:string};
 type CandidateForm={
   needId:string;
@@ -45,7 +45,7 @@ type CandidateForm={
 const blank:CandidateForm={needId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
 
 const sourceKindLabels:Record<string,string>={
-  job_site:"Работный сайт",social:"Соцсеть",referral:"Рекомендация",partner:"Партнёр",offline:"Оффлайн",internal:"Внутренний",other:"Другое",
+  job_site:"Работный сайт",social:"Соцсеть",referral:"Рекомендация",partner:"Партнёр",offline:"Оффлайн",internal:"База компании",other:"Другое",
 };
 
 export function RecruitingFunnelWorkspace({
@@ -73,8 +73,29 @@ export function RecruitingFunnelWorkspace({
   const [newSourceKind,setNewSourceKind]=useState("partner");
   const [showSourceCreate,setShowSourceCreate]=useState(false);
   const [stageSettings,setStageSettings]=useState<RecruitingFunnelStageSetting[]>(options.funnelStages);
+  const [duplicateMatches,setDuplicateMatches]=useState<{exact:Array<{id:string;fullName:string;phone:string|null;need:string|null;object:string|null}>;possible:Array<{id:string;fullName:string;phone:string|null;need:string|null;object:string|null}>}>({exact:[],possible:[]});
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
+
+  useEffect(()=>{
+    const phone=form.phone.trim();const fullName=form.fullName.trim();
+    if(!phone&&fullName.length<3){setDuplicateMatches({exact:[],possible:[]});return;}
+    const timer=setTimeout(async()=>{
+      if(demo){
+        const digits=(value:string)=>value.replace(/\D/g,"");
+        const exact=allRows.filter(row=>phone&&digits(row.phone??"")===digits(phone)).filter((row,index,array)=>array.findIndex(item=>item.candidateId===row.candidateId)===index).slice(0,3).map(row=>({id:row.candidateId,fullName:row.fullName,phone:row.phone,need:row.need,object:row.object}));
+        const possible=exact.length?[]:allRows.filter(row=>fullName.length>=3&&row.fullName.trim().toLocaleLowerCase("ru")===fullName.toLocaleLowerCase("ru")).filter((row,index,array)=>array.findIndex(item=>item.candidateId===row.candidateId)===index).slice(0,3).map(row=>({id:row.candidateId,fullName:row.fullName,phone:row.phone,need:row.need,object:row.object}));
+        setDuplicateMatches({exact,possible});return;
+      }
+      try{
+        const params=new URLSearchParams();if(phone)params.set("phone",phone);if(fullName)params.set("fullName",fullName);if(form.city)params.set("city",form.city);
+        contacts.forEach(contact=>{if(contact.value.trim())params.set(contact.kind,contact.value.trim())});
+        const response=await fetch("/api/candidates/duplicates?"+params.toString());const json=await response.json();
+        if(response.ok)setDuplicateMatches({exact:json.exact??[],possible:json.possible??[]});
+      }catch{}
+    },350);
+    return()=>clearTimeout(timer);
+  },[form.phone,form.fullName,form.city,contacts,demo,allRows]);
 
   useEffect(()=>{
     const params=new URLSearchParams();
@@ -160,6 +181,7 @@ export function RecruitingFunnelWorkspace({
           fullName:form.fullName||"Без имени",phone:form.phone,email:email||null,preferredChannel:form.preferredChannel||"phone",
           telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,source:form.source||null,sourceChannel:form.sourceChannel||null,
           sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,
+          contacts:contacts.filter(item=>item.value.trim()).map(item=>({channel:item.kind,value:item.value.trim(),isPreferred:form.preferredChannel===item.kind})),
         })});
         const json=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(json.error??"Не удалось добавить кандидата");
@@ -235,11 +257,11 @@ export function RecruitingFunnelWorkspace({
     {demo&&<p className="cell-sub">Учебные записи. Изменения демо сохраняются в этом браузере.</p>}
 
     <div className="recruiting-toolbar" role="group" aria-label="Рабочая очередь">
-      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"],["reserve","Резерв"],["closed","Завершённые"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}</div>
+      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}<Link className="button" href="/candidates?queue=reserve">Резерв · {filtered.filter(row=>row.stage==="reserve").length}</Link><Link className="button" href="/candidates?queue=completed">Завершённые · {filtered.filter(row=>["rejected","no_show"].includes(row.stage)).length}</Link></div>
       <div className="recruiting-toolbar-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Список кандидатов</Link></div>
     </div>
 
-    <div className="recruiting-funnel-scroll">
+    {(queue==="reserve"||queue==="closed")?<section className="recruiting-terminal-gate"><div><strong>{queue==="reserve"?"Резерв кандидатов":"Завершённые заявки"}</strong><span>Исторические контакты не хранятся бесконечным списком в рабочей воронке. Они доступны в общей базе кандидатов с поиском и фильтрами.</span></div><Link className="button primary" href={queue==="reserve"?"/candidates?queue=reserve":"/candidates?queue=completed"}>Открыть базу кандидатов</Link></section>:<div className="recruiting-funnel-scroll">
       <div className="recruiting-funnel recruiting-funnel-compact" style={{gridTemplateColumns:`repeat(${boardStages.length}, minmax(190px, 1fr))`,minWidth:boardStages.length*200-10}}>
         {boardStages.map(stage=><section className={`recruiting-column${dragged?" is-drop-target":""}`} key={stage} onDragOver={e=>{if(canEdit)e.preventDefault();}} onDrop={e=>{e.preventDefault();void drop(stage);}}>
           <header><span>{stageLabelByCode.get(stage)??recruitingStageLabels[stage]}</span><span>{scoped.filter(x=>x.stage===stage).length}</span></header>
@@ -251,7 +273,7 @@ export function RecruitingFunnelWorkspace({
           </div>
         </section>)}
       </div>
-    </div>
+    </div>}
 
     {selected&&<RecruitingActionDrawer
       key={selected.applicationId+String(targetStage)}
@@ -275,12 +297,18 @@ export function RecruitingFunnelWorkspace({
         <div className="candidate-create-layout">
           <div className="recruiting-form candidate-create-form">
             <label>Потребность<select required value={form.needId} onChange={e=>setForm(x=>({...x,needId:e.target.value}))}><option value="">Выберите потребность</option>{needs.filter(x=>["open","in_progress"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"} · найти {x.toRecruit}</option>)}</select></label>
-            <div className="candidate-create-grid"><label>Имя / ФИО<input value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="Можно заполнить после начала разговора"/></label><label>Телефон<input required value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label></div>
+            <div className="candidate-create-grid"><label>Имя / ФИО<input value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="Можно заполнить после начала разговора"/></label><label>Телефон<input required value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label></div>
 
             <div className="candidate-contact-list">
-              {contacts.map((contact,index)=><div className="candidate-contact-row" key={index}><select value={contact.kind} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,kind:e.target.value as ContactKind}:x))}><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select><input value={contact.value} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,value:e.target.value}:x))} placeholder={contact.kind==="telegram"?"@username или номер":contact.kind==="email"?"email":"Номер"}/><button className="icon-button" type="button" onClick={()=>setContacts(current=>current.filter((_,i)=>i!==index))}><X size={14}/></button></div>)}
+              {contacts.map((contact,index)=><div className="candidate-contact-row" key={index}><select value={contact.kind} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,kind:e.target.value as ContactKind}:x))}><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select><input value={contact.value} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,value:e.target.value}:x))} placeholder={contact.kind==="telegram"?"@username или номер":contact.kind==="email"?"email":"Номер"}/><button className="icon-button" type="button" onClick={()=>setContacts(current=>current.filter((_,i)=>i!==index))}><X size={14}/></button></div>)}
               <button className="button candidate-add-contact" type="button" onClick={()=>setContacts(current=>[...current,{kind:"telegram",value:""}])}><Plus size={13}/> Добавить контакт</button>
             </div>
+
+            {(duplicateMatches.exact.length>0||duplicateMatches.possible.length>0)&&<div className={`candidate-duplicate-hint ${duplicateMatches.exact.length?"exact":"possible"}`}>
+              <strong>{duplicateMatches.exact.length?"Найден существующий кандидат":"Возможное совпадение"}</strong>
+              <span>{duplicateMatches.exact.length?"Новая карточка человека не создастся — заявка будет добавлена к существующей истории.":"Проверьте карточку перед созданием: совпадает ФИО."}</span>
+              {[...duplicateMatches.exact,...duplicateMatches.possible].slice(0,2).map(item=><Link key={item.id} href={`/candidates/${item.id}`} target="_blank">{item.fullName} · {item.phone??"без телефона"}{item.need?` · ${item.need}`:""}</Link>)}
+            </div>}
 
             <div className="candidate-source-block">
               <label>Источник<select value={form.source} onChange={e=>setForm(x=>({...x,source:e.target.value}))}><option value="">Не указан</option>{localSources.filter(x=>x.active).map(source=><option key={source.id} value={source.name}>{source.name} · {sourceKindLabels[source.kind]??source.kind}</option>)}</select></label>
@@ -296,13 +324,29 @@ export function RecruitingFunnelWorkspace({
     </div></RecruitingPortal>}
 
     {showStageSettings&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStageSettings(false)}}>
-      <div className="recruiting-modal-card recruiting-stage-settings">
-        <div className="recruiting-modal-head"><div><h2>Настройка воронки</h2><p>Название можно менять под терминологию компании. Системный смысл этапа сохраняется для аналитики и автоматизаций.</p></div><button className="icon-button" onClick={()=>setShowStageSettings(false)}><X size={17}/></button></div>
-        <div className="stage-settings-list">{stageSettings.map((stage,index)=><div className="stage-settings-row" key={stage.code}><span className="stage-settings-index">{index+1}</span><input value={stage.label} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,label:e.target.value}:x))}/><small>{stage.code}</small><label><input type="checkbox" checked={stage.active} disabled={stage.code==="new"||stage.code==="first_shift"} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,active:e.target.checked}:x))}/> Показывать</label><div><button className="icon-button" type="button" disabled={index===0} onClick={()=>moveStage(index,-1)}>↑</button><button className="icon-button" type="button" disabled={index===stageSettings.length-1} onClick={()=>moveStage(index,1)}>↓</button></div></div>)}</div>
-        <div className="recruiting-form-actions"><button className="button" type="button" onClick={()=>setShowStageSettings(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="stages"} onClick={saveStageSettings}>{busy==="stages"?"Сохраняю…":"Сохранить настройку"}</button></div>
+      <div className="recruiting-modal-card recruiting-stage-settings recruiting-stage-settings-v2">
+        <div className="recruiting-modal-head"><div><h2>Настройка воронки</h2><p>Меняйте терминологию и включайте нужные рабочие этапы. Системная логика остаётся стабильной для аналитики, истории и автоматизаций.</p></div><button className="icon-button" onClick={()=>setShowStageSettings(false)}><X size={17}/></button></div>
+        <div className="stage-settings-guide"><strong>Рабочая цепочка</strong><span>«Новый контакт» и «Первый выход» — опорные этапы. Остальные можно адаптировать. Допуски можно вести отдельной колонкой или параллельными задачами в подготовке.</span></div>
+        <div className="stage-settings-list stage-settings-list-v2">{stageSettings.map((stage,index)=>{const locked=stage.code==="new"||stage.code==="first_shift";return <div className={`stage-settings-row-v2 ${stage.active?"active":"inactive"}`} key={stage.code}>
+          <div className="stage-settings-order"><span>{index+1}</span><div><button className="icon-button" type="button" disabled={index===0} onClick={()=>moveStage(index,-1)}>↑</button><button className="icon-button" type="button" disabled={index===stageSettings.length-1} onClick={()=>moveStage(index,1)}>↓</button></div></div>
+          <div className="stage-settings-main"><input aria-label="Название этапа" value={stage.label} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,label:e.target.value}:x))}/><span>{stageDescription(stage.systemType)}</span></div>
+          <label className="stage-settings-toggle"><input type="checkbox" checked={stage.active} disabled={locked} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,active:e.target.checked}:x))}/><span>{locked?"Обязательный":"Использовать"}</span></label>
+        </div>})}</div>
+        <div className="recruiting-form-actions"><button className="button" type="button" onClick={()=>setShowStageSettings(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="stages"} onClick={saveStageSettings}>{busy==="stages"?"Сохраняю…":"Сохранить воронку"}</button></div>
       </div>
     </div></RecruitingPortal>}
   </div>;
+}
+
+function stageDescription(systemType:string){
+  return systemType==="intake"?"Входящие контакты до начала общения":
+    systemType==="qualification"?"Обсуждение условий и решение кандидата":
+    systemType==="documents"?"Базовые документы для трудоустройства":
+    systemType==="clearance"?"Опциональный отдельный контроль допусков объекта":
+    systemType==="preparation"?"Прибытие, жильё, билеты и готовность к выходу":
+    systemType==="start"?"Фактический первый выход / невыход":
+    systemType==="retention"?"Контроль удержания после первой недели":
+    systemType==="retention_final"?"Контроль 30 дней":"Рабочий этап";
 }
 
 function RecruitingPortal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body);}
