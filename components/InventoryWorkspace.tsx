@@ -12,10 +12,10 @@ const categoryLabels:Record<string,string>={workwear:"Спецодежда",ppe:
 const locationLabels:Record<string,string>={office:"Офис",manager:"Запас менеджера",object:"Объект",housing:"Жильё",vehicle:"Автомобиль",other:"Другое"};
 
 export function InventoryWorkspace({snapshot,options,canManage,demo,initialWorkerId}:{snapshot:InventorySnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean;initialWorkerId?:string|null}){
-  const [showMovement,setShowMovement]=useState(false);
+  const [showMovement,setShowMovement]=useState(Boolean(initialWorkerId));
   const [showLocation,setShowLocation]=useState(false);
   const [showItem,setShowItem]=useState(false);
-  const [type,setType]=useState<MovementType>("receipt");
+  const [type,setType]=useState<MovementType>(initialWorkerId?"return":"receipt");
   const [itemId,setItemId]=useState(snapshot.items[0]?.id??"");
   const [variant,setVariant]=useState("");
   const [quantity,setQuantity]=useState("1");
