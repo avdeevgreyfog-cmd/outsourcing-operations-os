@@ -30,7 +30,7 @@ export function generateStaticParams(){
 
 export default async function CalculationWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;seed?:string;date?:string}>}){
   const actor=await requireActor();
-  const {id}=await params;const query=await searchParams;const activeTab=safeTab(query.tab);
+  const {id}=await params;const query=isGithubPagesDemo()?{}:await searchParams;const activeTab=safeTab(query.tab);
   const allRows=await listCommercialCalculations(actor);const rows=allRows.filter(row=>row.calculationId===id);
   const storedMeta=actor.demo?null:await getCalculationWorkspaceMeta(actor,id);
   const first=rows[0];
