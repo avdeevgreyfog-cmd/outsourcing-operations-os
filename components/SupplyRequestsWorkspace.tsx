@@ -8,7 +8,7 @@ import type { InventorySnapshot, OperationsReferenceData, SupplyRequestRow } fro
 import { rub } from "@/lib/ui/format";
 
 const typeLabels:Record<string,string>={purchase:"Закупка",payment:"Оплата",compensation:"Компенсация",service:"Услуга"};
-const statusLabels:Record<string,string>={draft:"Черновик",submitted:"Подана",approved:"Согласована",rejected:"Отклонена",in_progress:"В работе",received:"Получено",closed:"Закрыта"};
+const statusLabels:Record<string,string>={draft:"Черновик",submitted:"Подана",approved:"Согласована",rejected:"Отклонена",in_progress:"В работе",received:"Исполнено",closed:"Закрыта"};
 
 export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,initialItemId,initialLocationId}:{rows:SupplyRequestRow[];options:OperationsReferenceData;inventory:InventorySnapshot;canManage:boolean;demo:boolean;initialItemId?:string|null;initialLocationId?:string|null}){
   const [show,setShow]=useState(Boolean(initialItemId||initialLocationId));
@@ -31,6 +31,24 @@ export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,i
   const inProgress=rows.filter(row=>["approved","in_progress","received"].includes(row.status)).length;
   const plannedAmount=rows.reduce((sum,row)=>sum+Number(row.amount??0),0);
 
+  async function sendApproval(id:string){
+    setBusy(true);setError("");
+    try{
+      if(demo){setError("В демо-режиме согласование не создаётся");return;}
+      const response=await fetch("/api/approvals",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({subjectType:"supply_request",subjectId:id})});
+      const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось отправить на согласование");window.location.reload();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось отправить на согласование");}finally{setBusy(false);}
+  }
+
+  async function transition(id:string,status:"in_progress"|"received"|"closed"){
+    setBusy(true);setError("");
+    try{
+      if(demo){setError("В демо-режиме статус не сохраняется");return;}
+      const response=await fetch("/api/procurement",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id,status})});
+      const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить статус");window.location.reload();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить статус");}finally{setBusy(false);}
+  }
+
   async function save(){
     setBusy(true);setError("");
     try{
@@ -47,9 +65,9 @@ export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,i
     <div className="metrics-grid"><Metric label="Открытые заявки" value={open.length}/><Metric label="Ожидают обработки" value={submitted} tone={submitted?"warn":undefined}/><Metric label="В работе" value={inProgress}/><Metric label="Сумма в заявках" value={rub(plannedAmount)}/></div>
     <div className="candidate-directory-viewbar"><div className="summary-strip"><span>Менеджер создаёт потребность здесь; дальнейшая закупка, оплата или компенсация обрабатывается общей очередью.</span></div>{canManage&&<button className="button primary" onClick={()=>setShow(true)}><Plus size={14}/> Создать заявку</button>}</div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table">
-      <thead><tr><th>Заявка</th><th>Тип</th><th>Объект</th><th>Позиция</th><th>Количество</th><th>Сумма</th><th>Нужно до</th><th>Инициатор</th><th>Статус</th></tr></thead>
-      <tbody>{rows.map(row=><tr key={row.id}><td><strong className="cell-title">{row.title}</strong><span className="cell-sub">{row.description??row.vendor??row.createdAt}</span></td><td>{typeLabels[row.requestType]}</td><td>{row.object??"—"}</td><td>{row.item??"—"}</td><td className="num">{row.quantity==null?"—":row.quantity+" "+(row.unit??"")}</td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td>{row.neededBy??"—"}</td><td>{row.createdBy}</td><td><Status tone={row.status==="rejected"?"bad":row.status==="closed"?"good":row.status==="submitted"?"warn":"info"}>{statusLabels[row.status]??"В работе"}</Status></td></tr>)}</tbody>
-    </table>{!rows.length&&<div className="empty-inline">Заявок пока нет</div>}</div></section>
+      <thead><tr><th>Заявка</th><th>Тип</th><th>Объект</th><th>Позиция</th><th>Количество</th><th>Сумма</th><th>Нужно до</th><th>Инициатор</th><th>Статус</th>{canManage&&<th>Действие</th>}</tr></thead>
+      <tbody>{rows.map(row=><tr key={row.id}><td><strong className="cell-title">{row.title}</strong><span className="cell-sub">{row.description??row.vendor??row.createdAt}</span></td><td>{typeLabels[row.requestType]}</td><td>{row.object??"—"}</td><td>{row.item??"—"}</td><td className="num">{row.quantity==null?"—":row.quantity+" "+(row.unit??"")}</td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td>{row.neededBy??"—"}</td><td>{row.createdBy}</td><td><Status tone={row.status==="rejected"?"bad":row.status==="closed"?"good":row.status==="submitted"?"warn":"info"}>{row.approvalStatus==="pending"?"На согласовании":statusLabels[row.status]??"В работе"}</Status></td>{canManage&&<td>{row.approvalStatus==="pending"?<span className="cell-sub">Ожидает решения</span>:(row.status==="submitted"||row.status==="rejected")?<button className="button" disabled={busy} onClick={()=>void sendApproval(row.id)}>На согласование</button>:row.status==="approved"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"in_progress")}>В работу</button>:row.status==="in_progress"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"received")}>Исполнено</button>:row.status==="received"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"closed")}>Закрыть</button>:"—"}</td>}</tr>)}</tbody>
+    </table>{!rows.length&&<div className="empty-inline">Заявок пока нет</div>}</div>{error&&<div className="recruiting-error" style={{margin:12}}>{error}</div>}</section>
 
     {show&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShow(false)}}><div className="recruiting-modal-card">
       <div className="recruiting-modal-head"><div><h2>Новая заявка</h2><p>Закупка, оплата, компенсация или услуга с привязкой к объекту.</p></div><button className="icon-button" onClick={()=>setShow(false)}><X size={17}/></button></div>
