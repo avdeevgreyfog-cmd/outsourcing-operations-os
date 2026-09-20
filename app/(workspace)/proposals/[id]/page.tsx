@@ -19,7 +19,7 @@ export function generateStaticParams(){
 }
 
 export default async function ProposalPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
-  const {id}=await params;const {tab:rawTab}=await searchParams;const tab=rawTab&&tabLabels[rawTab]?rawTab:"overview";
+  const {id}=await params;const {tab:rawTab}=isGithubPagesDemo()?{}:await searchParams;const tab=rawTab&&tabLabels[rawTab]?rawTab:"overview";
   const actor=await requireActor();const proposal=await getCommercialProposalDetail(actor,id);if(!proposal)notFound();
   const canEdit=proposal.status==="draft"&&hasCapability(actor.access,"sales.proposal.edit");
   const canSubmit=hasCapability(actor.access,"sales.proposal.submit");const canClientDecision=hasCapability(actor.access,"sales.proposal.client_decision");const canLaunch=hasCapability(actor.access,"sales.proposal.launch");
