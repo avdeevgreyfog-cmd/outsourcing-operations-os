@@ -301,21 +301,26 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
         ), balances AS (
           SELECT organization_id,item_id,variant,location_id,sum(delta)::numeric quantity
           FROM deltas GROUP BY organization_id,item_id,variant,location_id
+        ), keys AS (
+          SELECT organization_id,item_id,variant,location_id FROM balances
+          UNION
+          SELECT organization_id,item_id,variant,location_id FROM inventory_stock_limits
         )
         SELECT i.id "itemId",i.name item,i.code,i.category,i.unit,i.returnable,i.tracks_variant "tracksVariant",
-          b.variant,l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
+          k.variant,l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
           COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa
             WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
             || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds",
-          b.quantity,COALESCE(lim.min_quantity,0)::numeric "minQuantity",b.organization_id "organizationId"
-        FROM balances b
-        JOIN inventory_items i ON i.id=b.item_id
-        JOIN storage_locations l ON l.id=b.location_id
+          COALESCE(b.quantity,0)::numeric quantity,COALESCE(lim.min_quantity,0)::numeric "minQuantity",k.organization_id "organizationId"
+        FROM keys k
+        JOIN inventory_items i ON i.id=k.item_id
+        JOIN storage_locations l ON l.id=k.location_id
         LEFT JOIN objects o ON o.id=l.object_id
-        LEFT JOIN inventory_stock_limits lim ON lim.location_id=b.location_id AND lim.item_id=b.item_id AND lim.variant=b.variant
+        LEFT JOIN balances b ON b.organization_id=k.organization_id AND b.item_id=k.item_id AND b.location_id=k.location_id AND b.variant=k.variant
+        LEFT JOIN inventory_stock_limits lim ON lim.location_id=k.location_id AND lim.item_id=k.item_id AND lim.variant=k.variant
         WHERE l.active AND i.active
-        ORDER BY i.name,b.variant,l.name
+        ORDER BY i.name,k.variant,l.name
       `
     ]);
     const visibleLocationIds=new Set(locations.map(row=>row.id));
@@ -668,7 +673,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         COALESCE(absences.tentative,0)::int "tentativeAbsences",
         COALESCE(exits.planned,0)::int "plannedExits",
         GREATEST(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
-        GREATEST(d.required-(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0)),0)::int "projectedDeficit",
+        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0),0),0)::int "projectedDeficit",
         o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM demand d JOIN objects o ON o.id=d.object_id JOIN specialties s ON s.id=d.specialty_id
@@ -680,7 +685,8 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT ca.candidate_id)::int preparing
         FROM candidate_applications ca
-        WHERE ca.object_id=o.id AND ca.stage IN ('documents','clearance','preparation','first_shift')
+        JOIN needs cn ON cn.id=ca.need_id
+        WHERE ca.object_id=o.id AND cn.specialty_id=d.specialty_id AND ca.stage IN ('documents','clearance','preparation','first_shift')
           AND ca.actual_start_at IS NULL
           AND (ca.planned_start_date IS NULL OR ca.planned_start_date<=current_date+${horizon}::int)
       ) incoming ON true
@@ -690,6 +696,8 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         FROM worker_absence_plans ap
         JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
         WHERE ap.status IN ('confirmed','tentative')
+          AND a.effective_from<=current_date+${horizon}::int
+          AND (a.effective_to IS NULL OR a.effective_to>=current_date)
           AND ap.planned_from<=current_date+${horizon}::int
           AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
       ) absences ON true
@@ -697,7 +705,10 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         SELECT count(DISTINCT ep.worker_id)::int planned
         FROM worker_exit_processes ep
         JOIN worker_object_assignments a ON a.worker_id=ep.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
-        WHERE ep.status='planned' AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
+        WHERE ep.status='planned'
+          AND a.effective_from<=ep.effective_date
+          AND (a.effective_to IS NULL OR a.effective_to>=ep.effective_date)
+          AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
       ) exits ON true
       ORDER BY "projectedDeficit" DESC,o.name,s.name
     `;
