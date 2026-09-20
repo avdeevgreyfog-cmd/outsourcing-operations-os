@@ -18,8 +18,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(actor.demo)return NextResponse.json({error:"В GitHub Demo альтернативная вакансия сохраняется локально"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [current]=await tx<Array<{id:string;candidateId:string;needId:string;ownerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];sourceSnapshot:Record<string,unknown>|null}>>`
-        SELECT ca.id,ca.candidate_id "candidateId",ca.need_id "needId",ca.owner_user_id "ownerUserId",ca.object_id "objectId",
+      const [current]=await tx<Array<{id:string;candidateId:string;needId:string;stage:string;ownerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];sourceSnapshot:Record<string,unknown>|null}>>`
+        SELECT ca.id,ca.candidate_id "candidateId",ca.need_id "needId",ca.stage,ca.owner_user_id "ownerUserId",ca.object_id "objectId",
           COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
           ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
             || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL) "assigneeUserIds",
@@ -43,14 +43,13 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(duplicate)throw new Error("У кандидата уже есть заявка на эту потребность");
 
       await tx`
+        INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,reason_code,changed_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},'rejected',${body.comment??"Переведён на другую вакансию"},'alternative_need',${actor.userId}::uuid)
+      `;
+      await tx`
         UPDATE candidate_applications SET stage='rejected',rejection_reason_code='alternative_need',
           rejection_reason=${body.comment??"Переведён на другую вакансию"},next_action_at=NULL,updated_at=now()
         WHERE id=${current.id}::uuid
-      `;
-      await tx`
-        INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,reason_code,changed_by_user_id)
-        SELECT ${actor.organizationId}::uuid,${current.id}::uuid,stage,'rejected',${body.comment??"Переведён на другую вакансию"},'alternative_need',${actor.userId}::uuid
-        FROM candidate_applications WHERE id=${current.id}::uuid
       `;
 
       const [created]=await tx<Array<{id:string}>>`
