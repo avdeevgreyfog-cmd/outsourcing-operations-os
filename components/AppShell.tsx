@@ -20,6 +20,6 @@ export async function AppShell({ actor, children }: { actor: Actor; children: Re
   const allowed: NavigationSection[] = filterNavigation(navigationManifest, navigationAccess, { showFoundations });
   return <div className="app-shell" data-initial-theme={theme}>
     <script dangerouslySetInnerHTML={{ __html: `document.documentElement.dataset.theme=${JSON.stringify(theme)}` }} />
-    <Suspense fallback={<div className="sidebar"/>}><WorkspaceNavigation key={`${actor.organizationId}:${actor.membershipId}:${actor.roleCode}:${actor.accessPreview?.targetId ?? "base"}`} actor={actor} sections={allowed} workspace={workspace}/></Suspense><main className="main-canvas"><div className="page-wrap">{children}</div></main>
+    <Suspense fallback={<div className="sidebar"/>}><WorkspaceNavigation key={`${actor.organizationId}:${actor.membershipId}:${actor.roleCode}:${actor.accessPreview?.targetId ?? "base"}`} actor={actor} sections={allowed} workspace={workspace}/></Suspense><main className="main-canvas"><Suspense fallback={<div className="page-wrap"/>}><div className="page-wrap">{children}</div></Suspense></main>
   </div>;
 }
