@@ -8,7 +8,7 @@ import { isGithubPagesDemo } from "@/lib/demo/pages";
 export default async function Assets({searchParams}:{searchParams:Promise<{worker?:string;action?:"issue"|"return"}>}){
   const actor=await requireActor();
   const params=isGithubPagesDemo()?{}:await searchParams;
-  const [snapshot,options,workerContext]=await Promise.all([getInventorySnapshot(actor),getOperationsReferenceData(actor),params.worker?getWorkerOffboardingContext(actor,params.worker):Promise.resolve(null)]);
+  const [snapshot,options,workerContext]=await Promise.all([getInventorySnapshot(actor),getOperationsReferenceData(actor,"assets.read"),params.worker?getWorkerOffboardingContext(actor,params.worker):Promise.resolve(null)]);
   const initialHolding=params.action==="return"?workerContext?.outstandingAssets[0]:null;
   return <>
     <PageHeader eyebrow="Операции → Обеспечение" title="Запасы и имущество" subtitle="Распределённые места хранения, выдача сотрудникам, перемещения, возвраты и списания." breadcrumbs={[{label:"Операции"},{label:"Обеспечение"},{label:"Запасы и имущество"}]}/>
