@@ -20,13 +20,14 @@ import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 type Props={
   row:RecruitingApplicationRow;
   need?:RecruitingNeedRow;
-  pipeline:RecruitingPipelineStage[];
-  options:RecruitingOptions;
+  pipeline?:RecruitingPipelineStage[];
+  options?:RecruitingOptions;
+  exitReasons?:RecruitingOptions["exitReasons"];
   initialStage?:RecruitingStage;
   demo:boolean;
   canEdit:boolean;
   canConvert:boolean;
-  showResponsible:boolean;
+  showResponsible?:boolean;
   onClose:()=>void;
   onSaved?:()=>void;
 };
@@ -42,8 +43,20 @@ const outcomeLabels=[
   ["documents_requested","Документы запрошены"],
 ] as const;
 
-export function RecruitingActionDrawer({row,need,pipeline,options,initialStage,demo,canEdit,canConvert,showResponsible,onClose,onSaved}:Props){
+export function RecruitingActionDrawer({row,need,pipeline,options,exitReasons,initialStage,demo,canEdit,canConvert,showResponsible=false,onClose,onSaved}:Props){
   const router=useRouter();
+  const effectivePipeline=pipeline??[
+    {stageCode:"new",label:"Новый контакт",stageKind:"new_contact",sortOrder:10,active:true,virtual:false,isSystem:true},
+    {stageCode:"contact",label:"Интервью",stageKind:"interview",sortOrder:20,active:true,virtual:false,isSystem:true},
+    {stageCode:"interview",label:"Документы",stageKind:"documents",sortOrder:30,active:true,virtual:false,isSystem:true},
+    {stageCode:"preparation",label:"Подготовка к выходу",stageKind:"preparation",sortOrder:40,active:true,virtual:false,isSystem:true},
+    {stageCode:"ready",label:"Готов к выходу",stageKind:"preparation",sortOrder:45,active:false,virtual:false,isSystem:true},
+    {stageCode:"started",label:"Первый выход",stageKind:"first_shift",sortOrder:50,active:true,virtual:false,isSystem:true},
+  ] as RecruitingPipelineStage[];
+  const effectiveOptions=options??{
+    specialties:[],regions:[],objects:[],recruiters:[],responsibles:row.responsibleUserId&&row.responsible?[{id:row.responsibleUserId,name:row.responsible}]:[],
+    sources:[],sourceCatalog:[],exitReasons:exitReasons??[],
+  };
   const [profile,setProfile]=useState<CandidateProfile|null>(null);
   const [stage,setStage]=useState<RecruitingStage>(initialStage??row.stage);
   const [workflow,setWorkflow]=useState(row.workflow??{});
@@ -89,11 +102,11 @@ export function RecruitingActionDrawer({row,need,pipeline,options,initialStage,d
 
   const risks=workRisks(row);
   const realStages=useMemo(()=>{
-    const stageCodes=pipeline.filter(item=>!item.virtual&&(item.active||item.stageCode===row.stage)).map(item=>item.stageCode);
+    const stageCodes=effectivePipeline.filter(item=>!item.virtual&&(item.active||item.stageCode===row.stage)).map(item=>item.stageCode);
     for(const terminal of recruitingTerminalStages)if(!stageCodes.includes(terminal))stageCodes.push(terminal);
     return stageCodes as RecruitingStage[];
-  },[pipeline,row.stage]);
-  const stageLabel=(value:string)=>pipeline.find(item=>item.stageCode===value)?.label??recruitingStageLabels[value as RecruitingStage]??value;
+  },[effectivePipeline,row.stage]);
+  const stageLabel=(value:string)=>effectivePipeline.find(item=>item.stageCode===value)?.label??recruitingStageLabels[value as RecruitingStage]??value;
   const conditions=need?.conditions??row.conditions;
   const c=(key:string)=>typeof conditions[key]==="string"&&String(conditions[key]).trim()?String(conditions[key]):null;
   const provided=(key:string)=>conditions[key]===true?"Да":conditions[key]===false?"Нет":null;
@@ -102,7 +115,7 @@ export function RecruitingActionDrawer({row,need,pipeline,options,initialStage,d
     const communications=(profile?.communications??[]).filter(item=>!item.applicationId||item.applicationId===row.applicationId).map(item=>({kind:"comment" as const,date:item.happenedAt,author:item.author,title:item.channel==="note"?"Комментарий":contactChannelLabels[item.channel]??item.channel,text:item.summary}));
     const history=(profile?.history??[]).filter(item=>item.applicationId===row.applicationId).map(item=>({kind:"system" as const,date:item.changedAt,author:item.changedBy,title:`${item.fromStage?stageLabel(item.fromStage)+" → ":""}${stageLabel(item.toStage)}`,text:item.reason??""}));
     return [...communications,...history].sort((a,b)=>parseRuDate(b.date)-parseRuDate(a.date)).slice(0,6);
-  },[profile,pipeline,row.applicationId]);
+  },[profile,effectivePipeline,row.applicationId]);
 
   function setOutcome(value:typeof outcomeLabels[number][0]){
     const messages:Record<typeof value,{last:string;next:string}>={
@@ -240,7 +253,7 @@ export function RecruitingActionDrawer({row,need,pipeline,options,initialStage,d
         <div className="candidate-work-grid">
           <label>Следующее действие<input value={workflow.nextActionText??""} onChange={event=>setWorkflow(current=>({...current,nextActionText:event.target.value}))}/></label>
           <label>Срок следующего действия<input name="nextActionAt" type="datetime-local" value={next} onChange={event=>setNext(event.target.value)}/></label>
-          {showResponsible&&<label>Текущий ответственный<select value={responsibleUserId} onChange={event=>setResponsibleUserId(event.target.value)}><option value="">Не назначен</option>{options.responsibles.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
+          {showResponsible&&<label>Текущий ответственный<select value={responsibleUserId} onChange={event=>setResponsibleUserId(event.target.value)}><option value="">Не назначен</option>{effectiveOptions.responsibles.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
           <label>Этап<select value={stage} onChange={event=>setStage(event.target.value as RecruitingStage)}>{realStages.map(value=><option key={value} value={value} disabled={value==="started"&&!canConvert}>{stageLabel(value)}</option>)}</select></label>
         </div>
 
@@ -258,7 +271,7 @@ export function RecruitingActionDrawer({row,need,pipeline,options,initialStage,d
         {stage==="started"&&row.stage!=="started"&&<label>Фактическое время первого выхода<input required name="actualStartAt" type="datetime-local" value={actual} onChange={event=>setActual(event.target.value)}/></label>}
         {stage==="manager_review"&&<div className="candidate-work-grid"><label>Кто принимает решение<input required value={workflow.reviewRecipient??""} onChange={event=>setWorkflow(current=>({...current,reviewRecipient:event.target.value}))}/></label><label>Срок решения<input required name="reviewDueAt" type="datetime-local" value={localDate(workflow.reviewDueAt)} onChange={event=>setWorkflow(current=>({...current,reviewDueAt:event.target.value?new Date(event.target.value).toISOString():undefined}))}/></label></div>}
         {stage==="reserve"&&<label>Причина резерва<select required value={workflow.reserveReason??""} onChange={event=>setWorkflow(current=>({...current,reserveReason:event.target.value}))}><option value="">Выберите причину</option>{reserveReasons.map(item=><option key={item}>{item}</option>)}</select></label>}
-        {["rejected","no_show"].includes(stage)&&<label>Причина завершения<select required value={code} onChange={event=>setCode(event.target.value)}><option value="">Выберите причину</option>{options.exitReasons.filter(item=>item.kind===stage||item.kind==="both").map(item=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label>}
+        {["rejected","no_show"].includes(stage)&&<label>Причина завершения<select required value={code} onChange={event=>setCode(event.target.value)}><option value="">Выберите причину</option>{effectiveOptions.exitReasons.filter(item=>item.kind===stage||item.kind==="both").map(item=><option key={item.code} value={item.code}>{item.name}</option>)}</select></label>}
         {stage!==row.stage&&<label>Комментарий к переходу<textarea value={reason} onChange={event=>setReason(event.target.value)} placeholder={stage==="rejected"||stage==="no_show"?"Что произошло":"При необходимости уточните причину перехода"}/></label>}
       </fieldset>
 
