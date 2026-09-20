@@ -1,35 +1,36 @@
 export const recruitingStages = [
   "new",
-  "contact",
   "interview",
-  "manager_review",
-  "approved",
+  "documents",
   "preparation",
-  "ready",
-  "started",
+  "first_shift",
+  "retention_7",
+  "retention_30",
 ] as const;
 
 export const recruitingTerminalStages = ["rejected", "no_show", "reserve"] as const;
 export type RecruitingStage = typeof recruitingStages[number] | typeof recruitingTerminalStages[number];
 
 export const recruitingStageLabels: Record<RecruitingStage, string> = {
-  new: "Новый",
-  contact: "Контакт",
+  new: "Новый контакт",
   interview: "Интервью",
-  manager_review: "На согласовании",
-  approved: "Согласован",
-  preparation: "Подготовка",
-  ready: "Готов к выходу",
-  started: "Вышел",
+  documents: "Документы",
+  preparation: "Подготовка к выходу",
+  first_shift: "Первый выход",
+  retention_7: "7 дней",
+  retention_30: "30 дней",
   rejected: "Отказ",
   no_show: "Не вышел",
   reserve: "Резерв",
 };
 
 export const legacyStageMap: Record<string, RecruitingStage> = {
-  call: "contact",
-  documents: "preparation",
-  first_shift: "started",
+  call: "interview",
+  contact: "interview",
+  manager_review: "documents",
+  approved: "documents",
+  ready: "preparation",
+  started: "first_shift",
 };
 
 export function normalizeRecruitingStage(value: string | null | undefined): RecruitingStage {
