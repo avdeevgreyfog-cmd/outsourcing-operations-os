@@ -3,9 +3,9 @@ import {requireCapability} from "@/lib/access/server";
 import {withTenant} from "@/lib/db/client";
 
 export type ApprovalListRow={
-  id:string;subjectType:"calculation_scenario"|"proposal"|"contract"|"tender";subjectId:string;subject:string;processCode:string;status:string;
+  id:string;subjectType:"calculation_scenario"|"proposal"|"contract"|"tender"|"supply_request";subjectId:string;subject:string;processCode:string;status:string;
   requestedBy:string;approver:string|null;approverUserId:string|null;requestedAt:string;decidedAt:string|null;decisionComment:string|null;
-  requestId:string|null;tenderId:string|null;sourceType:"request"|"tender"|null;sourceId:string|null;
+  requestId:string|null;tenderId:string|null;sourceType:"request"|"tender"|"supply_request"|null;sourceId:string|null;
 };
 
 export async function listAllApprovals(actor:Actor):Promise<ApprovalListRow[]>{
@@ -20,12 +20,13 @@ export async function listAllApprovals(actor:Actor):Promise<ApprovalListRow[]>{
           WHEN 'proposal' THEN 'КП · '||COALESCE(rp.title,'—')||' · №'||COALESCE(p.version::text,'—')
           WHEN 'contract' THEN 'Договор · '||COALESCE(ct.number,ct.title,'—')
           WHEN 'tender' THEN 'Тендер · '||COALESCE(td.title,'—')
+          WHEN 'supply_request' THEN 'Обеспечение · '||COALESCE(sr.title,'—')
         END subject,
         ai.process_code "processCode",ai.status,requester.display_name "requestedBy",approver.display_name approver,aps.approver_user_id "approverUserId",
         to_char(ai.submitted_at,'DD.MM.YYYY HH24:MI') "requestedAt",to_char(aps.decided_at,'DD.MM.YYYY HH24:MI') "decidedAt",aps.decision_comment "decisionComment",
         COALESCE(cc.request_id,p.request_id,ct.request_id) "requestId",COALESCE(cc.tender_id,CASE WHEN ai.subject_type='tender' THEN ai.subject_id END) "tenderId",
-        CASE WHEN COALESCE(cc.tender_id,CASE WHEN ai.subject_type='tender' THEN ai.subject_id END) IS NOT NULL THEN 'tender' WHEN COALESCE(cc.request_id,p.request_id,ct.request_id) IS NOT NULL THEN 'request' ELSE NULL END "sourceType",
-        COALESCE(cc.tender_id,CASE WHEN ai.subject_type='tender' THEN ai.subject_id END,cc.request_id,p.request_id,ct.request_id) "sourceId"
+        CASE WHEN ai.subject_type='supply_request' THEN 'supply_request' WHEN COALESCE(cc.tender_id,CASE WHEN ai.subject_type='tender' THEN ai.subject_id END) IS NOT NULL THEN 'tender' WHEN COALESCE(cc.request_id,p.request_id,ct.request_id) IS NOT NULL THEN 'request' ELSE NULL END "sourceType",
+        COALESCE(CASE WHEN ai.subject_type='supply_request' THEN ai.subject_id END,cc.tender_id,CASE WHEN ai.subject_type='tender' THEN ai.subject_id END,cc.request_id,p.request_id,ct.request_id) "sourceId"
       FROM approval_instances ai JOIN approval_steps aps ON aps.approval_id=ai.id AND aps.step_order=1
       JOIN app_users requester ON requester.id=ai.requested_by_user_id LEFT JOIN app_users approver ON approver.id=aps.approver_user_id
       LEFT JOIN calculation_scenarios cs ON ai.subject_type='calculation_scenario' AND cs.id=ai.subject_id
@@ -34,6 +35,7 @@ export async function listAllApprovals(actor:Actor):Promise<ApprovalListRow[]>{
       LEFT JOIN proposals p ON ai.subject_type='proposal' AND p.id=ai.subject_id LEFT JOIN requests rp ON rp.id=p.request_id
       LEFT JOIN contracts ct ON ai.subject_type='contract' AND ct.id=ai.subject_id
       LEFT JOIN tenders td ON ai.subject_type='tender' AND td.id=ai.subject_id
+      LEFT JOIN supply_requests sr ON ai.subject_type='supply_request' AND sr.id=ai.subject_id
       WHERE ${allOrg} OR ai.requested_by_user_id=${actor.userId}::uuid OR aps.approver_user_id=${actor.userId}::uuid
       ORDER BY ai.status='pending' DESC,ai.submitted_at DESC
     `;
