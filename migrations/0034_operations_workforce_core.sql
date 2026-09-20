@@ -146,6 +146,28 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
   )
 );
 
+CREATE TABLE IF NOT EXISTS supply_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  object_id uuid REFERENCES objects(id) ON DELETE SET NULL,
+  request_type text NOT NULL CHECK (request_type IN ('purchase','payment','compensation','service')),
+  title text NOT NULL,
+  description text,
+  item_id uuid REFERENCES inventory_items(id) ON DELETE SET NULL,
+  location_id uuid REFERENCES storage_locations(id) ON DELETE SET NULL,
+  quantity numeric(14,3),
+  unit text,
+  amount numeric(14,2),
+  vendor text,
+  needed_by date,
+  status text NOT NULL DEFAULT 'submitted'
+    CHECK (status IN ('draft','submitted','approved','rejected','in_progress','received','closed')),
+  created_by_user_id uuid NOT NULL REFERENCES app_users(id),
+  assigned_to_user_id uuid REFERENCES app_users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS housing_sites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -197,7 +219,9 @@ INSERT INTO permission_definitions(capability,domain,resource,action,field_sensi
 ('assets.read','operations','inventory','read',false,'Просмотр запасов, имущества и движений'),
 ('assets.manage','operations','inventory','manage',false,'Управление местами хранения и движениями имущества'),
 ('supply.housing.read','operations','housing','read',false,'Просмотр жилья и заселений'),
-('supply.housing.manage','operations','housing','manage',false,'Управление жильём и заселениями')
+('supply.housing.manage','operations','housing','manage',false,'Управление жильём и заселениями'),
+('procurement.read','operations','supply_request','read',false,'Просмотр заявок на обеспечение'),
+('procurement.manage','operations','supply_request','manage',false,'Создание и изменение заявок на обеспечение')
 ON CONFLICT (capability) DO NOTHING;
 
 INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
@@ -206,7 +230,7 @@ SELECT r.organization_id,r.id,p.capability,'allow',
   '{}'::uuid[]
 FROM role_templates r
 JOIN permission_definitions p ON p.capability IN (
-  'operations.crew.read','operations.crew.manage','assets.read','assets.manage','supply.housing.read','supply.housing.manage'
+  'operations.crew.read','operations.crew.manage','assets.read','assets.manage','supply.housing.read','supply.housing.manage','procurement.read','procurement.manage'
 )
 WHERE r.code IN ('object_manager','regional_manager')
 ON CONFLICT DO NOTHING;
@@ -225,7 +249,7 @@ DECLARE table_name text;
 BEGIN
   FOREACH table_name IN ARRAY ARRAY[
     'object_crews','object_crew_members','worker_absence_plans','storage_locations',
-    'inventory_items','inventory_stock_limits','inventory_movements',
+    'inventory_items','inventory_stock_limits','inventory_movements','supply_requests',
     'housing_sites','housing_units','housing_stays'
   ]
   LOOP
@@ -247,6 +271,7 @@ CREATE INDEX IF NOT EXISTS idx_inventory_movements_item_date ON inventory_moveme
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_from ON inventory_movements(organization_id,from_location_id,occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_to ON inventory_movements(organization_id,to_location_id,occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_worker ON inventory_movements(organization_id,worker_id,occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supply_requests_object_status ON supply_requests(organization_id,object_id,status,needed_by);
 CREATE INDEX IF NOT EXISTS idx_housing_sites_object ON housing_sites(organization_id,primary_object_id,active);
 CREATE INDEX IF NOT EXISTS idx_housing_stays_active ON housing_stays(organization_id,site_id,status,check_in,check_out);
 
@@ -270,6 +295,9 @@ CREATE TRIGGER audit_inventory_stock_limits AFTER INSERT OR UPDATE OR DELETE ON 
 FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 DROP TRIGGER IF EXISTS audit_inventory_movements ON inventory_movements;
 CREATE TRIGGER audit_inventory_movements AFTER INSERT OR UPDATE OR DELETE ON inventory_movements
+FOR EACH ROW EXECUTE FUNCTION audit_row_change();
+DROP TRIGGER IF EXISTS audit_supply_requests ON supply_requests;
+CREATE TRIGGER audit_supply_requests AFTER INSERT OR UPDATE OR DELETE ON supply_requests
 FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 DROP TRIGGER IF EXISTS audit_housing_sites ON housing_sites;
 CREATE TRIGGER audit_housing_sites AFTER INSERT OR UPDATE OR DELETE ON housing_sites
