@@ -1149,3 +1149,16 @@
  .candidate-work-stagebar{align-items:flex-start;flex-wrap:wrap}
  .candidate-work-stagebar small{width:100%;margin-left:0}
 }
+
+
+/* Shared OPERIS board — compact recruiting variant. */
+.sales-board.recruiting-board{gap:10px;align-items:stretch;padding-bottom:12px}
+.sales-board.recruiting-board .sales-board-column{width:210px;min-width:210px;min-height:360px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px}
+.sales-board.recruiting-board .sales-board-column>header{min-height:44px;padding:10px 11px;background:transparent;border-bottom:1px solid var(--border)}
+.sales-board.recruiting-board .sales-board-column>header>span{font-size:12px;font-weight:650;color:var(--text)}
+.sales-board.recruiting-board .sales-board-column>header>b{display:grid;place-items:center;min-width:23px;height:23px;border-radius:5px;background:var(--panel-3);color:var(--muted);font-size:10px;font-weight:600}
+.sales-board.recruiting-board .sales-board-cards{padding:8px;gap:8px;min-height:170px}
+.sales-board.recruiting-board .sales-board-card{width:100%;border:1px solid var(--border);border-radius:7px;background:var(--panel);box-shadow:none}
+.sales-board.recruiting-board .sales-board-card:hover{border-color:var(--border-strong);background:var(--panel);box-shadow:0 3px 10px #00000009}
+.sales-board.recruiting-board .recruiting-card.is-overdue{border-left:2px solid var(--bad)}
+.sales-board.recruiting-board .sales-board-empty{padding:22px 8px}
