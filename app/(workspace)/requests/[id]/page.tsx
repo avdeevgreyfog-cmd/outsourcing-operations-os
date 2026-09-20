@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -151,6 +153,10 @@ function tone(status: string) {
   if (["accepted", "agreed", "launched", "approved"].includes(status)) return "good" as const;
   if (["rejected", "not_agreed", "archived"].includes(status)) return "bad" as const;
   return "warn" as const;
+}
+
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.requests.map((id)=>({id})) : [];
 }
 
 export default async function RequestPage({
