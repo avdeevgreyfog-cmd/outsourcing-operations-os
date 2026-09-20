@@ -9,9 +9,9 @@ import { rub } from "@/lib/ui/format";
 
 const rateLabels:Record<string,string>={bed_day:"Койко-место / сутки",room_day:"Комната / сутки",room_month:"Комната / месяц",site_period:"Объект / период"};
 
-export function HousingWorkspace({snapshot,options,canManage,demo}:{snapshot:HousingSnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean}){
+export function HousingWorkspace({snapshot,options,canManage,demo,initialWorkerId}:{snapshot:HousingSnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean;initialWorkerId?:string|null}){
   const [showSite,setShowSite]=useState(false);
-  const [showStay,setShowStay]=useState(false);
+  const [showStay,setShowStay]=useState(Boolean(initialWorkerId));
   const [name,setName]=useState("");
   const [address,setAddress]=useState("");
   const [vendor,setVendor]=useState("");
@@ -20,7 +20,7 @@ export function HousingWorkspace({snapshot,options,canManage,demo}:{snapshot:Hou
   const [rateAmount,setRateAmount]=useState("");
   const [unitName,setUnitName]=useState("Комната 1");
   const [capacity,setCapacity]=useState("1");
-  const [workerId,setWorkerId]=useState("");
+  const [workerId,setWorkerId]=useState(initialWorkerId??"");
   const [siteId,setSiteId]=useState(snapshot.sites[0]?.id??"");
   const [bedLabel,setBedLabel]=useState("");
   const [checkIn,setCheckIn]=useState(new Date().toISOString().slice(0,10));
