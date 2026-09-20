@@ -55,7 +55,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
     applications:apps,
     contacts:(custom?.contacts as CandidateContactMethod[]|undefined)??profile?.contacts??[],
     communications:[...localComms,...(profile?.communications??[]).filter(x=>!localComms.some(y=>y.id===x.id))],
-    history:apps.flatMap(a=>(a.stageEvents??[]).map((h,i)=>({id:\`\${a.applicationId}-\${i}\`,applicationId:a.applicationId,fromStage:h.fromStage??null,toStage:h.toStage,changedAt:formatWorkDate(h.createdAt),changedBy:"Учебная история",reason:h.reason??null,reasonCode:h.reasonCode??null}))),
+    history:apps.flatMap(a=>(a.stageEvents??[]).map((h,i)=>({id:`${a.applicationId}-${i}`,applicationId:a.applicationId,fromStage:h.fromStage??null,toStage:h.toStage,changedAt:formatWorkDate(h.createdAt),changedBy:"Учебная история",reason:h.reason??null,reasonCode:h.reasonCode??null}))),
    };
    frame=requestAnimationFrame(()=>{setCurrent(hydrated);setDraftContacts(hydrated.contacts)});
   }catch{}
@@ -87,7 +87,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
     current.applications.forEach(app=>saveDemoApplication({...app,fullName:payload.fullName,phone:payload.phone,email:payload.email,preferredChannel:payload.preferredChannel,telegram:payload.telegram,whatsapp:payload.whatsapp,city:payload.city}));
     window.dispatchEvent(new Event(recruitingEvent));setCurrent(x=>x?{...x,...payload,contacts:draftContacts}:x);
    }else{
-    const response=await fetch(\`/api/candidates/\${candidateId}\`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    const response=await fetch(`/api/candidates/${candidateId}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить карточку");router.refresh();
    }
    setEditing(false);
@@ -102,7 +102,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
     const row={id:crypto.randomUUID(),candidateId,applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary:comm.summary,happenedAt:new Date().toLocaleString("ru-RU"),author:"Текущий пользователь"};
     const all=JSON.parse(localStorage.getItem(commStorage)||"[]");all.unshift(row);localStorage.setItem(commStorage,JSON.stringify(all));setCurrent(x=>x?{...x,communications:[row,...x.communications]}:x);
    }else{
-    const response=await fetch(\`/api/candidates/\${candidateId}/communications\`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary:comm.summary})});
+    const response=await fetch(`/api/candidates/${candidateId}/communications`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary:comm.summary})});
     const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось добавить коммуникацию");router.refresh();
    }
    setComm(x=>({...x,summary:""}));
@@ -119,7 +119,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
    <div className="candidate-profile-quick">
     {preferred&&<ContactPill item={preferred} primary/>}
     {current.contacts.filter(item=>item.active&&item.id!==preferred?.id).slice(0,3).map(item=><ContactPill key={item.id} item={item}/>)}
-    {current.workerId&&!demo&&<Link className="button primary" href={\`/workers/\${current.workerId}\`}><UserCheck size={14}/> Открыть сотрудника</Link>}
+    {current.workerId&&!demo&&<Link className="button primary" href={`/workers/${current.workerId}`}><UserCheck size={14}/> Открыть сотрудника</Link>}
    </div>
   </section>
 
@@ -128,7 +128,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
   {tab==="overview"&&<div className="candidate-profile-grid candidate-profile-overview"><div>
    {editing?<Section title="Редактирование карточки" note="Единые данные человека для всех вакансий и последующей карточки сотрудника"><form className="recruiting-form" onSubmit={saveProfile}>
     <div className="recruiting-form-grid"><Field name="fullName" label="ФИО" value={current.fullName} required/><Field name="phone" label="Основной телефон" value={current.phone}/><Field name="email" label="Email" value={current.email} type="email"/><Field name="city" label="Город" value={current.city}/><Field name="birthDate" label="Дата рождения" value={current.birthDate} type="date"/><label className="wide">Комментарий<textarea name="notes" defaultValue={current.notes??""}/></label></div>
-    <div className="candidate-contact-editor"><header><div><strong>Способы связи</strong><span>Можно хранить разные номера и логины. Один канал отметьте предпочтительным.</span></div><button className="button" type="button" onClick={()=>setDraftContacts(list=>[...list,{id:\`draft-\${crypto.randomUUID()}\`,channel:"telegram",value:"",label:null,isPreferred:false,active:true}])}><Plus size={13}/> Добавить контакт</button></header>
+    <div className="candidate-contact-editor"><header><div><strong>Способы связи</strong><span>Можно хранить разные номера и логины. Один канал отметьте предпочтительным.</span></div><button className="button" type="button" onClick={()=>setDraftContacts(list=>[...list,{id:`draft-${crypto.randomUUID()}`,channel:"telegram",value:"",label:null,isPreferred:false,active:true}])}><Plus size={13}/> Добавить контакт</button></header>
      <div>{draftContacts.map((item,index)=><div className="candidate-contact-edit-row" key={item.id}><select value={item.channel} onChange={e=>setDraftContacts(list=>list.map((row,i)=>i===index?{...row,channel:e.target.value as CandidateContactMethod["channel"]}:row))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="other">Другой</option></select><input value={item.value} onChange={e=>setDraftContacts(list=>list.map((row,i)=>i===index?{...row,value:e.target.value}:row))} placeholder={item.channel==="telegram"?"@username или номер":"Контакт"}/><input value={item.label??""} onChange={e=>setDraftContacts(list=>list.map((row,i)=>i===index?{...row,label:e.target.value||null}:row))} placeholder="Подпись, необязательно"/><label><input type="radio" name="preferredContact" checked={item.isPreferred} onChange={()=>setDraftContacts(list=>list.map((row,i)=>({...row,isPreferred:i===index})))}/> Основной</label><button className="icon-button" type="button" onClick={()=>setDraftContacts(list=>list.filter((_,i)=>i!==index))}><X size={14}/></button></div>)}</div>
     </div>
     <details className="candidate-profile-source-edit"><summary>Источник и атрибуция</summary><div className="recruiting-form-grid"><Field name="source" label="Источник" value={current.source}/><Field name="sourceChannel" label="Канал / площадка" value={current.sourceChannel}/><Field name="sourceCampaign" label="Кампания / объявление" value={current.sourceCampaign}/><Field name="sourceReference" label="Ссылка / ID" value={current.sourceReference}/></div></details>
@@ -143,7 +143,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
   </div><div>
    <Section title="Текущая работа с кандидатом"><div className="candidate-current-state">{latest?<><KeyValue label="Потребность" value={latest.need}/><KeyValue label="Объект" value={latest.object??"—"}/><KeyValue label="Этап" value={<Status tone={["first_shift","retention_7","retention_30"].includes(latest.stage)?"good":"info"}>{latest.stageLabel}</Status>}/><KeyValue label="Ответственный" value={latest.owner??"—"}/><KeyValue label="Следующее действие" value={nextActionDisplay(latest)}/><button className="button" onClick={()=>setSelected(latest)}>Открыть рабочий этап</button></>:<><strong>Нет активной заявки</strong><span>Человек находится в базе кандидатов и может быть добавлен в новую потребность.</span><Link className="button" href="/recruiting">Добавить в подбор</Link></>}</div></Section>
    <Section title="Источник" note="Атрибуция хранится в карточке, но не мешает текущей работе"><div className="candidate-current-state"><KeyValue label="Источник" value={current.source??"—"}/><KeyValue label="Канал" value={current.sourceChannel??"—"}/><KeyValue label="Кампания / объявление" value={current.sourceCampaign??"—"}/></div></Section>
-   {current.workerId&&<Section title="Связь с сотрудником" note="Рекрутинговая история остаётся в этой карточке"><div className="candidate-worker-link"><UserCheck size={18}/><div><strong>Создана карточка сотрудника</strong><span>Дальше рабочая история ведётся в контуре сотрудника: назначения, смены, табели, начисления и выплаты.</span></div>{!demo&&<Link className="button primary" href={\`/workers/\${current.workerId}\`}>Открыть</Link>}</div></Section>}
+   {current.workerId&&<Section title="Связь с сотрудником" note="Рекрутинговая история остаётся в этой карточке"><div className="candidate-worker-link"><UserCheck size={18}/><div><strong>Создана карточка сотрудника</strong><span>Дальше рабочая история ведётся в контуре сотрудника: назначения, смены, табели, начисления и выплаты.</span></div>{!demo&&<Link className="button primary" href={`/workers/${current.workerId}`}>Открыть</Link>}</div></Section>}
   </div></div>}
 
   {tab==="applications"&&<Section title="Заявки на потребности" note="Один человек может проходить несколько вакансий; переводы и отказы сохраняются в истории"><div className="candidate-applications candidate-application-timeline">{current.applications.map((application,index)=><div className="candidate-application-row" key={application.applicationId}><div><strong>{application.need}</strong><span>{application.object??"Без объекта"}</span>{application.rejectionReasonCode==="alternative_need"&&<small className="candidate-transfer-note">Переведён на альтернативную вакансию</small>}</div><div><Status tone={["first_shift","retention_7","retention_30"].includes(application.stage)?"good":["rejected","no_show"].includes(application.stage)?"bad":application.stage==="reserve"?"warn":"info"}>{application.stageLabel}</Status><span>{application.rejectionReason??""}</span></div><div><strong>{application.owner??"Без ответственного"}</strong><span>{application.nextActionAt?formatWorkDate(application.nextActionAt):"Нет запланированного действия"}</span></div><div><button className="button" onClick={()=>setSelected(application)}>Открыть</button></div>{index<current.applications.length-1&&application.rejectionReasonCode==="alternative_need"&&<div className="candidate-transfer-arrow">→ новая заявка</div>}</div>)}</div>{!current.applications.length&&<div className="empty-inline">Заявок пока нет. Кандидат находится только в общей базе.</div>}</Section>}
@@ -154,7 +154,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
 
   {tab==="history"&&<Section title="Системная история" note="Переходы этапов, переводы на другие вакансии и завершения отдельно от комментариев"><div className="candidate-history">{current.history.length?current.history.map(row=><div className="candidate-history-item" key={row.id}><time>{row.changedAt}</time><div><strong>{row.changedBy}: {stageLabel(row.fromStage)} → {stageLabel(row.toStage)}</strong>{row.reason&&<p>{row.reason}</p>}</div></div>):<div className="empty-inline">Изменений этапов пока нет</div>}</div></Section>}
 
-  {selected&&<RecruitingActionDrawer row={selected} need={needs.find(row=>row.id===selected.needId)??null} needs={needs} stages={options.funnelStages.filter(row=>row.active)} recruiters={options.recruiters} demo={demo} canEdit={canEdit} canConvert={canConvert} exitReasons={exitReasons} onClose={()=>setSelected(null)} onSaved={()=>{if(demo){const apps=mergeDemoApplications(current.applications,readDemoApplications().filter(x=>x.candidateId===candidateId));setCurrent(x=>x?{...x,applications:apps,status:apps.some(a=>['first_shift','retention_7','retention_30'].includes(a.stage))?'worker':x.status,history:apps.flatMap(a=>(a.stageEvents??[]).map((h,i)=>({id:\`\${a.applicationId}-\${i}\`,applicationId:a.applicationId,fromStage:h.fromStage??null,toStage:h.toStage,changedAt:formatWorkDate(h.createdAt),changedBy:'Текущий пользователь',reason:h.reason??null,reasonCode:h.reasonCode??null})))}:x);}}}/>}
+  {selected&&<RecruitingActionDrawer row={selected} need={needs.find(row=>row.id===selected.needId)??null} needs={needs} stages={options.funnelStages.filter(row=>row.active)} recruiters={options.recruiters} demo={demo} canEdit={canEdit} canConvert={canConvert} exitReasons={exitReasons} onClose={()=>setSelected(null)} onSaved={()=>{if(demo){const apps=mergeDemoApplications(current.applications,readDemoApplications().filter(x=>x.candidateId===candidateId));setCurrent(x=>x?{...x,applications:apps,status:apps.some(a=>['first_shift','retention_7','retention_30'].includes(a.stage))?'worker':x.status,history:apps.flatMap(a=>(a.stageEvents??[]).map((h,i)=>({id:`${a.applicationId}-${i}`,applicationId:a.applicationId,fromStage:h.fromStage??null,toStage:h.toStage,changedAt:formatWorkDate(h.createdAt),changedBy:'Текущий пользователь',reason:h.reason??null,reasonCode:h.reasonCode??null})))}:x);}}}/>}
  </div>;
 }
 
@@ -163,7 +163,7 @@ function CandidateDocuments({profile}:{profile:CandidateProfile}){
  const additional=profile.documents.filter(row=>row.groupType==="clearance");
  return <div className="candidate-documents-page">
   <Section title="Документы для трудоустройства" note="Единый пакет человека. Сохраняется при переводе на другую вакансию и остаётся связан с карточкой сотрудника."><div className="candidate-dossier-list">{employment.map(row=><DocumentDossierRow key={row.documentTypeId} row={row}/>)}</div>{!employment.length&&<div className="empty-inline">Базовые документы ещё не настроены</div>}</Section>
-  <Section title="Дополнительные документы и допуски" note="Требования конкретных объектов. У каждого требования есть ответственный, срок готовности и правило блокировки."><div className="candidate-dossier-list">{additional.map((row,index)=><DocumentDossierRow key={\`\${row.documentTypeId}-\${row.needId}-\${index}\`} row={row}/>)}</div>{!additional.length&&<div className="empty-inline">Дополнительных требований нет</div>}</Section>
+  <Section title="Дополнительные документы и допуски" note="Требования конкретных объектов. У каждого требования есть ответственный, срок готовности и правило блокировки."><div className="candidate-dossier-list">{additional.map((row,index)=><DocumentDossierRow key={`${row.documentTypeId}-${row.needId}-${index}`} row={row}/>)}</div>{!additional.length&&<div className="empty-inline">Дополнительных требований нет</div>}</Section>
  </div>;
 }
 
@@ -172,9 +172,9 @@ function DocumentDossierRow({row}:{row:CandidateProfile["documents"][number]}){
 }
 
 function ContactPill({item,primary=false}:{item:CandidateContactMethod;primary?:boolean}){
- const href=item.channel==="phone"?\`tel:\${item.value}\`:item.channel==="email"?\`mailto:\${item.value}\`:item.channel==="telegram"&&item.value.startsWith("@")?\`https://t.me/\${item.value.slice(1)}\`:undefined;
+ const href=item.channel==="phone"?`tel:${item.value}`:item.channel==="email"?`mailto:${item.value}`:item.channel==="telegram"&&item.value.startsWith("@")?`https://t.me/${item.value.slice(1)}`:undefined;
  const body=<><span>{contactChannelLabels[item.channel]??item.channel}{primary?" · основной":""}</span><strong>{item.value}</strong></>;
- return href?<a className={\`candidate-contact-pill\${primary?" primary":""}\`} href={href}>{item.channel==="phone"?<Phone size={13}/>:<MessageCircle size={13}/>}<span>{body}</span></a>:<span className={\`candidate-contact-pill\${primary?" primary":""}\`}><MessageCircle size={13}/><span>{body}</span></span>;
+ return href?<a className={`candidate-contact-pill${primary?" primary":""}`} href={href}>{item.channel==="phone"?<Phone size={13}/>:<MessageCircle size={13}/>}<span>{body}</span></a>:<span className={`candidate-contact-pill${primary?" primary":""}`}><MessageCircle size={13}/><span>{body}</span></span>;
 }
 function dedupeDocuments(rows:CandidateProfile["documents"]){return rows.filter((row,index)=>rows.findIndex(item=>item.documentTypeId===row.documentTypeId)===index)}
 function providerLabel(value:string){return value==="candidate"?"Предоставляет кандидат":value==="company"?"Оформляет компания":value==="client"?"Оформляет заказчик":value}
