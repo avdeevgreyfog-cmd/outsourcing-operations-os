@@ -9,7 +9,7 @@ const schema = z.object({
   fullName: z.string().trim().min(2).max(240),
   phone: z.string().trim().min(5).max(60).nullable().optional(),
   email: z.string().email().nullable().optional(),
-  preferredChannel: z.enum(["phone","whatsapp","telegram","email","other"]).nullable().optional(),
+  preferredChannel: z.enum(["phone","whatsapp","telegram","max","email","other"]).nullable().optional(),
   telegram: z.string().trim().max(120).nullable().optional(),
   whatsapp: z.string().trim().max(120).nullable().optional(),
   city: z.string().trim().max(240).nullable().optional(),
@@ -19,6 +19,14 @@ const schema = z.object({
   sourceCampaign: z.string().trim().max(500).nullable().optional(),
   sourceReference: z.string().trim().max(500).nullable().optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
+  contacts:z.array(z.object({
+    id:z.string().uuid().optional(),
+    channel:z.enum(["phone","email","telegram","whatsapp","max","other"]),
+    value:z.string().trim().min(1).max(240),
+    label:z.string().trim().max(120).nullable().optional(),
+    isPreferred:z.boolean().optional(),
+    active:z.boolean().optional(),
+  })).max(20).optional(),
 });
 
 export async function PATCH(request: Request,{params}:{params:Promise<{id:string}>}) {
@@ -39,6 +47,23 @@ export async function PATCH(request: Request,{params}:{params:Promise<{id:string
       `;
       if(!scope||!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor))throw new AccessDeniedError("recruiting.candidate.edit");
       await tx`UPDATE candidates SET full_name=${body.fullName},phone=${body.phone??null},email=${body.email??null},preferred_channel=${body.preferredChannel??null},telegram=${body.telegram??null},whatsapp=${body.whatsapp??null},city=${body.city??null},birth_date=${body.birthDate??null}::date,source=${body.source??null},source_channel=${body.sourceChannel??null},source_campaign=${body.sourceCampaign??null},source_reference=${body.sourceReference??null},notes=${body.notes??null},updated_at=now() WHERE id=${id}::uuid`;
+      if(body.contacts){
+        const activeIds=body.contacts.flatMap(item=>item.id?[item.id]:[]);
+        if(activeIds.length)await tx`UPDATE candidate_contact_methods SET active=false,is_preferred=false,updated_at=now() WHERE candidate_id=${id}::uuid AND id<>ALL(${activeIds}::uuid[])`;
+        else await tx`UPDATE candidate_contact_methods SET active=false,is_preferred=false,updated_at=now() WHERE candidate_id=${id}::uuid`;
+        if(body.contacts.some(item=>item.isPreferred))await tx`UPDATE candidate_contact_methods SET is_preferred=false,updated_at=now() WHERE candidate_id=${id}::uuid`;
+        for(const contact of body.contacts){
+          if(contact.id){
+            await tx`UPDATE candidate_contact_methods SET channel=${contact.channel},value=${contact.value},label=${contact.label??null},is_preferred=${contact.isPreferred??false},active=${contact.active!==false},updated_at=now() WHERE id=${contact.id}::uuid AND candidate_id=${id}::uuid`;
+          }else{
+            await tx`
+              INSERT INTO candidate_contact_methods(organization_id,candidate_id,channel,value,label,is_preferred,active,created_by_user_id)
+              VALUES(${actor.organizationId}::uuid,${id}::uuid,${contact.channel},${contact.value},${contact.label??null},${contact.isPreferred??false},${contact.active!==false},${actor.userId}::uuid)
+              ON CONFLICT(candidate_id,channel,value) DO UPDATE SET label=EXCLUDED.label,is_preferred=EXCLUDED.is_preferred,active=EXCLUDED.active,updated_at=now()
+            `;
+          }
+        }
+      }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${id}::uuid,'profile_updated','Обновлена карточка кандидата','{}'::jsonb)`;
       return {id};
     }));

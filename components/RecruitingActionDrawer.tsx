@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PhoneCall, UserRound, X } from "lucide-react";
+import { PhoneCall, UserRound } from "lucide-react";
 import { SalesDrawer } from "@/components/sales/SalesUI";
 import type { RecruitingApplicationRow, RecruitingFunnelStageSetting, RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 import type { RecruitingStage } from "@/lib/recruiting/model";
 import { recruitingStageLabels } from "@/lib/recruiting/model";
-import { formatWorkDate, reserveReasons, workRisks } from "@/lib/recruiting/workflow";
+import { formatWorkDate, workRisks } from "@/lib/recruiting/workflow";
 import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 import { saveDemoApplication } from "@/lib/recruiting/demo-client";
 
@@ -19,6 +19,11 @@ type DocumentRow={
   provider:"candidate"|"company"|"client";
   status:string;
   note:string|null;
+  requiredByStage?:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
+  blocksProgress?:boolean;
+  responsibleUserId?:string|null;
+  responsible?:string|null;
+  dueAt?:string|null;
 };
 
 type ActionOption={code:string;label:string;hint:string;tone?:"danger"|"neutral"};
@@ -40,7 +45,7 @@ const stageActions:Partial<Record<RecruitingStage,ActionOption[]>>={
   ],
   documents:[
     {code:"documents_wait",label:"Ожидаем документы",hint:"Назначить срок проверки"},
-    {code:"documents_complete",label:"Документы собраны",hint:"Перейти к допускам"},
+    {code:"documents_complete",label:"Документы собраны",hint:"Перейти к следующему активному этапу"},
     {code:"documents_stopped",label:"Оформление прекращено",hint:"Закрыть заявку",tone:"danger"},
   ],
   clearance:[
@@ -87,6 +92,7 @@ export function RecruitingActionDrawer({
     "new:interview":"take_in_work",
     "interview:documents":"interested",
     "documents:clearance":"documents_complete",
+    "documents:preparation":"documents_complete",
     "clearance:preparation":"clearance_complete",
     "preparation:first_shift":"ready_for_start",
   }[row.stage+":"+initialStage]??"";
@@ -122,6 +128,10 @@ export function RecruitingActionDrawer({
     {code:"retention_30",label:"30 дней",sortOrder:80,active:true,systemType:"retention_final"},
   ] as RecruitingFunnelStageSetting[]).filter(item=>item.active).sort((a,b)=>a.sortOrder-b.sortOrder),[stages]);
   const stageLabel=(value:RecruitingStage)=>orderedStages.find(item=>item.code===value)?.label??recruitingStageLabels[value];
+  const nextActiveStage=(value:RecruitingStage)=>{
+    const index=orderedStages.findIndex(item=>item.code===value);
+    return (index>=0?orderedStages[index+1]?.code:null)??(value==="documents"?"preparation":value);
+  };
   const risks=workRisks(row);
   const activeNeeds=needs.filter(item=>["open","in_progress"].includes(item.status)&&item.id!==row.needId);
 
@@ -171,14 +181,14 @@ export function RecruitingActionDrawer({
     if(action==="documents_complete"){
       const employment=documents?.filter(item=>item.groupType==="employment")??[];
       if(employment.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не все документы для оформления готовы.");
-      targetStage="clearance";workflow.outcomeCode="documents_complete";
+      targetStage=nextActiveStage("documents");workflow.outcomeCode="documents_complete";
     }
     if(action==="documents_stopped"){targetStage="rejected";reasonValue="documents";workflow.outcomeCode="documents_stopped";}
 
     if(action==="clearance_progress"){targetStage="clearance";workflow.outcomeCode="clearance_progress";nextAction=requireNext();}
     if(action==="clearance_complete"){
-      const clearance=documents?.filter(item=>item.groupType==="clearance")??[];
-      if(clearance.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не все допуски и документы объекта готовы.");
+      const clearance=documents?.filter(item=>item.groupType==="clearance"&&item.blocksProgress)??[];
+      if(clearance.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не готовы обязательные блокирующие допуски.");
       targetStage="preparation";workflow.outcomeCode="clearance_complete";
     }
     if(action==="clearance_failed"){
@@ -187,6 +197,11 @@ export function RecruitingActionDrawer({
     }
 
     if(action==="preparation_save"||action==="ready_for_start"){
+      if(action==="ready_for_start"){
+        const blocking=(documents??[]).filter(item=>item.groupType==="clearance"&&item.blocksProgress&&isDueBy(item.requiredByStage,"first_shift"));
+        const pending=blocking.filter(item=>!["received","verified","ready","not_required"].includes(item.status));
+        if(pending.length)throw new Error("Не готовы блокирующие документы: "+pending.map(item=>item.name).join(", "));
+      }
       targetStage=action==="ready_for_start"?"first_shift":"preparation";
       workflow.outcomeCode=action;
       workflow.travelState=travelState;
@@ -261,25 +276,35 @@ export function RecruitingActionDrawer({
     finally{setBusy("")}
   }
 
-  async function updateDocument(document:DocumentRow,status:string){
-    if(demo){setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?{...item,status}:item));return;}
+  async function updateDocument(document:DocumentRow,patch:Partial<Pick<DocumentRow,"status"|"responsibleUserId"|"dueAt">>){
+    const next={...document,...patch};
+    if(demo){setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?next:item));return;}
     setBusy(document.documentTypeId);setError("");
     try{
-      const response=await fetch("/api/candidates/"+row.candidateId+"/documents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId:row.applicationId,documentTypeId:document.documentTypeId,status})});
+      const response=await fetch("/api/candidates/"+row.candidateId+"/documents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({
+        applicationId:row.applicationId,documentTypeId:document.documentTypeId,status:next.status,responsibleUserId:next.responsibleUserId??null,dueAt:next.dueAt??null,
+      })});
       const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error??"Не удалось обновить документ");
-      setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?{...item,status}:item));
+      setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?next:item));
     }catch(e){setError(e instanceof Error?e.message:"Не удалось обновить документ");}
     finally{setBusy("")}
   }
 
-  const visibleDocuments=documents?.filter(item=>row.stage==="documents"?item.groupType==="employment":row.stage==="clearance"?item.groupType==="clearance":true)??null;
+  const visibleDocuments=documents?.filter(item=>
+    row.stage==="documents"?item.groupType==="employment":
+    row.stage==="clearance"?item.groupType==="clearance":
+    row.stage==="preparation"?item.groupType==="clearance"&&!["received","verified","ready","not_required"].includes(item.status):
+    false
+  )??null;
 
   return <SalesDrawer title={row.fullName} subtitle={row.need+" · "+(row.object??"Без объекта")} onClose={()=>{if(!busy)onClose();}}>
     <div className="candidate-work-drawer">
       <section className="candidate-work-identity">
-        <div><span>Телефон</span><strong>{row.phone??"Не указан"}</strong></div>
+        <div><span>{row.stage==="new"?"Телефон":"Связь"}</span><strong>{row.stage==="new"?(row.phone??"Не указан"):preferredContact(row)}</strong></div>
         <div><span>Город</span><strong>{row.city??"Не указан"}</strong></div>
-        <div><span>Источник</span><strong>{[row.source,row.sourceChannel].filter(Boolean).join(" · ")||"Не указан"}</strong></div>
+        {row.stage==="new"
+          ? <div><span>Источник</span><strong>{sourceDisplay(row)}</strong></div>
+          : <div><span>Канал связи</span><strong>{contactChannelLabel(row.preferredChannel)}</strong></div>}
         <div><span>Ответственный</span><strong>{row.owner??"Не назначен"}</strong></div>
       </section>
 
@@ -293,7 +318,7 @@ export function RecruitingActionDrawer({
         </div>
       </section>
 
-      {visibleDocuments!==null&&showDocumentsAtStage(row.stage)&&<DocumentChecklist documents={visibleDocuments} canEdit={canEdit} busy={busy} onChange={updateDocument}/>}
+      {visibleDocuments!==null&&showDocumentsAtStage(row.stage)&&<DocumentChecklist documents={visibleDocuments} recruiters={recruiters} canEdit={canEdit} busy={busy} onChange={updateDocument}/>}
 
       {error&&<div role="alert" className="recruiting-error">{error}</div>}
 
@@ -338,16 +363,21 @@ export function RecruitingActionDrawer({
   </SalesDrawer>;
 }
 
-function DocumentChecklist({documents,canEdit,busy,onChange}:{documents:DocumentRow[];canEdit:boolean;busy:string;onChange:(document:DocumentRow,status:string)=>void}){
+function DocumentChecklist({documents,recruiters,canEdit,busy,onChange}:{documents:DocumentRow[];recruiters:Array<{id:string;name:string}>;canEdit:boolean;busy:string;onChange:(document:DocumentRow,patch:Partial<Pick<DocumentRow,"status"|"responsibleUserId"|"dueAt">>)=>void}){
   const group=documents[0]?.groupType;
   const ready=documents.filter(item=>["received","verified","ready","not_required"].includes(item.status)).length;
   return <section className="candidate-documents">
-    <header><div><h3>{group==="clearance"?"Оформление и допуски":"Документы для оформления"}</h3><p>Готово {ready} из {documents.length}. Состояние карточки рассчитывается из этого списка.</p></div></header>
+    <header><div><h3>{group==="clearance"?"Дополнительные документы и допуски":"Документы для оформления"}</h3><p>Готово {ready} из {documents.length}. Неблокирующие требования могут выполняться параллельно следующим этапам.</p></div></header>
     <div>{documents.map(document=>{
       const statuses=document.provider==="candidate"
         ? ["missing","requested","received","verified","not_required"]
         : ["to_prepare","in_progress","ready","not_required"];
-      return <div className="candidate-document-row" key={document.documentTypeId}><div><strong>{document.name}</strong><small>{providerLabels[document.provider]}</small></div><select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,e.target.value)}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select></div>;
+      const companyTask=document.groupType==="clearance"&&document.provider!=="candidate"&&!["ready","not_required"].includes(document.status);
+      return <div className="candidate-document-row candidate-document-row-v2" key={document.documentTypeId}>
+        <div className="candidate-document-meta"><strong>{document.name}</strong><small>{providerLabels[document.provider]} · {document.requiredByStage?deadlineLabel(document.requiredByStage):"Срок не задан"}{document.blocksProgress?" · блокирует":""}</small></div>
+        <select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{status:e.target.value})}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select>
+        {companyTask&&<div className="candidate-document-task"><select aria-label={"Ответственный: "+document.name} value={document.responsibleUserId??""} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{responsibleUserId:e.target.value||null})}><option value="">Ответственный</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><input aria-label={"Срок: "+document.name} type="datetime-local" value={localDate(document.dueAt)} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{dueAt:e.target.value?new Date(e.target.value).toISOString():null})}/></div>}
+      </div>;
     })}</div>
   </section>;
 }
@@ -370,7 +400,7 @@ function PreparationFields({
   </>;
 }
 
-function showDocumentsAtStage(stage:RecruitingStage){return ["documents","clearance","preparation","first_shift","retention_7","retention_30"].includes(stage);}
+function showDocumentsAtStage(stage:RecruitingStage){return ["documents","clearance","preparation"].includes(stage);}
 
 function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
   const employment=[
@@ -378,16 +408,18 @@ function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
     {id:"demo-doc-snils",name:"СНИЛС",provider:"candidate" as const},
     {id:"demo-doc-inn",name:"ИНН",provider:"candidate" as const},
     {id:"demo-doc-bank",name:"Банковские реквизиты",provider:"candidate" as const},
+    {id:"demo-doc-employment-record",name:"Трудовая книжка / СТД",provider:"candidate" as const},
+    {id:"demo-doc-military",name:"Военный билет / документ воинского учёта",provider:"candidate" as const},
   ];
   const clearance=[
     {id:"demo-doc-medical",name:"Медицинская комиссия",provider:"company" as const},
     {id:"demo-doc-qualification",name:"Удостоверение / допуск",provider:"candidate" as const},
   ];
-  const employmentReady=Math.min(row.documentSummary?.employmentReady??(row.stage==="documents"?2:4),4);
+  const employmentReady=Math.min(row.documentSummary?.employmentReady??(row.stage==="documents"?3:6),6);
   const clearanceReady=Math.min(row.documentSummary?.clearanceReady??(["preparation","first_shift","retention_7","retention_30"].includes(row.stage)?2:0),2);
   return [
-    ...employment.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"employment" as const,provider:item.provider,status:index<employmentReady?"received":"requested",note:null})),
-    ...clearance.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"clearance" as const,provider:item.provider,status:index<clearanceReady?(item.provider==="candidate"?"received":"ready"):(item.provider==="candidate"?"requested":"to_prepare"),note:null})),
+    ...employment.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"employment" as const,provider:item.provider,status:index<employmentReady?"received":"requested",note:null,requiredByStage:"documents" as const,blocksProgress:true})),
+    ...clearance.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"clearance" as const,provider:item.provider,status:index<clearanceReady?(item.provider==="candidate"?"received":"ready"):(item.provider==="candidate"?"requested":"to_prepare"),note:null,requiredByStage:index===0?"first_shift" as const:"retention_7" as const,blocksProgress:false})),
   ];
 }
 
@@ -400,6 +432,22 @@ function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingAppli
   </section>;
 }
 
+function isDueBy(value:DocumentRow["requiredByStage"],target:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"){
+  if(!value||value==="none")return false;
+  const order=["documents","preparation","first_shift","retention_7","retention_30"];
+  return order.indexOf(value)<=order.indexOf(target);
+}
+function preferredContact(row:RecruitingApplicationRow){
+  if(row.preferredContact)return row.preferredContact;
+  if(row.preferredChannel==="telegram")return row.telegram??row.phone??"Не указан";
+  if(row.preferredChannel==="whatsapp")return row.whatsapp??row.phone??"Не указан";
+  if(row.preferredChannel==="email")return row.email??row.phone??"Не указан";
+  return row.phone??row.email??"Не указан";
+}
+function contactChannelLabel(value:string|null){return value==="telegram"?"Telegram":value==="whatsapp"?"WhatsApp":value==="max"?"MAX":value==="email"?"Email":value==="phone"?"Телефон":"Контакт";}
+function sourceDisplay(row:RecruitingApplicationRow){const source=row.source?.trim()??"";const channel=row.sourceChannel?.trim()??"";return !source&&!channel?"Не указан":source&&channel&&source.toLocaleLowerCase("ru")===channel.toLocaleLowerCase("ru")?source:[source,channel].filter(Boolean).join(" · ");}
+
+function deadlineLabel(value:string){return value==="documents"?"до оформления":value==="preparation"?"до подготовки":value==="first_shift"?"до первого выхода":value==="retention_7"?"до 7-го дня":value==="retention_30"?"до 30-го дня":"без жёсткого срока";}
 function provision(c:Record<string,unknown>,key:string){const explicit=c[key+"Provided"];const detail=display(c[key]);if(explicit===true)return detail==="—"?"Предоставляется":detail;if(explicit===false)return detail==="—"?"Не предоставляется":detail;return detail;}
 function display(value:unknown){if(value==null||value==="")return"—";if(typeof value==="string"||typeof value==="number")return String(value);return JSON.stringify(value);}
 function localDate(value?:string|null){if(!value||!Number.isFinite(Date.parse(value)))return"";const date=new Date(value);return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);}

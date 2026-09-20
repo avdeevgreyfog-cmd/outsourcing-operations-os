@@ -48,6 +48,8 @@ const patchSchema = z.object({
   documentRequirements: z.array(z.object({
     documentTypeId:z.string().uuid(),
     provider:z.enum(["candidate","company","client"]),
+    requiredByStage:z.enum(["documents","preparation","first_shift","retention_7","retention_30","none"]).default("first_shift"),
+    blocksProgress:z.boolean().default(false),
   })).max(50).optional(),
 });
 
@@ -154,7 +156,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
 
       if(body.documentRequirements!==undefined||body.documentTypeIds!==undefined){
-        const requestedDocs=body.documentRequirements??(body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const}));
+        const requestedDocs=body.documentRequirements??(body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const,requiredByStage:"documents" as const,blocksProgress:true}));
         const ids=[...new Set(requestedDocs.map(item=>item.documentTypeId))];
         if(ids.length!==requestedDocs.length)throw new Error("Документ указан несколько раз");
         if(ids.length){
@@ -166,8 +168,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await tx`DELETE FROM need_document_requirements WHERE need_id=${id}::uuid`;
         for(const requirement of requestedDocs){
           await tx`
-            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider)
-            VALUES(${actor.organizationId}::uuid,${id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider})
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider,required_by_stage,blocks_progress)
+            VALUES(${actor.organizationId}::uuid,${id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider},${requirement.requiredByStage},${requirement.blocksProgress})
           `;
         }
       }

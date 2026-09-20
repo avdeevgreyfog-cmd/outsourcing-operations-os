@@ -7,7 +7,7 @@ import { withTenant } from "@/lib/db/client";
 
 const schema=z.object({
   applicationId:z.string().uuid().nullable().optional(),
-  channel:z.enum(["phone","whatsapp","telegram","email","meeting","note","other"]),
+  channel:z.enum(["phone","whatsapp","telegram","max","email","meeting","note","other"]),
   direction:z.enum(["inbound","outbound","internal"]).default("internal"),
   summary:z.string().trim().min(2).max(3000),
   happenedAt:z.string().datetime().nullable().optional(),
@@ -24,10 +24,12 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         SELECT c.organization_id "organizationId",ca.owner_user_id "ownerUserId",COALESCE(n.region_id,o.region_id) "regionId",ca.object_id "objectId",o.client_company_id "clientId",
           ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
             || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds"
-        FROM candidates c JOIN candidate_applications ca ON ca.candidate_id=c.id JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
-        WHERE c.id=${id}::uuid ORDER BY ca.updated_at DESC LIMIT 1
+        FROM candidates c
+        LEFT JOIN LATERAL(SELECT ca.* FROM candidate_applications ca WHERE ca.candidate_id=c.id ORDER BY ca.updated_at DESC LIMIT 1) ca ON true
+        LEFT JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
+        WHERE c.id=${id}::uuid LIMIT 1
       `;
-      if(!scope||!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor))throw new AccessDeniedError("recruiting.candidate.edit");
+      if(!scope||(!actor.access.allOrg&&!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor)))throw new AccessDeniedError("recruiting.candidate.edit");
       if(body.applicationId){const [application]=await tx<Array<{id:string}>>`SELECT id FROM candidate_applications WHERE id=${body.applicationId}::uuid AND candidate_id=${id}::uuid`;if(!application)throw new Error("Заявка кандидата не найдена");}
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO candidate_communications(organization_id,candidate_id,application_id,channel,direction,summary,happened_at,created_by_user_id)

@@ -44,6 +44,18 @@ export async function PATCH(request:Request){
     if(!body.stages.find(item=>item.code==="new")?.active)return NextResponse.json({error:"Этап входящего контакта нельзя отключить"},{status:400});
     if(!body.stages.find(item=>item.code==="first_shift")?.active)return NextResponse.json({error:"Этап первого выхода нельзя отключить"},{status:400});
     await withTenant(actor.organizationId,actor.userId,sql=>sql.begin(async tx=>{
+      const disabled=body.stages.filter(item=>!item.active).map(item=>item.code);
+      if(disabled.length){
+        const occupied=await tx<Array<{stage:string;count:number}>>`
+          SELECT stage,count(*)::int count FROM candidate_applications
+          WHERE stage=ANY(${disabled}::text[])
+          GROUP BY stage
+        `;
+        if(occupied.length){
+          const labels=new Map(body.stages.map(item=>[item.code,item.label]));
+          throw new Error("Нельзя отключить этап с кандидатами: "+occupied.map(item=>`${labels.get(item.stage as typeof body.stages[number]["code"])??item.stage} — ${item.count}`).join(", "));
+        }
+      }
       for(const item of body.stages){
         await tx`
           UPDATE recruiting_funnel_stages

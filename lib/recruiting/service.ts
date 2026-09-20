@@ -15,7 +15,10 @@ export type RecruitingDocumentType = {
   defaultProvider:"candidate"|"company"|"client"; defaultRequired:boolean; active?:boolean;
 };
 export type NeedDocumentRequirement = {
-  documentTypeId:string; provider:"candidate"|"company"|"client";
+  documentTypeId:string;
+  provider:"candidate"|"company"|"client";
+  requiredByStage:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
+  blocksProgress:boolean;
 };
 export type NeedQuantityChange = { id:string; oldCount:number|null; newCount:number; delta:number; reason:string|null; changedAt:string; changedBy:string };
 
@@ -68,6 +71,7 @@ export type RecruitingApplicationRow = {
   phone: string | null;
   email: string | null;
   preferredChannel: string | null;
+  preferredContact?: string | null;
   telegram: string | null;
   whatsapp: string | null;
   city: string | null;
@@ -109,6 +113,49 @@ export type RecruitingApplicationRow = {
   };
 };
 
+export type CandidateContactMethod = {
+  id:string;
+  channel:"phone"|"email"|"telegram"|"whatsapp"|"max"|"other";
+  value:string;
+  label:string|null;
+  isPreferred:boolean;
+  active:boolean;
+};
+
+export type CandidateDocumentDossierRow = {
+  documentTypeId:string;
+  name:string;
+  groupType:"employment"|"clearance";
+  provider:"candidate"|"company"|"client";
+  status:string;
+  note:string|null;
+  needId:string|null;
+  need:string|null;
+  object:string|null;
+  requiredByStage:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
+  blocksProgress:boolean;
+};
+
+export type CandidateDirectoryRow = {
+  id:string;
+  fullName:string;
+  phone:string|null;
+  city:string|null;
+  preferredChannel:string|null;
+  preferredContact:string|null;
+  source:string|null;
+  status:"candidate"|"active"|"reserve"|"completed"|"worker";
+  latestNeed:string|null;
+  latestObject:string|null;
+  latestStage:RecruitingStage|null;
+  latestStageLabel:string|null;
+  owner:string|null;
+  applicationsCount:number;
+  activeApplications:number;
+  workerId:string|null;
+  updatedAt:string;
+};
+
 export type CandidateCommunication = {
   id: string;
   applicationId: string | null;
@@ -138,6 +185,7 @@ export type CandidateProfile = {
   preferredChannel: string | null;
   telegram: string | null;
   whatsapp: string | null;
+  contacts: CandidateContactMethod[];
   city: string | null;
   birthDate: string | null;
   source: string | null;
@@ -146,6 +194,9 @@ export type CandidateProfile = {
   sourceReference: string | null;
   notes: string | null;
   status: string;
+  workerId: string | null;
+  workerStatus: string | null;
+  documents: CandidateDocumentDossierRow[];
   applications: RecruitingApplicationRow[];
   communications: CandidateCommunication[];
   history: CandidateStageEvent[];
@@ -170,14 +221,16 @@ const demoUserNames:Record<string,string>={
   "10000000-0000-4000-8000-000000000004":"Алексей Волков",
   "10000000-0000-4000-8000-000000000005":"Ольга Новикова",
 };
-const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical","demo-doc-qualification"];
+const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-employment-record","demo-doc-military","demo-doc-medical","demo-doc-qualification"];
 const demoDocumentRequirements:NeedDocumentRequirement[]=[
-  {documentTypeId:"demo-doc-passport",provider:"candidate"},
-  {documentTypeId:"demo-doc-snils",provider:"candidate"},
-  {documentTypeId:"demo-doc-inn",provider:"candidate"},
-  {documentTypeId:"demo-doc-bank",provider:"candidate"},
-  {documentTypeId:"demo-doc-medical",provider:"company"},
-  {documentTypeId:"demo-doc-qualification",provider:"candidate"},
+  {documentTypeId:"demo-doc-passport",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-snils",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-inn",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-bank",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-employment-record",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-military",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-medical",provider:"company",requiredByStage:"first_shift",blocksProgress:false},
+  {documentTypeId:"demo-doc-qualification",provider:"candidate",requiredByStage:"retention_7",blocksProgress:false},
 ];
 
 function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
@@ -250,7 +303,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
         COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",
         ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds",
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider) ORDER BY dt.sort_order)
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider,'requiredByStage',ndr.required_by_stage,'blocksProgress',ndr.blocks_progress) ORDER BY dt.sort_order)
           FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
           WHERE ndr.need_id=n.id AND ndr.required),'[]'::jsonb) "documentRequirements"
       FROM needs n
@@ -370,6 +423,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
     return {
       applicationId: `demo-application-${row.id}`, candidateId: row.id, organizationId: row.organizationId,
       fullName: row.fullName, phone: row.phone ?? null, email: seed.email??null, preferredChannel: seed.preferredChannel??"phone",
+      preferredContact:seed.preferredChannel==="telegram"?seed.telegram??row.phone:seed.preferredChannel==="whatsapp"?seed.whatsapp??row.phone:seed.email??row.phone,
       telegram:seed.telegram??null,whatsapp:seed.whatsapp??null,city:seed.city??null,
       source: row.source ?? null, sourceChannel:seed.sourceChannel??row.source??null, sourceCampaign:seed.sourceCampaign??null, sourceReference:seed.sourceReference??null,
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
@@ -388,7 +442,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<Array<Omit<RecruitingApplicationRow,"stage"|"stageLabel"> & {rawStage:string} & Record<string, unknown>>>`
       SELECT ca.id "applicationId",c.id "candidateId",c.organization_id "organizationId",c.full_name "fullName",c.phone,c.email,
-        c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,CASE WHEN ca.source_snapshot IS NULL THEN c.source ELSE ca.source_snapshot->>'source' END source,ca.source_snapshot->>'channel' "sourceChannel",
+        c.preferred_channel "preferredChannel",COALESCE(pref.value,c.phone,c.email) "preferredContact",c.telegram,c.whatsapp,c.city,CASE WHEN ca.source_snapshot IS NULL THEN c.source ELSE ca.source_snapshot->>'source' END source,ca.source_snapshot->>'channel' "sourceChannel",
         ca.source_snapshot->>'campaign' "sourceCampaign",ca.source_snapshot->>'reference' "sourceReference",ca.stage "rawStage",ca.need_id "needId",
         COALESCE(n.title,s.name) need,ca.object_id "objectId",o.name object,COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ca.owner_user_id "ownerUserId",owner.display_name owner,ca.manager_user_id "managerUserId",manager.display_name manager,
@@ -410,14 +464,74 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         ),'[]'::jsonb) "recentCommunications",
         jsonb_build_object(
           'required',(SELECT count(*)::int FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required),
-          'received',(SELECT count(*)::int FROM need_document_requirements ndr LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')),
-          'missing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')),'[]'::jsonb),
-          'employmentRequired',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'),
-          'employmentReady',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment' AND COALESCE(cad.status,'missing') IN ('received','verified','ready')),
-          'employmentMissing',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment' AND COALESCE(cad.status,'missing') NOT IN ('received','verified','ready','not_required')),'[]'::jsonb),
-          'clearanceRequired',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'),
-          'clearanceReady',(SELECT count(*)::int FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')),
-          'clearancePending',COALESCE((SELECT jsonb_agg(dt.name ORDER BY dt.sort_order) FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance' AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')),'[]'::jsonb)
+          'received',(
+            SELECT count(*)::int
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required
+              AND CASE WHEN dt.group_type='employment'
+                THEN COALESCE(cd.status,cad.status,'missing')
+                ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
+              END IN ('received','verified','ready')
+          ),
+          'missing',COALESCE((
+            SELECT jsonb_agg(dt.name ORDER BY dt.sort_order)
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required
+              AND CASE WHEN dt.group_type='employment'
+                THEN COALESCE(cd.status,cad.status,'missing')
+                ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
+              END NOT IN ('received','verified','ready','not_required')
+          ),'[]'::jsonb),
+          'employmentRequired',(
+            SELECT count(*)::int FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'
+          ),
+          'employmentReady',(
+            SELECT count(*)::int
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'
+              AND COALESCE(cd.status,cad.status,'missing') IN ('received','verified','ready')
+          ),
+          'employmentMissing',COALESCE((
+            SELECT jsonb_agg(dt.name ORDER BY dt.sort_order)
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_documents cd ON cd.candidate_id=c.id AND cd.document_type_id=dt.id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='employment'
+              AND COALESCE(cd.status,cad.status,'missing') NOT IN ('received','verified','ready','not_required')
+          ),'[]'::jsonb),
+          'clearanceRequired',(
+            SELECT count(*)::int FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'
+          ),
+          'clearanceReady',(
+            SELECT count(*)::int
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'
+              AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) IN ('received','verified','ready')
+          ),
+          'clearancePending',COALESCE((
+            SELECT jsonb_agg(dt.name ORDER BY dt.sort_order)
+            FROM need_document_requirements ndr
+            JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+            LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+            WHERE ndr.need_id=n.id AND ndr.required AND dt.group_type='clearance'
+              AND COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) NOT IN ('received','verified','ready','not_required')
+          ),'[]'::jsonb)
         ) "documentSummary"
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
@@ -426,6 +540,12 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
       LEFT JOIN objects o ON o.id=ca.object_id
       LEFT JOIN app_users owner ON owner.id=ca.owner_user_id
       LEFT JOIN app_users manager ON manager.id=ca.manager_user_id
+      LEFT JOIN LATERAL(
+        SELECT cm.value FROM candidate_contact_methods cm
+        WHERE cm.candidate_id=c.id AND cm.active
+        ORDER BY (cm.channel=c.preferred_channel) DESC,cm.is_preferred DESC,cm.created_at
+        LIMIT 1
+      ) pref ON true
       ORDER BY ca.updated_at DESC
     `;
     return rows.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row) => {
@@ -436,11 +556,85 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   });
 }
 
+export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirectoryRow[]>{
+  requireCapability(actor,"recruiting.candidate.read");
+  if(actor.demo){
+    const applications=demoApplications(actor);
+    const ids=[...new Set(applications.map(row=>row.candidateId))];
+    return ids.map(id=>{
+      const related=applications.filter(row=>row.candidateId===id).sort((a,b)=>(b.updatedAt??"").localeCompare(a.updatedAt??""));
+      const first=related[0];
+      const active=related.filter(row=>["new","interview","documents","clearance","preparation"].includes(row.stage));
+      const worker=related.some(row=>["first_shift","retention_7","retention_30"].includes(row.stage));
+      const reserve=related.some(row=>row.stage==="reserve");
+      const completed=related.length>0&&related.every(row=>["rejected","no_show"].includes(row.stage));
+      const preferredContact=first.preferredChannel==="telegram"?first.telegram:first.preferredChannel==="whatsapp"?first.whatsapp:first.preferredChannel==="email"?first.email:first.phone;
+      return {
+        id,fullName:first.fullName,phone:first.phone,city:first.city,preferredChannel:first.preferredChannel,preferredContact:preferredContact??first.phone,
+        source:first.source,status:worker?"worker":active.length?"active":reserve?"reserve":completed?"completed":"candidate",
+        latestNeed:first.need,latestObject:first.object,latestStage:first.stage,latestStageLabel:first.stageLabel,owner:first.owner,
+        applicationsCount:related.length,activeApplications:active.length,workerId:worker?`demo-worker-${id}`:null,updatedAt:first.updatedAt??first.createdAt??"",
+      } satisfies CandidateDirectoryRow;
+    });
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<Array<CandidateDirectoryRow & {
+      organizationId:string;createdByUserId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];
+      rawStage:string|null;rawStatus:string;
+    }>>`
+      SELECT c.id,c.full_name "fullName",c.phone,c.city,c.preferred_channel "preferredChannel",
+        COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.organization_id "organizationId",c.created_by_user_id "createdByUserId",
+        COALESCE(latest.owner_user_id,c.current_recruiter_user_id) "ownerUserId",latest.manager_user_id "managerUserId",latest.object_id "objectId",
+        COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
+        ARRAY[latest.owner_user_id::text,latest.manager_user_id::text,c.current_recruiter_user_id::text,c.original_recruiter_user_id::text]
+          || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=latest.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL) "assigneeUserIds",
+        COALESCE(n.title,s.name) "latestNeed",o.name "latestObject",latest.stage "rawStage",
+        owner.display_name owner,count_apps.cnt::int "applicationsCount",count_apps.active::int "activeApplications",
+        wp.id "workerId",c.status "rawStatus",c.updated_at::text "updatedAt",
+        CASE
+          WHEN wp.id IS NOT NULL AND wp.status='active' THEN 'worker'
+          WHEN count_apps.active>0 THEN 'active'
+          WHEN count_apps.reserve>0 THEN 'reserve'
+          WHEN count_apps.cnt>0 AND count_apps.terminal=count_apps.cnt THEN 'completed'
+          ELSE 'candidate'
+        END status
+      FROM candidates c
+      LEFT JOIN LATERAL(
+        SELECT cm.value FROM candidate_contact_methods cm
+        WHERE cm.candidate_id=c.id AND cm.active
+        ORDER BY cm.is_preferred DESC,cm.created_at LIMIT 1
+      ) pref ON true
+      LEFT JOIN LATERAL(
+        SELECT ca.* FROM candidate_applications ca WHERE ca.candidate_id=c.id ORDER BY ca.updated_at DESC LIMIT 1
+      ) latest ON true
+      LEFT JOIN LATERAL(
+        SELECT count(*) cnt,
+          count(*) FILTER(WHERE stage IN ('new','interview','documents','clearance','preparation')) active,
+          count(*) FILTER(WHERE stage='reserve') reserve,
+          count(*) FILTER(WHERE stage IN ('rejected','no_show')) terminal
+        FROM candidate_applications ca WHERE ca.candidate_id=c.id
+      ) count_apps ON true
+      LEFT JOIN needs n ON n.id=latest.need_id
+      LEFT JOIN specialties s ON s.id=n.specialty_id
+      LEFT JOIN objects o ON o.id=latest.object_id
+      LEFT JOIN app_users owner ON owner.id=latest.owner_user_id
+      LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      ORDER BY c.updated_at DESC
+    `;
+    return rows.filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
+      const latestStage=row.rawStage?normalizeRecruitingStage(row.rawStage):null;
+      const {rawStage,rawStatus,organizationId,createdByUserId,ownerUserId,managerUserId,objectId,regionId,clientId,assigneeUserIds,...rest}=row;
+      void rawStatus;void organizationId;void createdByUserId;void ownerUserId;void managerUserId;void objectId;void regionId;void clientId;void assigneeUserIds;
+      return {...rest,latestStage,latestStageLabel:latestStage?recruitingStageLabels[latestStage]:null} as CandidateDirectoryRow;
+    });
+  });
+}
+
 export async function getCandidateProfile(actor: Actor, id: string): Promise<CandidateProfile | null> {
   const applications = (await listRecruitingApplications(actor)).filter((row) => row.candidateId === id);
-  if (!applications.length) return null;
-  const first = applications[0];
   if (actor.demo) {
+    if(!applications.length)return null;
+    const first = applications[0];
     const communications=applications.flatMap((application)=>(
       application.recentCommunications??[]
     ).map((item,index)=>({
@@ -465,21 +659,37 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     const status=applications.some(application=>["first_shift","retention_7","retention_30"].includes(application.stage))?"worker":applications.every(application=>["rejected","no_show"].includes(application.stage))?"inactive":"active";
     return {
       id, fullName:first.fullName, phone:first.phone, email:first.email, preferredChannel:first.preferredChannel, telegram:first.telegram,
-      whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
-      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status, applications,
+      whatsapp:first.whatsapp,
+      contacts:[
+        ...(first.phone?[{id:"demo-phone",channel:"phone" as const,value:first.phone,label:"Основной телефон",isPreferred:(first.preferredChannel??"phone")==="phone",active:true}]:[]),
+        ...(first.telegram?[{id:"demo-telegram",channel:"telegram" as const,value:first.telegram,label:null,isPreferred:first.preferredChannel==="telegram",active:true}]:[]),
+        ...(first.whatsapp?[{id:"demo-whatsapp",channel:"whatsapp" as const,value:first.whatsapp,label:null,isPreferred:first.preferredChannel==="whatsapp",active:true}]:[]),
+        ...(first.email?[{id:"demo-email",channel:"email" as const,value:first.email,label:null,isPreferred:first.preferredChannel==="email",active:true}]:[]),
+      ],
+      city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
+      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status,
+      workerId:status==="worker"?`demo-worker-${id}`:null,workerStatus:status==="worker"?"active":null,
+      documents:buildDemoCandidateDocuments(applications),
+      applications,
       communications:communications.sort((a,b)=>b.happenedAt.localeCompare(a.happenedAt)),
       history:history.reverse(),
     };
   }
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history">>>`
-      SELECT id,full_name "fullName",phone,email,preferred_channel "preferredChannel",telegram,whatsapp,city,birth_date::text "birthDate",
-        source,source_channel "sourceChannel",source_campaign "sourceCampaign",source_reference "sourceReference",notes,status
-      FROM candidates WHERE id=${id}::uuid
+    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"contacts"|"documents"> & {
+      organizationId:string;ownerUserId:string|null;createdByUserId:string;assigneeUserIds:string[];
+    }>>`
+      SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
+        c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
+        c.organization_id "organizationId",c.current_recruiter_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
+        ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text] "assigneeUserIds",
+        wp.id "workerId",wp.status "workerStatus"
+      FROM candidates c LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      WHERE c.id=${id}::uuid
     `;
-    if (!candidate) return null;
+    if (!candidate || !canReadRow(actor.access,"recruiting.candidate.read",candidate,actor)) return null;
     const applicationIds = applications.map((application) => application.applicationId);
-    const [communications, history] = await Promise.all([
+    const [communications, history, contacts, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
         SELECT cc.id,cc.application_id "applicationId",cc.channel,cc.direction,cc.summary,
           to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') "happenedAt",u.display_name author
@@ -492,9 +702,46 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         FROM candidate_stage_history h JOIN app_users u ON u.id=h.changed_by_user_id
         WHERE h.application_id=ANY(${applicationIds}::uuid[]) ORDER BY h.created_at DESC LIMIT 100
       `,
+      sql<CandidateContactMethod[]>`
+        SELECT id,channel,value,label,is_preferred "isPreferred",active
+        FROM candidate_contact_methods WHERE candidate_id=${id}::uuid AND active
+        ORDER BY is_preferred DESC,created_at
+      `,
+      sql<CandidateDocumentDossierRow[]>`
+        SELECT dt.id "documentTypeId",dt.name,dt.group_type "groupType",
+          COALESCE(ndr.provider,dt.default_provider) provider,
+          COALESCE(cd.status,cad.status,CASE WHEN COALESCE(ndr.provider,dt.default_provider)='candidate' THEN 'missing' ELSE 'to_prepare' END) status,
+          COALESCE(cd.note,cad.note) note,
+          n.id "needId",COALESCE(n.title,s.name) need,o.name object,
+          COALESCE(ndr.required_by_stage,CASE WHEN dt.group_type='employment' THEN 'documents' ELSE 'first_shift' END) "requiredByStage",
+          COALESCE(ndr.blocks_progress,dt.group_type='employment') "blocksProgress"
+        FROM recruiting_document_types dt
+        LEFT JOIN candidate_documents cd ON cd.candidate_id=${id}::uuid AND cd.document_type_id=dt.id
+        LEFT JOIN need_document_requirements ndr ON ndr.document_type_id=dt.id AND ndr.required
+          AND EXISTS(SELECT 1 FROM candidate_applications ca0 WHERE ca0.candidate_id=${id}::uuid AND ca0.need_id=ndr.need_id)
+        LEFT JOIN needs n ON n.id=ndr.need_id
+        LEFT JOIN specialties s ON s.id=n.specialty_id
+        LEFT JOIN objects o ON o.id=n.object_id
+        LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id
+        LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+        WHERE dt.active AND (dt.default_required OR cd.id IS NOT NULL OR ndr.need_id IS NOT NULL)
+        ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,n.created_at DESC NULLS LAST
+      `,
     ]);
-    return {...candidate, applications, communications, history};
+    const {organizationId,ownerUserId,createdByUserId,assigneeUserIds,...safeCandidate}=candidate;void organizationId;void ownerUserId;void createdByUserId;void assigneeUserIds;
+    return {...safeCandidate, contacts, documents, applications, communications, history};
   });
+}
+
+function buildDemoCandidateDocuments(applications:RecruitingApplicationRow[]):CandidateDocumentDossierRow[]{
+  const latest=applications[0];
+  if(!latest)return[];
+  const employment=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Трудовая / СТД","Военный билет / документ воинского учёта"];
+  const clearance=["Медицинская комиссия","Удостоверение / допуск"];
+  return [
+    ...employment.map((name,index)=>({documentTypeId:`demo-employment-${index}`,name,groupType:"employment" as const,provider:"candidate" as const,status:index<4?"received":"missing",note:null,needId:null,need:null,object:null,requiredByStage:"documents" as const,blocksProgress:true})),
+    ...clearance.map((name,index)=>({documentTypeId:`demo-clearance-${index}`,name,groupType:"clearance" as const,provider:index===0?"company" as const:"candidate" as const,status:index===0?"in_progress":"received",note:null,needId:latest.needId,need:latest.need,object:latest.object,requiredByStage:index===0?"first_shift" as const:"retention_7" as const,blocksProgress:false})),
+  ];
 }
 
 export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOptions> {
@@ -520,8 +767,9 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
       {id:"demo-source-hh",code:"hh",name:"hh.ru",kind:"job_site",active:true},
       {id:"demo-source-telegram",code:"telegram",name:"Telegram",kind:"social",active:true},
-      {id:"demo-source-referral",code:"referral",name:"Рекомендация",kind:"referral",active:true},
+      {id:"demo-source-referral",code:"referral",name:"Рекомендация сотрудника / кандидата",kind:"referral",active:true},
       {id:"demo-source-partner",code:"partner",name:"Партнёр / подрядчик",kind:"partner",active:true},
+      {id:"demo-source-company-db",code:"company_database",name:"База компании / импорт",kind:"internal",active:true},
     ],
     funnelStages: [
       {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
@@ -538,8 +786,13 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-doc-snils",code:"snils",name:"СНИЛС",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-inn",code:"inn",name:"ИНН",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
-      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:true},
+      {id:"demo-doc-employment-record",code:"employment_record",name:"Трудовая книжка / СТД",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-military",code:"military_id",name:"Военный билет / документ воинского учёта",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
+      {id:"demo-doc-medical-book",code:"medical_book",name:"Медицинская книжка",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
       {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск",groupType:"clearance",defaultProvider:"candidate",defaultRequired:false},
+      {id:"demo-doc-training",code:"training",name:"Обучение / аттестация",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
+      {id:"demo-doc-site-pass",code:"site_pass",name:"Пропуск на объект",groupType:"clearance",defaultProvider:"client",defaultRequired:false},
     ],
     exitReasons: [
       {code:"pay",name:"Не устроила зарплата",kind:"rejected"},

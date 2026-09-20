@@ -17,7 +17,7 @@ export type CalculationRow = ScopedRow & { id:string; requestId:string; request:
 export type ObjectRow = ScopedRow & { id:string; ownerName?:string|null; sourceRequestId?:string|null; name:string; code:string; client:string; status:string; region:string; targetStart?:string|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
-export type WorkerRow = ScopedRow & { id:string; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; object?:string|null; objectId?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
+export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; object?:string|null; objectId?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
 export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string };
 export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,number|null>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
 export type ReconciliationIssue = { id?:string; difference:number|string; worker:string; date:string; reason:string; owner:string; status?:string };
@@ -164,7 +164,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
   const maySeeComp = !actor.access.denies.includes("worker.compensation.read") && actor.access.capabilities.includes("worker.compensation.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<WorkerRow[]>`
-      SELECT w.id,w.organization_id "organizationId",w.full_name "fullName",w.status,w.source,w.created_by_user_id "createdByUserId",
+      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.status,w.source,w.created_by_user_id "createdByUserId",
              woa.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",woa.manager_user_id "ownerUserId",
              ARRAY[woa.manager_user_id::text] "assigneeUserIds",
              ${maySeeComp ? sql`wr.amount` : sql`NULL::numeric`} rate,
@@ -235,7 +235,24 @@ export async function listTasks(actor: Actor): Promise<TaskRow[]> {
   if (actor.demo) return allowed(actor, "task.read", demo.tasks);
   requireCapability(actor,"task.read");
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-    const rows=await sql<TaskRow[]>`SELECT id,organization_id "organizationId",title,status,priority,assignee_user_id "ownerUserId",ARRAY[assignee_user_id::text] "assigneeUserIds",to_char(due_at,'DD.MM HH24:MI') due,entity_type entity,created_by_user_id "createdByUserId" FROM tasks ORDER BY due_at NULLS LAST`;
+    const rows=await sql<TaskRow[]>`
+      SELECT t.id,t.organization_id "organizationId",t.title,t.status,t.priority,t.assignee_user_id "ownerUserId",
+        ARRAY[t.assignee_user_id::text] "assigneeUserIds",to_char(t.due_at,'DD.MM HH24:MI') due,
+        CASE
+          WHEN t.entity_type='candidate_application' THEN trim(concat_ws(' · ',c.full_name,COALESCE(n.title,s.name),o.name))
+          WHEN t.entity_type='candidate' THEN COALESCE(c_direct.full_name,'Кандидат')
+          ELSE COALESCE(NULLIF(t.entity_type,''),'Без связи')
+        END entity,
+        t.created_by_user_id "createdByUserId"
+      FROM tasks t
+      LEFT JOIN candidate_applications ca ON t.entity_type='candidate_application' AND ca.id=t.entity_id
+      LEFT JOIN candidates c ON c.id=ca.candidate_id
+      LEFT JOIN needs n ON n.id=ca.need_id
+      LEFT JOIN specialties s ON s.id=n.specialty_id
+      LEFT JOIN objects o ON o.id=ca.object_id
+      LEFT JOIN candidates c_direct ON t.entity_type='candidate' AND c_direct.id=t.entity_id
+      ORDER BY t.due_at NULLS LAST,t.created_at DESC
+    `;
     return rows.filter((row)=>canReadRow(actor.access,"task.read",row,actor));
   });
 }

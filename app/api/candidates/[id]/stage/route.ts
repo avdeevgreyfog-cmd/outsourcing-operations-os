@@ -107,6 +107,32 @@ async function syncPreparationTask(
   }
 }
 
+async function ensureBlockingDocumentsReady(tx:Sql,current:ScopeRow,targetStage:string){
+  const dueStages=
+    targetStage==="preparation"?["documents","preparation"]:
+    targetStage==="first_shift"?["documents","preparation","first_shift"]:
+    targetStage==="retention_7"?["documents","preparation","first_shift","retention_7"]:
+    targetStage==="retention_30"?["documents","preparation","first_shift","retention_7","retention_30"]:
+    [];
+  if(!dueStages.length)return;
+  const missing=await tx<Array<{name:string}>>`
+    SELECT dt.name
+    FROM need_document_requirements ndr
+    JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+    LEFT JOIN candidate_documents cd ON cd.candidate_id=${current.candidateId}::uuid AND cd.document_type_id=dt.id
+    LEFT JOIN candidate_application_documents cad ON cad.application_id=${current.id}::uuid AND cad.document_type_id=dt.id
+    WHERE ndr.need_id=${current.needId}::uuid
+      AND ndr.required AND ndr.blocks_progress
+      AND ndr.required_by_stage=ANY(${dueStages}::text[])
+      AND CASE WHEN dt.group_type='employment'
+        THEN COALESCE(cd.status,cad.status,'missing')
+        ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
+      END NOT IN ('received','verified','ready','not_required')
+    ORDER BY dt.sort_order,dt.name
+  `;
+  if(missing.length)throw new WorkflowError(`Нельзя перейти дальше: не готовы обязательные документы — ${missing.map(item=>item.name).join(", ")}.`);
+}
+
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -139,6 +165,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       const plannedArrivalValue=body.plannedArrivalAt===undefined?current.plannedArrivalAt:body.plannedArrivalAt;
       const message=validateStageChange({...current,stage:normalizedCurrent,workflow:current.workflow}, {...body,workflow,plannedArrivalAt:plannedArrivalValue,actualStartAt:actualStartValue});
       if(message)throw new WorkflowError(message);
+      if(changed)await ensureBlockingDocumentsReady(tx,current,body.stage);
 
       if(body.ownerUserId!==undefined&&body.ownerUserId!==null)await ensureActiveAssignee(tx,actor.organizationId,body.ownerUserId);
       if(workflow.managerInterviewUserId)await ensureActiveAssignee(tx,actor.organizationId,workflow.managerInterviewUserId);

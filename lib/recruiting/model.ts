@@ -63,7 +63,8 @@ export const candidateSourceLabels: Record<string, string> = {
   hh: "hh.ru",
   telegram: "Telegram",
   vk: "VK",
-  referral: "Рекомендация",
+  referral: "Рекомендация сотрудника / кандидата",
+  company_database: "База компании / импорт",
   agency: "Агентство",
   site: "Сайт",
   manual: "Ручной ввод",
@@ -73,6 +74,7 @@ export const contactChannelLabels: Record<string, string> = {
   phone: "Телефон",
   whatsapp: "WhatsApp",
   telegram: "Telegram",
+  max: "MAX",
   email: "Email",
   other: "Другой",
 };

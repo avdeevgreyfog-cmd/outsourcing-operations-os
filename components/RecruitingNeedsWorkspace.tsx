@@ -24,9 +24,9 @@ const activeStatuses=new Set(["open","in_progress","paused"]); const closedStatu
 
 export function RecruitingNeedsWorkspace({applications,rows,options,analytics,metricPreferences,initialView,canCreate,canManage,canConfigureAnalytics,canManageDocuments,demo}:Props){
  const router=useRouter();const [view,setView]=useState<View>(initialView);const [bucket,setBucket]=useState<Bucket>("active");const [query,setQuery]=useState("");const [source,setSource]=useState("all");const [objectFilter,setObjectFilter]=useState("all");const [specialtyFilter,setSpecialtyFilter]=useState("all");const [recruiterFilter,setRecruiterFilter]=useState("all");const [selected,setSelected]=useState<RecruitingNeedRow|null>(null);const [showCreate,setShowCreate]=useState(false);const [showEdit,setShowEdit]=useState(false);const [form,setForm]=useState<NeedForm>(emptyForm);const [editForm,setEditForm]=useState<NeedForm>(emptyForm);const [editStatus,setEditStatus]=useState("open");const [editRecruiter,setEditRecruiter]=useState("");const [editQuantityReason,setEditQuantityReason]=useState("");
- const defaultDocumentRequirements=useMemo<NeedDocumentRequirement[]>(()=>options.documentTypes.filter(item=>item.defaultRequired).map(item=>({documentTypeId:item.id,provider:item.defaultProvider})),[options.documentTypes]);
+ const defaultDocumentRequirements=useMemo<NeedDocumentRequirement[]>(()=>options.documentTypes.filter(item=>item.defaultRequired).map(item=>({documentTypeId:item.id,provider:item.defaultProvider,requiredByStage:item.groupType==="employment"?"documents":"first_shift",blocksProgress:item.groupType==="employment"})),[options.documentTypes]);
  const [editDocumentRequirements,setEditDocumentRequirements]=useState<NeedDocumentRequirement[]>([]);
- const [createDocumentRequirements,setCreateDocumentRequirements]=useState<NeedDocumentRequirement[]>(()=>options.documentTypes.filter(item=>item.defaultRequired).map(item=>({documentTypeId:item.id,provider:item.defaultProvider})));
+ const [createDocumentRequirements,setCreateDocumentRequirements]=useState<NeedDocumentRequirement[]>(()=>options.documentTypes.filter(item=>item.defaultRequired).map(item=>({documentTypeId:item.id,provider:item.defaultProvider,requiredByStage:item.groupType==="employment"?"documents":"first_shift",blocksProgress:item.groupType==="employment"})));
  const [localDocumentTypes,setLocalDocumentTypes]=useState<RecruitingDocumentType[]>(options.documentTypes);
  const [showDocumentSettings,setShowDocumentSettings]=useState(false);
  const [documentDraft,setDocumentDraft]=useState<RecruitingDocumentType[]>(options.documentTypes);
@@ -56,12 +56,12 @@ export function RecruitingNeedsWorkspace({applications,rows,options,analytics,me
  }catch(e){setError(e instanceof Error?e.message:"Не удалось создать потребность");}finally{setSaving(false)}}
  function openEdit(row:RecruitingNeedRow){
    setSelected(row);setEditForm(formFromNeed(row));setEditStatus(row.status);setEditRecruiter(row.recruiters[0]?.userId??"");setEditQuantityReason("");
-   setEditDocumentRequirements(row.documentRequirements?.length?row.documentRequirements:(row.requiredDocumentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:localDocumentTypes.find(item=>item.id===documentTypeId)?.defaultProvider??"candidate"})));
+   setEditDocumentRequirements(row.documentRequirements?.length?row.documentRequirements:(row.requiredDocumentTypeIds??[]).map(documentTypeId=>{const type=localDocumentTypes.find(item=>item.id===documentTypeId);return{documentTypeId,provider:type?.defaultProvider??"candidate",requiredByStage:type?.groupType==="employment"?"documents":"first_shift",blocksProgress:type?.groupType==="employment"}}));
    setError("");setShowEdit(true);
  }
  function openCreate(){
    setForm(emptyForm);
-   setCreateDocumentRequirements(localDocumentTypes.filter(item=>item.defaultRequired).map(item=>({documentTypeId:item.id,provider:item.defaultProvider})));
+   setCreateDocumentRequirements(localDocumentTypes.filter(item=>item.defaultRequired).map(item=>({documentTypeId:item.id,provider:item.defaultProvider,requiredByStage:item.groupType==="employment"?"documents":"first_shift",blocksProgress:item.groupType==="employment"})));
    setError("");setShowCreate(true);
  }
  async function saveEdit(event:React.FormEvent){
@@ -218,20 +218,32 @@ function DocumentRequirementEditor({
   onManageStandard:()=>void;
 }){
   const groups:[RecruitingDocumentType["groupType"],string,string][]=[
-    ["employment","Документы для оформления","То, что кандидат предоставляет для оформления в компании."],
-    ["clearance","Оформление и допуски","Медицинские документы, допуски, обучение и документы для конкретного объекта."],
+    ["employment","Документы для оформления","Базовый кадровый пакет. Обычно обязателен до завершения оформления."],
+    ["clearance","Дополнительные документы и допуски","Требования объекта. Могут оформляться параллельно и не блокировать движение кандидата."],
   ];
   const selectedMap=new Map(selected.map(item=>[item.documentTypeId,item]));
   function toggle(item:RecruitingDocumentType,checked:boolean){
-    if(checked)onChange([...selected,{documentTypeId:item.id,provider:item.defaultProvider}]);
+    if(checked)onChange([...selected,{
+      documentTypeId:item.id,
+      provider:item.defaultProvider,
+      requiredByStage:item.groupType==="employment"?"documents":"first_shift",
+      blocksProgress:item.groupType==="employment",
+    }]);
     else onChange(selected.filter(value=>value.documentTypeId!==item.id));
   }
-  function provider(item:RecruitingDocumentType,value:"candidate"|"company"|"client"){
-    onChange(selected.map(current=>current.documentTypeId===item.id?{...current,provider:value}:current));
+  function change(item:RecruitingDocumentType,patch:Partial<NeedDocumentRequirement>){
+    onChange(selected.map(current=>current.documentTypeId===item.id?{...current,...patch}:current));
   }
   return <fieldset className="recruiting-doc-requirements wide">
-    <div className="recruiting-doc-requirements-head"><div><legend>Документы и допуски</legend><p>Базовый набор компании уже отмечен. Для конкретной потребности его можно изменить.</p></div>{canManageStandard&&<button className="button" type="button" onClick={onManageStandard}>Настроить базовый набор</button>}</div>
-    <div className="recruiting-doc-groups">{groups.map(([group,label,description])=><section key={group} className="recruiting-doc-group"><header><strong>{label}</strong><span>{description}</span></header><div>{items.filter(item=>item.groupType===group&&item.active!==false).map(item=>{const requirement=selectedMap.get(item.id);return <div className="recruiting-doc-option" key={item.id}><label><input type="checkbox" checked={Boolean(requirement)} onChange={e=>toggle(item,e.target.checked)}/><span>{item.name}</span></label>{requirement&&<select aria-label={`Кто обеспечивает: ${item.name}`} value={requirement.provider} onChange={e=>provider(item,e.target.value as "candidate"|"company"|"client")}><option value="candidate">Предоставляет кандидат</option><option value="company">Оформляет компания</option><option value="client">Оформляет заказчик</option></select>}</div>})}</div></section>)}</div>
+    <div className="recruiting-doc-requirements-head"><div><legend>Документы и допуски</legend><p>Базовый набор компании отмечен автоматически. В этой потребности можно изменить ответственного, срок готовности и блокирует ли документ движение кандидата.</p></div>{canManageStandard&&<button className="button" type="button" onClick={onManageStandard}>Настроить базовый набор</button>}</div>
+    <div className="recruiting-doc-groups">{groups.map(([group,label,description])=><section key={group} className="recruiting-doc-group"><header><strong>{label}</strong><span>{description}</span></header><div>{items.filter(item=>item.groupType===group&&item.active!==false).map(item=>{const requirement=selectedMap.get(item.id);return <div className="recruiting-doc-option recruiting-doc-option-v2" key={item.id}>
+      <label className="recruiting-doc-check"><input type="checkbox" checked={Boolean(requirement)} onChange={e=>toggle(item,e.target.checked)}/><span>{item.name}</span></label>
+      {requirement&&<div className="recruiting-doc-rule-grid">
+        <select aria-label={`Кто обеспечивает: ${item.name}`} value={requirement.provider} onChange={e=>change(item,{provider:e.target.value as NeedDocumentRequirement["provider"]})}><option value="candidate">Кандидат</option><option value="company">Компания</option><option value="client">Заказчик</option></select>
+        <select aria-label={`К какому сроку: ${item.name}`} value={requirement.requiredByStage} onChange={e=>change(item,{requiredByStage:e.target.value as NeedDocumentRequirement["requiredByStage"]})}><option value="documents">До оформления</option><option value="preparation">До подготовки к выходу</option><option value="first_shift">До первого выхода</option><option value="retention_7">До 7-го дня</option><option value="retention_30">До 30-го дня</option><option value="none">Без жёсткого срока</option></select>
+        <label className="recruiting-doc-blocking"><input type="checkbox" checked={requirement.blocksProgress} onChange={e=>change(item,{blocksProgress:e.target.checked})}/> Блокирует этап</label>
+      </div>}
+    </div>})}</div></section>)}</div>
   </fieldset>;
 }
 
