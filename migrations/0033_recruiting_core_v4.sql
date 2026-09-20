@@ -8,6 +8,10 @@ ALTER TABLE candidates DROP CONSTRAINT IF EXISTS candidates_preferred_channel_ch
 ALTER TABLE candidates ADD CONSTRAINT candidates_preferred_channel_check
   CHECK (preferred_channel IS NULL OR preferred_channel IN ('phone','whatsapp','telegram','max','email','other'));
 
+ALTER TABLE candidate_communications DROP CONSTRAINT IF EXISTS candidate_communications_channel_check;
+ALTER TABLE candidate_communications ADD CONSTRAINT candidate_communications_channel_check
+  CHECK (channel IN ('phone','whatsapp','telegram','max','email','meeting','note','other'));
+
 ALTER TABLE candidates
   ADD COLUMN IF NOT EXISTS archived_at timestamptz;
 
