@@ -85,6 +85,40 @@ FROM candidates c
 WHERE c.source IS NOT NULL AND btrim(c.source)<>''
 ON CONFLICT (organization_id,name) DO NOTHING;
 
+CREATE OR REPLACE FUNCTION seed_recruiting_organization_defaults() RETURNS trigger
+LANGUAGE plpgsql AS $
+BEGIN
+  INSERT INTO recruiting_pipeline_stage_settings(organization_id,stage_code,label,stage_kind,sort_order,active,virtual,is_system)
+  VALUES
+    (NEW.id,'new','Новый контакт','new_contact',10,true,false,true),
+    (NEW.id,'contact','Интервью','interview',20,true,false,true),
+    (NEW.id,'interview','Документы','documents',30,true,false,true),
+    (NEW.id,'manager_review','Согласование','approval',35,false,false,true),
+    (NEW.id,'approved','Согласован','approval',36,false,false,true),
+    (NEW.id,'preparation','Подготовка к выходу','preparation',40,true,false,true),
+    (NEW.id,'ready','Готов к выходу','preparation',45,false,false,true),
+    (NEW.id,'started','Первый выход','first_shift',50,true,false,true),
+    (NEW.id,'retention_7','7 дней','retention',60,true,true,true),
+    (NEW.id,'retention_30','30 дней','retention',70,true,true,true)
+  ON CONFLICT (organization_id,stage_code) DO NOTHING;
+
+  INSERT INTO candidate_source_catalog(organization_id,name,kind,sort_order)
+  VALUES
+    (NEW.id,'Авито','job_board',10),
+    (NEW.id,'hh.ru','job_board',20),
+    (NEW.id,'Telegram','messenger',30),
+    (NEW.id,'Рекомендация','referral',40),
+    (NEW.id,'Партнёр / агентство','partner',50),
+    (NEW.id,'Ручной ввод','other',100)
+  ON CONFLICT (organization_id,name) DO NOTHING;
+  RETURN NEW;
+END $;
+
+DROP TRIGGER IF EXISTS seed_recruiting_defaults_on_organization ON organizations;
+CREATE TRIGGER seed_recruiting_defaults_on_organization
+AFTER INSERT ON organizations
+FOR EACH ROW EXECUTE FUNCTION seed_recruiting_organization_defaults();
+
 -- Headcount changes are explicit business events in addition to normal need versioning.
 CREATE TABLE need_headcount_changes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
