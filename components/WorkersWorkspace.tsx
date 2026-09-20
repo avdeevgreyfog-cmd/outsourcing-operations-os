@@ -106,7 +106,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
         <td>{row.origin??row.source??"—"}</td>
         <td>{row.employment??"—"}</td>
         {sensitive&&<><td className="num">{row.rate==null?"—":rub(row.rate)}</td><td className="num">{row.accrued==null?"—":rub(row.accrued)}</td><td className="num">{row.payable==null?"—":rub(row.payable)}</td></>}
-        <td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Работает":row.status}</Status></td>
+        <td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Работает":row.status==="dismissed"?"Работа завершена":row.status}</Status></td>
       </tr>)}</tbody>
     </table>{!filtered.length&&<div className="empty-inline">Сотрудники не найдены</div>}</div></section>
 
