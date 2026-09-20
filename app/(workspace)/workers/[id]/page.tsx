@@ -41,6 +41,8 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
 
   const canEdit=hasCapability(actor.access,"worker.edit");
   const canOffboard=hasCapability(actor.access,"worker.offboarding.manage");
+  const canViewAssets=hasCapability(actor.access,"assets.read");
+  const canViewHousing=hasCapability(actor.access,"supply.housing.read");
   const sensitive=hasCapability(actor.access,"worker.compensation.read");
   const payments=hasCapability(actor.access,"finance.payments.read");
   const [details,offboarding,options,shifts]=await Promise.all([
@@ -50,7 +52,11 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     hasCapability(actor.access,"operations.shift.read")?listShifts(actor).then(rows=>rows.filter(row=>row.objectId===worker.objectId)):Promise.resolve([]),
   ]);
   const tabs=Object.entries(labels)
-    .filter(([key])=>!["accruals","payments"].includes(key)||sensitive&&(!key.includes("payments")||payments))
+    .filter(([key])=>{
+      if(key==="assets")return canViewAssets;
+      if(key==="housing")return canViewHousing;
+      return !["accruals","payments"].includes(key)||sensitive&&(!key.includes("payments")||payments);
+    })
     .map(([key,label])=>({label,href:"/workers/"+id+"?tab="+key}));
 
   return <>
@@ -80,7 +86,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
       </div>
     </>}
 
-    {tab==="employment"&&<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} demo={actor.demo}/>}
+    {tab==="employment"&&<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} canAccessAssets={canViewAssets} demo={actor.demo}/>}
     {tab==="assignments"&&<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} demo={actor.demo}/>}
     {tab==="schedule"&&<>
       <Section title="Ближайшие смены"><div className="stack-list">{shifts.map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.time}</strong><small>{row.specialty} · {row.object}</small></div><Status tone="info">{row.kind}</Status></div>)}</div>{!shifts.length&&<Empty title="Смен нет" text="Для текущего назначения смены не найдены."/>}</Section>
