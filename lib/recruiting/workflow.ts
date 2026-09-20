@@ -35,6 +35,7 @@ export type StageChange = {
   workflow?: WorkflowDetails;
   expectedStage?: string;
   expectedUpdatedAt?: string;
+  ownerUserId?: string | null;
 };
 
 export const reserveReasons = ["Кандидат готов позже", "Нет свободных мест", "Ожидание другой потребности", "Не подходит объект", "Другая специальность"];
