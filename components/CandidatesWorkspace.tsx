@@ -79,7 +79,7 @@ export function CandidatesWorkspace({
   if(queue==='reserve'&&row.stage!=='reserve')return false;
   if(queue==='completed'&&!['rejected','no_show'].includes(row.stage))return false;
   if(queue==='worker'&&!['first_shift','retention_7','retention_30'].includes(row.stage))return false;
-  return \`\${row.fullName} \${row.phone??''} \${row.email??''} \${row.need} \${row.city??''} \${row.object??''} \${row.source??''} \${row.sourceCampaign??''}\`.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru').trim());
+  return `${row.fullName} ${row.phone??''} ${row.email??''} ${row.need} ${row.city??''} ${row.object??''} ${row.source??''} ${row.sourceCampaign??''}`.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru').trim());
  });
 
  const objectOptions=unique(all,'objectId','object');
@@ -148,12 +148,12 @@ export function CandidatesWorkspace({
       }
     }
     setLocalDirectory(current);localStorage.setItem(directoryStorage,JSON.stringify(current));
-    setImportResult(\`Импорт завершён: новых \${created}, найдено существующих \${reused}, заявок создано \${applications}.\`);
+    setImportResult(`Импорт завершён: новых ${created}, найдено существующих ${reused}, заявок создано ${applications}.`);
    }else{
     const response=await fetch('/api/candidates/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({rows:importRows,needId:importNeedId||null,source:importSource,ownerUserId:importOwner||null})});
     const json=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(json.error??'Не удалось импортировать кандидатов');
-    setImportResult(\`Импорт завершён: новых \${json.created}, существующих \${json.reused}, заявок создано \${json.applications}.\`);
+    setImportResult(`Импорт завершён: новых ${json.created}, существующих ${json.reused}, заявок создано ${json.applications}.`);
     window.location.reload();
    }
   }catch(e){setImportError(e instanceof Error?e.message:'Не удалось импортировать кандидатов');}
@@ -192,7 +192,7 @@ export function CandidatesWorkspace({
      <div className="candidate-import-options"><label>Куда загрузить<select value={importNeedId} onChange={e=>setImportNeedId(e.target.value)}><option value="">Только в базу кандидатов</option>{needs.filter(row=>['open','in_progress'].includes(row.status)).map(row=><option key={row.id} value={row.id}>{row.title} · {row.object??row.region??'без объекта'}</option>)}</select></label><label>Источник<select value={importSource} onChange={e=>setImportSource(e.target.value)}>{options.sourceCatalog.filter(row=>row.active).map(row=><option key={row.id} value={row.name}>{row.name}</option>)}</select></label><label>Ответственный<select value={importOwner} onChange={e=>setImportOwner(e.target.value)}><option value="">По умолчанию</option>{options.recruiters.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label></div>
      {importError&&<div className="recruiting-error">{importError}</div>}{importResult&&<div className="candidate-import-result">{importResult}</div>}
     </div>
-    <div className="recruiting-modal-footer"><button className="button" onClick={()=>setShowImport(false)}>Закрыть</button><button className="button primary" disabled={!importRows.length||importBusy} onClick={()=>void runImport()}>{importBusy?'Импортирую…':\`Импортировать \${importRows.length||''}\`}</button></div>
+    <div className="recruiting-modal-footer"><button className="button" onClick={()=>setShowImport(false)}>Закрыть</button><button className="button primary" disabled={!importRows.length||importBusy} onClick={()=>void runImport()}>{importBusy?'Импортирую…':`Импортировать ${importRows.length||''}`}</button></div>
    </div>
   </div></Portal>}
  </div>;
@@ -200,20 +200,20 @@ export function CandidatesWorkspace({
 
 function CandidatePeopleTable({rows,applications,demo}:{rows:CandidateDirectoryRow[];applications:RecruitingApplicationRow[];demo:boolean}){
  return <div className="section section-flush"><div className="request-table-wrap"><table className="data-table candidates-directory-table"><thead><tr>{['Кандидат','Статус','Предпочтительная связь','Последняя заявка','Источник','Ответственный','История','Обновлено',''].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(row=>{const latest=applications.find(app=>app.candidateId===row.id);const localOnly=demo&&!applications.some(app=>app.candidateId===row.id);return <tr key={row.id}>
-  <td>{localOnly?<strong className="cell-title">{row.fullName}</strong>:<Link className="cell-title" href={\`/candidates/\${row.id}\`}>{row.fullName}</Link>}<span className="cell-sub">{row.city??'Город не указан'}{row.phone?\` · \${row.phone}\`:''}</span></td>
+  <td>{localOnly?<strong className="cell-title">{row.fullName}</strong>:<Link className="cell-title" href={`/candidates/${row.id}`}>{row.fullName}</Link>}<span className="cell-sub">{row.city??'Город не указан'}{row.phone?` · ${row.phone}`:''}</span></td>
   <td><Status tone={row.status==='worker'?'good':row.status==='completed'?'neutral':row.status==='reserve'?'warn':'info'}>{directoryStatusLabel(row.status)}</Status>{row.latestStageLabel&&<span className="cell-sub">{row.latestStageLabel}</span>}</td>
   <td><strong>{contactChannelLabels[row.preferredChannel??'']??'Контакт'}</strong><span className="cell-sub">{row.preferredContact??row.phone??'—'}</span></td>
   <td>{row.latestNeed??'Нет активной заявки'}<span className="cell-sub">{row.latestObject??''}</span></td>
   <td>{row.source??'—'}</td><td>{row.owner??'—'}</td>
   <td>Заявок: {row.applicationsCount}<span className="cell-sub">Активных: {row.activeApplications}</span></td>
   <td>{formatWorkDate(row.updatedAt)}</td>
-  <td>{latest?<button className="button" type="button" onClick={()=>location.href=\`/candidates/\${row.id}\`}>Карточка</button>:<span className="cell-sub">База</span>}</td>
+  <td>{latest?<button className="button" type="button" onClick={()=>location.href=`/candidates/${row.id}`}>Карточка</button>:<span className="cell-sub">База</span>}</td>
  </tr>})}</tbody></table>{!rows.length&&<div className="empty-inline">Кандидаты по выбранным условиям не найдены</div>}</div></div>;
 }
 
 function CandidateApplicationsTable({rows,all,onOpen}:{rows:RecruitingApplicationRow[];all:RecruitingApplicationRow[];onOpen:(row:RecruitingApplicationRow)=>void}){
  return <div className="section section-flush"><div className="request-table-wrap"><table className="data-table candidates-list-table"><thead><tr>{['Кандидат','Контакт','Потребность','Этап','Ответственный','Текущее действие','Риски','История',''].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(row=>{const related=all.filter(x=>x.candidateId===row.candidateId);return <tr key={row.applicationId}>
-  <td><Link className="cell-title" href={\`/candidates/\${row.candidateId}\`}>{row.fullName}</Link><span className="cell-sub">{row.city??'Город не указан'}</span></td>
+  <td><Link className="cell-title" href={`/candidates/${row.candidateId}`}>{row.fullName}</Link><span className="cell-sub">{row.city??'Город не указан'}</span></td>
   <td>{preferredApplicationContact(row)}<span className="cell-sub">{contactChannelLabels[row.preferredChannel??'']??''}</span></td>
   <td>{row.need}<span className="cell-sub">{row.object??'Без объекта'}</span></td>
   <td><Status tone={['first_shift','retention_7','retention_30'].includes(row.stage)?'good':['rejected','no_show'].includes(row.stage)?'bad':'neutral'}>{row.stageLabel}</Status><span className="cell-sub">С {formatWorkDate(row.stageEnteredAt)}</span></td>
@@ -237,7 +237,7 @@ function preferredValue(row:ImportRow){return row.preferredChannel==='telegram'?
 function normalizeQueue(value:string){return value==='closed'?'completed':['all','candidate','active','worker','reserve','completed'].includes(value)?value:'all'}
 function directoryStatusLabel(value:CandidateDirectoryRow['status']){return value==='worker'?'Сотрудник':value==='active'?'В подборе':value==='reserve'?'Резерв':value==='completed'?'Завершён':'База кандидатов'}
 function statusRank(value:CandidateDirectoryRow['status']){return value==='active'?0:value==='reserve'?1:value==='candidate'?2:value==='worker'?3:4}
-function haystack(row:CandidateDirectoryRow,app?:RecruitingApplicationRow){return \`\${row.fullName} \${row.phone??''} \${row.city??''} \${row.preferredContact??''} \${row.source??''} \${app?.need??''} \${app?.object??''}\`.toLocaleLowerCase('ru')}
+function haystack(row:CandidateDirectoryRow,app?:RecruitingApplicationRow){return `${row.fullName} ${row.phone??''} ${row.city??''} ${row.preferredContact??''} ${row.source??''} ${app?.need??''} ${app?.object??''}`.toLocaleLowerCase('ru')}
 function unique(rows:RecruitingApplicationRow[],field:'objectId'|'ownerUserId',name:'object'|'owner'){return [...new Map(rows.filter(row=>row[field]).map(row=>[row[field]!,row[name]??'—'])).entries()]}
 function preferredApplicationContact(row:RecruitingApplicationRow){return row.preferredChannel==='telegram'?row.telegram??row.phone:row.preferredChannel==='whatsapp'?row.whatsapp??row.phone:row.preferredChannel==='email'?row.email??row.phone:row.phone??row.email??'—'}
 function structuredActionLabel(row:RecruitingApplicationRow){const code=row.workflow?.actionCode;const map:Record<string,string>={inbound_contact:'Новый входящий контакт',interview:'Интервью',callback:'Повторный контакт',no_answer:'Повторный звонок',manager_interview:'Интервью мастера',documents_wait:'Ожидаем документы',clearance_progress:'Оформляются допуски',preparation_save:'Подготовка к выходу',shift_worked:'Первый выход подтверждён',retention_check:'Контроль удержания'};return code?map[code]??'Зафиксирован результат':'—'}
