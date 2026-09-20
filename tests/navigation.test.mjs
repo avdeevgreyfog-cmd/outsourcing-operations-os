@@ -74,3 +74,14 @@ test("inventory and crews are active operation routes", () => {
   assert.equal(items.find((item) => item.href === "/assets")?.status, undefined);
   assert.equal(items.find((item) => item.href === "/crews")?.status, undefined);
 });
+
+
+test("operations supply and staffing workspaces are active", () => {
+  const items = flattenNavigation();
+  for (const href of ["/staffing-plan","/supply/housing","/assets","/procurement","/crews","/operations/analytics"]) {
+    const item=items.find((entry)=>entry.href===href);
+    assert.ok(item, "missing "+href);
+    assert.equal(item.status, undefined, href+" must not fall back to foundation");
+    assert.equal(item.sectionId, "operations");
+  }
+});
