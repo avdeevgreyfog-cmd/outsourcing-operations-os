@@ -136,6 +136,26 @@ export type CandidateDocumentDossierRow = {
   blocksProgress:boolean;
 };
 
+export type CandidateDirectoryRow = {
+  id:string;
+  fullName:string;
+  phone:string|null;
+  city:string|null;
+  preferredChannel:string|null;
+  preferredContact:string|null;
+  source:string|null;
+  status:"candidate"|"active"|"reserve"|"completed"|"worker";
+  latestNeed:string|null;
+  latestObject:string|null;
+  latestStage:RecruitingStage|null;
+  latestStageLabel:string|null;
+  owner:string|null;
+  applicationsCount:number;
+  activeApplications:number;
+  workerId:string|null;
+  updatedAt:string;
+};
+
 export type CandidateCommunication = {
   id: string;
   applicationId: string | null;
@@ -462,6 +482,80 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
       const stage = normalizeRecruitingStage(row.rawStage);
       const {rawStage, ...rest} = row;
       return {...rest, stage, stageLabel: recruitingStageLabels[stage]} as RecruitingApplicationRow;
+    });
+  });
+}
+
+export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirectoryRow[]>{
+  requireCapability(actor,"recruiting.candidate.read");
+  if(actor.demo){
+    const applications=demoApplications(actor);
+    const ids=[...new Set(applications.map(row=>row.candidateId))];
+    return ids.map(id=>{
+      const related=applications.filter(row=>row.candidateId===id).sort((a,b)=>(b.updatedAt??"").localeCompare(a.updatedAt??""));
+      const first=related[0];
+      const active=related.filter(row=>["new","interview","documents","clearance","preparation"].includes(row.stage));
+      const worker=related.some(row=>["first_shift","retention_7","retention_30"].includes(row.stage));
+      const reserve=related.some(row=>row.stage==="reserve");
+      const completed=related.length>0&&related.every(row=>["rejected","no_show"].includes(row.stage));
+      const preferredContact=first.preferredChannel==="telegram"?first.telegram:first.preferredChannel==="whatsapp"?first.whatsapp:first.preferredChannel==="email"?first.email:first.phone;
+      return {
+        id,fullName:first.fullName,phone:first.phone,city:first.city,preferredChannel:first.preferredChannel,preferredContact:preferredContact??first.phone,
+        source:first.source,status:worker?"worker":active.length?"active":reserve?"reserve":completed?"completed":"candidate",
+        latestNeed:first.need,latestObject:first.object,latestStage:first.stage,latestStageLabel:first.stageLabel,owner:first.owner,
+        applicationsCount:related.length,activeApplications:active.length,workerId:worker?`demo-worker-${id}`:null,updatedAt:first.updatedAt??first.createdAt??"",
+      } satisfies CandidateDirectoryRow;
+    });
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<Array<CandidateDirectoryRow & {
+      organizationId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];
+      rawStage:string|null;rawStatus:string;
+    }>>`
+      SELECT c.id,c.full_name "fullName",c.phone,c.city,c.preferred_channel "preferredChannel",
+        COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.organization_id "organizationId",
+        latest.owner_user_id "ownerUserId",latest.manager_user_id "managerUserId",latest.object_id "objectId",
+        COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
+        ARRAY[latest.owner_user_id::text,latest.manager_user_id::text]
+          || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=latest.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL) "assigneeUserIds",
+        COALESCE(n.title,s.name) "latestNeed",o.name "latestObject",latest.stage "rawStage",
+        owner.display_name owner,count_apps.cnt::int "applicationsCount",count_apps.active::int "activeApplications",
+        wp.id "workerId",c.status "rawStatus",c.updated_at::text "updatedAt",
+        CASE
+          WHEN wp.id IS NOT NULL AND wp.status='active' THEN 'worker'
+          WHEN count_apps.active>0 THEN 'active'
+          WHEN count_apps.reserve>0 THEN 'reserve'
+          WHEN count_apps.cnt>0 AND count_apps.terminal=count_apps.cnt THEN 'completed'
+          ELSE 'candidate'
+        END status
+      FROM candidates c
+      LEFT JOIN LATERAL(
+        SELECT cm.value FROM candidate_contact_methods cm
+        WHERE cm.candidate_id=c.id AND cm.active
+        ORDER BY cm.is_preferred DESC,cm.created_at LIMIT 1
+      ) pref ON true
+      LEFT JOIN LATERAL(
+        SELECT ca.* FROM candidate_applications ca WHERE ca.candidate_id=c.id ORDER BY ca.updated_at DESC LIMIT 1
+      ) latest ON true
+      LEFT JOIN LATERAL(
+        SELECT count(*) cnt,
+          count(*) FILTER(WHERE stage IN ('new','interview','documents','clearance','preparation')) active,
+          count(*) FILTER(WHERE stage='reserve') reserve,
+          count(*) FILTER(WHERE stage IN ('rejected','no_show')) terminal
+        FROM candidate_applications ca WHERE ca.candidate_id=c.id
+      ) count_apps ON true
+      LEFT JOIN needs n ON n.id=latest.need_id
+      LEFT JOIN specialties s ON s.id=n.specialty_id
+      LEFT JOIN objects o ON o.id=latest.object_id
+      LEFT JOIN app_users owner ON owner.id=latest.owner_user_id
+      LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      ORDER BY c.updated_at DESC
+    `;
+    return rows.filter(row=>row.applicationsCount===0||canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
+      const latestStage=row.rawStage?normalizeRecruitingStage(row.rawStage):null;
+      const {rawStage,rawStatus,organizationId,ownerUserId,managerUserId,objectId,regionId,clientId,assigneeUserIds,...rest}=row;
+      void rawStatus;void organizationId;void ownerUserId;void managerUserId;void objectId;void regionId;void clientId;void assigneeUserIds;
+      return {...rest,latestStage,latestStageLabel:latestStage?recruitingStageLabels[latestStage]:null} as CandidateDirectoryRow;
     });
   });
 }
