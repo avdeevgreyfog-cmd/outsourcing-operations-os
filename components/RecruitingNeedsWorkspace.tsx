@@ -235,7 +235,7 @@ function DocumentRequirementEditor({
     onChange(selected.map(current=>current.documentTypeId===item.id?{...current,...patch}:current));
   }
   return <fieldset className="recruiting-doc-requirements wide">
-    <div className="recruiting-doc-requirements-head"><div><legend>Документы и допуски</legend><p>Базовый набор компании отмечен автоматически. В этой потребности можно изменить ответственного, срок готовности и блокирует ли документ движение кандидата.</p></div>{canManageStandard&&<button className="button" type="button" onClick={onManageStandard}>Настроить базовый набор</button>}</div>
+    <div className="recruiting-doc-requirements-head"><div><legend>Документы и допуски</legend><p>Отметьте обязательные документы. Для каждого можно задать срок, ответственного и блокировку перехода.</p></div>{canManageStandard&&<button className="button" type="button" onClick={onManageStandard}>Настроить базовый набор</button>}</div>
     <div className="recruiting-doc-groups">{groups.map(([group,label,description])=><section key={group} className="recruiting-doc-group"><header><strong>{label}</strong><span>{description}</span></header><div>{items.filter(item=>item.groupType===group&&item.active!==false).map(item=>{const requirement=selectedMap.get(item.id);return <div className="recruiting-doc-option recruiting-doc-option-v2" key={item.id}>
       <label className="recruiting-doc-check"><input type="checkbox" checked={Boolean(requirement)} onChange={e=>toggle(item,e.target.checked)}/><span>{item.name}</span></label>
       {requirement&&<div className="recruiting-doc-rule-grid">
