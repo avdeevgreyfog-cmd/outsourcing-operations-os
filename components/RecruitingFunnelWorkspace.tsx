@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { Plus, Settings2, X } from "lucide-react";
 import { RecruitingActionDrawer } from "./RecruitingActionDrawer";
+import { SalesMetrics, SalesSearch, SalesSegments } from "@/components/sales/SalesUI";
 import { useRecruitingApplications, saveDemoApplication } from "@/lib/recruiting/demo-client";
 import { isActiveStage, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
 import type { RecruitingApplicationRow, RecruitingNeedRow, RecruitingOptions, RecruitingFunnelStageSetting, RecruitingSourceOption } from "@/lib/recruiting/service";
@@ -29,6 +30,7 @@ type Props={
   initialQueue?:string;
   initialStage?:string;
 };
+type WorkQueue="active"|"attention"|"today"|"missing";
 type ContactKind="telegram"|"whatsapp"|"max"|"email";
 type ExtraContact={kind:ContactKind;value:string};
 type CandidateForm={
@@ -61,7 +63,7 @@ export function RecruitingFunnelWorkspace({
   const [recruiterFilter,setRecruiterFilter]=useState(initialRecruiter??"all");
   const [sourceFilter,setSourceFilter]=useState(initialSource??"all");
   const [stageFilter]=useState(initialStage??"all");
-  const [queue,setQueue]=useState(["attention","today","missing"].includes(initialQueue??"")?initialQueue!:"active");
+  const [queue,setQueue]=useState<WorkQueue>(["attention","today","missing"].includes(initialQueue??"")?initialQueue as WorkQueue:"active");
   const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
   const [targetStage,setTargetStage]=useState<RecruitingStage|undefined>();
   const [dragged,setDragged]=useState<string|null>(null);
@@ -239,36 +241,33 @@ export function RecruitingFunnelWorkspace({
     });
   }
 
-  return <div className="recruiting-workspace">
-    <div className="recruiting-summary">
-      <div><span>В подборе</span><strong>{filtered.filter(x=>!["retention_7","retention_30","reserve","rejected","no_show"].includes(x.stage)).length}</strong></div>
-      <div><span>Интервью</span><strong>{filtered.filter(x=>x.stage==="interview").length}</strong></div>
-      <div><span>Подготовка</span><strong>{filtered.filter(x=>x.stage==="preparation").length}</strong></div>
-      <div><span>После выхода</span><strong>{filtered.filter(x=>["retention_7","retention_30"].includes(x.stage)).length}</strong></div>
+  return <div className="recruiting-workspace recruiting-funnel-workspace">
+    <SalesMetrics label="Сводка по подбору" items={[
+      {label:"В подборе",value:filtered.filter(x=>!["retention_7","retention_30","reserve","rejected","no_show"].includes(x.stage)).length,note:"до первого выхода"},
+      {label:"Требуют действия",value:filtered.filter(x=>!["retention_7","retention_30","reserve","rejected","no_show"].includes(x.stage)&&workRisks(x).length>0).length,note:"есть просрочка или риск"},
+      {label:"Подготовка",value:filtered.filter(x=>["documents","clearance","preparation"].includes(x.stage)).length,note:"документы, допуски и выход"},
+      {label:"Первый выход",value:filtered.filter(x=>x.stage==="first_shift").length,note:"ожидают подтверждения смены"},
+    ]}/>
+
+    {hasContext&&<div className="recruiting-filter-context"><div><strong>Фильтр из потребности</strong><span>{needFilter!=="all"?(needById.get(needFilter)?.title??"Потребность"):objectFilter!=="all"?(objectOptions.find(([id])=>id===objectFilter)?.[1]??"Объект"):"Выбранный контур"}</span></div><Link className="button" href="/needs">← Потребности</Link></div>}
+
+    <div className="recruiting-funnel-viewbar">
+      <SalesSegments<WorkQueue> label="Рабочая очередь" value={queue} onChange={setQueue} items={[{value:"active",label:"В работе"},{value:"attention",label:"Требуют действия"},{value:"today",label:"На сегодня"},{value:"missing",label:"Без действия"}]}/>
+      <div className="recruiting-funnel-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Кандидаты</Link>{canConfigurePipeline&&<button className="button" onClick={()=>setShowStageSettings(true)}><Settings2 size={14}/> Настроить воронку</button>}{canCreate&&<button className="button primary" onClick={()=>setShowCreate(true)}>+ Добавить кандидата</button>}</div>
     </div>
 
-    {hasContext&&<div className="recruiting-filter-context"><div><strong>Воронка отфильтрована из потребностей</strong><span>{needFilter!=="all"?(needById.get(needFilter)?.title??"Потребность"):objectFilter!=="all"?(objectOptions.find(([id])=>id===objectFilter)?.[1]??"Объект"):"Выбранный контур"}</span></div><Link className="button" href="/needs">← Потребности</Link></div>}
-
-    <div className="recruiting-toolbar">
-      <div className="recruiting-toolbar-left recruiting-funnel-filters">
-        <select className="request-search" value={needFilter} onChange={e=>setNeedFilter(e.target.value)}><option value="all">Все потребности</option>{needs.filter(x=>["open","in_progress","paused"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"}</option>)}</select>
-        <select className="request-search" value={objectFilter} onChange={e=>setObjectFilter(e.target.value)}><option value="all">Все объекты</option>{objectOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
-        <select className="request-search" value={specialtyFilter} onChange={e=>setSpecialtyFilter(e.target.value)}><option value="all">Все специальности</option>{specialtyOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
-        <select className="request-search" value={recruiterFilter} onChange={e=>setRecruiterFilter(e.target.value)}><option value="all">Все рекрутеры</option>{recruiterOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
-        <select className="request-search" value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}><option value="all">Все источники</option>{sourceOptions.map(source=><option key={source} value={source}>{source}</option>)}</select>
+    <div className="recruiting-funnel-filterbar">
+      <div className="recruiting-funnel-filter-controls">
+        <select value={needFilter} onChange={e=>setNeedFilter(e.target.value)} aria-label="Потребность"><option value="all">Все потребности</option>{needs.filter(x=>["open","in_progress","paused"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"}</option>)}</select>
+        <select value={objectFilter} onChange={e=>setObjectFilter(e.target.value)} aria-label="Объект"><option value="all">Все объекты</option>{objectOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
+        <select value={specialtyFilter} onChange={e=>setSpecialtyFilter(e.target.value)} aria-label="Специальность"><option value="all">Все специальности</option>{specialtyOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
+        <select value={recruiterFilter} onChange={e=>setRecruiterFilter(e.target.value)} aria-label="Рекрутер"><option value="all">Все рекрутеры</option>{recruiterOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>
+        <select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)} aria-label="Источник"><option value="all">Все источники</option>{sourceOptions.map(source=><option key={source} value={source}>{source}</option>)}</select>
       </div>
-      <div className="recruiting-toolbar-actions">
-        <input className="request-search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Кандидат, телефон, объект, источник"/>
-        {canConfigurePipeline&&<button className="button" onClick={()=>setShowStageSettings(true)}><Settings2 size={14}/> Настроить воронку</button>}
-        {canCreate&&<button className="button primary" onClick={()=>setShowCreate(true)}>+ Добавить кандидата</button>}
-      </div>
+      <SalesSearch value={query} onChange={setQuery} placeholder="Кандидат, телефон, объект, источник"/>
     </div>
 
     {error&&<div className="recruiting-error">{error}</div>}
-    <div className="recruiting-toolbar" role="group" aria-label="Рабочая очередь">
-      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}</div>
-      <div className="recruiting-toolbar-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Кандидаты</Link></div>
-    </div>
 
     <div className="recruiting-funnel-scroll">
       <div className="recruiting-funnel recruiting-funnel-compact" style={{gridTemplateColumns:`repeat(${boardStages.length}, minmax(190px, 1fr))`,minWidth:boardStages.length*200-10}}>
@@ -334,8 +333,8 @@ export function RecruitingFunnelWorkspace({
 
     {showStageSettings&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStageSettings(false)}}>
       <div className="recruiting-modal-card recruiting-stage-settings recruiting-stage-settings-v2">
-        <div className="recruiting-modal-head"><div><h2>Настройка воронки</h2><p>Меняйте терминологию и включайте нужные рабочие этапы. Системная логика остаётся стабильной для аналитики, истории и автоматизаций.</p></div><button className="icon-button" onClick={()=>setShowStageSettings(false)}><X size={17}/></button></div>
-        <div className="stage-settings-guide"><strong>Рабочая цепочка</strong><span>«Новый контакт» и «Первый выход» — опорные этапы. Остальные можно адаптировать. Допуски можно вести отдельной колонкой или параллельными задачами в подготовке.</span></div>
+        <div className="recruiting-modal-head"><div><h2>Настройка воронки</h2><p>Измените названия и включите нужные этапы.</p></div><button className="icon-button" onClick={()=>setShowStageSettings(false)}><X size={17}/></button></div>
+        <div className="stage-settings-guide"><strong>Рабочая цепочка</strong><span>«Новый контакт» и «Первый выход» обязательны. Остальные этапы можно адаптировать под процесс компании.</span></div>
         <div className="stage-settings-list stage-settings-list-v2">{stageSettings.map((stage,index)=>{const locked=stage.code==="new"||stage.code==="first_shift";return <div className={`stage-settings-row-v2 ${stage.active?"active":"inactive"}`} key={stage.code}>
           <div className="stage-settings-order"><span>{index+1}</span><div><button className="icon-button" type="button" disabled={index===0} onClick={()=>moveStage(index,-1)}>↑</button><button className="icon-button" type="button" disabled={index===stageSettings.length-1} onClick={()=>moveStage(index,1)}>↓</button></div></div>
           <div className="stage-settings-main"><input aria-label="Название этапа" value={stage.label} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,label:e.target.value}:x))}/><span>{stageDescription(stage.systemType)}</span></div>
