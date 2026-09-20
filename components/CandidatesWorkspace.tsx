@@ -7,17 +7,22 @@ import {Download,FileSpreadsheet,Upload,X} from 'lucide-react';
 import type {CandidateDirectoryRow,RecruitingApplicationRow,RecruitingNeedRow,RecruitingOptions} from '@/lib/recruiting/service';
 import {contactChannelLabels} from '@/lib/recruiting/model';
 import {useRecruitingApplications,saveDemoApplication} from '@/lib/recruiting/demo-client';
-import {formatWorkDate,isActiveStage,workRisks} from '@/lib/recruiting/workflow';
+import {formatWorkDate} from '@/lib/recruiting/workflow';
 import {Status} from './UI';
-import {RecruitingActionDrawer} from './RecruitingActionDrawer';
+import {SalesSearch,SalesSegments} from './sales/SalesUI';
 
 type ImportRow={
  fullName:string;phone:string|null;email:string|null;city:string|null;telegram:string|null;whatsapp:string|null;max:string|null;preferredChannel:"phone"|"email"|"telegram"|"whatsapp"|"max"|"other"|null;
 };
+type CandidateBucket='new'|'recruiting'|'post_exit'|'inactive';
+type OperationalBucket=CandidateBucket|'employee';
 const directoryStorage='operis.recruiting.directory.imports.v1';
+const recruitingStages=new Set(['interview','documents','clearance','preparation']);
+const postExitStages=new Set(['first_shift','retention_7']);
+const terminalStages=new Set(['reserve','rejected','no_show']);
 
 export function CandidatesWorkspace({
- rows,directory,needs,options,initialQueue,demo,exitReasons,canCreate,canEdit,canConvert,
+ rows,directory,needs,options,initialQueue,demo,canCreate,
 }:{
  rows:RecruitingApplicationRow[];
  directory:CandidateDirectoryRow[];
@@ -25,20 +30,15 @@ export function CandidatesWorkspace({
  options:RecruitingOptions;
  initialQueue:string;
  demo:boolean;
- exitReasons:RecruitingOptions['exitReasons'];
  canCreate:boolean;
- canEdit:boolean;
- canConvert:boolean;
 }){
  const all=useRecruitingApplications(rows,demo);
  const [query,setQuery]=useState('');
- const [queue,setQueue]=useState(normalizeQueue(initialQueue));
+ const [bucket,setBucket]=useState<CandidateBucket>(normalizeQueue(initialQueue));
  const [stage,setStage]=useState('all');
  const [object,setObject]=useState('all');
  const [owner,setOwner]=useState('all');
  const [source,setSource]=useState('all');
- const [view,setView]=useState<'people'|'applications'>('people');
- const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
  const [showImport,setShowImport]=useState(false);
  const [importRows,setImportRows]=useState<ImportRow[]>([]);
  const [importNeedId,setImportNeedId]=useState('');
@@ -60,35 +60,41 @@ export function CandidatesWorkspace({
  },[demo]);
 
  const people=useMemo(()=>[...localDirectory,...directory.filter(row=>!localDirectory.some(local=>local.id===row.id))],[directory,localDirectory]);
+ const latestByCandidate=useMemo(()=>{
+  const map=new Map<string,RecruitingApplicationRow>();
+  for(const application of all){
+   const current=map.get(application.candidateId);
+   const currentTime=current?.updatedAt??current?.createdAt??"";
+   const applicationTime=application.updatedAt??application.createdAt??"";
+   if(!current||applicationTime>currentTime)map.set(application.candidateId,application);
+  }
+  return map;
+ },[all]);
+ const counts=useMemo(()=>people.reduce<Record<CandidateBucket,number>>((acc,row)=>{
+  const value=candidateBucket(row,latestByCandidate.get(row.id));
+  if(value!=="employee")acc[value]++;
+  return acc;
+ },{new:0,recruiting:0,post_exit:0,inactive:0}),[people,latestByCandidate]);
+ const searchActive=Boolean(query.trim());
  const filteredPeople=people.filter(row=>{
-  if(queue!=='all'&&row.status!==queue)return false;
+  const latest=latestByCandidate.get(row.id);
+  if(!searchActive&&candidateBucket(row,latest)!==bucket)return false;
   if(source!=='all'&&row.source!==source)return false;
-  const latest=all.find(app=>app.candidateId===row.id);
   if(stage!=='all'&&latest?.stage!==stage)return false;
   if(object!=='all'&&latest?.objectId!==object)return false;
   if(owner!=='all'&&latest?.ownerUserId!==owner)return false;
-  return haystack(row,latest).includes(query.trim().toLocaleLowerCase('ru'));
- }).sort((a,b)=>statusRank(a.status)-statusRank(b.status)||b.updatedAt.localeCompare(a.updatedAt));
-
- const matchingApplications=all.filter(row=>{
-  if(stage!=='all'&&row.stage!==stage)return false;
-  if(object!=='all'&&row.objectId!==object)return false;
-  if(owner!=='all'&&row.ownerUserId!==owner)return false;
-  if(source!=='all'&&row.source!==source)return false;
-  if(queue==='active'&&!isActiveStage(row.stage))return false;
-  if(queue==='reserve'&&row.stage!=='reserve')return false;
-  if(queue==='completed'&&!['rejected','no_show'].includes(row.stage))return false;
-  if(queue==='worker'&&!['first_shift','retention_7','retention_30'].includes(row.stage))return false;
-  return `${row.fullName} ${row.phone??''} ${row.email??''} ${row.need} ${row.city??''} ${row.object??''} ${row.source??''} ${row.sourceCampaign??''}`.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru').trim());
+  return matchesCandidateQuery(row,latest,query);
+ }).sort((a,b)=>{
+  const aBucket=candidateBucket(a,latestByCandidate.get(a.id));
+  const bBucket=candidateBucket(b,latestByCandidate.get(b.id));
+  return bucketRank(aBucket)-bucketRank(bBucket)||b.updatedAt.localeCompare(a.updatedAt);
  });
 
  const objectOptions=unique(all,'objectId','object');
  const ownerOptions=unique(all,'ownerUserId','owner');
  const sourceOptions=[...new Set(people.map(row=>row.source).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,'ru'));
- const activePeople=people.filter(row=>row.status==='active').length;
- const workerPeople=people.filter(row=>row.status==='worker').length;
- const reservePeople=people.filter(row=>row.status==='reserve').length;
- const archivePeople=people.filter(row=>row.status==='completed').length;
+ const stageOptions=stageOptionsFor(bucket,options);
+
 
  async function downloadTemplate(){
   const XLSX=await import('xlsx');
@@ -160,28 +166,31 @@ export function CandidatesWorkspace({
   finally{setImportBusy(false);}
  }
 
- return <div className="recruiting-workspace candidate-directory">
-  <div className="recruiting-summary"><div><span>Людей в базе</span><strong>{people.length}</strong></div><div><span>Активно в подборе</span><strong>{activePeople}</strong></div><div><span>Сотрудники</span><strong>{workerPeople}</strong></div><div><span>Резерв / архив</span><strong>{reservePeople+archivePeople}</strong></div></div>
-
-  <div className="recruiting-toolbar candidate-directory-actions">
-   <div className="segmented-control">{[['people','Люди'],['applications','Заявки на потребности']].map(([value,label])=><button key={value} aria-pressed={view===value} className={view===value?'active':''} onClick={()=>setView(value as 'people'|'applications')}>{label}</button>)}</div>
-   <div className="candidate-directory-buttons"><Link className="button" href="/needs?view=analytics">Аналитика источников</Link>{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></div>
+ return <div className="recruiting-workspace candidate-directory candidate-directory-v2">
+  <div className="candidate-directory-actions">
+   <SalesSegments label="Состояние кандидатов" value={bucket} onChange={value=>{setBucket(value);setStage('all')}} items={[
+    {value:'new',label:`Новые · ${counts.new}`},
+    {value:'recruiting',label:`В подборе · ${counts.recruiting}`},
+    {value:'post_exit',label:`После выхода · ${counts.post_exit}`},
+    {value:'inactive',label:`Неактивные · ${counts.inactive}`},
+   ]}/>
+   <div className="candidate-directory-buttons">{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></div>
   </div>
 
-  <div className="recruiting-toolbar candidate-directory-filters">
-   <input className="request-search" aria-label="Поиск кандидата" placeholder="ФИО, телефон, город, вакансия, источник" value={query} onChange={e=>setQuery(e.target.value)}/>
-   <select aria-label="Статус" value={queue} onChange={e=>setQueue(e.target.value)}>{[['all','Все контакты'],['candidate','База без активной заявки'],['active','В подборе'],['worker','Стали сотрудниками'],['reserve','Резерв'],['completed','Завершённые']].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-   <select aria-label="Этап" value={stage} onChange={e=>setStage(e.target.value)}><option value="all">Все этапы</option>{Object.entries(options.funnelStages.reduce<Record<string,string>>((acc,row)=>{acc[row.code]=row.label;return acc},{})).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+  <div className="candidate-directory-search">
+   <SalesSearch value={query} onChange={setQuery} placeholder="Найти по ФИО, телефону, email или мессенджеру"/>
+   {searchActive&&<span>Поиск по всей базе, включая сотрудников.</span>}
+  </div>
+
+  <div className="candidate-directory-filters candidate-directory-filters-v2">
+   <select aria-label="Этап" value={stage} onChange={e=>setStage(e.target.value)}><option value="all">Все этапы</option>{stageOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
    <select aria-label="Объект" value={object} onChange={e=>setObject(e.target.value)}><option value="all">Объект: все</option>{objectOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-   <select aria-label="Рекрутер" value={owner} onChange={e=>setOwner(e.target.value)}><option value="all">Рекрутер: все</option>{ownerOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+   <select aria-label="Рекрутер" value={owner} onChange={e=>setOwner(e.target.value)}><option value="all">Ответственный: все</option>{ownerOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
    <select aria-label="Источник" value={source} onChange={e=>setSource(e.target.value)}><option value="all">Источник: все</option>{sourceOptions.map(v=><option key={v} value={v}>{v}</option>)}</select>
-   <button className="button" onClick={()=>{setQuery('');setStage('all');setQueue('all');setObject('all');setOwner('all');setSource('all');}}>Сбросить</button>
+   <button className="button" onClick={()=>{setQuery('');setStage('all');setObject('all');setOwner('all');setSource('all');}}>Сбросить</button>
   </div>
 
-  {view==='people'?<CandidatePeopleTable rows={filteredPeople} applications={all} demo={demo}/>:<CandidateApplicationsTable rows={matchingApplications} all={all} onOpen={setSelected}/>}
-
-  {selected&&<RecruitingActionDrawer row={selected} needs={needs} recruiters={options.recruiters} demo={demo} canEdit={canEdit} canConvert={canConvert} exitReasons={exitReasons} onClose={()=>setSelected(null)}/>}
-
+  <CandidatePeopleTable rows={filteredPeople} applications={all} demo={demo}/>
   {showImport&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowImport(false)}}>
    <div className="recruiting-modal-card candidate-import-modal">
     <div className="recruiting-modal-head"><div><h2>Импорт базы кандидатов</h2><p>Загрузите Excel. Система проверит существующие контакты и не создаст новую карточку при точном совпадении телефона, email или мессенджера.</p></div><button className="icon-button" onClick={()=>setShowImport(false)}><X size={17}/></button></div>
@@ -201,27 +210,14 @@ export function CandidatesWorkspace({
 function CandidatePeopleTable({rows,applications,demo}:{rows:CandidateDirectoryRow[];applications:RecruitingApplicationRow[];demo:boolean}){
  return <div className="section section-flush"><div className="request-table-wrap"><table className="data-table candidates-directory-table"><thead><tr>{['Кандидат','Статус','Предпочтительная связь','Последняя заявка','Источник','Ответственный','История','Обновлено',''].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(row=>{const latest=applications.find(app=>app.candidateId===row.id);const localOnly=demo&&!applications.some(app=>app.candidateId===row.id);return <tr key={row.id}>
   <td>{localOnly?<strong className="cell-title">{row.fullName}</strong>:<Link className="cell-title" href={`/candidates/${row.id}`}>{row.fullName}</Link>}<span className="cell-sub">{row.city??'Город не указан'}{row.phone?` · ${row.phone}`:''}</span></td>
-  <td><Status tone={row.status==='worker'?'good':row.status==='completed'?'neutral':row.status==='reserve'?'warn':'info'}>{directoryStatusLabel(row.status)}</Status>{row.latestStageLabel&&<span className="cell-sub">{row.latestStageLabel}</span>}</td>
+  <td><Status tone={candidateStatusTone(row,latest)}>{candidateStatusLabel(row,latest)}</Status>{row.latestStageLabel&&<span className="cell-sub">{row.latestStageLabel}</span>}</td>
   <td><strong>{contactChannelLabels[row.preferredChannel??'']??'Контакт'}</strong><span className="cell-sub">{row.preferredContact??row.phone??'—'}</span></td>
   <td>{row.latestNeed??'Нет активной заявки'}<span className="cell-sub">{row.latestObject??''}</span></td>
   <td>{row.source??'—'}</td><td>{row.owner??'—'}</td>
   <td>Заявок: {row.applicationsCount}<span className="cell-sub">Активных: {row.activeApplications}</span></td>
   <td>{formatWorkDate(row.updatedAt)}</td>
-  <td>{latest?<button className="button" type="button" onClick={()=>location.href=`/candidates/${row.id}`}>Карточка</button>:<span className="cell-sub">База</span>}</td>
+  <td>{latest?<Link className="button" href={`/candidates/${row.id}`}>Карточка</Link>:<span className="cell-sub">База</span>}</td>
  </tr>})}</tbody></table>{!rows.length&&<div className="empty-inline">Кандидаты по выбранным условиям не найдены</div>}</div></div>;
-}
-
-function CandidateApplicationsTable({rows,all,onOpen}:{rows:RecruitingApplicationRow[];all:RecruitingApplicationRow[];onOpen:(row:RecruitingApplicationRow)=>void}){
- return <div className="section section-flush"><div className="request-table-wrap"><table className="data-table candidates-list-table"><thead><tr>{['Кандидат','Контакт','Потребность','Этап','Ответственный','Текущее действие','Риски','История',''].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(row=>{const related=all.filter(x=>x.candidateId===row.candidateId);return <tr key={row.applicationId}>
-  <td><Link className="cell-title" href={`/candidates/${row.candidateId}`}>{row.fullName}</Link><span className="cell-sub">{row.city??'Город не указан'}</span></td>
-  <td>{preferredApplicationContact(row)}<span className="cell-sub">{contactChannelLabels[row.preferredChannel??'']??''}</span></td>
-  <td>{row.need}<span className="cell-sub">{row.object??'Без объекта'}</span></td>
-  <td><Status tone={['first_shift','retention_7','retention_30'].includes(row.stage)?'good':['rejected','no_show'].includes(row.stage)?'bad':'neutral'}>{row.stageLabel}</Status><span className="cell-sub">С {formatWorkDate(row.stageEnteredAt)}</span></td>
-  <td>{row.owner??'Не назначен'}<span className="cell-sub">{row.manager??''}</span></td>
-  <td>{structuredActionLabel(row)}<span className="cell-sub">{formatWorkDate(row.nextActionAt)}</span></td>
-  <td>{workRisks(row).join(' · ')||'—'}</td>
-  <td>Заявок: {related.length}</td><td><button className="button" onClick={()=>onOpen(row)}>Открыть этап</button></td>
- </tr>})}</tbody></table>{!rows.length&&<div className="empty-inline">Нет заявок по выбранным условиям</div>}</div></div>;
 }
 
 function mapImportRow(row:Record<string,unknown>,index:number):ImportRow|null{
@@ -234,11 +230,60 @@ function normalizeChannel(value:string):ImportRow['preferredChannel']{const v=va
 function nullable(value:string){return value||null}
 function digits(value:string){return value.replace(/\D/g,'')}
 function preferredValue(row:ImportRow){return row.preferredChannel==='telegram'?row.telegram:row.preferredChannel==='whatsapp'?row.whatsapp:row.preferredChannel==='max'?row.max:row.preferredChannel==='email'?row.email:row.phone}
-function normalizeQueue(value:string){return value==='closed'?'completed':['all','candidate','active','worker','reserve','completed'].includes(value)?value:'all'}
-function directoryStatusLabel(value:CandidateDirectoryRow['status']){return value==='worker'?'Сотрудник':value==='active'?'В подборе':value==='reserve'?'Резерв':value==='completed'?'Завершён':'База кандидатов'}
-function statusRank(value:CandidateDirectoryRow['status']){return value==='active'?0:value==='reserve'?1:value==='candidate'?2:value==='worker'?3:4}
-function haystack(row:CandidateDirectoryRow,app?:RecruitingApplicationRow){return `${row.fullName} ${row.phone??''} ${row.city??''} ${row.preferredContact??''} ${row.source??''} ${app?.need??''} ${app?.object??''}`.toLocaleLowerCase('ru')}
+function normalizeQueue(value:string):CandidateBucket{
+ if(value==='candidate'||value==='new')return'new';
+ if(value==='worker'||value==='post_exit')return'post_exit';
+ if(value==='reserve'||value==='completed'||value==='closed'||value==='inactive')return'inactive';
+ return'recruiting';
+}
+function candidateBucket(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow):OperationalBucket{
+ const stage=latest?.stage??row.latestStage;
+ if(stage==='new'||(!stage&&row.status==='candidate'))return'new';
+ if(stage&&recruitingStages.has(stage))return'recruiting';
+ if(stage&&postExitStages.has(stage))return'post_exit';
+ if(stage==='retention_30'||(row.workerId&&row.status==='worker'))return'employee';
+ if((stage&&terminalStages.has(stage))||row.status==='reserve'||row.status==='completed')return'inactive';
+ return row.status==='active'?'recruiting':'new';
+}
+function candidateStatusLabel(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow){
+ const value=candidateBucket(row,latest);
+ if(value==='new')return'Новый';
+ if(value==='recruiting')return'В подборе';
+ if(value==='post_exit')return'После выхода';
+ if(value==='employee')return'Сотрудник';
+ if(latest?.stage==='reserve'||row.status==='reserve')return'Резерв';
+ if(latest?.stage==='no_show')return'Не вышел';
+ return'Завершён';
+}
+function candidateStatusTone(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow):'good'|'warn'|'bad'|'info'|'neutral'{
+ const value=candidateBucket(row,latest);
+ if(value==='employee'||value==='post_exit')return'good';
+ if(value==='new'||value==='recruiting')return'info';
+ if(latest?.stage==='reserve'||row.status==='reserve')return'warn';
+ if(latest?.stage==='no_show'||latest?.stage==='rejected')return'bad';
+ return'neutral';
+}
+function bucketRank(value:OperationalBucket){return value==='new'?0:value==='recruiting'?1:value==='post_exit'?2:value==='inactive'?3:4}
+function matchesCandidateQuery(row:CandidateDirectoryRow,app:RecruitingApplicationRow|undefined,query:string){
+ const raw=query.trim();if(!raw)return true;
+ const text=[row.id,row.fullName,row.phone,row.city,row.preferredContact,row.source,app?.fullName,app?.phone,app?.email,app?.telegram,app?.whatsapp,app?.need,app?.object,app?.source,app?.sourceChannel,app?.sourceCampaign,app?.sourceReference].filter(Boolean).join(' ').toLocaleLowerCase('ru');
+ const normalized=raw.toLocaleLowerCase('ru').replace(/\s+/g,' ');
+ const terms=normalized.split(' ').filter(Boolean);
+ const textMatch=terms.every(term=>text.includes(term));
+ const phoneQuery=digits(raw);
+ if(phoneQuery.length>=4){
+  const contactDigits=digits([row.phone,row.preferredContact,app?.phone,app?.telegram,app?.whatsapp].filter(Boolean).join(' '));
+  if(contactDigits.includes(phoneQuery))return true;
+ }
+ return textMatch;
+}
+function stageOptionsFor(bucket:CandidateBucket,options:RecruitingOptions):Array<[string,string]>{
+ const labels=new Map(options.funnelStages.map(row=>[row.code,row.label]));
+ const codes=bucket==='new'?['new']:
+  bucket==='recruiting'?['interview','documents','clearance','preparation']:
+  bucket==='post_exit'?['first_shift','retention_7']:
+  ['reserve','rejected','no_show'];
+ return codes.map(code=>[code,labels.get(code)??(code==='reserve'?'Резерв':code==='rejected'?'Отказ':code==='no_show'?'Не вышел':code)]);
+}
 function unique(rows:RecruitingApplicationRow[],field:'objectId'|'ownerUserId',name:'object'|'owner'){return [...new Map(rows.filter(row=>row[field]).map(row=>[row[field]!,row[name]??'—'])).entries()]}
-function preferredApplicationContact(row:RecruitingApplicationRow){return row.preferredChannel==='telegram'?row.telegram??row.phone:row.preferredChannel==='whatsapp'?row.whatsapp??row.phone:row.preferredChannel==='email'?row.email??row.phone:row.phone??row.email??'—'}
-function structuredActionLabel(row:RecruitingApplicationRow){const code=row.workflow?.actionCode;const map:Record<string,string>={inbound_contact:'Новый входящий контакт',interview:'Интервью',callback:'Повторный контакт',no_answer:'Повторный звонок',manager_interview:'Интервью мастера',documents_wait:'Ожидаем документы',clearance_progress:'Оформляются допуски',preparation_save:'Подготовка к выходу',shift_worked:'Первый выход подтверждён',retention_check:'Контроль удержания'};return code?map[code]??'Зафиксирован результат':'—'}
 function Portal({children}:{children:React.ReactNode}){return typeof document==='undefined'?null:createPortal(children,document.body)}
