@@ -19,9 +19,10 @@ export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; s
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
 export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; object?:string|null; objectId?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
 export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string };
-export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,number|null>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
+export type TimesheetCellValue = number|string|null;
+export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,TimesheetCellValue>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
 export type ReconciliationIssue = { id?:string; difference:number|string; worker:string; date:string; reason:string; owner:string; status?:string };
-export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; clientHours:number; internalHours:number; discrepancy:number; status:string; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null };
+export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; month:string; periodStart:string; periodEnd:string; clientHours:number; internalHours:number; discrepancy:number; status:string; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null };
 export type FinanceRow = ScopedRow & { id:string; objectId:string; object:string; revenue:number|string; workerCost:number|string; expenses:number|string; contribution:number|string; marginPct:number|string; planMarginPct?:number|string|null; periodStart?:string|null; periodEnd?:string|null };
 export type TaskRow = ScopedRow & { id:string; title:string; status:string; priority:string; due?:string|null; entity?:string|null };
 export type AccessUserRow = { id:string; membershipId:string; name:string; email:string|null; role:string; roleCode:string; processRoles:string[]; teams:number; regions:number; scopes:string[]; capabilities:number; systemCapabilities:string[]; isOwner:boolean };
@@ -207,24 +208,95 @@ export async function listShifts(actor: Actor): Promise<ShiftRow[]> {
   });
 }
 
-export async function getTimesheet(actor: Actor): Promise<TimesheetData | null> {
+export async function getTimesheet(actor: Actor, options?: { objectId?: string | null; month?: string | null }): Promise<TimesheetData | null> {
   requireCapability(actor, "time.timesheet.read");
+  const requestedMonth=options?.month&&/^\\d{4}-\\d{2}$/.test(options.month)?options.month:new Date().toISOString().slice(0,7);
+  const [year,monthNumber]=requestedMonth.split("-").map(Number);
+  const periodStart=requestedMonth+"-01";
+  const periodEnd=new Date(Date.UTC(year,monthNumber,0)).toISOString().slice(0,10);
   if (actor.demo) {
-    if (!canReadRow(actor.access,"time.timesheet.read",{...demo.timesheet,ownerUserId:"10000000-0000-4000-8000-000000000004",assigneeUserIds:["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000003"]},actor)) return null;
-    return demo.timesheet;
+    const scoped={...demo.timesheet,ownerUserId:"10000000-0000-4000-8000-000000000004",assigneeUserIds:["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000003"]};
+    if (!canReadRow(actor.access,"time.timesheet.read",scoped,actor)) return null;
+    const demoMonth="2026-08";
+    return {...demo.timesheet,month:demoMonth,periodStart:demoMonth+"-01",periodEnd:demoMonth+"-31"};
   }
-  // Detailed pivot generation is intentionally server-derived from canonical time_entries.
+  const maySeeComp=!actor.access.denies.includes("worker.compensation.read")&&(actor.access.capabilities.includes("*")||actor.access.capabilities.includes("worker.compensation.read"));
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [meta] = await sql<TimesheetMeta[]>`SELECT id "objectId",name object,organization_id "organizationId",client_company_id "clientId",region_id "regionId",owner_user_id "ownerUserId" FROM objects ORDER BY created_at DESC LIMIT 1`;
-    if (!meta || !canReadRow(actor.access,"time.timesheet.read",meta,actor)) return null;
-    const rows = await sql<TimesheetWorkerRow[]>`
-      SELECT te.worker_id "workerId",w.full_name name,sum(te.fact_hours)::numeric total,sum(te.night_hours)::numeric night,sum(te.overtime_hours)::numeric overtime
-      FROM time_entries te JOIN worker_profiles w ON w.id=te.worker_id WHERE te.object_id=${meta.objectId}::uuid GROUP BY te.worker_id,w.full_name ORDER BY w.full_name
+    const objectRows=await sql<TimesheetMeta[]>`
+      SELECT id "objectId",name object,organization_id "organizationId",client_company_id "clientId",region_id "regionId",owner_user_id "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=objects.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM objects ORDER BY name
     `;
-    const [clientSnap] = await sql<ClientSnapshot[]>`SELECT (snapshot_json->>'hours')::numeric hours,status FROM timesheet_snapshots WHERE object_id=${meta.objectId}::uuid AND view_type='client' ORDER BY period_end DESC LIMIT 1`;
-    const internalHours = rows.reduce((sum,row)=>sum+Number(row.total),0);
-    const clientHours = Number(clientSnap?.hours ?? internalHours);
-    return {...meta,period:"Последний период",clientHours,internalHours,discrepancy:internalHours-clientHours,status:clientSnap?.status ?? "draft",rows,issue:null};
+    const visible=objectRows.filter(row=>canReadRow(actor.access,"time.timesheet.read",row,actor));
+    const meta=options?.objectId?visible.find(row=>row.objectId===options.objectId):visible[0];
+    if(!meta)return null;
+
+    const workers=await sql<Array<TimesheetWorkerRow & {organizationId:string}>>`
+      SELECT DISTINCT w.id "workerId",w.full_name name,0::numeric total,0::numeric night,0::numeric overtime,
+        ${maySeeComp?sql`wr.amount`:sql`NULL::numeric`} rate,
+        ${maySeeComp?sql`wa.total_amount`:sql`NULL::numeric`} accrual,
+        w.organization_id "organizationId"
+      FROM worker_profiles w
+      JOIN worker_object_assignments a ON a.worker_id=w.id
+      LEFT JOIN LATERAL (
+        SELECT amount FROM worker_rates r
+        WHERE r.worker_id=w.id AND r.object_id=${meta.objectId}::uuid
+          AND r.effective_from<=${periodEnd}::date AND (r.effective_to IS NULL OR r.effective_to>=${periodStart}::date)
+        ORDER BY r.effective_from DESC LIMIT 1
+      ) wr ON true
+      LEFT JOIN LATERAL (
+        SELECT total_amount FROM worker_accruals x
+        WHERE x.worker_id=w.id AND x.object_id=${meta.objectId}::uuid
+          AND x.period_end>=${periodStart}::date AND x.period_start<=${periodEnd}::date
+        ORDER BY x.period_end DESC LIMIT 1
+      ) wa ON true
+      WHERE a.object_id=${meta.objectId}::uuid
+        AND a.effective_from<=${periodEnd}::date
+        AND (a.effective_to IS NULL OR a.effective_to>=${periodStart}::date)
+      ORDER BY w.full_name
+    `;
+    const workerIds=workers.map(row=>row.workerId);
+    const entries=workerIds.length?await sql<Array<{workerId:string;workDate:string;timeCode:string;factHours:number|string;nightHours:number|string;overtimeHours:number|string}>>`
+      SELECT worker_id "workerId",work_date::text "workDate",time_code "timeCode",fact_hours "factHours",night_hours "nightHours",overtime_hours "overtimeHours"
+      FROM time_entries
+      WHERE object_id=${meta.objectId}::uuid AND worker_id=ANY(${workerIds}::uuid[])
+        AND work_date BETWEEN ${periodStart}::date AND ${periodEnd}::date
+      ORDER BY work_date
+    `:[];
+
+    const codeLabels:Record<string,string>={DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"Н"};
+    const byWorker=new Map<string,TimesheetWorkerRow>();
+    for(const worker of workers)byWorker.set(worker.workerId,{workerId:worker.workerId,name:worker.name,days:{},total:0,night:0,overtime:0,rate:worker.rate,accrual:worker.accrual});
+    for(const entry of entries){
+      const row=byWorker.get(entry.workerId);if(!row)continue;
+      const day=String(Number(entry.workDate.slice(8,10)));
+      row.days??={};
+      row.days[day]=entry.timeCode==="WORK"?Number(entry.factHours):codeLabels[entry.timeCode]??"Н";
+      row.total=Number(row.total)+Number(entry.factHours);
+      row.night=Number(row.night??0)+Number(entry.nightHours);
+      row.overtime=Number(row.overtime??0)+Number(entry.overtimeHours);
+    }
+    const rows=[...byWorker.values()];
+    const [clientSnap]=await sql<ClientSnapshot[]>`
+      SELECT (snapshot_json->>'hours')::numeric hours,status
+      FROM timesheet_snapshots
+      WHERE object_id=${meta.objectId}::uuid AND view_type='client'
+        AND period_start=${periodStart}::date AND period_end=${periodEnd}::date
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    const [issue]=await sql<Array<{difference:number|string;worker:string;date:string;reason:string;owner:string;status:string}>>`
+      SELECT r.difference_hours difference,w.full_name worker,to_char(r.work_date,'DD.MM.YYYY') date,
+        COALESCE(r.reason,'Причина не указана') reason,COALESCE(u.display_name,'Не назначен') owner,r.status
+      FROM reconciliation_issues r
+      LEFT JOIN worker_profiles w ON w.id=r.worker_id LEFT JOIN app_users u ON u.id=r.owner_user_id
+      WHERE r.object_id=${meta.objectId}::uuid AND r.status<>'resolved'
+        AND (r.work_date IS NULL OR r.work_date BETWEEN ${periodStart}::date AND ${periodEnd}::date)
+      ORDER BY r.created_at DESC LIMIT 1
+    `;
+    const internalHours=rows.reduce((sum,row)=>sum+Number(row.total),0);
+    const clientHours=Number(clientSnap?.hours??internalHours);
+    const period=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(periodStart+"T00:00:00Z"));
+    return {...meta,period,month:requestedMonth,periodStart,periodEnd,clientHours,internalHours,discrepancy:internalHours-clientHours,status:clientSnap?.status??"draft",rows,issue:issue??null};
   });
 }
 
