@@ -167,11 +167,11 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
 
 function CandidateDocuments({profile,options,candidateId,demo,canEdit,onOpenStage}:{profile:CandidateProfile;options:RecruitingOptions;candidateId:string;demo:boolean;canEdit:boolean;onOpenStage:(application:RecruitingApplicationRow,stage:RecruitingStage|undefined)=>void}){
  const router=useRouter();
- const [items,setItems]=useState(profile.documents);
+ const [demoItems,setDemoItems]=useState(profile.documents);
  const [busy,setBusy]=useState("");
  const [error,setError]=useState("");
  const [addId,setAddId]=useState("");
- useEffect(()=>{setItems(profile.documents)},[profile.documents]);
+ const items=demo?demoItems:profile.documents;
  const employment=dedupeDocuments(items.filter(row=>row.groupType==="employment"));
  const additional=items.filter(row=>row.groupType==="clearance");
  const latest=profile.applications.find(app=>isActiveStage(app.stage))??profile.applications[0]??null;
@@ -183,13 +183,12 @@ function CandidateDocuments({profile,options,candidateId,demo,canEdit,onOpenStag
   try{
    if(demo){
     const nextItems=items.some(item=>item.documentTypeId===row.documentTypeId)?items.map(item=>item.documentTypeId===row.documentTypeId&&item.needId===row.needId?nextRow:item):[...items,nextRow];
-    setItems(nextItems);
+    setDemoItems(nextItems);
     const all=JSON.parse(localStorage.getItem(profileStorage)||"{}");all[candidateId]={...(all[candidateId]??{}),documents:nextItems};localStorage.setItem(profileStorage,JSON.stringify(all));
    }else{
     const applicationId=row.groupType==="clearance"?(profile.applications.find(app=>app.needId===row.needId)?.applicationId??latest?.applicationId??null):null;
     const response=await fetch(`/api/candidates/${candidateId}/documents`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId,documentTypeId:row.documentTypeId,status:nextRow.status,note:nextRow.note??null})});
     const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error??"Не удалось обновить документ");
-    setItems(list=>list.some(item=>item.documentTypeId===row.documentTypeId)?list.map(item=>item.documentTypeId===row.documentTypeId&&item.needId===row.needId?nextRow:item):[...list,nextRow]);
     router.refresh();
    }
   }catch(e){setError(e instanceof Error?e.message:"Не удалось обновить документ");}
