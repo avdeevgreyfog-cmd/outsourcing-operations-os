@@ -542,3 +542,6 @@ button,input,select,textarea{letter-spacing:inherit}
   .capability-editor>div{grid-template-columns:18px 1fr 112px}
   .capability-editor .capability-scope{grid-column:2/-1}
 }
+
+.timesheet-cell-input{width:42px;height:28px;padding:0 4px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--text);font:inherit;text-align:center}.timesheet-cell-input:hover{border-color:var(--border)}.timesheet-cell-input:focus{outline:none;border-color:var(--accent);background:var(--panel)}
+@media print{.sidebar,.topbar,.page-actions,.scheduler-controls,.timesheet-summary,.timesheet-mode-note,.timesheet-legend{display:none!important}.main-content,.workspace-main{margin:0!important;padding:0!important;max-width:none!important}.timesheet-wrap{overflow:visible!important}.timesheet{min-width:0!important;font-size:9px!important}.timesheet td,.timesheet th{padding:4px!important}.section{border:0!important;box-shadow:none!important}.section-head{padding:8px 0!important}}
