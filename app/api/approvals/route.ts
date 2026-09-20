@@ -6,11 +6,11 @@ import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
 const schema=z.object({
-  subjectType:z.enum(["calculation_scenario","proposal","contract","tender"]),
+  subjectType:z.enum(["calculation_scenario","proposal","contract","tender","supply_request"]),
   subjectId:z.string().uuid(),
   processCode:z.enum(["tender_participation","tender_bid","tender_submission"]).optional(),
 });
-type SubjectContext={sourceType:"request"|"tender";sourceId:string;regionId:string|null;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;clientId:string|null;status:string};
+type SubjectContext={sourceType:"request"|"tender"|"supply_request";sourceId:string;regionId:string|null;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;clientId:string|null;status:string};
 
 export async function POST(request:Request){
   try{
@@ -50,6 +50,18 @@ export async function POST(request:Request){
         if(!context)throw new Error("Договор не найден");
         if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
         if(!["draft","negotiation","rejected"].includes(context.status))throw new Error("На согласование можно отправить только черновик или договор после переговоров");
+      }else if(body.subjectType==="supply_request"){
+        capability="procurement.manage";processCode="supply_request";stepCode="supply_request_approval";requireCapability(actor,capability);
+        const [row]=await tx<Array<SubjectContext>>`
+          SELECT 'supply_request' "sourceType",r.id "sourceId",o.region_id "regionId",r.organization_id "organizationId",
+            COALESCE(o.owner_user_id,r.created_by_user_id) "ownerUserId",r.created_by_user_id "createdByUserId",
+            NULL::uuid "teamId",o.client_company_id "clientId",r.status
+          FROM supply_requests r LEFT JOIN objects o ON o.id=r.object_id
+          WHERE r.id=${body.subjectId}::uuid
+        `;context=row;
+        if(!context)throw new Error("Заявка на обеспечение не найдена");
+        if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
+        if(!["submitted","rejected"].includes(context.status))throw new Error("На согласование можно отправить только поданную или отклонённую заявку");
       }else{
         capability="sales.tender.edit";requireCapability(actor,capability);processCode=body.processCode??"tender_participation";stepCode=processCode==="tender_bid"?"bid_approval":processCode==="tender_submission"?"submission_approval":"participation_approval";
         const [row]=await tx<Array<SubjectContext>>`
@@ -94,6 +106,8 @@ export async function POST(request:Request){
         await tx`UPDATE requests SET status='proposal_review',updated_at=now() WHERE id=${context.sourceId}::uuid`;
       }else if(body.subjectType==="contract"){
         await tx`UPDATE contracts SET status='internal_review',updated_at=now() WHERE id=${body.subjectId}::uuid`;
+      }else if(body.subjectType==="supply_request"){
+        await tx`UPDATE supply_requests SET status='submitted',updated_at=now() WHERE id=${body.subjectId}::uuid`;
       }else{
         await tx`UPDATE tenders SET stage='approval',updated_at=now() WHERE id=${body.subjectId}::uuid`;
       }
