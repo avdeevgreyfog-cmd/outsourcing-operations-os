@@ -38,10 +38,6 @@ WHERE dt.id=ndr.document_type_id;
 
 ALTER TABLE candidate_application_documents
   ADD COLUMN IF NOT EXISTS responsible_user_id uuid REFERENCES app_users(id),
-  ADD COLUMN IF NOT EXISTS due_at timestamptz;
-
-ALTER TABLE candidate_application_documents
-  ADD COLUMN IF NOT EXISTS responsible_user_id uuid REFERENCES app_users(id),
   ADD COLUMN IF NOT EXISTS due_at timestamptz,
   ADD COLUMN IF NOT EXISTS task_id uuid REFERENCES tasks(id) ON DELETE SET NULL;
 
