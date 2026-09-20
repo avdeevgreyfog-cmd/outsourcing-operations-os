@@ -48,7 +48,7 @@ export function RecruitingFunnelWorkspace({
   const [specialtyFilter,setSpecialtyFilter]=useState(initialSpecialty??"all");
   const [recruiterFilter,setRecruiterFilter]=useState(initialRecruiter??"all");
   const [sourceFilter,setSourceFilter]=useState(initialSource??"all");
-  const [stageFilter,setStageFilter]=useState(initialStage??"all");
+  const [stageFilter]=useState(initialStage??"all");
   const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
   const [showCreate,setShowCreate]=useState(false);
   const [targetStage,setTargetStage]=useState<RecruitingStage|undefined>();
@@ -100,7 +100,6 @@ export function RecruitingFunnelWorkspace({
   });
 
   const displayStage=(row:RecruitingApplicationRow)=>displayRecruitingStage(row);
-  const stageLabel=(stage:string)=>pipeline.find(item=>item.stageCode===stage)?.label??terminalLabels[stage]??recruitingStageLabels[stage as RecruitingStage]??stage;
   const configuredColumns=useMemo(()=>{
     if(queue==="reserve")return [{stageCode:"reserve",label:"Резерв",virtual:false}] as Array<Pick<RecruitingPipelineStage,"stageCode"|"label"|"virtual">>;
     if(queue==="closed")return [{stageCode:"rejected",label:terminalLabels.rejected,virtual:false},{stageCode:"no_show",label:terminalLabels.no_show,virtual:false}];
@@ -182,7 +181,6 @@ export function RecruitingFunnelWorkspace({
 
 function CompactCandidateCard({row,displayStage,showResponsible,draggable,onDragStart,onDragEnd,onClick}:{row:RecruitingApplicationRow;displayStage:RecruitingDisplayStage;showResponsible:boolean;draggable:boolean;onDragStart:()=>void;onDragEnd:()=>void;onClick:()=>void}){
   const risk=workRisks(row)[0];
-  const days=row.actualStartAt&&Number.isFinite(Date.parse(row.actualStartAt))?Math.max(0,Math.floor((Date.now()-Date.parse(row.actualStartAt))/86400000)):0;
   const travelLabels:Record<string,string>={not_required:"Логистика не требуется",planning:"Логистика планируется",ticket_required:"Нужно купить билет",ticket_purchased:"Билет куплен",travelling:"В пути",arrived:"Прибыл"};
   return <button className={`recruiting-card recruiting-card-compact${risk?" is-overdue":""}`} draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick}>
     <div className="recruiting-card-title"><strong>{row.fullName}</strong>{row.nextActionAt&&<time>{formatWorkDate(row.nextActionAt).split(",").pop()?.trim()}</time>}</div>
@@ -192,7 +190,7 @@ function CompactCandidateCard({row,displayStage,showResponsible,draggable,onDrag
     {displayStage==="interview"&&<><span>Документы <strong>{row.documentsReceived} / {row.documentsRequired||"—"}</strong></span><span className="recruiting-card-muted">{row.workflow?.lastContact??"Ожидается сбор документов"}</span></>}
     {["manager_review","approved"].includes(displayStage)&&<span>{row.workflow?.reviewRecipient?`Решение: ${row.workflow.reviewRecipient}`:"Ожидается решение"}</span>}
     {["preparation","ready"].includes(displayStage)&&<><span>Выход: <strong>{row.plannedStartDate??"не назначен"}</strong>{row.workflow?.plannedShift?` · ${row.workflow.plannedShift}`:""}</span><span className="recruiting-card-muted">{travelLabels[row.workflow?.travelStatus??"planning"]??"Логистика"}</span></>}
-    {["started","retention_7","retention_30"].includes(displayStage)&&<><span>Первый выход: <strong>{row.actualStartAt?new Date(row.actualStartAt).toLocaleDateString("ru-RU"):"—"}</strong></span><span className="recruiting-card-muted">Работает {days} дн.</span></>}
+    {["started","retention_7","retention_30"].includes(displayStage)&&<><span>Первый выход: <strong>{row.actualStartAt?new Date(row.actualStartAt).toLocaleDateString("ru-RU"):"—"}</strong></span><span className="recruiting-card-muted">{displayStage==="retention_30"?"Отработал 30+ дней":displayStage==="retention_7"?"Отработал 7+ дней":"Первый выход подтверждён"}</span></>}
     {displayStage==="reserve"&&<span>{row.workflow?.reserveReason??"Причина резерва не указана"}</span>}
     {["rejected","no_show"].includes(displayStage)&&<span>{row.rejectionReason??"Причина завершения не указана"}</span>}
     <div className="recruiting-card-footer">{showResponsible&&<span>{row.responsible??row.owner??"Не назначен"}</span>}{risk&&<span className="needs-overdue">{risk}</span>}</div>
