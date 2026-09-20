@@ -71,6 +71,7 @@ export type RecruitingApplicationRow = {
   phone: string | null;
   email: string | null;
   preferredChannel: string | null;
+  preferredContact?: string | null;
   telegram: string | null;
   whatsapp: string | null;
   city: string | null;
@@ -420,6 +421,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
     return {
       applicationId: `demo-application-${row.id}`, candidateId: row.id, organizationId: row.organizationId,
       fullName: row.fullName, phone: row.phone ?? null, email: seed.email??null, preferredChannel: seed.preferredChannel??"phone",
+      preferredContact:seed.preferredChannel==="telegram"?seed.telegram??row.phone:seed.preferredChannel==="whatsapp"?seed.whatsapp??row.phone:seed.email??row.phone,
       telegram:seed.telegram??null,whatsapp:seed.whatsapp??null,city:seed.city??null,
       source: row.source ?? null, sourceChannel:seed.sourceChannel??row.source??null, sourceCampaign:seed.sourceCampaign??null, sourceReference:seed.sourceReference??null,
       stage, stageLabel: recruitingStageLabels[stage], needId: need?.id ?? "", need: row.need ?? "—", objectId: row.objectId ?? null,
@@ -438,7 +440,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<Array<Omit<RecruitingApplicationRow,"stage"|"stageLabel"> & {rawStage:string} & Record<string, unknown>>>`
       SELECT ca.id "applicationId",c.id "candidateId",c.organization_id "organizationId",c.full_name "fullName",c.phone,c.email,
-        c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,CASE WHEN ca.source_snapshot IS NULL THEN c.source ELSE ca.source_snapshot->>'source' END source,ca.source_snapshot->>'channel' "sourceChannel",
+        c.preferred_channel "preferredChannel",COALESCE(pref.value,c.phone,c.email) "preferredContact",c.telegram,c.whatsapp,c.city,CASE WHEN ca.source_snapshot IS NULL THEN c.source ELSE ca.source_snapshot->>'source' END source,ca.source_snapshot->>'channel' "sourceChannel",
         ca.source_snapshot->>'campaign' "sourceCampaign",ca.source_snapshot->>'reference' "sourceReference",ca.stage "rawStage",ca.need_id "needId",
         COALESCE(n.title,s.name) need,ca.object_id "objectId",o.name object,COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ca.owner_user_id "ownerUserId",owner.display_name owner,ca.manager_user_id "managerUserId",manager.display_name manager,
@@ -536,6 +538,12 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
       LEFT JOIN objects o ON o.id=ca.object_id
       LEFT JOIN app_users owner ON owner.id=ca.owner_user_id
       LEFT JOIN app_users manager ON manager.id=ca.manager_user_id
+      LEFT JOIN LATERAL(
+        SELECT cm.value FROM candidate_contact_methods cm
+        WHERE cm.candidate_id=c.id AND cm.active
+        ORDER BY (cm.channel=c.preferred_channel) DESC,cm.is_preferred DESC,cm.created_at
+        LIMIT 1
+      ) pref ON true
       ORDER BY ca.updated_at DESC
     `;
     return rows.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row) => {
