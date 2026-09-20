@@ -17,6 +17,8 @@ const schema = z.object({
   documentRequirements: z.array(z.object({
     documentTypeId:z.string().uuid(),
     provider:z.enum(["candidate","company","client"]),
+    requiredByStage:z.enum(["documents","preparation","first_shift","retention_7","retention_30","none"]).default("first_shift"),
+    blocksProgress:z.boolean().default(false),
   })).max(50).optional(),
   conditions: z.object({
     location: z.string().trim().max(500).nullable().optional(),
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
       `;
       const requestedDocs=body.documentRequirements?.length
         ? body.documentRequirements
-        : (body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const}));
+        : (body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const,requiredByStage:"documents" as const,blocksProgress:true}));
       if(requestedDocs.length){
         const ids=[...new Set(requestedDocs.map(item=>item.documentTypeId))];
         if(ids.length!==requestedDocs.length)throw new Error("Документ указан несколько раз");
@@ -112,8 +114,8 @@ export async function POST(request: Request) {
         if(valid.length!==ids.length)throw new Error("Один из типов документов недоступен");
         for(const requirement of requestedDocs){
           await tx`
-            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider)
-            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider})
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider,required_by_stage,blocks_progress)
+            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider},${requirement.requiredByStage},${requirement.blocksProgress})
           `;
         }
       }
