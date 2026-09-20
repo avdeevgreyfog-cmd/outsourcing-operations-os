@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PhoneCall, UserRound } from "lucide-react";
 import { SalesDrawer } from "@/components/sales/SalesUI";
+import { Status } from "@/components/UI";
 import type { RecruitingApplicationRow, RecruitingFunnelStageSetting, RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 import type { RecruitingStage } from "@/lib/recruiting/model";
 import { recruitingStageLabels } from "@/lib/recruiting/model";
@@ -69,7 +70,6 @@ const stageActions:Partial<Record<RecruitingStage,ActionOption[]>>={
   ],
 };
 
-const providerLabels={candidate:"Кандидат",company:"Компания",client:"Заказчик"} as const;
 const statusLabels:Record<string,string>={
   missing:"Не получен",requested:"Запрошен",received:"Получен",verified:"Проверен",rejected:"Отклонён",not_required:"Не требуется",
   to_prepare:"Нужно оформить",in_progress:"В работе",ready:"Готов",
@@ -308,6 +308,7 @@ export function RecruitingActionDrawer({
 
   return <SalesDrawer title={row.fullName} subtitle={row.need+" · "+(row.object??"Без объекта")} onClose={()=>{if(!busy)onClose();}}>
     <div className="candidate-work-drawer">
+      <div className="candidate-work-stagebar"><span>Текущий этап</span><Status tone={["first_shift","retention_7","retention_30"].includes(row.stage)?"good":"info"}>{stageLabel(row.stage)}</Status>{row.nextActionAt&&<small>Следующее действие: {formatWorkDate(row.nextActionAt)}</small>}</div>
       <section className="candidate-work-identity">
         <div><span>{row.stage==="new"?"Телефон":"Связь"}</span><strong>{row.stage==="new"?(row.phone??"Не указан"):preferredContact(row)}</strong></div>
         <div><span>Город</span><strong>{row.city??"Не указан"}</strong></div>
@@ -320,7 +321,7 @@ export function RecruitingActionDrawer({
       <NeedSummary need={need} row={row}/>
 
       <section className="candidate-work-history">
-        <header><div><h3>Последние события</h3><p>Что уже происходило с кандидатом</p></div><Link href={"/candidates/"+row.candidateId}>Полная история</Link></header>
+        <header><div><h3>Последние события</h3></div><Link href={"/candidates/"+row.candidateId}>Полная история</Link></header>
         <div className="candidate-work-history-list">
           {(row.recentCommunications??[]).slice(0,4).map(item=><div key={item.id}><time>{item.happenedAt}</time><span><strong>{item.author}</strong><small>{item.summary}</small></span></div>)}
           {row.stageEvents?.slice(-2).reverse().map((item,index)=><div key={"stage-"+index}><time>{formatWorkDate(item.createdAt)}</time><span><strong>Система</strong><small>Этап: {stageLabel(item.toStage as RecruitingStage)}{item.reason?" · "+item.reason:""}</small></span></div>)}
@@ -364,7 +365,7 @@ export function RecruitingActionDrawer({
             {action&&<label className="wide">Дополнительный комментарий<textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Только если нужной информации нет в структурированных полях"/></label>}
           </div>
 
-          <div className="candidate-action-footer"><span>{action?"Система сама зафиксирует результат, этап и историю.":"Выберите результат — появятся только необходимые поля."}</span>{action&&<button className="button primary" type="button" disabled={Boolean(busy)||(!canConvert&&action==="shift_worked")} onClick={()=>void performAction()}>{busy?"Сохраняю…":action==="alternative_need"?"Перевести на вакансию":"Сохранить результат"}</button>}</div>
+          {action&&<div className="candidate-action-footer"><button className="button primary" type="button" disabled={Boolean(busy)||(!canConvert&&action==="shift_worked")} onClick={()=>void performAction()}>{busy?"Сохраняю…":action==="alternative_need"?"Перевести на вакансию":"Сохранить результат"}</button></div>}
         </section>}
 
       <div className="recruiting-form-actions candidate-drawer-links"><Link className="button" href={"/candidates/"+row.candidateId}><UserRound size={14}/> Полная карточка</Link>{row.phone&&<a className="button" href={"tel:"+row.phone}><PhoneCall size={14}/> Позвонить</a>}</div>
@@ -376,14 +377,14 @@ function DocumentChecklist({documents,recruiters,canEdit,busy,onChange}:{documen
   const group=documents[0]?.groupType;
   const ready=documents.filter(item=>["received","verified","ready","not_required"].includes(item.status)).length;
   return <section className="candidate-documents">
-    <header><div><h3>{group==="clearance"?"Дополнительные документы и допуски":"Документы для оформления"}</h3><p>Готово {ready} из {documents.length}. Неблокирующие требования могут выполняться параллельно следующим этапам.</p></div></header>
+    <header><div><h3>{group==="clearance"?"Дополнительные документы и допуски":"Документы для оформления"}</h3><p>Готово {ready} из {documents.length}</p></div></header>
     <div>{documents.map(document=>{
       const statuses=document.provider==="candidate"
         ? ["missing","requested","received","verified","not_required"]
         : ["to_prepare","in_progress","ready","not_required"];
       const companyTask=document.groupType==="clearance"&&document.provider!=="candidate"&&!["ready","not_required"].includes(document.status);
       return <div className="candidate-document-row candidate-document-row-v2" key={document.documentTypeId}>
-        <div className="candidate-document-meta"><strong>{document.name}</strong><small>{providerLabels[document.provider]} · {document.requiredByStage?deadlineLabel(document.requiredByStage):"Срок не задан"}{document.blocksProgress?" · блокирует":""}</small></div>
+        <div className="candidate-document-meta"><strong>{document.name}</strong>{document.blocksProgress&&<small>Блокирует переход</small>}</div>
         <select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{status:e.target.value})}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select>
         {companyTask&&<div className="candidate-document-task"><label><span>Ответственный</span><select aria-label={"Ответственный: "+document.name} value={document.responsibleUserId??""} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{responsibleUserId:e.target.value||null})}><option value="">Не назначен</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label><span>Срок готовности</span><input aria-label={"Срок: "+document.name} type="datetime-local" value={localDate(document.dueAt)} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{dueAt:e.target.value?new Date(e.target.value).toISOString():null})}/></label></div>}
       </div>;
@@ -456,7 +457,6 @@ function preferredContact(row:RecruitingApplicationRow){
 function contactChannelLabel(value:string|null){return value==="telegram"?"Telegram":value==="whatsapp"?"WhatsApp":value==="max"?"MAX":value==="email"?"Email":value==="phone"?"Телефон":"Контакт";}
 function sourceDisplay(row:RecruitingApplicationRow){const source=row.source?.trim()??"";const channel=row.sourceChannel?.trim()??"";return !source&&!channel?"Не указан":source&&channel&&source.toLocaleLowerCase("ru")===channel.toLocaleLowerCase("ru")?source:[source,channel].filter(Boolean).join(" · ");}
 
-function deadlineLabel(value:string){return value==="documents"?"до оформления":value==="preparation"?"до подготовки":value==="first_shift"?"до первого выхода":value==="retention_7"?"до 7-го дня":value==="retention_30"?"до 30-го дня":"без жёсткого срока";}
 function provision(c:Record<string,unknown>,key:string){const explicit=c[key+"Provided"];const detail=display(c[key]);if(explicit===true)return detail==="—"?"Предоставляется":detail;if(explicit===false)return detail==="—"?"Не предоставляется":detail;return detail;}
 function display(value:unknown){if(value==null||value==="")return"—";if(typeof value==="string"||typeof value==="number")return String(value);return JSON.stringify(value);}
 function localDate(value?:string|null){if(!value||!Number.isFinite(Date.parse(value)))return"";const date=new Date(value);return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);}
