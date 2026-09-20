@@ -10,7 +10,7 @@ export default async function ProcurementPage({searchParams}:{searchParams:Promi
   const params=isGithubPagesDemo()?{}:await searchParams;
   const [rows,options,inventory]=await Promise.all([
     listSupplyRequests(actor),
-    getOperationsReferenceData(actor),
+    getOperationsReferenceData(actor,"procurement.read",{includeWorkers:false}),
     getInventorySnapshot(actor),
   ]);
   return <>
