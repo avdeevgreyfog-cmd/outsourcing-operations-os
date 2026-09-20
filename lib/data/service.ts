@@ -235,7 +235,24 @@ export async function listTasks(actor: Actor): Promise<TaskRow[]> {
   if (actor.demo) return allowed(actor, "task.read", demo.tasks);
   requireCapability(actor,"task.read");
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-    const rows=await sql<TaskRow[]>`SELECT id,organization_id "organizationId",title,status,priority,assignee_user_id "ownerUserId",ARRAY[assignee_user_id::text] "assigneeUserIds",to_char(due_at,'DD.MM HH24:MI') due,entity_type entity,created_by_user_id "createdByUserId" FROM tasks ORDER BY due_at NULLS LAST`;
+    const rows=await sql<TaskRow[]>`
+      SELECT t.id,t.organization_id "organizationId",t.title,t.status,t.priority,t.assignee_user_id "ownerUserId",
+        ARRAY[t.assignee_user_id::text] "assigneeUserIds",to_char(t.due_at,'DD.MM HH24:MI') due,
+        CASE
+          WHEN t.entity_type='candidate_application' THEN trim(concat_ws(' · ',c.full_name,COALESCE(n.title,s.name),o.name))
+          WHEN t.entity_type='candidate' THEN COALESCE(c_direct.full_name,'Кандидат')
+          ELSE COALESCE(NULLIF(t.entity_type,''),'Без связи')
+        END entity,
+        t.created_by_user_id "createdByUserId"
+      FROM tasks t
+      LEFT JOIN candidate_applications ca ON t.entity_type='candidate_application' AND ca.id=t.entity_id
+      LEFT JOIN candidates c ON c.id=ca.candidate_id
+      LEFT JOIN needs n ON n.id=ca.need_id
+      LEFT JOIN specialties s ON s.id=n.specialty_id
+      LEFT JOIN objects o ON o.id=ca.object_id
+      LEFT JOIN candidates c_direct ON t.entity_type='candidate' AND c_direct.id=t.entity_id
+      ORDER BY t.due_at NULLS LAST,t.created_at DESC
+    `;
     return rows.filter((row)=>canReadRow(actor.access,"task.read",row,actor));
   });
 }
