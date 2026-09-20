@@ -29,6 +29,7 @@ const conditionSchema = z.object({
   dailyAllowanceProvided: z.boolean().nullable().optional(),
   dailyAllowanceAmount: z.string().trim().max(500).nullable().optional(),
   requirements: z.string().trim().max(3000).nullable().optional(),
+  documents: z.array(z.string().trim().min(1).max(160)).max(30).optional(),
   comment: z.string().trim().max(3000).nullable().optional(),
 });
 
@@ -39,6 +40,8 @@ const patchSchema = z.object({
   priority: z.enum(["low","normal","high","critical"]).optional(),
   status: z.enum(["open","in_progress","filled","paused","cancelled"]).optional(),
   conditions: conditionSchema.partial().optional(),
+  changeReason: z.string().trim().max(1000).nullable().optional(),
+  changeResponsibleUserId: z.string().uuid().nullable().optional(),
   recruiters: z.array(z.object({
     userId: z.string().uuid(),
     targetCount: z.number().int().min(1).max(10000),
@@ -114,6 +117,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       }
 
+      if(countRequired!==current.countRequired){
+        const responsibleUserId=body.changeResponsibleUserId??recruiters?.[0]?.userId??current.ownerUserId??actor.userId;
+        const [responsible]=await tx<Array<{id:string}>>`SELECT id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${responsibleUserId}::uuid AND status='active' LIMIT 1`;
+        if(!responsible)throw new Error("Ответственный за изменение численности не найден");
+        await tx`INSERT INTO need_headcount_changes(organization_id,need_id,previous_count,new_count,delta,responsible_user_id,reason,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${id}::uuid,${current.countRequired},${countRequired},${countRequired-current.countRequired},${responsibleUserId}::uuid,${body.changeReason??null},${actor.userId}::uuid)`;
+      }
+
       await tx`
         UPDATE needs SET
           title=${body.title ?? current.title},
@@ -140,7 +151,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${id}::uuid,'updated',
-          ${`Обновлена потребность: ${body.title ?? current.title}`},${sql.json({changed})})
+          ${`Обновлена потребность: ${body.title ?? current.title}`},${sql.json({changed,previousCount:current.countRequired,newCount:countRequired})})
       `;
       return {id};
     }));
