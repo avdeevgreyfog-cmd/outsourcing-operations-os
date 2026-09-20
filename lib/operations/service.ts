@@ -1,6 +1,6 @@
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
-import { canReadRow } from "@/lib/core/access.mjs";
+import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
 
@@ -609,7 +609,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
       SELECT relation_type "relationType",to_char(effective_from,'DD.MM.YYYY') "relationFrom",to_char(effective_to,'DD.MM.YYYY') "relationTo"
       FROM employment_relations WHERE worker_id=${workerId}::uuid ORDER BY effective_from DESC LIMIT 1
     `;
-    const assets=await sql<Array<WorkerOutstandingAsset & {quantity:number|string}>>`
+    const assets=hasCapability(actor.access,"assets.read")?await sql<Array<WorkerOutstandingAsset & {quantity:number|string}>>`
       SELECT i.id "itemId",i.name item,m.variant,
         sum(CASE WHEN m.movement_type='issue' THEN m.quantity
                  WHEN m.movement_type='return' THEN -m.quantity
@@ -624,13 +624,13 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
                       WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity
                       ELSE 0 END)>0
       ORDER BY i.name,m.variant
-    `;
-    const housing=await sql<Array<{id:string;site:string;checkIn:string;checkOut:string|null;status:string}>>`
+    `:[] as Array<WorkerOutstandingAsset & {quantity:number|string}>;
+    const housing=hasCapability(actor.access,"supply.housing.read")?await sql<Array<{id:string;site:string;checkIn:string;checkOut:string|null;status:string}>>`
       SELECT st.id,hs.name site,to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status
       FROM housing_stays st JOIN housing_sites hs ON hs.id=st.site_id
       WHERE st.worker_id=${workerId}::uuid AND st.status IN ('planned','active')
       ORDER BY st.check_in DESC
-    `;
+    `:[];
     const exits=await sql<WorkerExitHistoryRow[]>`
       SELECT id,to_char(effective_date,'DD.MM.YYYY') "effectiveDate",reason_code "reasonCode",reason,status,to_char(created_at,'DD.MM.YYYY') "createdAt"
       FROM worker_exit_processes WHERE worker_id=${workerId}::uuid ORDER BY effective_date DESC,created_at DESC
