@@ -4,10 +4,12 @@ import { WorkspaceNavigation, type NavigationSection } from "@/components/Worksp
 import { filterNavigation, navigationManifest } from "@/lib/core/navigation-runtime.mjs";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { getWorkspaceContext } from "@/lib/auth/server";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 
 export async function AppShell({ actor, children }: { actor: Actor; children: React.ReactNode }) {
-  const store = await cookies();
-  const theme = store.get("oo_theme")?.value === "dark" ? "dark" : "light";
+  const staticDemo = isGithubPagesDemo();
+  const store = staticDemo ? null : await cookies();
+  const theme = store?.get("oo_theme")?.value === "dark" ? "dark" : "light";
   const workspace = await getWorkspaceContext(actor);
   const showFoundations = actor.demo || hasCapability(actor.access, "admin.permissions.manage");
   const navigationAccess = actor.demo ? {
