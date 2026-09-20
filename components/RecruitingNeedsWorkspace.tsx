@@ -18,7 +18,8 @@ type Props={applications:RecruitingApplicationRow[];rows:RecruitingNeedRow[];opt
 type View="objects"|"needs"|"analytics"; type Bucket="active"|"attention"|"closed"|"all";
 type NeedForm={title:string;specialtyId:string;objectId:string;regionId:string;countRequired:string;deadline:string;sourceKind:string;priority:string;location:string;schedule:string;workerPay:string;dailyAllowanceProvided:string;dailyAllowanceAmount:string;shift:string;housing:string;housingProvided:string;travel:string;travelProvided:string;shuttle:string;shuttleProvided:string;meals:string;mealsProvided:string;ppe:string;ppeProvided:string;medical:string;medicalProvided:string;tools:string;toolsProvided:string;citizenship:string;requirements:string;comment:string};
 const emptyForm:NeedForm={title:"",specialtyId:"",objectId:"",regionId:"",countRequired:"",deadline:"",sourceKind:"manual",priority:"normal",location:"",schedule:"",workerPay:"",dailyAllowanceProvided:"unknown",dailyAllowanceAmount:"",shift:"",housing:"",housingProvided:"unknown",travel:"",travelProvided:"unknown",shuttle:"",shuttleProvided:"unknown",meals:"",mealsProvided:"unknown",ppe:"",ppeProvided:"unknown",medical:"",medicalProvided:"unknown",tools:"",toolsProvided:"unknown",citizenship:"",requirements:"",comment:""};
-const storageKey="operis.recruiting.needs.v2";
+const storageKey="operis.recruiting.needs.v3";
+const documentStorageKey="operis.recruiting.document-types.v1";
 const activeStatuses=new Set(["open","in_progress","paused"]); const closedStatuses=new Set(["filled","cancelled"]);
 
 export function RecruitingNeedsWorkspace({applications,rows,options,analytics,metricPreferences,initialView,canCreate,canManage,canConfigureAnalytics,canManageDocuments,demo}:Props){
@@ -34,6 +35,7 @@ export function RecruitingNeedsWorkspace({applications,rows,options,analytics,me
  const [newDocumentProvider,setNewDocumentProvider]=useState<"candidate"|"company"|"client">("candidate");
  const [saving,setSaving]=useState(false);const [error,setError]=useState("");const [localRows,setLocalRows]=useState<RecruitingNeedRow[]>([]);
  useEffect(()=>{if(!demo)return;let frame=0;try{const value=localStorage.getItem(storageKey);if(value){const parsed=JSON.parse(value) as RecruitingNeedRow[];frame=requestAnimationFrame(()=>setLocalRows(parsed));}}catch{}return()=>{if(frame)cancelAnimationFrame(frame)}},[demo]);
+ useEffect(()=>{if(!demo)return;try{const value=localStorage.getItem(documentStorageKey);if(value){const parsed=JSON.parse(value) as RecruitingDocumentType[];setLocalDocumentTypes(parsed);setDocumentDraft(parsed);}}catch{}},[demo]);
  const applicationRows=useRecruitingApplications(applications,demo);
  const mergedNeeds=useMemo(()=>[...localRows,...rows.filter(row=>!localRows.some(local=>local.id===row.id))],[localRows,rows]);
  const allRows=useMemo(()=>demo?mergedNeeds.map(need=>{
@@ -93,6 +95,41 @@ export function RecruitingNeedsWorkspace({applications,rows,options,analytics,me
      }
      setShowEdit(false);
    }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить изменения");}
+   finally{setSaving(false)}
+ }
+ async function addDocumentType(){
+   const name=newDocumentName.trim();if(!name){setError("Укажите название документа.");return;}
+   setSaving(true);setError("");
+   try{
+     if(demo){
+       const item:RecruitingDocumentType={id:`demo-custom-${crypto.randomUUID()}`,code:`custom-${Date.now()}`,name,groupType:newDocumentGroup,defaultProvider:newDocumentProvider,defaultRequired:false,active:true};
+       const next=[...documentDraft,item];setDocumentDraft(next);setLocalDocumentTypes(next);localStorage.setItem(documentStorageKey,JSON.stringify(next));
+     }else{
+       const response=await fetch("/api/recruiting/document-types",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name,groupType:newDocumentGroup,defaultProvider:newDocumentProvider,defaultRequired:false})});
+       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось добавить документ");
+       setDocumentDraft(current=>[...current,json]);setLocalDocumentTypes(current=>[...current,json]);
+     }
+     setNewDocumentName("");
+   }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить документ");}
+   finally{setSaving(false)}
+ }
+ async function saveDocumentStandard(){
+   setSaving(true);setError("");
+   try{
+     if(demo){
+       setLocalDocumentTypes(documentDraft);localStorage.setItem(documentStorageKey,JSON.stringify(documentDraft));setShowDocumentSettings(false);return;
+     }
+     const changed=documentDraft.filter(item=>{const base=localDocumentTypes.find(x=>x.id===item.id);return base&&(
+       base.name!==item.name||base.groupType!==item.groupType||base.defaultProvider!==item.defaultProvider||base.defaultRequired!==item.defaultRequired||Boolean(base.active)!==Boolean(item.active)
+     )});
+     const saved:RecruitingDocumentType[]=[];
+     for(const item of changed){
+       const response=await fetch("/api/recruiting/document-types",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({id:item.id,name:item.name,groupType:item.groupType,defaultProvider:item.defaultProvider,defaultRequired:item.defaultRequired,active:item.active!==false})});
+       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??`Не удалось сохранить «${item.name}»`);saved.push(json);
+     }
+     setLocalDocumentTypes(current=>current.map(item=>saved.find(savedItem=>savedItem.id===item.id)??documentDraft.find(draft=>draft.id===item.id)??item));
+     setShowDocumentSettings(false);router.refresh();
+   }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить базовый набор документов");}
    finally{setSaving(false)}
  }
  function changeView(next:View){setView(next);if(next==="analytics")router.replace("/needs?view=analytics",{scroll:false});else if(next==="needs")router.replace("/needs?view=needs",{scroll:false});else router.replace("/needs",{scroll:false})}
