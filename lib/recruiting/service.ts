@@ -492,6 +492,28 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
                 AND pg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
                 AND pg.effect='allow'
             )
+            OR EXISTS (
+              SELECT 1
+              FROM position_assignments pa
+              JOIN staff_positions sp ON sp.id=pa.staff_position_id
+              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
+              WHERE pa.membership_id=m.id
+                AND pa.status<>'ended'
+                AND pa.effective_from<=current_date
+                AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+                AND ppg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
+                AND ppg.effect='allow'
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM membership_process_roles mpr
+              JOIN process_role_permission_grants prg ON prg.process_role_id=mpr.process_role_id
+              WHERE mpr.membership_id=m.id
+                AND mpr.effective_from<=current_date
+                AND (mpr.effective_to IS NULL OR mpr.effective_to>=current_date)
+                AND prg.capability IN ('recruiting.candidate.edit','recruiting.candidate.create')
+                AND prg.effect='allow'
+            )
             OR (m.user_id=${actor.userId}::uuid AND ${hasCapability(actor.access,"recruiting.candidate.edit")})
           )
           AND (${actor.access.allOrg} OR mr.region_id=ANY(${actor.regionIds}::uuid[]) OR m.user_id=${actor.userId}::uuid)
