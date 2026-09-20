@@ -61,7 +61,7 @@ export function RecruitingFunnelWorkspace({
   const [recruiterFilter,setRecruiterFilter]=useState(initialRecruiter??"all");
   const [sourceFilter,setSourceFilter]=useState(initialSource??"all");
   const [stageFilter]=useState(initialStage??"all");
-  const [queue,setQueue]=useState(initialQueue??"active");
+  const [queue,setQueue]=useState(["attention","today","missing"].includes(initialQueue??"")?initialQueue!:"active");
   const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
   const [targetStage,setTargetStage]=useState<RecruitingStage|undefined>();
   const [dragged,setDragged]=useState<string|null>(null);
@@ -142,16 +142,16 @@ export function RecruitingFunnelWorkspace({
   }),[allRows,needById,needFilter,objectFilter,specialtyFilter,recruiterFilter,sourceFilter,query,stageFilter]);
 
   const scoped=filtered.filter(row=>
-    queue==="reserve"?row.stage==="reserve":
-    queue==="closed"?["rejected","no_show"].includes(row.stage):
-    queue==="attention"?workRisks(row).length>0:
-    queue==="today"?Boolean(row.nextActionAt&&new Date(row.nextActionAt).toDateString()===new Date().toDateString()):
-    queue==="missing"?["interview","documents","clearance","preparation"].includes(row.stage)&&!row.nextActionAt:
-    isActiveStage(row.stage)
+    !["retention_7","retention_30","reserve","rejected","no_show"].includes(row.stage)&&(
+      queue==="attention"?workRisks(row).length>0:
+      queue==="today"?Boolean(row.nextActionAt&&new Date(row.nextActionAt).toDateString()===new Date().toDateString()):
+      queue==="missing"?["interview","documents","clearance","preparation"].includes(row.stage)&&!row.nextActionAt:
+      isActiveStage(row.stage)
+    )
   );
   const hasContext=needFilter!=="all"||objectFilter!=="all"||specialtyFilter!=="all"||recruiterFilter!=="all"||sourceFilter!=="all";
-  const activeStages=stageSettings.filter(x=>x.active||allRows.some(row=>row.stage===x.code)).sort((a,b)=>a.sortOrder-b.sortOrder);
-  const boardStages:RecruitingStage[]=queue==="reserve"?["reserve"]:queue==="closed"?["rejected","no_show"]:activeStages.map(x=>x.code);
+  const activeStages=stageSettings.filter(x=>(x.active||allRows.some(row=>row.stage===x.code))&&!["retention_7","retention_30"].includes(x.code)).sort((a,b)=>a.sortOrder-b.sortOrder);
+  const boardStages:RecruitingStage[]=activeStages.map(x=>x.code);
   const selectedNeed=form.needId?needById.get(form.needId):undefined;
 
   async function drop(stage:RecruitingStage){
@@ -241,10 +241,10 @@ export function RecruitingFunnelWorkspace({
 
   return <div className="recruiting-workspace">
     <div className="recruiting-summary">
-      <div><span>В работе</span><strong>{filtered.filter(x=>isActiveStage(x.stage)).length}</strong></div>
+      <div><span>В подборе</span><strong>{filtered.filter(x=>!["retention_7","retention_30","reserve","rejected","no_show"].includes(x.stage)).length}</strong></div>
       <div><span>Интервью</span><strong>{filtered.filter(x=>x.stage==="interview").length}</strong></div>
       <div><span>Подготовка</span><strong>{filtered.filter(x=>x.stage==="preparation").length}</strong></div>
-      <div><span>Первый выход</span><strong>{filtered.filter(x=>["first_shift","retention_7","retention_30"].includes(x.stage)).length}</strong></div>
+      <div><span>После выхода</span><strong>{filtered.filter(x=>["retention_7","retention_30"].includes(x.stage)).length}</strong></div>
     </div>
 
     {hasContext&&<div className="recruiting-filter-context"><div><strong>Воронка отфильтрована из потребностей</strong><span>{needFilter!=="all"?(needById.get(needFilter)?.title??"Потребность"):objectFilter!=="all"?(objectOptions.find(([id])=>id===objectFilter)?.[1]??"Объект"):"Выбранный контур"}</span></div><Link className="button" href="/needs">← Потребности</Link></div>}
@@ -265,14 +265,12 @@ export function RecruitingFunnelWorkspace({
     </div>
 
     {error&&<div className="recruiting-error">{error}</div>}
-    {demo&&<p className="cell-sub">Учебные записи. Изменения демо сохраняются в этом браузере.</p>}
-
     <div className="recruiting-toolbar" role="group" aria-label="Рабочая очередь">
-      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}<Link className="button" href="/candidates?queue=reserve">Резерв · {filtered.filter(row=>row.stage==="reserve").length}</Link><Link className="button" href="/candidates?queue=completed">Завершённые · {filtered.filter(row=>["rejected","no_show"].includes(row.stage)).length}</Link></div>
-      <div className="recruiting-toolbar-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Список кандидатов</Link></div>
+      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}</div>
+      <div className="recruiting-toolbar-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Кандидаты</Link></div>
     </div>
 
-    {(queue==="reserve"||queue==="closed")?<section className="recruiting-terminal-gate"><div><strong>{queue==="reserve"?"Резерв кандидатов":"Завершённые заявки"}</strong><span>Исторические контакты не хранятся бесконечным списком в рабочей воронке. Они доступны в общей базе кандидатов с поиском и фильтрами.</span></div><Link className="button primary" href={queue==="reserve"?"/candidates?queue=reserve":"/candidates?queue=completed"}>Открыть базу кандидатов</Link></section>:<div className="recruiting-funnel-scroll">
+    <div className="recruiting-funnel-scroll">
       <div className="recruiting-funnel recruiting-funnel-compact" style={{gridTemplateColumns:`repeat(${boardStages.length}, minmax(190px, 1fr))`,minWidth:boardStages.length*200-10}}>
         {boardStages.map(stage=><section className={`recruiting-column${dragged?" is-drop-target":""}`} key={stage} onDragOver={e=>{if(canEdit)e.preventDefault();}} onDrop={e=>{e.preventDefault();void drop(stage);}}>
           <header><span>{stageLabelByCode.get(stage)??recruitingStageLabels[stage]}</span><span>{scoped.filter(x=>x.stage===stage).length}</span></header>
@@ -284,7 +282,7 @@ export function RecruitingFunnelWorkspace({
           </div>
         </section>)}
       </div>
-    </div>}
+    </div>
 
     {selected&&<RecruitingActionDrawer
       key={selected.applicationId+String(targetStage)}

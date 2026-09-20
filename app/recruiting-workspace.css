@@ -1036,3 +1036,70 @@
  .candidate-document-add{grid-template-columns:1fr}
  .candidate-documents-stage{align-items:flex-start;flex-direction:column}
 }
+
+
+/* Candidate operations workspace v2 — 2026-09-20 */
+.candidate-directory-v2 .candidate-directory-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.candidate-directory-v2 .candidate-directory-actions .sales-segments{flex:1;min-width:520px}
+.candidate-directory-v2 .candidate-directory-buttons{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.candidate-directory-search{display:flex;align-items:center;gap:10px;min-width:0}
+.candidate-directory-search .sales-search{flex:1;max-width:720px}
+.candidate-directory-search>span{font-size:11px;color:var(--muted);white-space:nowrap}
+.candidate-directory-filters-v2{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr)) auto;gap:8px}
+.candidate-directory-filters-v2 select,.candidate-directory-filters-v2 .button{min-height:38px}
+.candidate-directory-filters-v2 select{width:100%;min-width:0;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);padding:7px 30px 7px 10px;font:inherit;font-size:12px}
+.candidate-directory-v2 .candidates-directory-table td,.candidate-directory-v2 .candidates-directory-table th{vertical-align:middle}
+.candidate-directory-v2 .candidates-directory-table .cell-title{font-size:12px}
+.candidate-directory-v2 .candidates-directory-table .cell-sub{font-size:10px}
+
+.candidate-activity-layout{align-items:start}
+.candidate-activity-filters{display:flex;align-items:center;gap:4px}
+.candidate-activity-filters button{height:30px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--muted);font:inherit;font-size:11px;cursor:pointer}
+.candidate-activity-filters button.active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--accent-soft);color:var(--text);font-weight:650}
+.candidate-activity-form{padding-top:12px}
+.candidate-activity-form .button.primary{justify-self:stretch}
+.candidate-profile-recent .candidate-history-item{padding:11px 18px}
+
+.candidate-documents-workspace{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.candidate-documents-error{grid-column:1/-1}
+.candidate-documents-main{display:grid;gap:16px;min-width:0}
+.candidate-documents-rail{min-width:0}
+.candidate-documents-rail-card{position:sticky;top:72px;display:grid;gap:12px;padding:16px;border:1px solid var(--border);border-radius:10px;background:var(--panel)}
+.candidate-documents-rail-card>.eyebrow{font-size:10px;color:var(--accent);font-weight:700;text-transform:none;letter-spacing:0}
+.candidate-documents-rail-card>strong{font-size:15px;line-height:1.35}
+.candidate-document-readiness{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.candidate-document-readiness>div{display:grid;gap:3px;padding:10px 11px}
+.candidate-document-readiness>div+div{border-left:1px solid var(--border)}
+.candidate-document-readiness span{font-size:10px;color:var(--muted)}
+.candidate-document-readiness b{font-size:16px}
+.candidate-document-blockers{display:grid;gap:5px;padding-top:2px}
+.candidate-document-blockers span{padding:6px 8px;border-radius:6px;background:color-mix(in srgb,var(--warn) 7%,var(--panel));font-size:11px;color:var(--text)}
+.candidate-documents-rail-card .candidate-current-actions{margin-top:0;display:grid;gap:8px}
+.candidate-documents-rail-card .candidate-current-actions .button{width:100%}
+
+.candidate-document-edit-row{grid-template-columns:minmax(0,1fr) minmax(145px,180px) auto;gap:10px 14px;align-items:center}
+.candidate-document-edit-row .candidate-document-copy{align-self:start}
+.candidate-document-note{display:block;margin-top:4px;padding:6px 8px;border-left:2px solid var(--border-strong);background:var(--panel-2);font-size:11px!important;color:var(--muted)!important}
+.candidate-document-row-actions{display:flex;justify-content:flex-end}
+.candidate-document-row-actions .button{min-height:34px;white-space:nowrap}
+.button.button-quiet{background:transparent}
+.candidate-document-comment-editor{grid-column:1/-1;display:grid;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2)}
+.candidate-document-comment-editor textarea{width:100%;min-height:64px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);padding:9px 10px;font:inherit;font-size:12px;resize:vertical}
+.candidate-document-comment-editor>div{display:flex;justify-content:flex-end;gap:8px}
+
+@media(max-width:1100px){
+ .candidate-directory-v2 .candidate-directory-actions .sales-segments{min-width:0;width:100%}
+ .candidate-directory-filters-v2{grid-template-columns:repeat(2,minmax(150px,1fr))}
+ .candidate-directory-filters-v2 .button{justify-self:start}
+ .candidate-documents-workspace{grid-template-columns:1fr}
+ .candidate-documents-rail-card{position:static}
+}
+@media(max-width:760px){
+ .candidate-directory-search{align-items:stretch;flex-direction:column}
+ .candidate-directory-search>span{white-space:normal}
+ .candidate-directory-filters-v2{grid-template-columns:1fr}
+ .candidate-directory-v2 .candidate-directory-buttons{width:100%;margin-left:0}
+ .candidate-document-edit-row{grid-template-columns:1fr}
+ .candidate-document-row-actions{justify-content:flex-start}
+ .candidate-document-comment-editor{grid-column:auto}
+}

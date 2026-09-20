@@ -60,8 +60,12 @@ const stageActions:Partial<Record<RecruitingStage,ActionOption[]>>={
   ],
   first_shift:[
     {code:"shift_worked",label:"Вышел на смену",hint:"Подтвердить фактический выход"},
+    {code:"retention_7_check",label:"Контроль 7 дней",hint:"Подтвердить, что сотрудник продолжает работать"},
     {code:"shift_no_show",label:"Не вышел",hint:"Зафиксировать причину",tone:"danger"},
     {code:"shift_not_admitted",label:"Не допущен",hint:"Зафиксировать причину недопуска",tone:"danger"},
+  ],
+  retention_7:[
+    {code:"retention_30_check",label:"Контроль 30 дней",hint:"Завершить контроль после выхода"},
   ],
 };
 
@@ -95,6 +99,8 @@ export function RecruitingActionDrawer({
     "documents:preparation":"documents_complete",
     "clearance:preparation":"clearance_complete",
     "preparation:first_shift":"ready_for_start",
+    "first_shift:retention_7":"retention_7_check",
+    "retention_7:retention_30":"retention_30_check",
   }[row.stage+":"+initialStage]??"";
   const [action,setAction]=useState(impliedAction);
   const [ownerUserId,setOwnerUserId]=useState(row.ownerUserId??"");
@@ -229,6 +235,9 @@ export function RecruitingActionDrawer({
       targetStage="no_show";reasonValue=reasonCode;workflow.outcomeCode="shift_not_admitted";workflow.firstShiftOutcome="not_admitted";
     }
 
+    if(action==="retention_7_check"){targetStage="retention_7";workflow.outcomeCode="retention_7_confirmed";}
+    if(action==="retention_30_check"){targetStage="retention_30";workflow.outcomeCode="retention_30_confirmed";}
+
     setBusy("save");setError("");
     try{
       await saveApplicationChange(row,{
@@ -322,8 +331,8 @@ export function RecruitingActionDrawer({
 
       {error&&<div role="alert" className="recruiting-error">{error}</div>}
 
-      {row.stage==="retention_7"||row.stage==="retention_30"
-        ? <section className="candidate-stage-actions candidate-retention-panel"><h3>{row.stage==="retention_7"?"Контроль 7 дней":"Контроль 30 дней"}</h3><p>Этот этап уже привязан к факту первого выхода. Следующим шагом будет автоматическая синхронизация с табелем и событием выбытия сотрудника.</p></section>
+      {row.stage==="retention_30"
+        ? <section className="candidate-stage-actions candidate-retention-panel"><h3>Контроль 30 дней завершён</h3><p>Дальнейшая работа с человеком ведётся в карточке сотрудника. Рекрутинговая история остаётся доступна в карточке кандидата.</p></section>
         : <section className="candidate-stage-actions">
           <header><div><span className="eyebrow">{stageLabel(row.stage)}</span><h3>Результат текущего этапа</h3></div>{risks.length>0&&<span className="candidate-action-risk">{risks[0]}</span>}</header>
           <div className="candidate-action-grid">{(stageActions[row.stage]??[]).map(option=><button type="button" key={option.code} className={"candidate-action-choice "+(action===option.code?"active ":"")+(option.tone==="danger"?"danger":"")} onClick={()=>{setAction(option.code);setError("")}} disabled={!canEdit}><strong>{option.label}</strong><small>{option.hint}</small></button>)}</div>
