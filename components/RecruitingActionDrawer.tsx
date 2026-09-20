@@ -3,12 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PhoneCall, UserRound, X } from "lucide-react";
+import { PhoneCall, UserRound } from "lucide-react";
 import { SalesDrawer } from "@/components/sales/SalesUI";
 import type { RecruitingApplicationRow, RecruitingFunnelStageSetting, RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 import type { RecruitingStage } from "@/lib/recruiting/model";
 import { recruitingStageLabels } from "@/lib/recruiting/model";
-import { formatWorkDate, reserveReasons, workRisks } from "@/lib/recruiting/workflow";
+import { formatWorkDate, workRisks } from "@/lib/recruiting/workflow";
 import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 import { saveDemoApplication } from "@/lib/recruiting/demo-client";
 
