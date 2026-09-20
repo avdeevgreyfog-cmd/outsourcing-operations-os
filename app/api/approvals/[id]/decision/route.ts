@@ -5,7 +5,7 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
 const schema=z.object({decision:z.enum(["approve","reject"]),comment:z.string().trim().max(2000).optional()});
-type ApprovalRow={id:string;subjectType:"calculation_scenario"|"proposal"|"contract"|"tender";subjectId:string;processCode:string;status:string;approverUserId:string|null};
+type ApprovalRow={id:string;subjectType:"calculation_scenario"|"proposal"|"contract"|"tender"|"supply_request";subjectId:string;processCode:string;status:string;approverUserId:string|null};
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -91,6 +91,12 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         }
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
           VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'contract',${approval.subjectId}::uuid,'approval_decided',${body.decision==="approve"?'Договор внутренне согласован':'Договор возвращён на доработку'},${sql.json({comment:body.comment??null})})`;
+      }else if(approval.subjectType==="supply_request"){
+        const [subject]=await tx<Array<{id:string;title:string}>>`SELECT id,title FROM supply_requests WHERE id=${approval.subjectId}::uuid FOR UPDATE`;
+        if(!subject)throw new Error("Заявка на обеспечение не найдена");
+        await tx`UPDATE supply_requests SET status=${body.decision==="approve"?"approved":"rejected"},updated_at=now() WHERE id=${approval.subjectId}::uuid`;
+        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'supply_request',${approval.subjectId}::uuid,'approval_decided',${body.decision==="approve"?'Заявка на обеспечение согласована':'Заявка на обеспечение отклонена'},${sql.json({comment:body.comment??null})})`;
       }else{
         tenderId=approval.subjectId;
         const [tender]=await tx<Array<{id:string;stage:string}>>`SELECT id,stage FROM tenders WHERE id=${tenderId}::uuid FOR UPDATE`;
