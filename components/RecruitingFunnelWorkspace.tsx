@@ -29,7 +29,7 @@ type Props={
   initialQueue?:string;
   initialStage?:string;
 };
-type ContactKind="telegram"|"whatsapp"|"email";
+type ContactKind="telegram"|"whatsapp"|"max"|"email";
 type ExtraContact={kind:ContactKind;value:string};
 type CandidateForm={
   needId:string;
@@ -45,7 +45,17 @@ type CandidateForm={
 const blank:CandidateForm={needId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
 
 const sourceKindLabels:Record<string,string>={
-  job_site:"Работный сайт",social:"Соцсеть",referral:"Рекомендация",partner:"Партнёр",offline:"Оффлайн",internal:"Внутренний",other:"Другое",
+  job_site:"Работный сайт",social:"Соцсеть",referral:"Рекомендация",partner:"Партнёр",database:"База компании",offline:"Оффлайн",internal:"Внутренний",other:"Другое",
+};
+const stageSettingsMeta:Record<string,{description:string;required:boolean}>={
+  new:{description:"Входящие контакты, которые ещё нужно взять в работу.",required:true},
+  interview:{description:"Первичное общение, квалификация и решение кандидата.",required:false},
+  documents:{description:"Базовые документы, необходимые для оформления человека.",required:false},
+  clearance:{description:"Отдельный этап допусков и документов объекта. Можно отключить и вести их параллельно в подготовке.",required:false},
+  preparation:{description:"Прибытие, билет, жильё и готовность к первому выходу.",required:false},
+  first_shift:{description:"Факт первого выхода и создание карточки сотрудника.",required:true},
+  retention_7:{description:"Контроль после первой недели работы.",required:false},
+  retention_30:{description:"Контроль удержания после 30 дней.",required:false},
 };
 
 export function RecruitingFunnelWorkspace({
@@ -60,12 +70,14 @@ export function RecruitingFunnelWorkspace({
   const [recruiterFilter,setRecruiterFilter]=useState(initialRecruiter??"all");
   const [sourceFilter,setSourceFilter]=useState(initialSource??"all");
   const [stageFilter,setStageFilter]=useState(initialStage??"all");
-  const [queue,setQueue]=useState(initialQueue??"active");
+  const [queue,setQueue]=useState(initialQueue==="reserve"||initialQueue==="closed"?"active":initialQueue??"active");
   const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
   const [targetStage,setTargetStage]=useState<RecruitingStage|undefined>();
   const [dragged,setDragged]=useState<string|null>(null);
   const [showCreate,setShowCreate]=useState(false);
   const [showStageSettings,setShowStageSettings]=useState(false);
+  const [duplicateMatch,setDuplicateMatch]=useState<{id:string;fullName:string;phone?:string|null;reason:string}|null>(null);
+  const [allowNameDuplicate,setAllowNameDuplicate]=useState(false);
   const [form,setForm]=useState<CandidateForm>({...blank,needId:initialNeed??"",source:options.sourceCatalog[0]?.name??""});
   const [contacts,setContacts]=useState<ExtraContact[]>([]);
   const [localSources,setLocalSources]=useState<RecruitingSourceOption[]>(options.sourceCatalog);
@@ -90,6 +102,24 @@ export function RecruitingFunnelWorkspace({
   },[needFilter,objectFilter,specialtyFilter,recruiterFilter,sourceFilter,queue,stageFilter,router]);
 
   const allRows=useRecruitingApplications(rows,demo);
+  useEffect(()=>{
+    const phone=form.phone.replace(/\D/g,"");const name=form.fullName.trim();
+    if(phone.length<7&&name.length<4){setDuplicateMatch(null);setAllowNameDuplicate(false);return}
+    const timer=window.setTimeout(async()=>{
+      if(demo){
+        const strong=phone.length>=7?allRows.find(row=>row.phone?.replace(/\D/g,"")===phone):undefined;
+        const byName=!strong&&name?allRows.find(row=>row.fullName.trim().toLocaleLowerCase("ru")===name.toLocaleLowerCase("ru")):undefined;
+        setDuplicateMatch(strong?{id:strong.candidateId,fullName:strong.fullName,phone:strong.phone,reason:"phone"}:byName?{id:byName.candidateId,fullName:byName.fullName,phone:byName.phone,reason:"full_name"}:null);
+        return;
+      }
+      try{
+        const params=new URLSearchParams();if(phone.length>=7)params.set("phone",form.phone);if(name.length>=4)params.set("fullName",name);
+        const response=await fetch("/api/candidates/dedupe?"+params.toString());if(!response.ok)return;
+        const body=await response.json();const match=body.matches?.[0];setDuplicateMatch(match?{id:match.id,fullName:match.fullName,phone:match.phone,reason:match.matchReasons?.includes("phone")?"phone":"full_name"}:null);
+      }catch{}
+    },350);
+    return()=>window.clearTimeout(timer);
+  },[form.phone,form.fullName,demo,allRows]);
   const needById=useMemo(()=>new Map(needs.map(item=>[item.id,item])),[needs]);
   const stageLabelByCode=useMemo(()=>new Map(options.funnelStages.map(item=>[item.code,item.label])),[options.funnelStages]);
   const objectOptions=useMemo(()=>Array.from(new Map(needs.filter(item=>item.objectId&&item.object).map(item=>[item.objectId!,item.object!])).entries()),[needs]);
@@ -119,7 +149,7 @@ export function RecruitingFunnelWorkspace({
   );
   const hasContext=needFilter!=="all"||objectFilter!=="all"||specialtyFilter!=="all"||recruiterFilter!=="all"||sourceFilter!=="all";
   const activeStages=options.funnelStages.filter(x=>x.active).sort((a,b)=>a.sortOrder-b.sortOrder);
-  const boardStages:RecruitingStage[]=queue==="reserve"?["reserve"]:queue==="closed"?["rejected","no_show"]:activeStages.map(x=>x.code);
+  const boardStages:RecruitingStage[]=activeStages.map(x=>x.code);
   const selectedNeed=form.needId?needById.get(form.needId):undefined;
 
   async function drop(stage:RecruitingStage){
@@ -136,6 +166,7 @@ export function RecruitingFunnelWorkspace({
     if(!form.phone){setError("Укажите телефон кандидата");return;}
     const telegram=contacts.find(x=>x.kind==="telegram")?.value??"";
     const whatsapp=contacts.find(x=>x.kind==="whatsapp")?.value??"";
+    const max=contacts.find(x=>x.kind==="max")?.value??"";
     const email=contacts.find(x=>x.kind==="email")?.value??"";
     setBusy("create");
     try{
@@ -159,13 +190,15 @@ export function RecruitingFunnelWorkspace({
         const response=await fetch("/api/candidates",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           fullName:form.fullName||"Без имени",phone:form.phone,email:email||null,preferredChannel:form.preferredChannel||"phone",
           telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,source:form.source||null,sourceChannel:form.sourceChannel||null,
-          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,
+          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,allowNameDuplicate,
+          contacts:[{kind:"phone",value:form.phone,isPrimary:true,isPreferred:form.preferredChannel==="phone"},...contacts.filter(item=>item.value.trim()).map(item=>({kind:item.kind,value:item.value,isPrimary:true,isPreferred:form.preferredChannel===item.kind}))],
         })});
         const json=await response.json().catch(()=>({}));
+        if(response.status===409&&json.possibleDuplicate){setDuplicateMatch({id:json.match.id,fullName:json.match.fullName,reason:"full_name"});throw new Error("Найден кандидат с таким ФИО. Проверьте карточку или подтвердите создание отдельного человека.");}
         if(!response.ok)throw new Error(json.error??"Не удалось добавить кандидата");
         router.refresh();
       }
-      setShowCreate(false);setContacts([]);setForm({...blank,needId:needFilter==="all"?"":needFilter,source:localSources[0]?.name??""});
+      setShowCreate(false);setContacts([]);setDuplicateMatch(null);setAllowNameDuplicate(false);setForm({...blank,needId:needFilter==="all"?"":needFilter,source:localSources[0]?.name??""});
     }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить кандидата");}
     finally{setBusy("");}
   }
@@ -235,7 +268,7 @@ export function RecruitingFunnelWorkspace({
     {demo&&<p className="cell-sub">Учебные записи. Изменения демо сохраняются в этом браузере.</p>}
 
     <div className="recruiting-toolbar" role="group" aria-label="Рабочая очередь">
-      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"],["reserve","Резерв"],["closed","Завершённые"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}</div>
+      <div className="recruiting-toolbar-left">{[["active","В работе"],["attention","Требуют действия"],["today","На сегодня"],["missing","Без действия"]].map(([value,label])=><button key={value} className={`button ${queue===value?"active":""}`} aria-pressed={queue===value} onClick={()=>setQueue(value)}>{label}</button>)}<Link className="button" href="/candidates?queue=reserve">Резерв <span className="queue-count">{allRows.filter(row=>row.stage==="reserve").length}</span></Link><Link className="button" href="/candidates?queue=completed">Завершённые <span className="queue-count">{allRows.filter(row=>["rejected","no_show"].includes(row.stage)).length}</span></Link></div>
       <div className="recruiting-toolbar-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Список кандидатов</Link></div>
     </div>
 
@@ -275,13 +308,14 @@ export function RecruitingFunnelWorkspace({
         <div className="candidate-create-layout">
           <div className="recruiting-form candidate-create-form">
             <label>Потребность<select required value={form.needId} onChange={e=>setForm(x=>({...x,needId:e.target.value}))}><option value="">Выберите потребность</option>{needs.filter(x=>["open","in_progress"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"} · найти {x.toRecruit}</option>)}</select></label>
-            <div className="candidate-create-grid"><label>Имя / ФИО<input value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="Можно заполнить после начала разговора"/></label><label>Телефон<input required value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label></div>
+            <div className="candidate-create-grid"><label>Имя / ФИО<input value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="Можно заполнить после начала разговора"/></label><label>Телефон<input required value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="max">MAX</option><option value="email">Email</option></select></label></div>
 
             <div className="candidate-contact-list">
-              {contacts.map((contact,index)=><div className="candidate-contact-row" key={index}><select value={contact.kind} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,kind:e.target.value as ContactKind}:x))}><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select><input value={contact.value} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,value:e.target.value}:x))} placeholder={contact.kind==="telegram"?"@username или номер":contact.kind==="email"?"email":"Номер"}/><button className="icon-button" type="button" onClick={()=>setContacts(current=>current.filter((_,i)=>i!==index))}><X size={14}/></button></div>)}
+              {contacts.map((contact,index)=><div className="candidate-contact-row" key={index}><select value={contact.kind} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,kind:e.target.value as ContactKind}:x))}><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="max">MAX</option><option value="email">Email</option></select><input value={contact.value} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,value:e.target.value}:x))} placeholder={contact.kind==="telegram"?"@username или номер":contact.kind==="email"?"email":"Номер"}/><button className="icon-button" type="button" onClick={()=>setContacts(current=>current.filter((_,i)=>i!==index))}><X size={14}/></button></div>)}
               <button className="button candidate-add-contact" type="button" onClick={()=>setContacts(current=>[...current,{kind:"telegram",value:""}])}><Plus size={13}/> Добавить контакт</button>
             </div>
 
+            {duplicateMatch&&<div className={"candidate-duplicate-alert "+(duplicateMatch.reason==="phone"?"strong":"warning")}><div><strong>{duplicateMatch.reason==="phone"?"Контакт уже есть в базе":"Возможный дубль по ФИО"}</strong><span>{duplicateMatch.fullName}{duplicateMatch.phone?" · "+duplicateMatch.phone:""}</span><small>{duplicateMatch.reason==="phone"?"Новая заявка будет добавлена к существующей карточке человека.":"ФИО не считается достаточным признаком дубля — проверьте карточку перед созданием."}</small></div><div><Link className="button" href={"/candidates/"+duplicateMatch.id}>Открыть карточку</Link>{duplicateMatch.reason==="full_name"&&!allowNameDuplicate&&<button type="button" className="button" onClick={()=>setAllowNameDuplicate(true)}>Это другой человек</button>}{allowNameDuplicate&&<span className="candidate-duplicate-confirmed">Создадим отдельную карточку</span>}</div></div>}
             <div className="candidate-source-block">
               <label>Источник<select value={form.source} onChange={e=>setForm(x=>({...x,source:e.target.value}))}><option value="">Не указан</option>{localSources.filter(x=>x.active).map(source=><option key={source.id} value={source.name}>{source.name} · {sourceKindLabels[source.kind]??source.kind}</option>)}</select></label>
               {canManageSources&&<button className="button" type="button" onClick={()=>setShowSourceCreate(x=>!x)}>+ Источник</button>}
@@ -298,7 +332,7 @@ export function RecruitingFunnelWorkspace({
     {showStageSettings&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStageSettings(false)}}>
       <div className="recruiting-modal-card recruiting-stage-settings">
         <div className="recruiting-modal-head"><div><h2>Настройка воронки</h2><p>Название можно менять под терминологию компании. Системный смысл этапа сохраняется для аналитики и автоматизаций.</p></div><button className="icon-button" onClick={()=>setShowStageSettings(false)}><X size={17}/></button></div>
-        <div className="stage-settings-list">{stageSettings.map((stage,index)=><div className="stage-settings-row" key={stage.code}><span className="stage-settings-index">{index+1}</span><input value={stage.label} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,label:e.target.value}:x))}/><small>{stage.code}</small><label><input type="checkbox" checked={stage.active} disabled={stage.code==="new"||stage.code==="first_shift"} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,active:e.target.checked}:x))}/> Показывать</label><div><button className="icon-button" type="button" disabled={index===0} onClick={()=>moveStage(index,-1)}>↑</button><button className="icon-button" type="button" disabled={index===stageSettings.length-1} onClick={()=>moveStage(index,1)}>↓</button></div></div>)}</div>
+        <div className="stage-settings-list">{stageSettings.map((stage,index)=>{const meta=stageSettingsMeta[stage.code]??{description:"Рабочий этап подбора.",required:false};return <div className={"stage-settings-row-v2 "+(!stage.active?"inactive":"")} key={stage.code}><span className="stage-settings-index">{index+1}</span><div className="stage-settings-main"><input value={stage.label} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,label:e.target.value}:x))}/><span>{meta.description}</span></div><div className="stage-settings-state">{meta.required?<span className="stage-system-lock">Обязательный</span>:<label><input type="checkbox" checked={stage.active} onChange={e=>setStageSettings(current=>current.map(x=>x.code===stage.code?{...x,active:e.target.checked}:x))}/><span>{stage.active?"Используется":"Отключён"}</span></label>}</div><div className="stage-settings-order"><button className="icon-button" type="button" title="Выше" disabled={index===0} onClick={()=>moveStage(index,-1)}>↑</button><button className="icon-button" type="button" title="Ниже" disabled={index===stageSettings.length-1} onClick={()=>moveStage(index,1)}>↓</button></div></div>})}</div>
         <div className="recruiting-form-actions"><button className="button" type="button" onClick={()=>setShowStageSettings(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="stages"} onClick={saveStageSettings}>{busy==="stages"?"Сохраняю…":"Сохранить настройку"}</button></div>
       </div>
     </div></RecruitingPortal>}
