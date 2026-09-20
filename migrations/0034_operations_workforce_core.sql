@@ -152,6 +152,8 @@ CREATE TABLE IF NOT EXISTS housing_sites (
   name text NOT NULL,
   address_text text,
   vendor text,
+  primary_object_id uuid REFERENCES objects(id) ON DELETE SET NULL,
+  responsible_user_id uuid REFERENCES app_users(id) ON DELETE SET NULL,
   rate_model text NOT NULL DEFAULT 'bed_day'
     CHECK (rate_model IN ('bed_day','room_day','room_month','site_period')),
   rate_amount numeric(14,2) NOT NULL DEFAULT 0 CHECK (rate_amount >= 0),
@@ -245,6 +247,7 @@ CREATE INDEX IF NOT EXISTS idx_inventory_movements_item_date ON inventory_moveme
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_from ON inventory_movements(organization_id,from_location_id,occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_to ON inventory_movements(organization_id,to_location_id,occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_inventory_movements_worker ON inventory_movements(organization_id,worker_id,occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_housing_sites_object ON housing_sites(organization_id,primary_object_id,active);
 CREATE INDEX IF NOT EXISTS idx_housing_stays_active ON housing_stays(organization_id,site_id,status,check_in,check_out);
 
 DROP TRIGGER IF EXISTS audit_object_crews ON object_crews;
