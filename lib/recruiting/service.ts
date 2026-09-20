@@ -196,6 +196,7 @@ export type CandidateProfile = {
   sourceReference: string | null;
   notes: string | null;
   status: string;
+  archivedAt:string|null;
   workerId:string|null;
   contacts:CandidateContact[];
   documents:CandidateDocumentRecord[];
@@ -625,7 +626,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     return {
       id, fullName:first.fullName, phone:first.phone, email:first.email, preferredChannel:first.preferredChannel, telegram:first.telegram,
       whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
-      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status,
+      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status,archivedAt:null,
       workerId:null,contacts,documents:[...baseDocs,...extraDocs],applications,
       communications:communications.sort((a,b)=>b.happenedAt.localeCompare(a.happenedAt)),
       history:history.reverse(),
@@ -636,7 +637,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
       ownerUserId:string|null;regionId:null;objectId:null;clientId:null;assigneeUserIds:string[];
     }>>\`
       SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
-        c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
+        c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,c.archived_at::text "archivedAt",
         wp.id "workerId",c.current_recruiter_user_id "ownerUserId",NULL::uuid "regionId",NULL::uuid "objectId",NULL::uuid "clientId",
         ARRAY_REMOVE(ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text],NULL) "assigneeUserIds"
       FROM candidates c LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id
