@@ -26,6 +26,20 @@ UPDATE recruiting_document_types
 SET default_required=false
 WHERE group_type='clearance';
 
+ALTER TABLE need_document_requirements
+  ADD COLUMN IF NOT EXISTS required_by_stage text NOT NULL DEFAULT 'first_shift',
+  ADD COLUMN IF NOT EXISTS blocks_progress boolean NOT NULL DEFAULT true;
+
+ALTER TABLE need_document_requirements DROP CONSTRAINT IF EXISTS need_document_requirements_required_by_stage_check;
+ALTER TABLE need_document_requirements ADD CONSTRAINT need_document_requirements_required_by_stage_check
+  CHECK (required_by_stage IN ('documents','preparation','first_shift','retention_7','retention_30','none'));
+
+UPDATE need_document_requirements ndr
+SET required_by_stage=CASE WHEN dt.group_type='employment' THEN 'documents' ELSE 'first_shift' END,
+    blocks_progress=CASE WHEN dt.group_type='employment' THEN true ELSE false END
+FROM recruiting_document_types dt
+WHERE dt.id=ndr.document_type_id;
+
 -- Preserve explicitly configured historical needs. Only needs with no employment
 -- requirements receive the current organization baseline automatically.
 INSERT INTO need_document_requirements(
@@ -45,20 +59,6 @@ WHERE NOT EXISTS(
   WHERE existing.need_id=n.id AND existing.required AND edt.group_type='employment'
 )
 ON CONFLICT(need_id,document_type_id) DO NOTHING;
-
-ALTER TABLE need_document_requirements
-  ADD COLUMN IF NOT EXISTS required_by_stage text NOT NULL DEFAULT 'first_shift',
-  ADD COLUMN IF NOT EXISTS blocks_progress boolean NOT NULL DEFAULT true;
-
-ALTER TABLE need_document_requirements DROP CONSTRAINT IF EXISTS need_document_requirements_required_by_stage_check;
-ALTER TABLE need_document_requirements ADD CONSTRAINT need_document_requirements_required_by_stage_check
-  CHECK (required_by_stage IN ('documents','preparation','first_shift','retention_7','retention_30','none'));
-
-UPDATE need_document_requirements ndr
-SET required_by_stage=CASE WHEN dt.group_type='employment' THEN 'documents' ELSE 'first_shift' END,
-    blocks_progress=CASE WHEN dt.group_type='employment' THEN true ELSE false END
-FROM recruiting_document_types dt
-WHERE dt.id=ndr.document_type_id;
 
 ALTER TABLE candidate_application_documents
   ADD COLUMN IF NOT EXISTS responsible_user_id uuid REFERENCES app_users(id),
