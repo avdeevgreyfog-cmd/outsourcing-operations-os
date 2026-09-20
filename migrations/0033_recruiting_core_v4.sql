@@ -112,11 +112,6 @@ UPDATE recruiting_document_types
 SET default_required=true,group_type='employment',default_provider='candidate'
 WHERE code IN ('passport','snils','inn');
 
-UPDATE recruiting_document_types
-SET name='Трудовая книжка / сведения о трудовой деятельности',
-    group_type='employment',default_provider='candidate',default_required=true
-WHERE code='bank_details' AND false;
-
 INSERT INTO recruiting_document_types(organization_id,code,name,group_type,default_provider,default_required,sort_order)
 SELECT o.id,v.code,v.name,'employment','candidate',v.required,v.sort_order
 FROM organizations o
@@ -126,6 +121,10 @@ CROSS JOIN (VALUES
 ) AS v(code,name,required,sort_order)
 ON CONFLICT (organization_id,code) DO UPDATE SET
   name=EXCLUDED.name,group_type='employment',default_provider='candidate';
+
+ALTER TABLE recruiting_candidate_sources DROP CONSTRAINT IF EXISTS recruiting_candidate_sources_kind_check;
+ALTER TABLE recruiting_candidate_sources ADD CONSTRAINT recruiting_candidate_sources_kind_check
+  CHECK (kind IN ('job_site','social','referral','partner','database','offline','internal','other'));
 
 INSERT INTO recruiting_candidate_sources(organization_id,code,name,kind,sort_order)
 SELECT o.id,'company_database','База компании / импорт','database',80
