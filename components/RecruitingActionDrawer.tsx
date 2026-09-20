@@ -17,6 +17,7 @@ type DocumentRow={
   name:string;
   groupType:"employment"|"clearance";
   provider:"candidate"|"company"|"client";
+  requiredBy:"employment"|"first_shift"|"day7"|"day30"|"non_blocking";
   status:string;
   note:string|null;
 };
@@ -83,13 +84,13 @@ export function RecruitingActionDrawer({
   onSaved?:()=>void;
 }){
   const router=useRouter();
-  const impliedAction=initialStage===undefined?"":{
-    "new:interview":"take_in_work",
-    "interview:documents":"interested",
-    "documents:clearance":"documents_complete",
-    "clearance:preparation":"clearance_complete",
-    "preparation:first_shift":"ready_for_start",
-  }[row.stage+":"+initialStage]??"";
+  const impliedAction=initialStage===undefined?"":(
+    row.stage==="new"&&initialStage==="interview"?"take_in_work":
+    row.stage==="interview"&&initialStage==="documents"?"interested":
+    row.stage==="documents"&&["clearance","preparation"].includes(initialStage)?"documents_complete":
+    row.stage==="clearance"&&initialStage==="preparation"?"clearance_complete":
+    row.stage==="preparation"&&initialStage==="first_shift"?"ready_for_start":""
+  );
   const [action,setAction]=useState(impliedAction);
   const [ownerUserId,setOwnerUserId]=useState(row.ownerUserId??"");
   const [comment,setComment]=useState("");
@@ -107,7 +108,7 @@ export function RecruitingActionDrawer({
   const [housingState,setHousingState]=useState(row.workflow?.housingState??(housingProvided?"needs_booking":"not_required"));
   const [housingAssignee,setHousingAssignee]=useState(row.workflow?.housingAssigneeUserId??"");
   const [housingDue,setHousingDue]=useState(localDate(row.workflow?.housingDueAt));
-  const [documents,setDocuments]=useState<DocumentRow[]|null>(()=>demo&&showDocumentsAtStage(row.stage)?buildDemoDocuments(row):null);
+  const [documents,setDocuments]=useState<DocumentRow[]|null>(()=>demo&&showDocumentsAtStage(row.stage)?buildDemoDocuments(row,need):null);
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
 
@@ -124,6 +125,11 @@ export function RecruitingActionDrawer({
   const stageLabel=(value:RecruitingStage)=>orderedStages.find(item=>item.code===value)?.label??recruitingStageLabels[value];
   const risks=workRisks(row);
   const activeNeeds=needs.filter(item=>["open","in_progress"].includes(item.status)&&item.id!==row.needId);
+  const nextActiveStage=(from:RecruitingStage)=>{
+    const index=orderedStages.findIndex(item=>item.code===from);
+    return (index>=0?orderedStages[index+1]?.code:null)??from;
+  };
+  const readyDocument=(item:DocumentRow)=>["received","verified","ready","not_required"].includes(item.status);
 
   useEffect(()=>{
     if(demo||!showDocumentsAtStage(row.stage))return;
@@ -171,15 +177,15 @@ export function RecruitingActionDrawer({
     if(action==="documents_complete"){
       const employment=documents?.filter(item=>item.groupType==="employment")??[];
       if(employment.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не все документы для оформления готовы.");
-      targetStage="clearance";workflow.outcomeCode="documents_complete";
+      targetStage=nextActiveStage("documents");workflow.outcomeCode="documents_complete";
     }
     if(action==="documents_stopped"){targetStage="rejected";reasonValue="documents";workflow.outcomeCode="documents_stopped";}
 
     if(action==="clearance_progress"){targetStage="clearance";workflow.outcomeCode="clearance_progress";nextAction=requireNext();}
     if(action==="clearance_complete"){
-      const clearance=documents?.filter(item=>item.groupType==="clearance")??[];
-      if(clearance.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не все допуски и документы объекта готовы.");
-      targetStage="preparation";workflow.outcomeCode="clearance_complete";
+      const clearance=documents?.filter(item=>item.groupType==="clearance"&&item.requiredBy==="first_shift")??[];
+      if(clearance.some(item=>!readyDocument(item)))throw new Error("Не готовы документы и допуски, обязательные до первого выхода.");
+      targetStage=nextActiveStage("clearance");workflow.outcomeCode="clearance_complete";
     }
     if(action==="clearance_failed"){
       if(!reasonCode)throw new Error("Выберите причину, по которой допуск не получен.");
@@ -187,6 +193,7 @@ export function RecruitingActionDrawer({
     }
 
     if(action==="preparation_save"||action==="ready_for_start"){
+      if(action==="ready_for_start"){const blocking=(documents??[]).filter(item=>item.groupType==="clearance"&&item.requiredBy==="first_shift"&&!readyDocument(item));if(blocking.length)throw new Error("До выхода осталось закрыть: "+blocking.map(item=>item.name).join(", "));}
       targetStage=action==="ready_for_start"?"first_shift":"preparation";
       workflow.outcomeCode=action;
       workflow.travelState=travelState;
@@ -272,7 +279,14 @@ export function RecruitingActionDrawer({
     finally{setBusy("")}
   }
 
-  const visibleDocuments=documents?.filter(item=>row.stage==="documents"?item.groupType==="employment":row.stage==="clearance"?item.groupType==="clearance":true)??null;
+  const visibleDocuments=documents?.filter(item=>{
+    if(row.stage==="documents")return item.groupType==="employment";
+    if(row.stage==="clearance")return item.groupType==="clearance";
+    if(row.stage==="preparation"||row.stage==="first_shift")return item.groupType==="clearance"&&item.requiredBy==="first_shift"&&!readyDocument(item);
+    if(row.stage==="retention_7")return item.groupType==="clearance"&&item.requiredBy==="day7"&&!readyDocument(item);
+    if(row.stage==="retention_30")return item.groupType==="clearance"&&item.requiredBy==="day30"&&!readyDocument(item);
+    return false;
+  })??null;
 
   return <SalesDrawer title={row.fullName} subtitle={row.need+" · "+(row.object??"Без объекта")} onClose={()=>{if(!busy)onClose();}}>
     <div className="candidate-work-drawer">
@@ -293,7 +307,7 @@ export function RecruitingActionDrawer({
         </div>
       </section>
 
-      {visibleDocuments!==null&&showDocumentsAtStage(row.stage)&&<DocumentChecklist documents={visibleDocuments} canEdit={canEdit} busy={busy} onChange={updateDocument}/>}
+      {visibleDocuments!==null&&visibleDocuments.length>0&&showDocumentsAtStage(row.stage)&&<DocumentChecklist documents={visibleDocuments} canEdit={canEdit} busy={busy} onChange={updateDocument}/>}
 
       {error&&<div role="alert" className="recruiting-error">{error}</div>}
 
@@ -347,7 +361,7 @@ function DocumentChecklist({documents,canEdit,busy,onChange}:{documents:Document
       const statuses=document.provider==="candidate"
         ? ["missing","requested","received","verified","not_required"]
         : ["to_prepare","in_progress","ready","not_required"];
-      return <div className="candidate-document-row" key={document.documentTypeId}><div><strong>{document.name}</strong><small>{providerLabels[document.provider]}</small></div><select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,e.target.value)}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select></div>;
+      return <div className="candidate-document-row" key={document.documentTypeId}><div><strong>{document.name}</strong><small>{providerLabels[document.provider]} · {requiredByLabel(document.requiredBy)}</small></div><select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,e.target.value)}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select></div>;
     })}</div>
   </section>;
 }
@@ -372,24 +386,36 @@ function PreparationFields({
 
 function showDocumentsAtStage(stage:RecruitingStage){return ["documents","clearance","preparation","first_shift","retention_7","retention_30"].includes(stage);}
 
-function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
-  const employment=[
-    {id:"demo-doc-passport",name:"Паспорт",provider:"candidate" as const},
-    {id:"demo-doc-snils",name:"СНИЛС",provider:"candidate" as const},
-    {id:"demo-doc-inn",name:"ИНН",provider:"candidate" as const},
-    {id:"demo-doc-bank",name:"Банковские реквизиты",provider:"candidate" as const},
+function buildDemoDocuments(row:RecruitingApplicationRow,need:RecruitingNeedRow|null):DocumentRow[]{
+  const meta:Record<string,{name:string;groupType:"employment"|"clearance"}>={
+    "demo-doc-passport":{name:"Паспорт",groupType:"employment"},
+    "demo-doc-snils":{name:"СНИЛС",groupType:"employment"},
+    "demo-doc-inn":{name:"ИНН",groupType:"employment"},
+    "demo-doc-bank":{name:"Банковские реквизиты",groupType:"employment"},
+    "demo-doc-employment-record":{name:"Трудовая книжка / СТД-Р / СТД-СФР",groupType:"employment"},
+    "demo-doc-military-record":{name:"Документ воинского учёта",groupType:"employment"},
+    "demo-doc-medical":{name:"Медицинская комиссия",groupType:"clearance"},
+    "demo-doc-qualification":{name:"Удостоверение / допуск",groupType:"clearance"},
+  };
+  const requirements=need?.documentRequirements??[
+    {documentTypeId:"demo-doc-passport",provider:"candidate" as const,requiredBy:"employment" as const},
+    {documentTypeId:"demo-doc-snils",provider:"candidate" as const,requiredBy:"employment" as const},
+    {documentTypeId:"demo-doc-inn",provider:"candidate" as const,requiredBy:"employment" as const},
+    {documentTypeId:"demo-doc-bank",provider:"candidate" as const,requiredBy:"employment" as const},
+    {documentTypeId:"demo-doc-employment-record",provider:"candidate" as const,requiredBy:"employment" as const},
   ];
-  const clearance=[
-    {id:"demo-doc-medical",name:"Медицинская комиссия",provider:"company" as const},
-    {id:"demo-doc-qualification",name:"Удостоверение / допуск",provider:"candidate" as const},
-  ];
-  const employmentReady=Math.min(row.documentSummary?.employmentReady??(row.stage==="documents"?2:4),4);
-  const clearanceReady=Math.min(row.documentSummary?.clearanceReady??(["preparation","first_shift","retention_7","retention_30"].includes(row.stage)?2:0),2);
-  return [
-    ...employment.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"employment" as const,provider:item.provider,status:index<employmentReady?"received":"requested",note:null})),
-    ...clearance.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"clearance" as const,provider:item.provider,status:index<clearanceReady?(item.provider==="candidate"?"received":"ready"):(item.provider==="candidate"?"requested":"to_prepare"),note:null})),
-  ];
+  let employmentIndex=0,clearanceIndex=0;
+  return requirements.map(requirement=>{
+    const info=meta[requirement.documentTypeId]??{name:"Дополнительный документ",groupType:requirement.requiredBy==="employment"?"employment":"clearance"};
+    const index=info.groupType==="employment"?employmentIndex++:clearanceIndex++;
+    const totalReady=info.groupType==="employment"?(row.documentSummary?.employmentReady??(["clearance","preparation","first_shift","retention_7","retention_30"].includes(row.stage)?5:3)):(row.documentSummary?.clearanceReady??(["first_shift","retention_7","retention_30"].includes(row.stage)?1:0));
+    const ready=index<totalReady;
+    return {documentTypeId:requirement.documentTypeId,name:info.name,groupType:info.groupType,provider:requirement.provider,requiredBy:requirement.requiredBy,
+      status:ready?(requirement.provider==="candidate"?"received":"ready"):(requirement.provider==="candidate"?"requested":"in_progress"),note:null};
+  });
 }
+
+function requiredByLabel(value:DocumentRow["requiredBy"]){return value==="employment"?"до оформления":value==="first_shift"?"до первого выхода":value==="day7"?"до 7-го дня":value==="day30"?"до 30-го дня":"не блокирует выход";}
 
 function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingApplicationRow}){
   const c=need?.conditions??row.conditions;
