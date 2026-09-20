@@ -360,10 +360,10 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   requireCapability(actor, "recruiting.candidate.read");
   if (actor.demo) return demoApplications(actor);
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const rows = await sql<Array<Omit<RecruitingApplicationRow,"stage"|"stageLabel"> & {rawStage:string} & Record<string, unknown>>>`
+    const rows = await sql<Array<Omit<RecruitingApplicationRow,"stage"|"stageLabel"> & {rawStage:string;configuredStageLabel:string|null} & Record<string, unknown>>>`
       SELECT ca.id "applicationId",c.id "candidateId",c.organization_id "organizationId",c.full_name "fullName",c.phone,c.email,
         c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,CASE WHEN ca.source_snapshot IS NULL THEN c.source ELSE ca.source_snapshot->>'source' END source,ca.source_snapshot->>'channel' "sourceChannel",
-        ca.source_snapshot->>'campaign' "sourceCampaign",ca.source_snapshot->>'reference' "sourceReference",ca.stage "rawStage",ca.need_id "needId",
+        ca.source_snapshot->>'campaign' "sourceCampaign",ca.source_snapshot->>'reference' "sourceReference",ca.stage "rawStage",ps.label "configuredStageLabel",ca.need_id "needId",
         COALESCE(n.title,s.name) need,ca.object_id "objectId",o.name object,COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ca.owner_user_id "ownerUserId",owner.display_name owner,ca.manager_user_id "managerUserId",manager.display_name manager,
         ca.responsible_user_id "responsibleUserId",responsible.display_name responsible,
@@ -385,12 +385,13 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
       LEFT JOIN app_users owner ON owner.id=ca.owner_user_id
       LEFT JOIN app_users manager ON manager.id=ca.manager_user_id
       LEFT JOIN app_users responsible ON responsible.id=ca.responsible_user_id
+      LEFT JOIN recruiting_pipeline_stage_settings ps ON ps.organization_id=ca.organization_id AND ps.stage_code=ca.stage
       ORDER BY ca.updated_at DESC
     `;
     return rows.filter((row) => canReadRow(actor.access, "recruiting.candidate.read", row, actor)).map((row) => {
       const stage = normalizeRecruitingStage(row.rawStage);
-      const {rawStage, ...rest} = row;
-      return {...rest, stage, stageLabel: recruitingStageLabels[stage]} as RecruitingApplicationRow;
+      const {rawStage,configuredStageLabel, ...rest} = row;
+      return {...rest, stage, stageLabel: configuredStageLabel??recruitingStageLabels[stage]} as RecruitingApplicationRow;
     });
   });
 }
