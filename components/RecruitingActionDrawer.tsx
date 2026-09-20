@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BriefcaseBusiness, FileCheck2, MessageSquarePlus, Phone, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { SalesDrawer } from "@/components/sales/SalesUI";
@@ -14,7 +14,7 @@ import type {
   RecruitingPipelineStage,
 } from "@/lib/recruiting/service";
 import { contactChannelLabels, recruitingStageLabels, recruitingTerminalStages, type RecruitingStage } from "@/lib/recruiting/model";
-import { formatWorkDate, reserveReasons, workRisks } from "@/lib/recruiting/workflow";
+import { reserveReasons, workRisks } from "@/lib/recruiting/workflow";
 import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 
 type Props={
@@ -43,16 +43,24 @@ const outcomeLabels=[
   ["documents_requested","Документы запрошены"],
 ] as const;
 
+const defaultPipeline:RecruitingPipelineStage[]=[
+  {stageCode:"new",label:"Новый контакт",stageKind:"new_contact",sortOrder:10,active:true,virtual:false,isSystem:true},
+  {stageCode:"contact",label:"Интервью",stageKind:"interview",sortOrder:20,active:true,virtual:false,isSystem:true},
+  {stageCode:"interview",label:"Документы",stageKind:"documents",sortOrder:30,active:true,virtual:false,isSystem:true},
+  {stageCode:"preparation",label:"Подготовка к выходу",stageKind:"preparation",sortOrder:40,active:true,virtual:false,isSystem:true},
+  {stageCode:"ready",label:"Готов к выходу",stageKind:"preparation",sortOrder:45,active:false,virtual:false,isSystem:true},
+  {stageCode:"started",label:"Первый выход",stageKind:"first_shift",sortOrder:50,active:true,virtual:false,isSystem:true},
+];
+
+function defaultCallbackDate(){
+  const date=new Date(Date.now()+86400000);
+  date.setHours(10,0,0,0);
+  return localDate(date.toISOString());
+}
+
 export function RecruitingActionDrawer({row,need,pipeline,options,exitReasons,initialStage,demo,canEdit,canConvert,showResponsible=false,onClose,onSaved}:Props){
   const router=useRouter();
-  const effectivePipeline=pipeline??[
-    {stageCode:"new",label:"Новый контакт",stageKind:"new_contact",sortOrder:10,active:true,virtual:false,isSystem:true},
-    {stageCode:"contact",label:"Интервью",stageKind:"interview",sortOrder:20,active:true,virtual:false,isSystem:true},
-    {stageCode:"interview",label:"Документы",stageKind:"documents",sortOrder:30,active:true,virtual:false,isSystem:true},
-    {stageCode:"preparation",label:"Подготовка к выходу",stageKind:"preparation",sortOrder:40,active:true,virtual:false,isSystem:true},
-    {stageCode:"ready",label:"Готов к выходу",stageKind:"preparation",sortOrder:45,active:false,virtual:false,isSystem:true},
-    {stageCode:"started",label:"Первый выход",stageKind:"first_shift",sortOrder:50,active:true,virtual:false,isSystem:true},
-  ] as RecruitingPipelineStage[];
+  const effectivePipeline=pipeline??defaultPipeline;
   const effectiveOptions=options??{
     specialties:[],regions:[],objects:[],recruiters:[],responsibles:row.responsibleUserId&&row.responsible?[{id:row.responsibleUserId,name:row.responsible}]:[],
     sources:[],sourceCatalog:[],exitReasons:exitReasons??[],
@@ -106,7 +114,7 @@ export function RecruitingActionDrawer({row,need,pipeline,options,exitReasons,in
     for(const terminal of recruitingTerminalStages)if(!stageCodes.includes(terminal))stageCodes.push(terminal);
     return stageCodes as RecruitingStage[];
   },[effectivePipeline,row.stage]);
-  const stageLabel=(value:string)=>effectivePipeline.find(item=>item.stageCode===value)?.label??recruitingStageLabels[value as RecruitingStage]??value;
+  const stageLabel=useCallback((value:string)=>effectivePipeline.find(item=>item.stageCode===value)?.label??recruitingStageLabels[value as RecruitingStage]??value,[effectivePipeline]);
   const conditions=need?.conditions??row.conditions;
   const c=(key:string)=>typeof conditions[key]==="string"&&String(conditions[key]).trim()?String(conditions[key]):null;
   const provided=(key:string)=>conditions[key]===true?"Да":conditions[key]===false?"Нет":null;
@@ -115,7 +123,7 @@ export function RecruitingActionDrawer({row,need,pipeline,options,exitReasons,in
     const communications=(profile?.communications??[]).filter(item=>!item.applicationId||item.applicationId===row.applicationId).map(item=>({kind:"comment" as const,date:item.happenedAt,author:item.author,title:item.channel==="note"?"Комментарий":contactChannelLabels[item.channel]??item.channel,text:item.summary}));
     const history=(profile?.history??[]).filter(item=>item.applicationId===row.applicationId).map(item=>({kind:"system" as const,date:item.changedAt,author:item.changedBy,title:`${item.fromStage?stageLabel(item.fromStage)+" → ":""}${stageLabel(item.toStage)}`,text:item.reason??""}));
     return [...communications,...history].sort((a,b)=>parseRuDate(b.date)-parseRuDate(a.date)).slice(0,6);
-  },[profile,effectivePipeline,row.applicationId]);
+  },[profile,row.applicationId,stageLabel]);
 
   function setOutcome(value:typeof outcomeLabels[number][0]){
     const messages:Record<typeof value,{last:string;next:string}>={
@@ -125,11 +133,7 @@ export function RecruitingActionDrawer({row,need,pipeline,options,exitReasons,in
       documents_requested:{last:"Документы запрошены",next:"Проверить получение документов"},
     };
     setWorkflow(current=>({...current,contactOutcome:value,lastContact:messages[value].last,nextActionText:messages[value].next}));
-    if(value==="no_answer"||value==="callback"){
-      const date=new Date(Date.now()+86400000);
-      date.setHours(10,0,0,0);
-      setNext(localDate(date.toISOString()));
-    }
+    if(value==="no_answer"||value==="callback")setNext(defaultCallbackDate());
     if(value==="documents_requested"&&stage==="contact")setStage("interview");
   }
 
