@@ -24,17 +24,21 @@ type Props={
 type Tab="overview"|"applications"|"documents"|"communications"|"history";
 const profileStorage="operis.recruiting.profiles.v2";
 const commStorage="operis.recruiting.communications.v1";
+const terminalStages=new Set<RecruitingStage>(["rejected","no_show","reserve"]);
+const readyDocumentStatuses=new Set(["received","verified","ready","not_required"]);
+const stageAdvanceActions=new Set(["new:interview","interview:documents","documents:clearance","documents:preparation","clearance:preparation","preparation:first_shift"]);
 
 export function CandidateProfileWorkspace({profile,candidateId,options,needs,demo,canEdit,canConvert,exitReasons}:Props){
  const router=useRouter();
  const [tab,setTab]=useState<Tab>("overview");
  const [current,setCurrent]=useState<CandidateProfile|null>(profile);
  const [selected,setSelected]=useState<RecruitingApplicationRow|null>(null);
+ const [selectedTargetStage,setSelectedTargetStage]=useState<RecruitingStage|undefined>();
  const [editing,setEditing]=useState(false);
  const [draftContacts,setDraftContacts]=useState<CandidateContactMethod[]>(profile?.contacts??[]);
  const [busy,setBusy]=useState("");
  const [error,setError]=useState("");
- const [comm,setComm]=useState({applicationId:"",channel:"phone",direction:"outbound",summary:""});
+ const [comm,setComm]=useState({applicationId:"",channel:"phone",direction:"outbound",result:"contacted",summary:""});
 
  useEffect(()=>{
   if(!demo){const frame=requestAnimationFrame(()=>{setCurrent(profile);setDraftContacts(profile?.contacts??[])});return()=>cancelAnimationFrame(frame);}
@@ -63,6 +67,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
  },[candidateId,demo,profile]);
 
  const latest=useMemo(()=>current?.applications.find(app=>isActiveStage(app.stage))??current?.applications[0]??null,[current]);
+ const nextStage=latest?nextLifecycleStage(latest.stage,options.funnelStages):null;
  const tabs:[Tab,string][]=[["overview","Обзор"],["applications","Заявки"],["documents","Документы"],["communications","Коммуникации"],["history","История"]];
  const preferred=current?current.contacts.find(item=>item.isPreferred&&item.active)??current.contacts.find(item=>item.active)??null:null;
 
@@ -97,12 +102,14 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
 
  async function addCommunication(event:React.FormEvent){
   event.preventDefault();if(!current||!comm.summary.trim())return;setBusy("communication");setError("");
+  const resultLabel=communicationResultLabel(comm.result);
+  const summary=resultLabel+(comm.summary.trim()?": "+comm.summary.trim():"");
   try{
    if(demo){
-    const row={id:crypto.randomUUID(),candidateId,applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary:comm.summary,happenedAt:new Date().toLocaleString("ru-RU"),author:"Текущий пользователь"};
+    const row={id:crypto.randomUUID(),candidateId,applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary,happenedAt:new Date().toLocaleString("ru-RU"),author:"Текущий пользователь"};
     const all=JSON.parse(localStorage.getItem(commStorage)||"[]");all.unshift(row);localStorage.setItem(commStorage,JSON.stringify(all));setCurrent(x=>x?{...x,communications:[row,...x.communications]}:x);
    }else{
-    const response=await fetch(`/api/candidates/${candidateId}/communications`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary:comm.summary})});
+    const response=await fetch(`/api/candidates/${candidateId}/communications`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId:comm.applicationId||null,channel:comm.channel,direction:comm.direction,summary})});
     const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось добавить коммуникацию");router.refresh();
    }
    setComm(x=>({...x,summary:""}));
@@ -141,7 +148,7 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
 
    <Section title="Последние события" note="Коммуникации и системные события по человеку"><div className="candidate-history candidate-profile-recent">{current.communications.slice(0,5).map(row=><div className="candidate-history-item" key={row.id}><time>{row.happenedAt}</time><div><strong>{row.author} · {communicationLabel(row.channel)}</strong><p>{row.summary}</p></div></div>)}{!current.communications.length&&<div className="empty-inline">Событий пока нет</div>}</div></Section>
   </div><div>
-   <Section title="Текущая работа с кандидатом"><div className="candidate-current-state">{latest?<><KeyValue label="Потребность" value={latest.need}/><KeyValue label="Объект" value={latest.object??"—"}/><KeyValue label="Этап" value={<Status tone={["first_shift","retention_7","retention_30"].includes(latest.stage)?"good":"info"}>{latest.stageLabel}</Status>}/><KeyValue label="Ответственный" value={latest.owner??"—"}/><KeyValue label="Следующее действие" value={nextActionDisplay(latest)}/><button className="button" onClick={()=>setSelected(latest)}>Открыть рабочий этап</button></>:<><strong>Нет активной заявки</strong><span>Человек находится в базе кандидатов и может быть добавлен в новую потребность.</span><Link className="button" href="/recruiting">Добавить в подбор</Link></>}</div></Section>
+   <Section title="Текущая работа с кандидатом">{latest?<><CandidateStageMiniFlow application={latest} stages={options.funnelStages} onAdvance={stage=>{setSelectedTargetStage(stage);setSelected(latest)}}/><div className="candidate-current-state"><KeyValue label="Потребность" value={latest.need}/><KeyValue label="Объект" value={latest.object??"—"}/><KeyValue label="Этап" value={<Status tone={["first_shift","retention_7","retention_30"].includes(latest.stage)?"good":"info"}>{latest.stageLabel}</Status>}/><KeyValue label="Ответственный" value={latest.owner??"—"}/><KeyValue label="Следующее действие" value={nextActionDisplay(latest)}/><div className="candidate-current-actions"><button className="button" onClick={()=>{setSelectedTargetStage(undefined);setSelected(latest)}}>Открыть рабочий этап</button>{nextStage&&stageAdvanceActions.has(latest.stage+":"+nextStage)&&<button className="button primary" onClick={()=>{setSelectedTargetStage(nextStage);setSelected(latest)}}>Перейти дальше</button>}</div></div></>:<div className="candidate-current-state"><strong>Нет активной заявки</strong><span>Человек находится в базе кандидатов и может быть добавлен в новую потребность.</span><Link className="button" href="/recruiting">Добавить в подбор</Link></div>}</Section>
    <Section title="Источник" note="Атрибуция хранится в карточке, но не мешает текущей работе"><div className="candidate-current-state"><KeyValue label="Источник" value={current.source??"—"}/><KeyValue label="Канал" value={current.sourceChannel??"—"}/><KeyValue label="Кампания / объявление" value={current.sourceCampaign??"—"}/></div></Section>
    {current.workerId&&<Section title="Связь с сотрудником" note="Рекрутинговая история остаётся в этой карточке"><div className="candidate-worker-link"><UserCheck size={18}/><div><strong>Создана карточка сотрудника</strong><span>Дальше рабочая история ведётся в контуре сотрудника: назначения, смены, табели, начисления и выплаты.</span></div>{!demo&&<Link className="button primary" href={`/workers/${current.workerId}`}>Открыть</Link>}</div></Section>}
   </div></div>}
