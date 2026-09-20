@@ -569,11 +569,11 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<Array<CandidateDirectoryRow & {
-      organizationId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];
+      organizationId:string;createdByUserId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];
       rawStage:string|null;rawStatus:string;
     }>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.city,c.preferred_channel "preferredChannel",
-        COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.organization_id "organizationId",
+        COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.organization_id "organizationId",c.created_by_user_id "createdByUserId",
         latest.owner_user_id "ownerUserId",latest.manager_user_id "managerUserId",latest.object_id "objectId",
         COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ARRAY[latest.owner_user_id::text,latest.manager_user_id::text]
@@ -611,10 +611,10 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
       LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       ORDER BY c.updated_at DESC
     `;
-    return rows.filter(row=>row.applicationsCount===0||canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
+    return rows.filter(row=>row.applicationsCount===0?(actor.access.allOrg||row.createdByUserId===actor.userId):canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
       const latestStage=row.rawStage?normalizeRecruitingStage(row.rawStage):null;
-      const {rawStage,rawStatus,organizationId,ownerUserId,managerUserId,objectId,regionId,clientId,assigneeUserIds,...rest}=row;
-      void rawStatus;void organizationId;void ownerUserId;void managerUserId;void objectId;void regionId;void clientId;void assigneeUserIds;
+      const {rawStage,rawStatus,organizationId,createdByUserId,ownerUserId,managerUserId,objectId,regionId,clientId,assigneeUserIds,...rest}=row;
+      void rawStatus;void organizationId;void createdByUserId;void ownerUserId;void managerUserId;void objectId;void regionId;void clientId;void assigneeUserIds;
       return {...rest,latestStage,latestStageLabel:latestStage?recruitingStageLabels[latestStage]:null} as CandidateDirectoryRow;
     });
   });
@@ -669,11 +669,12 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"contacts"|"documents">>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
         c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
-        wp.id "workerId",wp.status "workerStatus"
+        c.created_by_user_id "createdByUserId",wp.id "workerId",wp.status "workerStatus"
       FROM candidates c LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       WHERE c.id=${id}::uuid
     `;
     if (!candidate) return null;
+    if(!applications.length&&!actor.access.allOrg&&candidate.createdByUserId!==actor.userId)return null;
     const applicationIds = applications.map((application) => application.applicationId);
     const [communications, history, contacts, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
@@ -715,7 +716,8 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,n.created_at DESC NULLS LAST
       `,
     ]);
-    return {...candidate, contacts, documents, applications, communications, history};
+    const {createdByUserId,...safeCandidate}=candidate;void createdByUserId;
+    return {...safeCandidate, contacts, documents, applications, communications, history};
   });
 }
 
