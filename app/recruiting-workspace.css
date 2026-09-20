@@ -725,3 +725,10 @@
  .candidate-action-form .recruiting-action-fields label:has(textarea){grid-column:auto}
  .recruiting-doc-requirements>div{grid-template-columns:1fr 1fr}
 }
+
+.recruiting-condition-core{display:grid;border:1px solid var(--border);border-radius:var(--radius-panel);overflow:hidden}
+.recruiting-condition-more{border:1px solid var(--border);border-radius:var(--radius-control);background:var(--panel)}
+.recruiting-condition-more>summary{padding:9px 11px;cursor:pointer;font-size:10.5px;font-weight:650;color:var(--muted)}
+.recruiting-condition-more[open]>summary{border-bottom:1px solid var(--border);color:var(--text)}
+.recruiting-condition-more>.recruiting-provision-editor{border:0;border-radius:0}
+.recruiting-condition-more>.recruiting-condition-editor-grid{padding:10px 11px;border-top:1px solid var(--border)}
