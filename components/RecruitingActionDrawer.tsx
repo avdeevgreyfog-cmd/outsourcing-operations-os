@@ -408,12 +408,14 @@ function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
     {id:"demo-doc-snils",name:"СНИЛС",provider:"candidate" as const},
     {id:"demo-doc-inn",name:"ИНН",provider:"candidate" as const},
     {id:"demo-doc-bank",name:"Банковские реквизиты",provider:"candidate" as const},
+    {id:"demo-doc-employment-record",name:"Трудовая книжка / СТД",provider:"candidate" as const},
+    {id:"demo-doc-military",name:"Военный билет / документ воинского учёта",provider:"candidate" as const},
   ];
   const clearance=[
     {id:"demo-doc-medical",name:"Медицинская комиссия",provider:"company" as const},
     {id:"demo-doc-qualification",name:"Удостоверение / допуск",provider:"candidate" as const},
   ];
-  const employmentReady=Math.min(row.documentSummary?.employmentReady??(row.stage==="documents"?2:4),4);
+  const employmentReady=Math.min(row.documentSummary?.employmentReady??(row.stage==="documents"?3:6),6);
   const clearanceReady=Math.min(row.documentSummary?.clearanceReady??(["preparation","first_shift","retention_7","retention_30"].includes(row.stage)?2:0),2);
   return [
     ...employment.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"employment" as const,provider:item.provider,status:index<employmentReady?"received":"requested",note:null,requiredByStage:"documents" as const,blocksProgress:true})),
