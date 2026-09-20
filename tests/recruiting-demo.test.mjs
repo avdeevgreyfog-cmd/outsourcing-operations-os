@@ -37,18 +37,18 @@ test('demo candidate details provide stage-specific history communications and d
 
   const documentDetails=timeline.demoApplicationDetails(documents,demo.candidates.indexOf(documents));
   assert.equal(documentDetails.stage,'documents');
-  assert.equal(documentDetails.documentSummary.employmentRequired,4);
-  assert.ok(documentDetails.documentSummary.employmentReady>=2);
+  assert.equal(documentDetails.documentSummary.employmentRequired,6);
+  assert.ok(documentDetails.documentSummary.employmentReady>=3);
   assert.ok(documentDetails.documentSummary.employmentMissing.length>0);
   assert.ok(documentDetails.recentCommunications.length>=2);
 
   const clearanceDetails=timeline.demoApplicationDetails(clearance,demo.candidates.indexOf(clearance));
   assert.equal(clearanceDetails.stage,'clearance');
-  assert.equal(clearanceDetails.documentSummary.employmentReady,4);
+  assert.equal(clearanceDetails.documentSummary.employmentReady,6);
   assert.ok(clearanceDetails.documentSummary.clearancePending.length>0);
 
   const prepDetails=timeline.demoApplicationDetails(prep,demo.candidates.indexOf(prep));
-  assert.equal(prepDetails.documentSummary.employmentReady,4);
+  assert.equal(prepDetails.documentSummary.employmentReady,6);
   assert.equal(prepDetails.documentSummary.clearanceReady,2);
   assert.ok(['ticket_required','ticket_bought','company','self'].includes(prepDetails.workflow.travelState));
   assert.ok(prepDetails.plannedStartDate);
