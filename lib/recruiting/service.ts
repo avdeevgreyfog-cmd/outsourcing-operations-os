@@ -223,15 +223,18 @@ const demoUserNames:Record<string,string>={
   "10000000-0000-4000-8000-000000000004":"Алексей Волков",
   "10000000-0000-4000-8000-000000000005":"Ольга Новикова",
 };
-const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical","demo-doc-qualification"];
-const demoDocumentRequirements:NeedDocumentRequirement[]=[
-  {documentTypeId:"demo-doc-passport",provider:"candidate"},
-  {documentTypeId:"demo-doc-snils",provider:"candidate"},
-  {documentTypeId:"demo-doc-inn",provider:"candidate"},
-  {documentTypeId:"demo-doc-bank",provider:"candidate"},
-  {documentTypeId:"demo-doc-medical",provider:"company"},
-  {documentTypeId:"demo-doc-qualification",provider:"candidate"},
+const demoEmploymentRequirements:NeedDocumentRequirement[]=[
+  {documentTypeId:"demo-doc-passport",provider:"candidate",requiredBy:"employment"},
+  {documentTypeId:"demo-doc-snils",provider:"candidate",requiredBy:"employment"},
+  {documentTypeId:"demo-doc-inn",provider:"candidate",requiredBy:"employment"},
+  {documentTypeId:"demo-doc-bank",provider:"candidate",requiredBy:"employment"},
+  {documentTypeId:"demo-doc-employment-record",provider:"candidate",requiredBy:"employment"},
 ];
+function demoRequirementsForSpecialty(specialty:string):NeedDocumentRequirement[]{
+  if(specialty==="Комплектовщик")return [...demoEmploymentRequirements,{documentTypeId:"demo-doc-medical",provider:"company",requiredBy:"first_shift"}];
+  if(specialty==="Сборщик мебели")return [...demoEmploymentRequirements,{documentTypeId:"demo-doc-qualification",provider:"candidate",requiredBy:"day7"}];
+  return demoEmploymentRequirements;
+}
 
 function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
   return recruitingStageOrder.reduce<Partial<Record<RecruitingStage,number>>>((acc,stage,index)=>{
@@ -274,8 +277,8 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
               {id:`demo-qty-${row.id}-1`,oldCount:null,newCount:3,delta:3,reason:"Исходный объём потребности",changedAt:"04.09.2026 10:00",changedBy:"Дмитрий Орлов"},
             ]
           : [{id:`demo-qty-${row.id}-1`,oldCount:null,newCount:row.required,delta:row.required,reason:"Исходный объём потребности",changedAt:"03.09.2026 10:30",changedBy:"Алексей Волков"}],
-      requiredDocumentTypeIds:demoDocumentIds,
-      documentRequirements:demoDocumentRequirements,
+      requiredDocumentTypeIds:demoRequirementsForSpecialty(row.specialty).map(item=>item.documentTypeId),
+      documentRequirements:demoRequirementsForSpecialty(row.specialty),
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
@@ -303,7 +306,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
         COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",
         ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds",
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider) ORDER BY dt.sort_order)
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider,'requiredBy',ndr.required_by) ORDER BY dt.sort_order)
           FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
           WHERE ndr.need_id=n.id AND ndr.required),'[]'::jsonb) "documentRequirements"
       FROM needs n
@@ -573,8 +576,9 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
       {id:"demo-source-hh",code:"hh",name:"hh.ru",kind:"job_site",active:true},
       {id:"demo-source-telegram",code:"telegram",name:"Telegram",kind:"social",active:true},
-      {id:"demo-source-referral",code:"referral",name:"Рекомендация",kind:"referral",active:true},
+      {id:"demo-source-referral",code:"referral",name:"Рекомендация сотрудника / кандидата",kind:"referral",active:true},
       {id:"demo-source-partner",code:"partner",name:"Партнёр / подрядчик",kind:"partner",active:true},
+      {id:"demo-source-database",code:"company_database",name:"База компании / импорт",kind:"database",active:true},
     ],
     funnelStages: [
       {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
@@ -591,7 +595,9 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-doc-snils",code:"snils",name:"СНИЛС",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-inn",code:"inn",name:"ИНН",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
-      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:true},
+      {id:"demo-doc-employment-record",code:"employment_record",name:"Трудовая книжка / СТД-Р / СТД-СФР",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-military-record",code:"military_record",name:"Документ воинского учёта",groupType:"employment",defaultProvider:"candidate",defaultRequired:false},
+      {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
       {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск",groupType:"clearance",defaultProvider:"candidate",defaultRequired:false},
     ],
     exitReasons: [
