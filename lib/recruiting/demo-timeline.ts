@@ -10,7 +10,8 @@ type DemoCandidateSeed = {
   ownerUserId?:string|null;
 };
 
-const documentNames=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Медицинские документы"];
+const employmentDocuments=["Паспорт","СНИЛС","ИНН","Банковские реквизиты"];
+const clearanceDocuments=["Медицинская комиссия","Удостоверение / допуск"];
 const objectManager="10000000-0000-4000-8000-000000000004";
 const regionalManager="10000000-0000-4000-8000-000000000003";
 
@@ -43,6 +44,7 @@ function communicationSummaries(stage:RecruitingStage,index:number){
     ? ["Первый звонок без ответа. Назначена повторная попытка.","Дозвонились: условия вакансии проговорили, кандидат задаёт вопросы по проживанию."]
     : ["Созвонились: вакансия интересна, уточнили опыт и готовность к графику.","Кандидат подтвердил, что готов продолжить оформление."];
   if(stage==="documents") return ["После интервью кандидат подтвердил интерес.","Запросили паспорт, СНИЛС, ИНН и реквизиты.","Часть документов получена, ожидаем оставшиеся."];
+  if(stage==="clearance") return ["Документы для оформления собраны.","Запущены медкомиссия и необходимые допуски.","Часть процедур ещё в работе."];
   if(stage==="preparation") return ["Документы собраны и проверены.","Согласована ориентировочная дата выхода.","Уточнили проезд и подтверждение прибытия."];
   if(stage==="first_shift") return ["Кандидат подтвердил приезд.","Мастер подтвердил первый выход на смену."];
   if(stage==="retention_7") return ["Первый выход подтверждён.","Контроль после недели: сотрудник продолжает работать, критичных замечаний нет."];
@@ -85,10 +87,17 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     });
   }
 
-  const received=stage==="documents"?2+(index%3):rank>=3||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?5:0;
-  const missing=documentNames.slice(received);
+  const employmentReady=stage==="documents"?2+(index%3):rank>=recruitingStages.indexOf("clearance")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?4:0;
+  const clearanceReady=stage==="clearance"?index%2:rank>=recruitingStages.indexOf("preparation")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?2:0;
+  const employmentMissing=employmentDocuments.slice(Math.min(employmentReady,employmentDocuments.length));
+  const clearancePending=clearanceDocuments.slice(Math.min(clearanceReady,clearanceDocuments.length));
+  const received=employmentReady+clearanceReady;
+  const missing=[...employmentMissing,...clearancePending];
   const plannedStartDate=["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)
     ? (actualStartAt?.slice(0,10)??`2026-09-${String(21+(index%5)).padStart(2,"0")}`)
+    : null;
+  const plannedArrivalAt=["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)
+    ? (actualStartAt??`2026-09-${String(20+(index%5)).padStart(2,"0")}T18:00:00+03:00`)
     : null;
 
   const travelState=stage==="preparation"
@@ -104,11 +113,13 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     : stage==="reserve"
       ? "2026-09-27T10:00:00+03:00"
       : stage==="new"
-        ? `2026-09-20T${String(10+(index%8)).padStart(2,"0")}:00:00+03:00`
+        ? null
         : stage==="interview"
           ? `2026-09-21T${String(9+(index%8)).padStart(2,"0")}:30:00+03:00`
           : stage==="documents"
             ? "2026-09-21T12:00:00+03:00"
+            : stage==="clearance"
+              ? "2026-09-21T15:00:00+03:00"
             : stage==="preparation"
               ? "2026-09-21T17:00:00+03:00"
               : "2026-09-22T10:00:00+03:00";
@@ -128,6 +139,7 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
       stage==="new"?"Позвонить по новому контакту":
       stage==="interview"?(index%3===0?"Повторить звонок и получить решение":"Уточнить решение по вакансии"):
       stage==="documents"?"Получить недостающие документы":
+      stage==="clearance"?"Проверить готовность допусков":
       stage==="preparation"?(travelState==="ticket_required"?"Купить билет и подтвердить выезд":"Подтвердить дату прибытия"):
       stage==="first_shift"?"Получить подтверждение мастера по первой смене":
       stage==="retention_7"?"Контроль удержания после первой недели":
@@ -136,10 +148,18 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     lastContact:summaries.at(-1)??"",
     contactAttempts:stage==="new"?0:stage==="interview"?1+(index%3):2,
     plannedShift:["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?"Дневная · 08:00–20:00":"",
+    actionCode:stage==="new"?"inbound_contact":stage==="interview"?"interview":stage==="documents"?"documents_wait":stage==="clearance"?"clearance_progress":stage==="preparation"?"preparation_save":stage==="first_shift"?"shift_worked":"retention_check",
+    outcomeCode:stage==="new"?"unprocessed":stage==="interview"?"in_progress":stage==="documents"?"waiting":stage==="clearance"?"in_progress":stage==="preparation"?"planned":stage==="first_shift"?"worked":"active",
     confirmed:["preparation","first_shift","retention_7","retention_30"].includes(stage)&&stage!=="no_show",
     readiness:["preparation","first_shift","retention_7","retention_30"].includes(stage),
     reserveReason:stage==="reserve"?"Заканчивает текущую работу и сможет выйти позже":undefined,
     travelState,
+    housingState:["preparation","first_shift","retention_7","retention_30"].includes(stage)?(index%3===0?"needs_booking":"booked"):"not_required",
+    housingAssigneeUserId:["preparation","first_shift","retention_7","retention_30"].includes(stage)?objectManager:undefined,
+    housingDueAt:["preparation","first_shift","retention_7","retention_30"].includes(stage)?"2026-09-20T12:00:00+03:00":undefined,
+    ticketAssigneeUserId:travelState==="ticket_required"||travelState==="ticket_bought"?regionalManager:undefined,
+    ticketDueAt:travelState==="ticket_required"||travelState==="ticket_bought"?"2026-09-20T10:00:00+03:00":undefined,
+    firstShiftOutcome:["first_shift","retention_7","retention_30"].includes(stage)?"worked":undefined,
     travelNote:
       travelState==="ticket_required"?"Нужно купить билет до Москвы":
       travelState==="ticket_bought"?"Билет оформлен, данные отправлены кандидату":
@@ -158,11 +178,12 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     stageEnteredAt:stageEvents.at(-1)?.createdAt??stageDate(reached,index),
     stageEvents,
     plannedStartDate,
+    plannedArrivalAt,
     actualStartAt,
     nextActionAt,
     nextAction:nextActionAt,
     workflow,
     recentCommunications,
-    documentSummary:{required:5,received,missing},
+    documentSummary:{required:6,received,missing,employmentRequired:4,employmentReady,employmentMissing,clearanceRequired:2,clearanceReady,clearancePending},
   };
 }
