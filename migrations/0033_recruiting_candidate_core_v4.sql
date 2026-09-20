@@ -12,6 +12,16 @@ ALTER TABLE candidate_communications DROP CONSTRAINT IF EXISTS candidate_communi
 ALTER TABLE candidate_communications ADD CONSTRAINT candidate_communications_channel_check
   CHECK (channel IN ('phone','whatsapp','telegram','max','email','meeting','note','other'));
 
+INSERT INTO recruiting_document_types(organization_id,code,name,group_type,default_provider,default_required,sort_order)
+SELECT o.id,'employment_record','Трудовая книжка / СТД','employment','candidate',true,42
+FROM organizations o
+ON CONFLICT (organization_id,code) DO UPDATE SET
+  name=EXCLUDED.name,group_type='employment',default_provider='candidate';
+
+UPDATE recruiting_document_types
+SET default_required=true
+WHERE code IN ('passport','snils','inn','bank_details','employment_record','military_id');
+
 ALTER TABLE need_document_requirements
   ADD COLUMN IF NOT EXISTS required_by_stage text NOT NULL DEFAULT 'first_shift',
   ADD COLUMN IF NOT EXISTS blocks_progress boolean NOT NULL DEFAULT true;
