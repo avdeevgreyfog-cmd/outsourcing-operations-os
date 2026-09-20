@@ -1,4 +1,5 @@
 export function isDemoMode(): boolean {
+  if(process.env.GITHUB_PAGES_DEMO==="1") return true;
   const value=process.env.DEMO_MODE?.trim().toLowerCase();
 
   if(["true","1","yes","on"].includes(value??"")) return true;

@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -22,9 +24,13 @@ function safeDate(value?:string){return value&&/^\d{4}-\d{2}-\d{2}$/.test(value)
 function dateLabel(value:string|null|undefined){if(!value)return "—";const date=new Date(`${value}T00:00:00`);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat("ru-RU").format(date);}
 function statusTone(status:string){if(status==="approved"||status==="accepted")return "good" as const;if(status==="review"||status==="pending")return "warn" as const;if(status==="rejected")return "bad" as const;return "neutral" as const;}
 
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.calculations.map((id)=>({id})) : [];
+}
+
 export default async function CalculationWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;seed?:string;date?:string}>}){
   const actor=await requireActor();
-  const {id}=await params;const query=await searchParams;const activeTab=safeTab(query.tab);
+  const {id}=await params;const query=isGithubPagesDemo()?{}:await searchParams;const activeTab=safeTab(query.tab);
   const allRows=await listCommercialCalculations(actor);const rows=allRows.filter(row=>row.calculationId===id);
   const storedMeta=actor.demo?null:await getCalculationWorkspaceMeta(actor,id);
   const first=rows[0];

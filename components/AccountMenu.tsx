@@ -4,6 +4,7 @@ import { KeyRound, LogOut, UserRound, X } from "lucide-react";
 import type { Actor } from "@/lib/access/types";
 
 export function AccountMenu({ actor }: { actor: Actor }) {
+  const staticGithubDemo=process.env.NEXT_PUBLIC_GITHUB_PAGES_DEMO==="1";
   const [open,setOpen]=useState(false);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
@@ -50,7 +51,7 @@ export function AccountMenu({ actor }: { actor: Actor }) {
         <button type="submit" className="button" disabled={busy}>Сохранить пароль</button>
       </form>}
       {message&&<p className="account-message">{message}</p>}
-      <button type="button" className="account-logout" onClick={logout} disabled={busy}><LogOut size={14}/>Выйти</button>
+{staticGithubDemo?<div className="account-message">Статическая демо-версия GitHub Pages</div>:<button type="button" className="account-logout" onClick={logout} disabled={busy}><LogOut size={14}/>Выйти</button>}
     </div>}
   </div>;
 }

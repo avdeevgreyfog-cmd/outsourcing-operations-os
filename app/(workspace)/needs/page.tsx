@@ -1,3 +1,4 @@
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { PageHeader } from "@/components/UI";
@@ -20,7 +21,7 @@ type SearchParams = {
 
 export default async function Needs({searchParams}:{searchParams:Promise<SearchParams>}){
   const actor=await requireActor();
-  const params=await searchParams;
+  const params=isGithubPagesDemo()?{}:await searchParams;
   const analyticsFilters=normalizeRecruitingAnalyticsFilters(params);
   const [rows,options,analytics,metricPreferences,applications]=await Promise.all([
     listRecruitingNeeds(actor),

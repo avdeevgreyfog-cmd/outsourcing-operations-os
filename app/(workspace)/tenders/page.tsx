@@ -1,3 +1,4 @@
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import {requireActor} from "@/lib/auth/server";
 import {hasCapability} from "@/lib/core/access.mjs";
 import {getTenderOptions,listTenders} from "@/lib/tenders/service";
@@ -25,7 +26,7 @@ type SearchParams={
 
 export default async function TendersPage({searchParams}:{searchParams:Promise<SearchParams>}){
   const actor=await requireActor();
-  const params=await searchParams;
+  const params=isGithubPagesDemo()?{}:await searchParams;
   if(actor.demo&&!actor.access.capabilities.includes("sales.tender.read"))actor.access.capabilities.push("sales.tender.read");
   const analyticsFilters=normalizeTenderAnalyticsFilters(params);
   const [rows,options,analytics,metricPreferences]=await Promise.all([

@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -10,8 +12,12 @@ const labels:Record<string,string>={overview:"Обзор",needs:"Потребн�
 const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Готов к запуску",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const needStatusLabels:Record<string,string>={open:"Открыта",in_progress:"В работе",filled:"Закрыта",paused:"Приостановлена",cancelled:"Отменена"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.objects.map((id)=>({id})) : [];
+}
+
 export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}) {
- const {id}=await params;const {tab:rawTab}=await searchParams;const tab=rawTab&&labels[rawTab]?rawTab:"overview";const actor=await requireActor();const objects=await listObjects(actor);const object=objects.find(row=>row.id===id);if(!object)notFound();
+ const {id}=await params;const {tab:rawTab}=isGithubPagesDemo()?{}:await searchParams;const tab=rawTab&&labels[rawTab]?rawTab:"overview";const actor=await requireActor();const objects=await listObjects(actor);const object=objects.find(row=>row.id===id);if(!object)notFound();
  const [needs,workers,shifts,finance,candidates]=await Promise.all([
   hasCapability(actor.access,"operations.need.read")?listNeeds(actor):Promise.resolve([]),hasCapability(actor.access,"worker.read")?listWorkers(actor):Promise.resolve([]),hasCapability(actor.access,"operations.shift.read")?listShifts(actor):Promise.resolve([]),hasCapability(actor.access,"finance.pnl.read")?listFinance(actor):Promise.resolve([]),hasCapability(actor.access,"recruiting.candidate.read")?listCandidates(actor):Promise.resolve([]),
  ]);

@@ -1,12 +1,8 @@
-name: Deploy OPERIS GitHub Alias
+name: Deploy OPERIS GitHub Demo
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'preview/github-pages-alias.html'
-      - 'preview/recruiting-v2/**'
-      - '.github/workflows/deploy-tender-preview-pages.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,26 +20,43 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      GITHUB_PAGES_DEMO: "1"
+      NEXT_PUBLIC_GITHUB_PAGES_DEMO: "1"
+      NEXT_PUBLIC_BASE_PATH: "/outsourcing-operations-os"
+      DEMO_MODE: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Prepare static demo source
+        run: |
+          rm -rf app/api
+          rm -rf app/login app/activate
+          rm -rf app/request-form app/request-intake
+
+      - name: Build the real OPERIS app for GitHub Pages
+        run: npm run build
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Assemble GitHub Pages production alias
-        run: |
-          rm -rf .pages-site
-          mkdir -p .pages-site
-          cp preview/github-pages-alias.html .pages-site/index.html
-          cp preview/github-pages-alias.html .pages-site/404.html
-          mkdir -p .pages-site/recruiting-preview
-          cp -R preview/recruiting-v2/. .pages-site/recruiting-preview/
-          touch .pages-site/.nojekyll
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: .pages-site
+          path: out
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -153,6 +155,10 @@ function tone(status: string) {
   return "warn" as const;
 }
 
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.requests.map((id)=>({id})) : [];
+}
+
 export default async function RequestPage({
   params,
   searchParams,
@@ -161,7 +167,7 @@ export default async function RequestPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab } = isGithubPagesDemo() ? {} : await searchParams;
   const requestedTab = rawTab && tabLabels[rawTab] ? rawTab : "overview";
   const actor = await requireActor();
   const canEdit = hasCapability(actor.access, "sales.request.edit");

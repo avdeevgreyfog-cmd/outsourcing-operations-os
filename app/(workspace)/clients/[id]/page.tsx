@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -42,6 +44,10 @@ function tone(value: string) {
   return "neutral" as const;
 }
 
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.clients.map((id)=>({id})) : [];
+}
+
 export default async function ClientPage({
   params,
   searchParams,
@@ -50,7 +56,7 @@ export default async function ClientPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab } = isGithubPagesDemo() ? {} : await searchParams;
   const actor = await requireActor();
   const canReadFinance = hasCapability(actor.access, "finance.pnl.read");
   const clients = await listClients(actor);
