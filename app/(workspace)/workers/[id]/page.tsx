@@ -33,7 +33,7 @@ export function generateStaticParams(){
 export default async function WorkerPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
   const {id}=await params;
   const {tab:raw}=isGithubPagesDemo()?{}:await searchParams;
-  const tab=raw&&labels[raw]?raw:"overview";
+  const requestedTab=raw&&labels[raw]?raw:"overview";
   const actor=await requireActor();
   const workers=await listWorkers(actor);
   const worker=workers.find(row=>row.id===id);
@@ -45,6 +45,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
   const canViewHousing=hasCapability(actor.access,"supply.housing.read");
   const sensitive=hasCapability(actor.access,"worker.compensation.read");
   const payments=hasCapability(actor.access,"finance.payments.read");
+  const tab=(requestedTab==="assets"&&!canViewAssets)||(requestedTab==="housing"&&!canViewHousing)?"overview":requestedTab;
   const [details,offboarding,options,shifts]=await Promise.all([
     getWorkerOperationsDetails(actor,id),
     getWorkerOffboardingContext(actor,id),
@@ -65,7 +66,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
 
     {tab==="overview"&&<>
       <div className="metrics-grid">
-        <Metric label="Статус" value={worker.status==="active"?"Работает":worker.status} tone="good"/>
+        <Metric label="Статус" value={worker.status==="active"?"Работает":worker.status==="dismissed"?"Работа завершена":worker.status} tone="good"/>
         <Metric label="Часов в периоде" value={(worker as typeof worker&{monthHours?:number}).monthHours??"—"}/>
         {sensitive&&<Metric label="Начислено" value={worker.accrued==null?"—":rub(worker.accrued)}/>}
         {sensitive&&<Metric label="К выплате" value={worker.payable==null?"—":rub(worker.payable)} tone={Number(worker.payable)>0?"warn":"good"}/>}
