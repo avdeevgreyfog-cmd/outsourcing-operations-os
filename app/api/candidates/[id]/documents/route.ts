@@ -8,7 +8,7 @@ import { withTenant } from "@/lib/db/client";
 
 const status=z.enum(["missing","requested","received","verified","rejected","not_required","to_prepare","in_progress","ready"]);
 const patchSchema=z.object({
-  applicationId:z.string().uuid(),
+  applicationId:z.string().uuid().nullable().optional(),
   documentTypeId:z.string().uuid(),
   status,
   note:z.string().trim().max(1000).nullable().optional(),
@@ -92,6 +92,37 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     if(actor.demo)return NextResponse.json({error:"В демонстрационном режиме документы сохраняются локально"},{status:409});
     const {id}=await params;const body=patchSchema.parse(await request.json());
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+      if(!body.applicationId){
+        const [scope]=await tx<Array<{organizationId:string;ownerUserId:string|null;createdByUserId:string;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
+          SELECT c.organization_id "organizationId",c.current_recruiter_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
+            latest.object_id "objectId",COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
+            ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text,latest.owner_user_id::text,latest.manager_user_id::text] "assigneeUserIds"
+          FROM candidates c
+          LEFT JOIN LATERAL(SELECT ca.* FROM candidate_applications ca WHERE ca.candidate_id=c.id ORDER BY ca.updated_at DESC LIMIT 1) latest ON true
+          LEFT JOIN needs n ON n.id=latest.need_id LEFT JOIN objects o ON o.id=latest.object_id
+          WHERE c.id=${id}::uuid LIMIT 1
+        `;
+        if(!scope||(!actor.access.allOrg&&!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor)))throw new AccessDeniedError("recruiting.candidate.edit");
+        const [documentType]=await tx<Array<{name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client"}>>`
+          SELECT name,group_type "groupType",default_provider provider
+          FROM recruiting_document_types
+          WHERE id=${body.documentTypeId}::uuid AND organization_id=${actor.organizationId}::uuid AND active
+        `;
+        if(!documentType)throw new Error("Документ не найден в справочнике");
+        if(documentType.groupType!=="employment")throw new Error("Дополнительный допуск должен быть связан с конкретной заявкой");
+        await tx`
+          INSERT INTO candidate_documents(organization_id,candidate_id,document_type_id,status,note,updated_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${actor.userId}::uuid)
+          ON CONFLICT(candidate_id,document_type_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
+        `;
+        await tx`
+          INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${id}::uuid,'document_updated',
+            ${`Документ «${documentType.name}»: ${body.status}`},
+            ${sql.json({applicationId:null,documentTypeId:body.documentTypeId,status:body.status,provider:documentType.provider})})
+        `;
+        return;
+      }
       const [row]=await tx<Array<{id:string;candidateId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
         SELECT ca.id,ca.candidate_id "candidateId",ca.owner_user_id "ownerUserId",ca.manager_user_id "managerUserId",ca.object_id "objectId",
           COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
