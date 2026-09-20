@@ -14,11 +14,11 @@ import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 type DocumentRow={documentTypeId:string;name:string;status:string;note:string|null};
 
 export function RecruitingActionDrawer({
-  row,need,stages,initialStage,exitReasons,demo,canEdit,canConvert,onClose,onSaved,
+  row,need=null,stages,initialStage,exitReasons,demo,canEdit,canConvert,onClose,onSaved,
 }:{
   row:RecruitingApplicationRow;
-  need:RecruitingNeedRow|null;
-  stages:RecruitingFunnelStageSetting[];
+  need?:RecruitingNeedRow|null;
+  stages?:RecruitingFunnelStageSetting[];
   initialStage?:RecruitingStage;
   exitReasons:RecruitingOptions["exitReasons"];
   demo:boolean;
@@ -39,7 +39,15 @@ export function RecruitingActionDrawer({
   const [error,setError]=useState("");
   const [documents,setDocuments]=useState<DocumentRow[]|null>(null);
   const risks=workRisks(row);
-  const orderedStages=useMemo(()=>stages.filter(x=>x.active).sort((a,b)=>a.sortOrder-b.sortOrder),[stages]);
+  const orderedStages=useMemo(()=>(stages?.length?stages:[
+    {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
+    {code:"interview",label:"Интервью",sortOrder:20,active:true,systemType:"qualification"},
+    {code:"documents",label:"Документы",sortOrder:30,active:true,systemType:"documents"},
+    {code:"preparation",label:"Подготовка к выходу",sortOrder:40,active:true,systemType:"preparation"},
+    {code:"first_shift",label:"Первый выход",sortOrder:50,active:true,systemType:"start"},
+    {code:"retention_7",label:"7 дней",sortOrder:60,active:true,systemType:"retention"},
+    {code:"retention_30",label:"30 дней",sortOrder:70,active:true,systemType:"retention_final"},
+  ] as RecruitingFunnelStageSetting[]).filter(x=>x.active).sort((a,b)=>a.sortOrder-b.sortOrder),[stages]);
   const stageLabel=(value:RecruitingStage)=>orderedStages.find(x=>x.code===value)?.label??recruitingStageLabels[value];
   const nextStage=orderedStages[Math.min(Math.max(orderedStages.findIndex(x=>x.code===row.stage)+1,0),orderedStages.length-1)]?.code;
 
@@ -110,7 +118,7 @@ export function RecruitingActionDrawer({
         <div><span>Ответственный</span><strong>{row.owner??"Не назначен"}</strong></div>
       </section>
 
-      <NeedSummary need={need}/>
+      <NeedSummary need={need} row={row}/>
 
       <section className="candidate-work-history">
         <header><div><h3>Последние события</h3><p>Что уже происходило с кандидатом</p></div><Link href={`/candidates/${row.candidateId}`}>Полная история</Link></header>
@@ -165,11 +173,10 @@ export function RecruitingActionDrawer({
   </SalesDrawer>;
 }
 
-function NeedSummary({need}:{need:RecruitingNeedRow|null}){
-  if(!need)return null;
-  const c=need.conditions;
+function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingApplicationRow}){
+  const c=need?.conditions??row.conditions;
   return <section className="candidate-work-need">
-    <header><div><h3>Условия вакансии</h3><p>{need.title} · {need.object??need.region??"Без локации"}</p></div><Link href={`/needs?view=needs`}>Потребность</Link></header>
+    <header><div><h3>Условия вакансии</h3><p>{need?.title??row.need} · {need?.object??row.object??need?.region??"Без локации"}</p></div><Link href="/needs?view=needs">Потребность</Link></header>
     <div className="candidate-work-pay"><span>На руки</span><strong>{display(c.workerPay)}</strong></div>
     <dl><div><dt>График</dt><dd>{display(c.schedule)}</dd></div><div><dt>Смена</dt><dd>{display(c.shift)}</dd></div><div><dt>Проживание</dt><dd>{provision(c,"housing")}</dd></div><div><dt>Питание</dt><dd>{provision(c,"meals")}</dd></div><div><dt>Проезд</dt><dd>{provision(c,"travel")}</dd></div><div><dt>Развозка</dt><dd>{provision(c,"shuttle")}</dd></div></dl>
   </section>;
