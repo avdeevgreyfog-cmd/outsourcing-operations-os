@@ -36,6 +36,7 @@ const schema = z.object({
     dailyAllowanceProvided: z.boolean().nullable().optional(),
     dailyAllowanceAmount: z.string().trim().max(500).nullable().optional(),
     requirements: z.string().trim().max(3000).nullable().optional(),
+    documents: z.array(z.string().trim().min(1).max(160)).max(30).optional(),
     comment: z.string().trim().max(3000).nullable().optional(),
   }).default({}),
 });
