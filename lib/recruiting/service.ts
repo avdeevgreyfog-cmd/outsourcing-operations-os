@@ -15,7 +15,10 @@ export type RecruitingDocumentType = {
   defaultProvider:"candidate"|"company"|"client"; defaultRequired:boolean; active?:boolean;
 };
 export type NeedDocumentRequirement = {
-  documentTypeId:string; provider:"candidate"|"company"|"client";
+  documentTypeId:string;
+  provider:"candidate"|"company"|"client";
+  requiredByStage:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
+  blocksProgress:boolean;
 };
 export type NeedQuantityChange = { id:string; oldCount:number|null; newCount:number; delta:number; reason:string|null; changedAt:string; changedBy:string };
 
@@ -70,6 +73,7 @@ export type RecruitingApplicationRow = {
   preferredChannel: string | null;
   telegram: string | null;
   whatsapp: string | null;
+  contacts: CandidateContactMethod[];
   city: string | null;
   source: string | null;
   sourceChannel: string | null;
@@ -109,6 +113,29 @@ export type RecruitingApplicationRow = {
   };
 };
 
+export type CandidateContactMethod = {
+  id:string;
+  channel:"phone"|"email"|"telegram"|"whatsapp"|"max"|"other";
+  value:string;
+  label:string|null;
+  isPreferred:boolean;
+  active:boolean;
+};
+
+export type CandidateDocumentDossierRow = {
+  documentTypeId:string;
+  name:string;
+  groupType:"employment"|"clearance";
+  provider:"candidate"|"company"|"client";
+  status:string;
+  note:string|null;
+  needId:string|null;
+  need:string|null;
+  object:string|null;
+  requiredByStage:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
+  blocksProgress:boolean;
+};
+
 export type CandidateCommunication = {
   id: string;
   applicationId: string | null;
@@ -146,6 +173,9 @@ export type CandidateProfile = {
   sourceReference: string | null;
   notes: string | null;
   status: string;
+  workerId: string | null;
+  workerStatus: string | null;
+  documents: CandidateDocumentDossierRow[];
   applications: RecruitingApplicationRow[];
   communications: CandidateCommunication[];
   history: CandidateStageEvent[];
@@ -172,12 +202,12 @@ const demoUserNames:Record<string,string>={
 };
 const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical","demo-doc-qualification"];
 const demoDocumentRequirements:NeedDocumentRequirement[]=[
-  {documentTypeId:"demo-doc-passport",provider:"candidate"},
-  {documentTypeId:"demo-doc-snils",provider:"candidate"},
-  {documentTypeId:"demo-doc-inn",provider:"candidate"},
-  {documentTypeId:"demo-doc-bank",provider:"candidate"},
-  {documentTypeId:"demo-doc-medical",provider:"company"},
-  {documentTypeId:"demo-doc-qualification",provider:"candidate"},
+  {documentTypeId:"demo-doc-passport",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-snils",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-inn",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-bank",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-medical",provider:"company",requiredByStage:"first_shift",blocksProgress:false},
+  {documentTypeId:"demo-doc-qualification",provider:"candidate",requiredByStage:"retention_7",blocksProgress:false},
 ];
 
 function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingStage,number>> {
@@ -250,7 +280,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
         COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",
         ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds",
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider) ORDER BY dt.sort_order)
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('documentTypeId',ndr.document_type_id,'provider',ndr.provider,'requiredByStage',ndr.required_by_stage,'blocksProgress',ndr.blocks_progress) ORDER BY dt.sort_order)
           FROM need_document_requirements ndr JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
           WHERE ndr.need_id=n.id AND ndr.required),'[]'::jsonb) "documentRequirements"
       FROM needs n
@@ -465,21 +495,33 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     const status=applications.some(application=>["first_shift","retention_7","retention_30"].includes(application.stage))?"worker":applications.every(application=>["rejected","no_show"].includes(application.stage))?"inactive":"active";
     return {
       id, fullName:first.fullName, phone:first.phone, email:first.email, preferredChannel:first.preferredChannel, telegram:first.telegram,
-      whatsapp:first.whatsapp, city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
-      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status, applications,
+      whatsapp:first.whatsapp,
+      contacts:[
+        ...(first.phone?[{id:"demo-phone",channel:"phone" as const,value:first.phone,label:"Основной телефон",isPreferred:(first.preferredChannel??"phone")==="phone",active:true}]:[]),
+        ...(first.telegram?[{id:"demo-telegram",channel:"telegram" as const,value:first.telegram,label:null,isPreferred:first.preferredChannel==="telegram",active:true}]:[]),
+        ...(first.whatsapp?[{id:"demo-whatsapp",channel:"whatsapp" as const,value:first.whatsapp,label:null,isPreferred:first.preferredChannel==="whatsapp",active:true}]:[]),
+        ...(first.email?[{id:"demo-email",channel:"email" as const,value:first.email,label:null,isPreferred:first.preferredChannel==="email",active:true}]:[]),
+      ],
+      city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
+      sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status,
+      workerId:status==="worker"?`demo-worker-${id}`:null,workerStatus:status==="worker"?"active":null,
+      documents:buildDemoCandidateDocuments(applications),
+      applications,
       communications:communications.sort((a,b)=>b.happenedAt.localeCompare(a.happenedAt)),
       history:history.reverse(),
     };
   }
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history">>>`
-      SELECT id,full_name "fullName",phone,email,preferred_channel "preferredChannel",telegram,whatsapp,city,birth_date::text "birthDate",
-        source,source_channel "sourceChannel",source_campaign "sourceCampaign",source_reference "sourceReference",notes,status
-      FROM candidates WHERE id=${id}::uuid
+      SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
+        c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
+        wp.id "workerId",wp.status "workerStatus"
+      FROM candidates c LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      WHERE c.id=${id}::uuid
     `;
     if (!candidate) return null;
     const applicationIds = applications.map((application) => application.applicationId);
-    const [communications, history] = await Promise.all([
+    const [communications, history, contacts, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
         SELECT cc.id,cc.application_id "applicationId",cc.channel,cc.direction,cc.summary,
           to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') "happenedAt",u.display_name author
@@ -492,9 +534,46 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         FROM candidate_stage_history h JOIN app_users u ON u.id=h.changed_by_user_id
         WHERE h.application_id=ANY(${applicationIds}::uuid[]) ORDER BY h.created_at DESC LIMIT 100
       `,
+      sql<CandidateContactMethod[]>`
+        SELECT id,channel,value,label,is_preferred "isPreferred",active
+        FROM candidate_contact_methods WHERE candidate_id=${id}::uuid AND active
+        ORDER BY is_preferred DESC,created_at
+      `,
+      sql<CandidateDocumentDossierRow[]>`
+        SELECT dt.id "documentTypeId",dt.name,dt.group_type "groupType",
+          COALESCE(ndr.provider,dt.default_provider) provider,
+          COALESCE(cd.status,cad.status,CASE WHEN COALESCE(ndr.provider,dt.default_provider)='candidate' THEN 'missing' ELSE 'to_prepare' END) status,
+          COALESCE(cd.note,cad.note) note,
+          n.id "needId",COALESCE(n.title,s.name) need,o.name object,
+          COALESCE(ndr.required_by_stage,CASE WHEN dt.group_type='employment' THEN 'documents' ELSE 'first_shift' END) "requiredByStage",
+          COALESCE(ndr.blocks_progress,dt.group_type='employment') "blocksProgress"
+        FROM recruiting_document_types dt
+        LEFT JOIN candidate_documents cd ON cd.candidate_id=${id}::uuid AND cd.document_type_id=dt.id
+        LEFT JOIN need_document_requirements ndr ON ndr.document_type_id=dt.id AND ndr.required
+        LEFT JOIN needs n ON n.id=ndr.need_id AND EXISTS(
+          SELECT 1 FROM candidate_applications ca WHERE ca.candidate_id=${id}::uuid AND ca.need_id=n.id
+        )
+        LEFT JOIN specialties s ON s.id=n.specialty_id
+        LEFT JOIN objects o ON o.id=n.object_id
+        LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id
+        LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+        WHERE dt.active AND (dt.default_required OR cd.id IS NOT NULL OR ndr.need_id IS NOT NULL)
+        ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,n.created_at DESC NULLS LAST
+      `,
     ]);
-    return {...candidate, applications, communications, history};
+    return {...candidate, contacts, documents, applications, communications, history};
   });
+}
+
+function buildDemoCandidateDocuments(applications:RecruitingApplicationRow[]):CandidateDocumentDossierRow[]{
+  const latest=applications[0];
+  if(!latest)return[];
+  const employment=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Трудовая / СТД","Военный билет / документ воинского учёта"];
+  const clearance=["Медицинская комиссия","Удостоверение / допуск"];
+  return [
+    ...employment.map((name,index)=>({documentTypeId:`demo-employment-${index}`,name,groupType:"employment" as const,provider:"candidate" as const,status:index<4?"received":"missing",note:null,needId:null,need:null,object:null,requiredByStage:"documents" as const,blocksProgress:true})),
+    ...clearance.map((name,index)=>({documentTypeId:`demo-clearance-${index}`,name,groupType:"clearance" as const,provider:index===0?"company" as const:"candidate" as const,status:index===0?"in_progress":"received",note:null,needId:latest.needId,need:latest.need,object:latest.object,requiredByStage:index===0?"first_shift" as const:"retention_7" as const,blocksProgress:false})),
+  ];
 }
 
 export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOptions> {
@@ -520,8 +599,9 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
       {id:"demo-source-hh",code:"hh",name:"hh.ru",kind:"job_site",active:true},
       {id:"demo-source-telegram",code:"telegram",name:"Telegram",kind:"social",active:true},
-      {id:"demo-source-referral",code:"referral",name:"Рекомендация",kind:"referral",active:true},
+      {id:"demo-source-referral",code:"referral",name:"Рекомендация сотрудника / кандидата",kind:"referral",active:true},
       {id:"demo-source-partner",code:"partner",name:"Партнёр / подрядчик",kind:"partner",active:true},
+      {id:"demo-source-company-db",code:"company_database",name:"База компании / импорт",kind:"internal",active:true},
     ],
     funnelStages: [
       {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
