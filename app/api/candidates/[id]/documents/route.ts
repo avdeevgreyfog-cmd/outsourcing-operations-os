@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Sql } from "postgres";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -11,6 +12,8 @@ const patchSchema=z.object({
   documentTypeId:z.string().uuid(),
   status,
   note:z.string().trim().max(1000).nullable().optional(),
+  responsibleUserId:z.string().uuid().nullable().optional(),
+  dueAt:z.string().datetime().nullable().optional(),
 });
 
 export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){
@@ -29,8 +32,9 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         WHERE ca.id=${applicationId}::uuid AND ca.candidate_id=${id}::uuid
       `;
       if(!row||!canReadRow(actor.access,"recruiting.candidate.read",row,actor))throw new AccessDeniedError("recruiting.candidate.read");
-      return sql<Array<{documentTypeId:string;name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client";status:string;note:string|null;requiredByStage:string;blocksProgress:boolean}>>`
+      return sql<Array<{documentTypeId:string;name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client";status:string;note:string|null;requiredByStage:string;blocksProgress:boolean;responsibleUserId:string|null;responsible:string|null;dueAt:string|null}>>`
         SELECT dt.id "documentTypeId",dt.name,dt.group_type "groupType",ndr.provider,ndr.required_by_stage "requiredByStage",ndr.blocks_progress "blocksProgress",
+          cad.responsible_user_id "responsibleUserId",ru.display_name responsible,cad.due_at::text "dueAt",
           CASE WHEN dt.group_type='employment'
             THEN COALESCE(cd.status,cad.status,'missing')
             ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
@@ -41,6 +45,7 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
         LEFT JOIN candidate_documents cd ON cd.candidate_id=ca.candidate_id AND cd.document_type_id=dt.id
         LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
+        LEFT JOIN app_users ru ON ru.id=cad.responsible_user_id
         WHERE ndr.required
         ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,dt.name
       `;
@@ -50,6 +55,32 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);return NextResponse.json({error:"Не удалось загрузить документы"},{status:500});
   }
+}
+
+async function syncDocumentTask(tx:Sql,actor:{organizationId:string;userId:string},row:{id:string;candidateId:string},documentTypeId:string,documentName:string,responsibleUserId:string|null|undefined,dueAt:string|null|undefined,status:string){
+  const kind="candidate_document";
+  const [existing]=await tx<Array<{id:string}>>`
+    SELECT id FROM tasks
+    WHERE organization_id=${actor.organizationId}::uuid AND entity_type='candidate_application' AND entity_id=${row.id}::uuid
+      AND checklist_json->>'kind'=${kind} AND checklist_json->>'documentTypeId'=${documentTypeId}
+      AND status<>'cancelled'
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  const done=["received","verified","ready","not_required"].includes(status);
+  const enabled=Boolean(responsibleUserId&&dueAt)&&!["not_required","rejected"].includes(status);
+  if(!enabled){
+    if(existing)await tx`UPDATE tasks SET status=${done?"done":"cancelled"},updated_at=now() WHERE id=${existing.id}::uuid`;
+    return;
+  }
+  const [membership]=await tx<Array<{id:string}>>`SELECT id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${responsibleUserId}::uuid AND status='active'`;
+  if(!membership)throw new Error("Ответственный по документу не является активным сотрудником организации");
+  const title=`Подготовить документ: ${documentName}`;
+  if(existing)await tx`UPDATE tasks SET title=${title},status=${done?"done":"open"},priority='high',assignee_user_id=${responsibleUserId}::uuid,due_at=${dueAt}::timestamptz,updated_at=now() WHERE id=${existing.id}::uuid`;
+  else await tx`
+    INSERT INTO tasks(organization_id,title,status,priority,assignee_user_id,due_at,entity_type,entity_id,checklist_json,created_by_user_id)
+    VALUES(${actor.organizationId}::uuid,${title},${done?"done":"open"},'high',${responsibleUserId}::uuid,${dueAt}::timestamptz,'candidate_application',${row.id}::uuid,
+      ${tx.json({kind,documentTypeId,candidateId:row.candidateId})},${actor.userId}::uuid)
+  `;
 }
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
@@ -82,10 +113,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         `;
       }else{
         await tx`
-          INSERT INTO candidate_application_documents(organization_id,application_id,document_type_id,status,note,updated_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${body.applicationId}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${actor.userId}::uuid)
-          ON CONFLICT(application_id,document_type_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
+          INSERT INTO candidate_application_documents(organization_id,application_id,document_type_id,status,note,responsible_user_id,due_at,updated_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${body.applicationId}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${body.responsibleUserId??null}::uuid,${body.dueAt??null}::timestamptz,${actor.userId}::uuid)
+          ON CONFLICT(application_id,document_type_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,responsible_user_id=EXCLUDED.responsible_user_id,due_at=EXCLUDED.due_at,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
         `;
+        if(requirement.provider!=="candidate"||body.responsibleUserId||body.dueAt){
+          await syncDocumentTask(tx,actor,row,body.documentTypeId,requirement.name,body.responsibleUserId,body.dueAt,body.status);
+        }
       }
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
