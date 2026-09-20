@@ -77,6 +77,7 @@ export function RecruitingFunnelWorkspace({
   const [duplicateMatches,setDuplicateMatches]=useState<{exact:Array<{id:string;fullName:string;phone:string|null;need:string|null;object:string|null}>;possible:Array<{id:string;fullName:string;phone:string|null;need:string|null;object:string|null}>}>({exact:[],possible:[]});
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
+  const allRows=useRecruitingApplications(rows,demo);
 
   useEffect(()=>{
     if(!demo)return;
@@ -121,7 +122,6 @@ export function RecruitingFunnelWorkspace({
     router.replace(qs?`/recruiting?${qs}`:"/recruiting",{scroll:false});
   },[needFilter,objectFilter,specialtyFilter,recruiterFilter,sourceFilter,queue,stageFilter,router]);
 
-  const allRows=useRecruitingApplications(rows,demo);
   const needById=useMemo(()=>new Map(needs.map(item=>[item.id,item])),[needs]);
   const stageLabelByCode=useMemo(()=>new Map(stageSettings.map(item=>[item.code,item.label])),[stageSettings]);
   const objectOptions=useMemo(()=>Array.from(new Map(needs.filter(item=>item.objectId&&item.object).map(item=>[item.objectId!,item.object!])).entries()),[needs]);
