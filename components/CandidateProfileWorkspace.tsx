@@ -48,6 +48,7 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
     sourceReference:custom?.sourceReference??profile?.sourceReference??first?.sourceReference??null,notes:custom?.notes??profile?.notes??null,
     status:profile?.status??(applications.some(x=>x.stage==="started")?"worker":"active"),applications,
     communications:[...localComms,...(profile?.communications??[]).filter(x=>!localComms.some(y=>y.id===x.id))],history:applications.flatMap(a=>(a.stageEvents??[]).map((h,i)=>({id:`${a.applicationId}-${i}`,applicationId:a.applicationId,fromStage:h.fromStage??null,toStage:h.toStage,changedAt:formatWorkDate(h.createdAt),changedBy:"Учебная история",reason:h.reason??null,reasonCode:h.reasonCode??null}))),
+    documents:profile?.documents??[],
    };
    frame=requestAnimationFrame(()=>setCurrent(hydrated));
   }catch{}
