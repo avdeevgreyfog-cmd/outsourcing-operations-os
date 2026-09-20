@@ -67,12 +67,14 @@ export const candidateSourceLabels: Record<string, string> = {
   agency: "Агентство",
   site: "Сайт",
   manual: "Ручной ввод",
+  company_database: "База компании / импорт",
 };
 
 export const contactChannelLabels: Record<string, string> = {
   phone: "Телефон",
   whatsapp: "WhatsApp",
   telegram: "Telegram",
+  max: "MAX",
   email: "Email",
   other: "Другой",
 };
