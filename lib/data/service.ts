@@ -176,8 +176,8 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
       FROM worker_profiles w
       LEFT JOIN LATERAL (
         SELECT * FROM worker_object_assignments x
-        WHERE x.worker_id=w.id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)
-        ORDER BY x.effective_from DESC LIMIT 1
+        WHERE x.worker_id=w.id
+        ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1
       ) woa ON true
       LEFT JOIN objects o ON o.id=woa.object_id
       LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
