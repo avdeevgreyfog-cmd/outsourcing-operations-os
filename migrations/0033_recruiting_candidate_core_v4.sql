@@ -4,6 +4,14 @@ BEGIN;
 -- one person card, dynamic contacts, document deadlines/blocking rules,
 -- company database source, and worker linkage integrity.
 
+ALTER TABLE candidates DROP CONSTRAINT IF EXISTS candidates_preferred_channel_check;
+ALTER TABLE candidates ADD CONSTRAINT candidates_preferred_channel_check
+  CHECK (preferred_channel IS NULL OR preferred_channel IN ('phone','whatsapp','telegram','max','email','other'));
+
+ALTER TABLE candidate_communications DROP CONSTRAINT IF EXISTS candidate_communications_channel_check;
+ALTER TABLE candidate_communications ADD CONSTRAINT candidate_communications_channel_check
+  CHECK (channel IN ('phone','whatsapp','telegram','max','email','meeting','note','other'));
+
 ALTER TABLE need_document_requirements
   ADD COLUMN IF NOT EXISTS required_by_stage text NOT NULL DEFAULT 'first_shift',
   ADD COLUMN IF NOT EXISTS blocks_progress boolean NOT NULL DEFAULT true;
