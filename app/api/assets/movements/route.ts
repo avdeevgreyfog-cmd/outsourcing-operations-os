@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
+import type { Sql } from "postgres";
 
 const schema=z.object({
   itemId:z.string().uuid(),
@@ -18,7 +19,7 @@ const schema=z.object({
   writeoffAfterReturn:z.boolean().optional(),
 });
 
-async function locationBalance(tx:any,itemId:string,variant:string,locationId:string){
+async function locationBalance(tx:Sql,itemId:string,variant:string,locationId:string){
   const [row]=await tx<Array<{quantity:number}>>`
     WITH deltas AS (
       SELECT quantity delta FROM inventory_movements WHERE item_id=${itemId}::uuid AND variant=${variant} AND to_location_id=${locationId}::uuid AND movement_type IN ('opening','receipt','transfer','return','adjustment_in')
@@ -27,10 +28,10 @@ async function locationBalance(tx:any,itemId:string,variant:string,locationId:st
     ) SELECT COALESCE(sum(delta),0)::numeric quantity FROM deltas
   `;return Number(row?.quantity??0);
 }
-async function workerOutstanding(tx:any,itemId:string,variant:string,workerId:string){
+async function workerOutstanding(tx:Sql,itemId:string,variant:string,workerId:string){
   const [row]=await tx<Array<{quantity:number}>>`
     SELECT COALESCE(
-      sum(CASE WHEN movement_type='issue' THEN quantity WHEN movement_type IN ('return','writeoff') THEN -quantity ELSE 0 END),0
+      sum(CASE WHEN movement_type='issue' THEN quantity WHEN movement_type='return' THEN -quantity WHEN movement_type='writeoff' AND from_location_id IS NULL THEN -quantity ELSE 0 END),0
     )::numeric quantity
     FROM inventory_movements WHERE item_id=${itemId}::uuid AND variant=${variant} AND worker_id=${workerId}::uuid
   `;return Number(row?.quantity??0);
@@ -63,8 +64,8 @@ export async function POST(request:Request){
       `;
       if(type==="return"&&body.writeoffAfterReturn){
         await tx`
-          INSERT INTO inventory_movements(organization_id,item_id,variant,movement_type,quantity,from_location_id,worker_id,item_condition,note,created_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${body.itemId}::uuid,${body.variant},'writeoff',${body.quantity},${body.toLocationId}::uuid,${body.workerId}::uuid,${body.condition??"unusable"},${body.note?body.note+" · Списание после возврата":"Списание после возврата"},${actor.userId}::uuid)
+          INSERT INTO inventory_movements(organization_id,item_id,variant,movement_type,quantity,from_location_id,item_condition,note,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${body.itemId}::uuid,${body.variant},'writeoff',${body.quantity},${body.toLocationId}::uuid,${body.condition??"unusable"},${body.note?body.note+" · Списание после возврата":"Списание после возврата"},${actor.userId}::uuid)
         `;
       }
       await tx`
