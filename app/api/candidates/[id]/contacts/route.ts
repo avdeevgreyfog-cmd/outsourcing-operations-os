@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Sql } from "postgres";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -23,13 +24,14 @@ function normalized(kind:string,value:string){
   return trimmed.toLowerCase();
 }
 
-async function getScope(tx:any,id:string){
+async function getScope(tx:Sql,id:string){
   const [scope]=await tx<Array<{id:string;organizationId:string;ownerUserId:string|null;regionId:string|null;objectId:string|null;clientId:string|null;assigneeUserIds:string[]}>>\`
-    SELECT c.id,c.organization_id "organizationId",ca.owner_user_id "ownerUserId",COALESCE(n.region_id,o.region_id) "regionId",ca.object_id "objectId",o.client_company_id "clientId",
-      ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
+    SELECT c.id,c.organization_id "organizationId",COALESCE(ca.owner_user_id,c.current_recruiter_user_id) "ownerUserId",COALESCE(n.region_id,o.region_id) "regionId",ca.object_id "objectId",o.client_company_id "clientId",
+      ARRAY_REMOVE(ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text,ca.owner_user_id::text,ca.manager_user_id::text],NULL)
+        || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
         || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds"
     FROM candidates c
-    LEFT JOIN candidate_applications ca ON ca.candidate_id=c.id
+    LEFT JOIN LATERAL (SELECT x.* FROM candidate_applications x WHERE x.candidate_id=c.id ORDER BY x.updated_at DESC LIMIT 1) ca ON true
     LEFT JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
     WHERE c.id=\${id}::uuid ORDER BY ca.updated_at DESC NULLS LAST LIMIT 1
   \`;
