@@ -574,3 +574,133 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
     return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor)).map(row=>({...row,quantity:row.quantity==null?null:Number(row.quantity),amount:row.amount==null?null:Number(row.amount)}));
   });
 }
+
+
+export type WorkerOutstandingAsset={itemId:string;item:string;variant:string;quantity:number;unit:string};
+export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string};
+export type WorkerOffboardingContext={
+  relationType:string|null;
+  relationFrom:string|null;
+  relationTo:string|null;
+  outstandingAssets:WorkerOutstandingAsset[];
+  housing:Array<{id:string;site:string;checkIn:string;checkOut:string|null;status:string}>;
+  exits:WorkerExitHistoryRow[];
+};
+
+export async function getWorkerOffboardingContext(actor:Actor,workerId:string):Promise<WorkerOffboardingContext>{
+  requireCapability(actor,"worker.read");
+  if(actor.demo)return {relationType:"employment",relationFrom:"01.09.2026",relationTo:null,outstandingAssets:[],housing:[],exits:[]};
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const [scope]=await sql<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+      SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM worker_profiles w
+      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) a ON true
+      LEFT JOIN objects o ON o.id=a.object_id
+      WHERE w.id=${workerId}::uuid
+    `;
+    if(!scope||!canReadRow(actor.access,"worker.read",{...scope,objectId:scope.objectId??undefined,ownerUserId:scope.ownerUserId??undefined,regionId:scope.regionId??undefined},actor))return {relationType:null,relationFrom:null,relationTo:null,outstandingAssets:[],housing:[],exits:[]};
+    const [relation]=await sql<Array<{relationType:string;relationFrom:string;relationTo:string|null}>>`
+      SELECT relation_type "relationType",to_char(effective_from,'DD.MM.YYYY') "relationFrom",to_char(effective_to,'DD.MM.YYYY') "relationTo"
+      FROM employment_relations WHERE worker_id=${workerId}::uuid ORDER BY effective_from DESC LIMIT 1
+    `;
+    const assets=await sql<Array<WorkerOutstandingAsset & {quantity:number|string}>>`
+      SELECT i.id "itemId",i.name item,m.variant,
+        sum(CASE WHEN m.movement_type='issue' THEN m.quantity
+                 WHEN m.movement_type='return' THEN -m.quantity
+                 WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity
+                 ELSE 0 END)::numeric quantity,
+        i.unit
+      FROM inventory_movements m JOIN inventory_items i ON i.id=m.item_id
+      WHERE m.worker_id=${workerId}::uuid AND i.returnable
+      GROUP BY i.id,i.name,i.unit,m.variant
+      HAVING sum(CASE WHEN m.movement_type='issue' THEN m.quantity
+                      WHEN m.movement_type='return' THEN -m.quantity
+                      WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity
+                      ELSE 0 END)>0
+      ORDER BY i.name,m.variant
+    `;
+    const housing=await sql<Array<{id:string;site:string;checkIn:string;checkOut:string|null;status:string}>>`
+      SELECT st.id,hs.name site,to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status
+      FROM housing_stays st JOIN housing_sites hs ON hs.id=st.site_id
+      WHERE st.worker_id=${workerId}::uuid AND st.status IN ('planned','active')
+      ORDER BY st.check_in DESC
+    `;
+    const exits=await sql<WorkerExitHistoryRow[]>`
+      SELECT id,to_char(effective_date,'DD.MM.YYYY') "effectiveDate",reason_code "reasonCode",reason,status,to_char(created_at,'DD.MM.YYYY') "createdAt"
+      FROM worker_exit_processes WHERE worker_id=${workerId}::uuid ORDER BY effective_date DESC,created_at DESC
+    `;
+    return {relationType:relation?.relationType??null,relationFrom:relation?.relationFrom??null,relationTo:relation?.relationTo??null,outstandingAssets:assets.map(row=>({...row,quantity:Number(row.quantity)})),housing,exits};
+  });
+}
+
+export type StaffingForecastRow={
+  organizationId:string;objectId:string;object:string;specialtyId:string;specialty:string;
+  required:number;working:number;preparing:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;
+  projectedAvailable:number;projectedDeficit:number;ownerUserId:string|null;assigneeUserIds:string[];regionId:string|null;
+};
+
+export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<StaffingForecastRow[]>{
+  requireCapability(actor,"operations.need.read");
+  const horizon=Math.max(7,Math.min(90,horizonDays));
+  if(actor.demo){
+    return demo.needs.map((need,index)=>{
+      const object=demo.objects.find(row=>row.id===need.objectId);
+      const working=demo.workers.filter(worker=>worker.objectId===need.objectId&&worker.status==="active").length;
+      const preparing=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
+      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,required:Number(need.required),working,preparing,confirmedAbsences:0,tentativeAbsences:0,plannedExits:0,projectedAvailable:working+preparing,projectedDeficit:Math.max(Number(need.required)-working-preparing,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
+      return row;
+    }).filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<StaffingForecastRow[]>`
+      WITH demand AS (
+        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required
+        FROM needs n
+        WHERE n.object_id IS NOT NULL AND n.status NOT IN ('cancelled','archived')
+        GROUP BY n.object_id,n.specialty_id
+      )
+      SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
+        d.required,
+        COALESCE(workforce.working,0)::int working,
+        COALESCE(incoming.preparing,0)::int preparing,
+        COALESCE(absences.confirmed,0)::int "confirmedAbsences",
+        COALESCE(absences.tentative,0)::int "tentativeAbsences",
+        COALESCE(exits.planned,0)::int "plannedExits",
+        GREATEST(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
+        GREATEST(d.required-(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0)),0)::int "projectedDeficit",
+        o.owner_user_id "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM demand d JOIN objects o ON o.id=d.object_id JOIN specialties s ON s.id=d.specialty_id
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT a.worker_id)::int working
+        FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+        WHERE a.object_id=o.id AND a.specialty_id=d.specialty_id AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+      ) workforce ON true
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT ca.candidate_id)::int preparing
+        FROM candidate_applications ca
+        WHERE ca.object_id=o.id AND ca.stage IN ('documents','clearance','preparation','first_shift')
+          AND ca.actual_start_at IS NULL
+          AND (ca.planned_start_date IS NULL OR ca.planned_start_date<=current_date+${horizon}::int)
+      ) incoming ON true
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT CASE WHEN ap.status='confirmed' THEN ap.worker_id END)::int confirmed,
+               count(DISTINCT CASE WHEN ap.status='tentative' THEN ap.worker_id END)::int tentative
+        FROM worker_absence_plans ap
+        JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
+        WHERE ap.status IN ('confirmed','tentative')
+          AND ap.planned_from<=current_date+${horizon}::int
+          AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
+      ) absences ON true
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT ep.worker_id)::int planned
+        FROM worker_exit_processes ep
+        JOIN worker_object_assignments a ON a.worker_id=ep.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
+        WHERE ep.status='planned' AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
+      ) exits ON true
+      ORDER BY "projectedDeficit" DESC,o.name,s.name
+    `;
+    return rows.filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
+  });
+}
