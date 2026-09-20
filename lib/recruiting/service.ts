@@ -221,12 +221,14 @@ const demoUserNames:Record<string,string>={
   "10000000-0000-4000-8000-000000000004":"Алексей Волков",
   "10000000-0000-4000-8000-000000000005":"Ольга Новикова",
 };
-const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-medical","demo-doc-qualification"];
+const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-employment-record","demo-doc-military","demo-doc-medical","demo-doc-qualification"];
 const demoDocumentRequirements:NeedDocumentRequirement[]=[
   {documentTypeId:"demo-doc-passport",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
   {documentTypeId:"demo-doc-snils",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
   {documentTypeId:"demo-doc-inn",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
   {documentTypeId:"demo-doc-bank",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-employment-record",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
+  {documentTypeId:"demo-doc-military",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
   {documentTypeId:"demo-doc-medical",provider:"company",requiredByStage:"first_shift",blocksProgress:false},
   {documentTypeId:"demo-doc-qualification",provider:"candidate",requiredByStage:"retention_7",blocksProgress:false},
 ];
@@ -619,7 +621,7 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
       LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       ORDER BY c.updated_at DESC
     `;
-    return rows.filter(row=>row.applicationsCount===0?(actor.access.allOrg||row.createdByUserId===actor.userId):canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
+    return rows.filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
       const latestStage=row.rawStage?normalizeRecruitingStage(row.rawStage):null;
       const {rawStage,rawStatus,organizationId,createdByUserId,ownerUserId,managerUserId,objectId,regionId,clientId,assigneeUserIds,...rest}=row;
       void rawStatus;void organizationId;void createdByUserId;void ownerUserId;void managerUserId;void objectId;void regionId;void clientId;void assigneeUserIds;
@@ -674,15 +676,18 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     };
   }
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"contacts"|"documents"> & {createdByUserId:string}>>`
+    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"contacts"|"documents"> & {
+      organizationId:string;ownerUserId:string|null;createdByUserId:string;assigneeUserIds:string[];
+    }>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
         c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
-        c.created_by_user_id "createdByUserId",wp.id "workerId",wp.status "workerStatus"
+        c.organization_id "organizationId",c.current_recruiter_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
+        ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text] "assigneeUserIds",
+        wp.id "workerId",wp.status "workerStatus"
       FROM candidates c LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       WHERE c.id=${id}::uuid
     `;
-    if (!candidate) return null;
-    if(!applications.length&&!actor.access.allOrg&&candidate.createdByUserId!==actor.userId)return null;
+    if (!candidate || !canReadRow(actor.access,"recruiting.candidate.read",candidate,actor)) return null;
     const applicationIds = applications.map((application) => application.applicationId);
     const [communications, history, contacts, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
@@ -723,7 +728,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,n.created_at DESC NULLS LAST
       `,
     ]);
-    const {createdByUserId,...safeCandidate}=candidate;void createdByUserId;
+    const {organizationId,ownerUserId,createdByUserId,assigneeUserIds,...safeCandidate}=candidate;void organizationId;void ownerUserId;void createdByUserId;void assigneeUserIds;
     return {...safeCandidate, contacts, documents, applications, communications, history};
   });
 }
@@ -781,8 +786,13 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       {id:"demo-doc-snils",code:"snils",name:"СНИЛС",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-inn",code:"inn",name:"ИНН",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-employment-record",code:"employment_record",name:"Трудовая книжка / СТД",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
+      {id:"demo-doc-military",code:"military_id",name:"Военный билет / документ воинского учёта",groupType:"employment",defaultProvider:"candidate",defaultRequired:true},
       {id:"demo-doc-medical",code:"medical",name:"Медицинская комиссия",groupType:"clearance",defaultProvider:"company",defaultRequired:true},
+      {id:"demo-doc-medical-book",code:"medical_book",name:"Медицинская книжка",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
       {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск",groupType:"clearance",defaultProvider:"candidate",defaultRequired:false},
+      {id:"demo-doc-training",code:"training",name:"Обучение / аттестация",groupType:"clearance",defaultProvider:"company",defaultRequired:false},
+      {id:"demo-doc-site-pass",code:"site_pass",name:"Пропуск на объект",groupType:"clearance",defaultProvider:"client",defaultRequired:false},
     ],
     exitReasons: [
       {code:"pay",name:"Не устроила зарплата",kind:"rejected"},
