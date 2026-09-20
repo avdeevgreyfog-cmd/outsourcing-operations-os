@@ -14,11 +14,12 @@ import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 type DocumentRow={documentTypeId:string;name:string;status:string;note:string|null};
 
 export function RecruitingActionDrawer({
-  row,need=null,stages,initialStage,exitReasons,demo,canEdit,canConvert,onClose,onSaved,
+  row,need=null,stages,recruiters=[],initialStage,exitReasons,demo,canEdit,canConvert,onClose,onSaved,
 }:{
   row:RecruitingApplicationRow;
   need?:RecruitingNeedRow|null;
   stages?:RecruitingFunnelStageSetting[];
+  recruiters?: Array<{id:string;name:string}>;
   initialStage?:RecruitingStage;
   exitReasons:RecruitingOptions["exitReasons"];
   demo:boolean;
@@ -34,6 +35,7 @@ export function RecruitingActionDrawer({
   const [planned,setPlanned]=useState(row.plannedStartDate??"");
   const [actual,setActual]=useState("");
   const [reason,setReason]=useState("");
+  const [ownerUserId,setOwnerUserId]=useState(row.ownerUserId??"");
   const [code,setCode]=useState(row.rejectionReasonCode??"");
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
@@ -73,6 +75,7 @@ export function RecruitingActionDrawer({
         actualStartAt:actual?new Date(actual).toISOString():null,
         reason:reason||undefined,
         reasonCode:code||undefined,
+        ownerUserId:ownerUserId||null,
       },demo);
       router.refresh();onSaved?.();onClose();
     }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить");}
@@ -144,6 +147,7 @@ export function RecruitingActionDrawer({
         </div>
 
         <fieldset disabled={busy==="save"||!canEdit} className="recruiting-action-fields">
+          {recruiters.length>0&&<label>Текущий ответственный<select value={ownerUserId} onChange={e=>setOwnerUserId(e.target.value)}><option value="">Не назначен</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
           <label>Этап<select value={stage} onChange={e=>setStage(e.target.value as RecruitingStage)}>
             {orderedStages.map(item=><option key={item.code} value={item.code} disabled={item.code==="first_shift"&&!canConvert}>{item.label}</option>)}
             <option value="reserve">Резерв</option><option value="rejected">Отказ</option><option value="no_show">Не вышел</option>
