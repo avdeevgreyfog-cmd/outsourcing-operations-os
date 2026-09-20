@@ -13,14 +13,14 @@ export const recruitingTerminalStages = ["rejected", "no_show", "reserve"] as co
 export type RecruitingStage = typeof recruitingStages[number] | typeof recruitingTerminalStages[number];
 
 export const recruitingStageLabels: Record<RecruitingStage, string> = {
-  new: "Новый",
-  contact: "Контакт",
-  interview: "Интервью",
+  new: "Новый контакт",
+  contact: "Интервью",
+  interview: "Документы",
   manager_review: "На согласовании",
   approved: "Согласован",
-  preparation: "Подготовка",
+  preparation: "Подготовка к выходу",
   ready: "Готов к выходу",
-  started: "Вышел",
+  started: "Первый выход",
   rejected: "Отказ",
   no_show: "Не вышел",
   reserve: "Резерв",
