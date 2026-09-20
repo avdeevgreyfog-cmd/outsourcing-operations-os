@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { JSONValue } from "postgres";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -18,7 +19,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(actor.demo)return NextResponse.json({error:"В GitHub Demo альтернативная вакансия сохраняется локально"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [current]=await tx<Array<{id:string;candidateId:string;needId:string;stage:string;ownerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];sourceSnapshot:Record<string,unknown>|null}>>`
+      const [current]=await tx<Array<{id:string;candidateId:string;needId:string;stage:string;ownerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];sourceSnapshot:JSONValue|null}>>`
         SELECT ca.id,ca.candidate_id "candidateId",ca.need_id "needId",ca.stage,ca.owner_user_id "ownerUserId",ca.object_id "objectId",
           COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
           ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
@@ -30,7 +31,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       `;
       if(!current||!canReadRow(actor.access,"recruiting.candidate.edit",current,actor))throw new AccessDeniedError("recruiting.candidate.edit");
       if(current.needId===body.needId)throw new Error("Выберите другую потребность");
-      const [target]=await tx<Array<{id:string;objectId:string|null;regionId:string|null;clientId:string|null;ownerUserId:string|null;managerUserId:string|null;conditions:Record<string,unknown>;assigneeUserIds:string[]}>>`
+      const [target]=await tx<Array<{id:string;objectId:string|null;regionId:string|null;clientId:string|null;ownerUserId:string|null;managerUserId:string|null;conditions:JSONValue;assigneeUserIds:string[]}>>`
         SELECT n.id,n.object_id "objectId",COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
           n.owner_user_id "ownerUserId",n.manager_user_id "managerUserId",n.conditions_snapshot conditions,
           ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=n.id AND na.unassigned_at IS NULL)
