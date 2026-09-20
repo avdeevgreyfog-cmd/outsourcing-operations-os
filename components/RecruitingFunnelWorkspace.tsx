@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 import { Plus, Settings2, X } from "lucide-react";
 import { RecruitingActionDrawer } from "./RecruitingActionDrawer";
 import { useRecruitingApplications, saveDemoApplication } from "@/lib/recruiting/demo-client";
-import { isActiveStage, needsTransitionDetails, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
+import { isActiveStage, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
 import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 import type { RecruitingApplicationRow, RecruitingNeedRow, RecruitingOptions, RecruitingFunnelStageSetting, RecruitingSourceOption } from "@/lib/recruiting/service";
 import { recruitingStageLabels, recruitingStages, type RecruitingStage } from "@/lib/recruiting/model";
@@ -127,11 +127,7 @@ export function RecruitingFunnelWorkspace({
     const row=allRows.find(x=>x.applicationId===dragged);
     setDragged(null);
     if(!row||row.stage===stage||!canEdit||busy)return;
-    if(needsTransitionDetails(row.stage,stage)){setTargetStage(stage);setSelected(row);return;}
-    setBusy(row.applicationId);setError("");
-    try{await saveApplicationChange(row,{stage},demo);router.refresh();}
-    catch(e){setError(e instanceof Error?e.message:"Не удалось переместить");}
-    finally{setBusy("");}
+    setTargetStage(stage);setSelected(row);
   }
 
   async function createCandidate(event:React.FormEvent){
