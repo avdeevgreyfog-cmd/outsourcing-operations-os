@@ -197,40 +197,48 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
   });
 }
 
-export async function getOperationsReferenceData(actor:Actor):Promise<OperationsReferenceData>{
-  requireCapability(actor,"worker.read");
+export async function getOperationsReferenceData(
+  actor:Actor,
+  capability="worker.read",
+  options:{includeWorkers?:boolean;includeSpecialties?:boolean}={},
+):Promise<OperationsReferenceData>{
+  requireCapability(actor,capability);
+  const includeWorkers=options.includeWorkers!==false;
+  const includeSpecialties=options.includeSpecialties!==false;
   if(actor.demo){
-    const visibleObjects=demo.objects.filter(row=>canReadRow(actor.access,"worker.read",row,actor));
+    const visibleObjects=demo.objects.filter(row=>canReadRow(actor.access,capability,row,actor));
     const objectIds=new Set(visibleObjects.map(row=>row.id));
-    const specialtyNames=[...new Set(demo.needs.filter(row=>objectIds.has(row.objectId)).map(row=>row.specialty))];
+    const specialtyNames=includeSpecialties?[...new Set(demo.needs.filter(row=>objectIds.has(row.objectId)).map(row=>row.specialty))]:[];
     return {
       objects:visibleObjects.map(row=>({id:row.id,name:row.name,region:row.region,ownerUserId:row.ownerUserId??null,assigneeUserIds:row.assigneeUserIds??[]})),
       specialties:specialtyNames.map((name,index)=>({id:`demo-specialty-${index+1}`,name})),
-      workers:demo.workers.filter(row=>!row.objectId||objectIds.has(row.objectId)).map(row=>({id:row.id,fullName:row.fullName,objectId:row.objectId??null,object:row.object??null})),
+      workers:includeWorkers?demo.workers.filter(row=>row.objectId&&objectIds.has(row.objectId)).map(row=>({id:row.id,fullName:row.fullName,objectId:row.objectId??null,object:row.object??null})):[],
     };
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const objects=await sql<Array<{id:string;name:string;region:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>>`
-      SELECT o.id,o.name,rg.name region,o.owner_user_id "ownerUserId",
+    const objects=await sql<Array<{id:string;name:string;region:string|null;regionId:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>>`
+      SELECT o.id,o.name,rg.name region,o.region_id "regionId",o.owner_user_id "ownerUserId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM objects o LEFT JOIN regions rg ON rg.id=o.region_id ORDER BY o.name
     `;
-    const visibleObjects=objects.filter(row=>canReadRow(actor.access,"worker.read",{organizationId:actor.organizationId,objectId:row.id,ownerUserId:row.ownerUserId,assigneeUserIds:row.assigneeUserIds},actor));
+    const visibleObjects=objects
+      .filter(row=>canReadRow(actor.access,capability,{organizationId:actor.organizationId,objectId:row.id,regionId:row.regionId??undefined,ownerUserId:row.ownerUserId,assigneeUserIds:row.assigneeUserIds},actor))
+      .map(({regionId:_,...row})=>row);
     const ids=visibleObjects.map(row=>row.id);
-    const specialties=await sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`;
-    const workers=ids.length
+    const specialties=includeSpecialties?await sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`:[];
+    const workers=includeWorkers&&ids.length
       ? await sql<Array<{id:string;fullName:string;objectId:string|null;object:string|null}>>`
           SELECT w.id,w.full_name "fullName",a.object_id "objectId",o.name object
           FROM worker_profiles w
-          LEFT JOIN LATERAL (
+          JOIN LATERAL (
             SELECT * FROM worker_object_assignments woa
             WHERE woa.worker_id=w.id AND woa.effective_from<=current_date
               AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
             ORDER BY woa.effective_from DESC LIMIT 1
           ) a ON true
-          LEFT JOIN objects o ON o.id=a.object_id
-          WHERE a.object_id=ANY(${ids}::uuid[]) OR a.object_id IS NULL
+          JOIN objects o ON o.id=a.object_id
+          WHERE a.object_id=ANY(${ids}::uuid[])
           ORDER BY w.full_name
         `
       : [];
