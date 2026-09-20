@@ -40,6 +40,15 @@ ALTER TABLE candidate_application_documents
   ADD COLUMN IF NOT EXISTS responsible_user_id uuid REFERENCES app_users(id),
   ADD COLUMN IF NOT EXISTS due_at timestamptz;
 
+ALTER TABLE candidate_application_documents
+  ADD COLUMN IF NOT EXISTS responsible_user_id uuid REFERENCES app_users(id),
+  ADD COLUMN IF NOT EXISTS due_at timestamptz,
+  ADD COLUMN IF NOT EXISTS task_id uuid REFERENCES tasks(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_candidate_application_documents_task
+ON candidate_application_documents(task_id)
+WHERE task_id IS NOT NULL;
+
 CREATE TABLE candidate_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
