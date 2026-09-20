@@ -11,7 +11,7 @@ type DemoCandidateSeed = {
   ownerUserId?:string|null;
 };
 
-const employmentDocuments=["Паспорт","СНИЛС","ИНН","Банковские реквизиты"];
+const employmentDocuments=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Трудовая книжка / СТД","Военный билет / документ воинского учёта"];
 const clearanceDocuments=["Медицинская комиссия","Удостоверение / допуск"];
 const objectManager="10000000-0000-4000-8000-000000000004";
 const regionalManager="10000000-0000-4000-8000-000000000003";
@@ -88,7 +88,7 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     });
   }
 
-  const employmentReady=stage==="documents"?2+(index%2):rank>=recruitingStages.indexOf("clearance")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?4:0;
+  const employmentReady=stage==="documents"?3+(index%3):rank>=recruitingStages.indexOf("clearance")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?6:0;
   const clearanceReady=stage==="clearance"?index%2:rank>=recruitingStages.indexOf("preparation")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?2:0;
   const employmentMissing=employmentDocuments.slice(Math.min(employmentReady,employmentDocuments.length));
   const clearancePending=clearanceDocuments.slice(Math.min(clearanceReady,clearanceDocuments.length));
@@ -185,6 +185,6 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     nextAction:nextActionAt,
     workflow,
     recentCommunications,
-    documentSummary:{required:6,received,missing,employmentRequired:4,employmentReady,employmentMissing,clearanceRequired:2,clearanceReady,clearancePending},
+    documentSummary:{required:8,received,missing,employmentRequired:6,employmentReady,employmentMissing,clearanceRequired:2,clearanceReady,clearancePending},
   };
 }
