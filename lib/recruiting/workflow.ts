@@ -84,12 +84,13 @@ export function validateStageChange(row: WorkflowRow, change: StageChange, now =
   if(["first_shift","retention_7","retention_30"].includes(row.stage) && recruitingStages.indexOf(change.stage as typeof recruitingStages[number]) < recruitingStages.indexOf(row.stage as typeof recruitingStages[number])) {
     return "После фактического выхода этап нельзя вернуть назад. Для выбытия используйте завершение заявки.";
   }
-  if(change.stage === "preparation" && !planned) return "Укажите плановую дату первого выхода.";
-  if(change.stage === "preparation" && details.travelState !== "not_required" && !arrival) return "Укажите плановую дату прибытия.";
-  if(details.travelState === "ticket_required" && (!details.ticketDueAt || !details.ticketAssigneeUserId)) return "Для покупки билета укажите ответственного и дедлайн.";
-  if(details.housingState === "needs_booking" && (!details.housingDueAt || !details.housingAssigneeUserId)) return "Для размещения укажите ответственного и дедлайн.";
+  if(change.stage !== "preparation" && details.travelState === "ticket_required" && (!details.ticketDueAt || !details.ticketAssigneeUserId)) return "Для покупки билета укажите ответственного и дедлайн.";
+  if(change.stage !== "preparation" && details.housingState === "needs_booking" && (!details.housingDueAt || !details.housingAssigneeUserId)) return "Для размещения укажите ответственного и дедлайн.";
   if(change.stage === "first_shift" && row.stage !== "first_shift") {
-    if(!planned) return "Перед первым выходом укажите плановую дату.";
+    if(!planned) return "Перед первым выходом укажите плановую дату первого выхода.";
+    if(details.travelState !== "not_required" && !arrival) return "Перед первым выходом укажите плановую дату прибытия.";
+    if(details.travelState === "ticket_required" && (!details.ticketDueAt || !details.ticketAssigneeUserId)) return "Для покупки билета укажите ответственного и дедлайн.";
+    if(details.housingState === "needs_booking" && (!details.housingDueAt || !details.housingAssigneeUserId)) return "Для размещения укажите ответственного и дедлайн.";
   }
   if(details.firstShiftOutcome === "worked" && (!actualStart || !Number.isFinite(Date.parse(actualStart)) || Date.parse(actualStart)>now)) {
     return "Для подтверждённого выхода укажите фактическое время первого выхода.";
