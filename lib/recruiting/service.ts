@@ -834,7 +834,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       sql<RecruitingFunnelStageSetting[]>`
         SELECT code,label,sort_order "sortOrder",active,system_type "systemType"
         FROM recruiting_funnel_stages
-        WHERE active ORDER BY sort_order,created_at
+        ORDER BY sort_order,created_at
       `,
       sql<RecruitingDocumentType[]>`
         SELECT id,code,name,group_type "groupType",default_provider "defaultProvider",default_required "defaultRequired",active
