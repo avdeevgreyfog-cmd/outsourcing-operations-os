@@ -27,8 +27,22 @@ try {
     migrations.some((row) => row.filename === "0030_access_foundation.sql"),
     "access foundation migration must be applied",
   );
+  assert.ok(
+    migrations.some((row) => row.filename === "0031_recruiting_operating_model.sql"),
+    "recruiting operating-model migration must be applied",
+  );
 
   await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
+  const [pipelineStage]=await sql`SELECT label,stage_kind,active FROM recruiting_pipeline_stage_settings WHERE stage_code='new'`;
+  assert.equal(pipelineStage?.label,"Новый контакт");
+  assert.equal(pipelineStage?.stage_kind,"new_contact");
+  assert.equal(pipelineStage?.active,true);
+  const sourceCatalog=await sql`SELECT name FROM candidate_source_catalog ORDER BY sort_order,name`;
+  assert.ok(sourceCatalog.some((row)=>row.name==="Авито"),"candidate source catalog must be seeded");
+  const recruitingTables=await sql`SELECT to_regclass('public.need_headcount_changes')::text headcount,to_regclass('public.candidate_application_documents')::text documents,to_regclass('public.candidate_application_assignment_history')::text assignments`;
+  assert.equal(recruitingTables[0]?.headcount,"need_headcount_changes");
+  assert.equal(recruitingTables[0]?.documents,"candidate_application_documents");
+  assert.equal(recruitingTables[0]?.assignments,"candidate_application_assignment_history");
 
   const personalOrg = "00000000-0000-4000-8000-000000000002";
   const personalUser = "10000000-0000-4000-8000-000000000101";
