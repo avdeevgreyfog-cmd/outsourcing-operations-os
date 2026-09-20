@@ -164,16 +164,27 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
   const maySeeComp = !actor.access.denies.includes("worker.compensation.read") && actor.access.capabilities.includes("worker.compensation.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<WorkerRow[]>`
-      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.status,w.source,w.created_by_user_id "createdByUserId",
-             woa.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",woa.manager_user_id "ownerUserId",
-             ARRAY[woa.manager_user_id::text] "assigneeUserIds",
+      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.status,w.source,
+             w.created_by_user_id "createdByUserId",woa.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",
+             woa.manager_user_id "ownerUserId",ARRAY[woa.manager_user_id::text] "assigneeUserIds",
+             er.relation_type employment,rec.display_name "originalRecruiter",w.source origin,
              ${maySeeComp ? sql`wr.amount` : sql`NULL::numeric`} rate,
-             ${maySeeComp ? sql`COALESCE(wa.total_amount,0)` : sql`NULL::numeric`} accrued
+             ${maySeeComp ? sql`COALESCE(wa.total_amount,0)` : sql`NULL::numeric`} accrued,
+             ${maySeeComp ? sql`COALESCE(pay.paid,0)+COALESCE(adv.advances,0)` : sql`NULL::numeric`} paid,
+             ${maySeeComp ? sql`GREATEST(COALESCE(wa.total_amount,0)-COALESCE(pay.paid,0)-COALESCE(adv.advances,0),0)` : sql`NULL::numeric`} payable
       FROM worker_profiles w
-      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_to IS NULL ORDER BY x.effective_from DESC LIMIT 1) woa ON true
+      LEFT JOIN LATERAL (
+        SELECT * FROM worker_object_assignments x
+        WHERE x.worker_id=w.id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)
+        ORDER BY x.effective_from DESC LIMIT 1
+      ) woa ON true
       LEFT JOIN objects o ON o.id=woa.object_id
-      LEFT JOIN LATERAL (SELECT amount FROM worker_rates x WHERE x.worker_id=w.id AND x.effective_to IS NULL ORDER BY x.effective_from DESC LIMIT 1) wr ON true
-      LEFT JOIN LATERAL (SELECT total_amount FROM worker_accruals x WHERE x.worker_id=w.id ORDER BY x.period_end DESC LIMIT 1) wa ON true
+      LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
+      LEFT JOIN app_users rec ON rec.id=w.original_recruiter_user_id
+      LEFT JOIN LATERAL (SELECT amount FROM worker_rates x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) wr ON true
+      LEFT JOIN LATERAL (SELECT id,total_amount,period_start,period_end FROM worker_accruals x WHERE x.worker_id=w.id ORDER BY x.period_end DESC LIMIT 1) wa ON true
+      LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric paid FROM worker_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.accrual_id=wa.id)) pay ON true
+      LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric advances FROM advance_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.payment_date BETWEEN wa.period_start AND wa.period_end)) adv ON true
       ORDER BY w.full_name
     `;
     return rows.filter((row) => canReadRow(actor.access, "worker.read", row, actor));

@@ -57,3 +57,20 @@ test("every foundation route has a module descriptor and canonical route", () =>
   assert.equal(contracts?.id, "contract-registry");
   assert.equal(contracts?.status, undefined, "contracts must not fall back to the foundation catch-all route");
 });
+
+
+test("operations owns workers and operational analytics", () => {
+  const items = flattenNavigation();
+  const worker = items.find((item) => item.href === "/workers");
+  const analytics = items.find((item) => item.href === "/operations/analytics");
+  assert.equal(worker?.sectionId, "operations");
+  assert.equal(worker?.groupId, "operations-workforce");
+  assert.equal(analytics?.sectionId, "operations");
+  assert.equal(items.some((item) => item.href === "/analytics?view=comparison"), false);
+});
+
+test("inventory and crews are active operation routes", () => {
+  const items = flattenNavigation();
+  assert.equal(items.find((item) => item.href === "/assets")?.status, undefined);
+  assert.equal(items.find((item) => item.href === "/crews")?.status, undefined);
+});

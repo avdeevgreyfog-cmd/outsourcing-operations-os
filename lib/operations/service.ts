@@ -1,0 +1,360 @@
+import type { Actor } from "@/lib/access/types";
+import { requireCapability } from "@/lib/access/server";
+import { canReadRow } from "@/lib/core/access.mjs";
+import { withTenant } from "@/lib/db/client";
+import * as demo from "@/lib/demo/data";
+
+export type OperationsAnalyticsRow = {
+  organizationId:string;
+  objectId:string;
+  object:string;
+  code:string;
+  client:string;
+  region:string;
+  manager:string|null;
+  ownerUserId:string|null;
+  assigneeUserIds:string[];
+  required:number;
+  working:number;
+  preparing:number;
+  deficit:number;
+  todayDemand:number;
+  todayAssigned:number;
+  noShows:number;
+  monthHours:number;
+  openIncidents:number;
+};
+
+export type OperationsReferenceData = {
+  objects:Array<{id:string;name:string;region:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>;
+  specialties:Array<{id:string;name:string}>;
+  workers:Array<{id:string;fullName:string;objectId:string|null;object:string|null}>;
+};
+
+export type StorageLocationRow = {
+  id:string;
+  organizationId:string;
+  name:string;
+  kind:string;
+  objectId:string|null;
+  object:string|null;
+  responsibleUserId:string|null;
+  responsible:string|null;
+  ownerUserId:string|null;
+  assigneeUserIds:string[];
+  description:string|null;
+};
+
+export type InventoryItemRow = {
+  id:string;
+  name:string;
+  code:string|null;
+  category:string;
+  unit:string;
+  returnable:boolean;
+  tracksVariant:boolean;
+};
+
+export type InventoryBalanceRow = {
+  itemId:string;
+  item:string;
+  code:string|null;
+  category:string;
+  unit:string;
+  returnable:boolean;
+  tracksVariant:boolean;
+  variant:string;
+  locationId:string;
+  location:string;
+  locationKind:string;
+  objectId:string|null;
+  ownerUserId:string|null;
+  assigneeUserIds:string[];
+  quantity:number;
+  minQuantity:number;
+};
+
+export type InventorySnapshot = {
+  locations:StorageLocationRow[];
+  items:InventoryItemRow[];
+  balances:InventoryBalanceRow[];
+};
+
+export type CrewRow = {
+  id:string;
+  organizationId:string;
+  objectId:string;
+  object:string;
+  specialtyId:string|null;
+  specialty:string|null;
+  name:string;
+  leaderWorkerId:string|null;
+  leader:string|null;
+  leaderMode:"working_leader"|"dedicated";
+  bonusAmount:number|null;
+  bonusUnit:string|null;
+  memberCount:number;
+  status:string;
+  ownerUserId:string|null;
+  assigneeUserIds:string[];
+};
+
+export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAnalyticsRow[]>{
+  requireCapability(actor,"operations.object.read");
+  if(actor.demo){
+    return demo.objects
+      .filter(row=>canReadRow(actor.access,"operations.object.read",row,actor))
+      .map(row=>{
+        const workers=demo.workers.filter(worker=>worker.objectId===row.id&&worker.status==="active").length;
+        const shifts=demo.shifts.filter(shift=>shift.objectId===row.id);
+        const incidents=demo.incidents.filter(item=>item.objectId===row.id&&item.status!=="resolved").length;
+        const preparing=demo.candidates.filter(candidate=>candidate.objectId===row.id&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
+        return {
+          organizationId:row.organizationId,
+          objectId:row.id,
+          object:row.name,
+          code:row.code,
+          client:row.client,
+          region:row.region,
+          manager:null,
+          ownerUserId:row.ownerUserId??null,
+          assigneeUserIds:row.assigneeUserIds??[],
+          required:Number(row.required??0),
+          working:workers,
+          preparing,
+          deficit:Math.max(Number(row.required??0)-workers,0),
+          todayDemand:shifts.reduce((sum,shift)=>sum+Number(shift.demand??0),0),
+          todayAssigned:shifts.reduce((sum,shift)=>sum+Number(shift.assigned??0),0),
+          noShows:0,
+          monthHours:demo.timesheet.objectId===row.id?Number(demo.timesheet.internalHours??0):0,
+          openIncidents:incidents,
+        };
+      });
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<OperationsAnalyticsRow[]>`
+      SELECT
+        o.organization_id "organizationId",o.id "objectId",o.name object,o.code,c.name client,rg.name region,
+        owner.display_name manager,o.owner_user_id "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds",
+        COALESCE(needs.required,0)::int required,
+        COALESCE(workforce.working,0)::int working,
+        COALESCE(preparing.count,0)::int preparing,
+        GREATEST(COALESCE(needs.required,0)-COALESCE(workforce.working,0),0)::int deficit,
+        COALESCE(today."demand",0)::int "todayDemand",
+        COALESCE(today.assigned,0)::int "todayAssigned",
+        COALESCE(no_shows.count,0)::int "noShows",
+        COALESCE(hours.total,0)::numeric "monthHours",
+        COALESCE(open_incidents.count,0)::int "openIncidents"
+      FROM objects o
+      JOIN client_companies c ON c.id=o.client_company_id
+      JOIN regions rg ON rg.id=o.region_id
+      LEFT JOIN app_users owner ON owner.id=o.owner_user_id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(sum(n.count_required),0)::int required
+        FROM needs n WHERE n.object_id=o.id AND n.status NOT IN ('cancelled','archived')
+      ) needs ON true
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT woa.worker_id)::int working
+        FROM worker_object_assignments woa
+        JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
+        WHERE woa.object_id=o.id
+          AND woa.effective_from<=current_date
+          AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
+      ) workforce ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int count
+        FROM candidate_applications ca
+        WHERE ca.object_id=o.id
+          AND ca.stage IN ('documents','clearance','preparation','first_shift')
+          AND ca.actual_start_at IS NULL
+      ) preparing ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(sum(sh.demand_count),0)::int "demand",COALESCE(sum(sh.assigned_count),0)::int assigned
+        FROM shifts sh WHERE sh.object_id=o.id AND sh.shift_date=current_date
+      ) today ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int count
+        FROM attendance_events ae
+        JOIN shift_assignments sa ON sa.id=ae.shift_assignment_id
+        JOIN shifts sh ON sh.id=sa.shift_id
+        WHERE sh.object_id=o.id AND sh.shift_date=current_date AND ae.event_type='no_show'
+      ) no_shows ON true
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(sum(te.fact_hours),0)::numeric total
+        FROM time_entries te
+        WHERE te.object_id=o.id
+          AND te.work_date>=date_trunc('month',current_date)::date
+          AND te.work_date<(date_trunc('month',current_date)+interval '1 month')::date
+      ) hours ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int count FROM incidents i WHERE i.object_id=o.id AND i.status<>'resolved'
+      ) open_incidents ON true
+      ORDER BY o.name
+    `;
+    return rows.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor));
+  });
+}
+
+export async function getOperationsReferenceData(actor:Actor):Promise<OperationsReferenceData>{
+  requireCapability(actor,"worker.read");
+  if(actor.demo){
+    const visibleObjects=demo.objects.filter(row=>canReadRow(actor.access,"worker.read",row,actor));
+    const objectIds=new Set(visibleObjects.map(row=>row.id));
+    const specialtyNames=[...new Set(demo.needs.filter(row=>objectIds.has(row.objectId)).map(row=>row.specialty))];
+    return {
+      objects:visibleObjects.map(row=>({id:row.id,name:row.name,region:row.region,ownerUserId:row.ownerUserId??null,assigneeUserIds:row.assigneeUserIds??[]})),
+      specialties:specialtyNames.map((name,index)=>({id:`demo-specialty-${index+1}`,name})),
+      workers:demo.workers.filter(row=>!row.objectId||objectIds.has(row.objectId)).map(row=>({id:row.id,fullName:row.fullName,objectId:row.objectId??null,object:row.object??null})),
+    };
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const objects=await sql<Array<{id:string;name:string;region:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>>`
+      SELECT o.id,o.name,rg.name region,o.owner_user_id "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM objects o LEFT JOIN regions rg ON rg.id=o.region_id ORDER BY o.name
+    `;
+    const visibleObjects=objects.filter(row=>canReadRow(actor.access,"worker.read",{organizationId:actor.organizationId,objectId:row.id,ownerUserId:row.ownerUserId,assigneeUserIds:row.assigneeUserIds},actor));
+    const ids=visibleObjects.map(row=>row.id);
+    const specialties=await sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`;
+    const workers=ids.length
+      ? await sql<Array<{id:string;fullName:string;objectId:string|null;object:string|null}>>`
+          SELECT w.id,w.full_name "fullName",a.object_id "objectId",o.name object
+          FROM worker_profiles w
+          LEFT JOIN LATERAL (
+            SELECT * FROM worker_object_assignments woa
+            WHERE woa.worker_id=w.id AND woa.effective_from<=current_date
+              AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
+            ORDER BY woa.effective_from DESC LIMIT 1
+          ) a ON true
+          LEFT JOIN objects o ON o.id=a.object_id
+          WHERE a.object_id=ANY(${ids}::uuid[]) OR a.object_id IS NULL
+          ORDER BY w.full_name
+        `
+      : [];
+    return {objects:visibleObjects,specialties,workers};
+  });
+}
+
+export async function listStorageLocations(actor:Actor):Promise<StorageLocationRow[]>{
+  requireCapability(actor,"assets.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>canReadRow(actor.access,"operations.object.read",row,actor))??demo.objects[0];
+    return [
+      {id:"demo-location-manager",organizationId:object.organizationId,name:"Запас менеджера",kind:"manager",objectId:null,object:null,responsibleUserId:actor.userId,responsible:actor.displayName,ownerUserId:actor.userId,assigneeUserIds:[actor.userId],description:"Личный операционный запас менеджера"},
+      {id:"demo-location-object",organizationId:object.organizationId,name:`${object.name} · запас`,kind:"object",objectId:object.id,object:object.name,responsibleUserId:object.ownerUserId??null,responsible:null,ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],description:"Запас непосредственно на объекте"},
+    ];
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<StorageLocationRow[]>`
+      SELECT l.id,l.organization_id "organizationId",l.name,l.kind,l.object_id "objectId",o.name object,
+        l.responsible_user_id "responsibleUserId",u.display_name responsible,
+        COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+          || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds",
+        l.description
+      FROM storage_locations l
+      LEFT JOIN objects o ON o.id=l.object_id
+      LEFT JOIN app_users u ON u.id=l.responsible_user_id
+      WHERE l.active
+      ORDER BY l.name
+    `;
+    return rows.filter(row=>canReadRow(actor.access,"assets.read",row,actor));
+  });
+}
+
+export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapshot>{
+  requireCapability(actor,"assets.read");
+  if(actor.demo){
+    const locations=await listStorageLocations(actor);
+    const items:InventoryItemRow[]=[
+      {id:"demo-item-boots",name:"Ботинки рабочие",code:"BOOT",category:"workwear",unit:"пар",returnable:true,tracksVariant:true},
+      {id:"demo-item-jacket",name:"Куртка рабочая",code:"JACKET",category:"workwear",unit:"шт",returnable:true,tracksVariant:true},
+      {id:"demo-item-helmet",name:"Каска",code:"HELMET",category:"ppe",unit:"шт",returnable:true,tracksVariant:false},
+    ];
+    const balances:InventoryBalanceRow[]=[
+      {...items[0],itemId:items[0].id,item:items[0].name,variant:"43",locationId:locations[0].id,location:locations[0].name,locationKind:locations[0].kind,objectId:locations[0].objectId,ownerUserId:locations[0].ownerUserId,assigneeUserIds:locations[0].assigneeUserIds,quantity:3,minQuantity:2},
+      {...items[1],itemId:items[1].id,item:items[1].name,variant:"52",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:4,minQuantity:3},
+      {...items[2],itemId:items[2].id,item:items[2].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:6,minQuantity:5},
+    ];
+    return {locations,items,balances};
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const [locations,items,rawBalances]=await Promise.all([
+      listStorageLocations(actor),
+      sql<InventoryItemRow[]>`
+        SELECT id,name,code,category,unit,returnable,tracks_variant "tracksVariant"
+        FROM inventory_items WHERE active ORDER BY name
+      `,
+      sql<Array<InventoryBalanceRow & {organizationId:string}>>`
+        WITH deltas AS (
+          SELECT m.organization_id,m.item_id,m.variant,m.to_location_id location_id,m.quantity delta
+          FROM inventory_movements m
+          WHERE m.to_location_id IS NOT NULL AND m.movement_type IN ('opening','receipt','transfer','return','adjustment_in')
+          UNION ALL
+          SELECT m.organization_id,m.item_id,m.variant,m.from_location_id location_id,-m.quantity delta
+          FROM inventory_movements m
+          WHERE m.from_location_id IS NOT NULL AND m.movement_type IN ('transfer','issue','writeoff','adjustment_out')
+        ), balances AS (
+          SELECT organization_id,item_id,variant,location_id,sum(delta)::numeric quantity
+          FROM deltas GROUP BY organization_id,item_id,variant,location_id
+        )
+        SELECT i.id "itemId",i.name item,i.code,i.category,i.unit,i.returnable,i.tracks_variant "tracksVariant",
+          b.variant,l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
+          COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",
+          ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+            WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+            || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds",
+          b.quantity,COALESCE(lim.min_quantity,0)::numeric "minQuantity",b.organization_id "organizationId"
+        FROM balances b
+        JOIN inventory_items i ON i.id=b.item_id
+        JOIN storage_locations l ON l.id=b.location_id
+        LEFT JOIN objects o ON o.id=l.object_id
+        LEFT JOIN inventory_stock_limits lim ON lim.location_id=b.location_id AND lim.item_id=b.item_id AND lim.variant=b.variant
+        WHERE l.active AND i.active
+        ORDER BY i.name,b.variant,l.name
+      `
+    ]);
+    const visibleLocationIds=new Set(locations.map(row=>row.id));
+    const balances=rawBalances
+      .filter(row=>visibleLocationIds.has(row.locationId)&&canReadRow(actor.access,"assets.read",row,actor))
+      .map(({organizationId:_,...row})=>({...row,quantity:Number(row.quantity),minQuantity:Number(row.minQuantity)}));
+    return {locations,items,balances};
+  });
+}
+
+export async function listCrews(actor:Actor):Promise<CrewRow[]>{
+  requireCapability(actor,"operations.crew.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>canReadRow(actor.access,"operations.object.read",row,actor))??demo.objects[0];
+    const leader=demo.workers.find(row=>row.objectId===object.id);
+    return leader?[{
+      id:"demo-crew-1",organizationId:object.organizationId,objectId:object.id,object:object.name,
+      specialtyId:null,specialty:leader.object??null,name:"Бригада 1",leaderWorkerId:leader.id,leader:leader.fullName,
+      leaderMode:"working_leader",bonusAmount:1000,bonusUnit:"shift",memberCount:Math.min(5,demo.workers.filter(row=>row.objectId===object.id).length),
+      status:"active",ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],
+    }]:[];
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<CrewRow[]>`
+      SELECT cr.id,cr.organization_id "organizationId",cr.object_id "objectId",o.name object,
+        cr.specialty_id "specialtyId",s.name specialty,cr.name,cr.leader_worker_id "leaderWorkerId",w.full_name leader,
+        cr.leader_mode "leaderMode",cr.bonus_amount "bonusAmount",cr.bonus_unit "bonusUnit",cr.status,
+        o.owner_user_id "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds",
+        count(cm.id) FILTER (WHERE cm.effective_from<=current_date AND (cm.effective_to IS NULL OR cm.effective_to>=current_date))::int "memberCount"
+      FROM object_crews cr
+      JOIN objects o ON o.id=cr.object_id
+      LEFT JOIN specialties s ON s.id=cr.specialty_id
+      LEFT JOIN worker_profiles w ON w.id=cr.leader_worker_id
+      LEFT JOIN object_crew_members cm ON cm.crew_id=cr.id
+      GROUP BY cr.id,o.id,o.name,s.name,w.full_name
+      ORDER BY o.name,cr.name
+    `;
+    return rows.filter(row=>canReadRow(actor.access,"operations.crew.read",row,actor));
+  });
+}

@@ -1,2 +1,15 @@
-import { requireActor } from "@/lib/auth/server"; import { listWorkers } from "@/lib/data/service"; import { PageHeader,Section } from "@/components/UI"; import { WorkersGrid } from "@/components/RegistryGrids"; import { hasCapability } from "@/lib/core/access.mjs";
-export default async function Workers(){const actor=await requireActor();const rows=await listWorkers(actor);const sensitive=hasCapability(actor.access,"worker.compensation.read");return <><PageHeader eyebrow="Персонал" title="Сотрудники" subtitle="Действующие сотрудники, назначения, оформление и доступная финансовая история." breadcrumbs={[{label:"Люди"},{label:"Сотрудники"}]}/><Section><WorkersGrid rows={rows} sensitive={sensitive}/></Section></>}
+import { requireActor } from "@/lib/auth/server";
+import { hasCapability } from "@/lib/core/access.mjs";
+import { PageHeader } from "@/components/UI";
+import { WorkersWorkspace } from "@/components/WorkersWorkspace";
+import { listWorkers } from "@/lib/data/service";
+import { getOperationsReferenceData } from "@/lib/operations/service";
+
+export default async function Workers(){
+  const actor=await requireActor();
+  const [rows,options]=await Promise.all([listWorkers(actor),getOperationsReferenceData(actor)]);
+  return <>
+    <PageHeader eyebrow="Операции → Персонал объектов" title="Сотрудники" subtitle="Действующий персонал объектов, назначения, расчётный статус и история работы." breadcrumbs={[{label:"Операции"},{label:"Персонал объектов"},{label:"Сотрудники"}]}/>
+    <WorkersWorkspace rows={rows} options={options} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"worker.edit")} demo={actor.demo}/>
+  </>;
+}

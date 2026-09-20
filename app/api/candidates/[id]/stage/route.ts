@@ -230,16 +230,17 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       if(confirmingFirstShift){
         requireCapability(actor,"recruiting.candidate.convert");
         if(!current.objectId)throw new Error("Перед фактическим выходом назначьте кандидату объект");
-        const [candidate]=await tx<Array<{fullName:string;phone:string|null;source:string|null;originalRecruiterUserId:string|null}>>`
-          SELECT full_name "fullName",phone,source,original_recruiter_user_id "originalRecruiterUserId" FROM candidates WHERE id=${current.candidateId}::uuid FOR UPDATE
+        const [candidate]=await tx<Array<{fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;notes:string|null;source:string|null;originalRecruiterUserId:string|null}>>`
+          SELECT full_name "fullName",phone,email,city,birth_date::text "birthDate",notes,source,original_recruiter_user_id "originalRecruiterUserId"
+          FROM candidates WHERE id=${current.candidateId}::uuid FOR UPDATE
         `;
         if(!candidate)throw new Error("Кандидат не найден");
         const [existingWorker]=await tx<Array<{id:string}>>`SELECT id FROM worker_profiles WHERE origin_candidate_id=${current.candidateId}::uuid FOR UPDATE`;
         if(existingWorker)workerId=existingWorker.id;
         else{
           const [worker]=await tx<Array<{id:string}>>`
-            INSERT INTO worker_profiles(organization_id,origin_candidate_id,full_name,phone,status,source,original_recruiter_user_id,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${current.candidateId}::uuid,${candidate.fullName},${candidate.phone},'active',${candidate.source},${candidate.originalRecruiterUserId}::uuid,${actor.userId}::uuid)
+            INSERT INTO worker_profiles(organization_id,origin_candidate_id,full_name,phone,email,city,birth_date,notes,status,source,original_recruiter_user_id,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${current.candidateId}::uuid,${candidate.fullName},${candidate.phone},${candidate.email},${candidate.city},${candidate.birthDate}::date,${candidate.notes},'active',${candidate.source},${candidate.originalRecruiterUserId}::uuid,${actor.userId}::uuid)
             RETURNING id
           `;
           workerId=worker.id;
