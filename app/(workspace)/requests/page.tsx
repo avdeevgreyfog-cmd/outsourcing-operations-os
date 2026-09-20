@@ -1,3 +1,4 @@
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { listRequestBoard, listRequestStages, getRequestWorkspaceOptions, getRequestSnapshotTime } from "@/lib/commercial/request-workflow-server";
@@ -19,7 +20,7 @@ type SearchParams={
 
 export default async function RequestsPage({searchParams}:{searchParams:Promise<SearchParams>}) {
   const actor=await requireActor();
-  const params=await searchParams;
+  const params=isGithubPagesDemo()?{}:await searchParams;
   const analyticsFilters=normalizeRequestAnalyticsFilters(params);
   const [rows,stages,options,analytics,metricPreferences]=await Promise.all([
     listRequestBoard(actor),
