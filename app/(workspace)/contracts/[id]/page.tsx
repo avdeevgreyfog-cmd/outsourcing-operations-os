@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -5,6 +7,10 @@ import { hasCapability } from "@/lib/core/access.mjs";
 import { getContractDetail } from "@/lib/commercial/contracts";
 import { ContractDetailWorkspace } from "@/components/ContractDetailWorkspace";
 import { PageHeader } from "@/components/UI";
+
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.contracts.map((id)=>({id})) : [];
+}
 
 export default async function ContractPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;const actor=await requireActor();const contract=await getContractDetail(actor,id);if(!contract)notFound();
