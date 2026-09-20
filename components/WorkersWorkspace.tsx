@@ -38,7 +38,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       if((form.objectId&&!form.specialtyId)||(!form.objectId&&form.specialtyId))throw new Error("Объект и специальность указываются вместе");
       if(demo){
         const object=options.objects.find(x=>x.id===form.objectId);
-        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id??null,rate:form.rate?Number(form.rate):null,accrued:0,paid:0,payable:0},...current]);
+        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,rate:form.rate?Number(form.rate):null,accrued:0,paid:0,payable:0},...current]);
       }else{
         const response=await fetch("/api/workers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           ...form,phone:form.phone||null,email:form.email||null,city:form.city||null,birthDate:form.birthDate||null,
