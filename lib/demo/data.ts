@@ -113,7 +113,8 @@ export const candidates = demoCandidateBlueprints.map((item,index)=>{
  const need=needs[item.need];
  const object=objects.find(value=>value.id===need.objectId)!;
  const number=String(index+1).padStart(12,"0");
- const ownerUserId=item.owner==="object"?objectManager:item.owner==="regional"?regional:recruiter;
+ const owner="owner" in item?item.owner:undefined;
+ const ownerUserId=owner==="object"?objectManager:owner==="regional"?regional:recruiter;
  const sourceCampaign=item.source==="Авито"?"Авито · сентябрь":item.source==="hh.ru"?"hh.ru · складской персонал":item.source==="Telegram"?"Telegram · вахта":item.source==="Рекомендация"?"Рекомендации сотрудников":"Партнёрская поставка";
  return {
   id:`85000000-0000-4000-8000-${number}`,
