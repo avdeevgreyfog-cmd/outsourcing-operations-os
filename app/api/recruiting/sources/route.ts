@@ -5,7 +5,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
-const kind=z.enum(["job_site","social","referral","partner","offline","internal","other"]);
+const kind=z.enum(["job_site","social","referral","partner","database","offline","internal","other"]);
 const createSchema=z.object({name:z.string().trim().min(2).max(120),kind:kind.default("other")});
 const patchSchema=z.object({id:z.string().uuid(),name:z.string().trim().min(2).max(120).optional(),kind:kind.optional(),active:z.boolean().optional()});
 
