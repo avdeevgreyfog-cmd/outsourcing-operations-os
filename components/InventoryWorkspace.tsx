@@ -1,6 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRightLeft, PackagePlus, Plus, RotateCcw, Trash2, UserRound, X } from "lucide-react";
 import { Metric, Status } from "@/components/UI";
@@ -80,7 +81,7 @@ export function InventoryWorkspace({snapshot,options,canManage,demo}:{snapshot:I
         <td><strong className="cell-title">{row.item}</strong><span className="cell-sub">{row.code??row.unit}</span></td><td>{categoryLabels[row.category]??row.category}</td><td>{row.variant||"—"}</td><td>{row.location}<span className="cell-sub">{locationLabels[row.locationKind]??row.locationKind}</span></td><td className="num">{row.quantity} {row.unit}</td>
         <td>{canManage?<div style={{display:"flex",gap:6,alignItems:"center"}}><input style={{width:72}} type="number" min="0" value={limitDrafts[key]??String(row.minQuantity)} onChange={e=>setLimitDrafts(current=>({...current,[key]:e.target.value}))}/><button className="button" disabled={busy} onClick={()=>void saveLimit(row)}>Сохранить</button></div>:row.minQuantity}</td>
         <td><Status tone={lowStock?"warn":"good"}>{lowStock?"Требует пополнения":"В норме"}</Status></td>
-        {canManage&&<td><div className="page-actions"><button className="icon-button" title="Переместить" onClick={()=>openMovement("transfer",row)}><ArrowRightLeft size={14}/></button><button className="icon-button" title="Выдать сотруднику" onClick={()=>openMovement("issue",row)}><UserRound size={14}/></button><button className="icon-button" title="Списать" onClick={()=>openMovement("writeoff",row)}><Trash2 size={14}/></button></div></td>}
+        {canManage&&<td><div className="page-actions">{lowStock&&<Link className="button" href={"/procurement?item="+row.itemId+"&location="+row.locationId}>Заявка</Link>}<button className="icon-button" title="Переместить" onClick={()=>openMovement("transfer",row)}><ArrowRightLeft size={14}/></button><button className="icon-button" title="Выдать сотруднику" onClick={()=>openMovement("issue",row)}><UserRound size={14}/></button><button className="icon-button" title="Списать" onClick={()=>openMovement("writeoff",row)}><Trash2 size={14}/></button></div></td>}
       </tr>})}</tbody>
     </table>{!grouped.length&&<div className="empty-inline">Остатков пока нет. Создайте место хранения и оформите поступление.</div>}</div></section>
     {canManage&&<div className="summary-strip"><strong>Возврат сотрудника:</strong><span>при возврате можно отметить состояние вещи и сразу списать повреждённый или непригодный предмет.</span><button className="button" onClick={()=>openMovement("return")}><RotateCcw size={14}/> Оформить возврат</button></div>}
