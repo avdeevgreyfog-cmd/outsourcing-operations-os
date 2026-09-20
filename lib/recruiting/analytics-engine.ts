@@ -202,12 +202,12 @@ export function buildPeriodAnalytics(applications: AnalyticsApplication[], histo
       const entered=firstReached.get(stage), advanced=firstReached.get(next);
       if(entered!=null&&advanced!=null&&advanced>=entered) stageDurations.get(stage)!.push((advanced-entered)/3600000);
     }
-    if(asOfStage==="ready") ready++;
+    if(asOfStage==="preparation") ready++;
     if(asOfStage==="rejected") rejected++;
     if(asOfStage==="no_show") noShow++;
-    if(!terminalStages.has(asOfStage)&&asOfStage!=="started"&&asOfStage!=="reserve") inWork++;
+    if(!terminalStages.has(asOfStage)&&!["first_shift","retention_7","retention_30","reserve"].includes(asOfStage)) inWork++;
 
-    const firstContactAt=firstReached.get("contact");
+    const firstContactAt=firstReached.get("interview");
     if(firstContactAt!=null&&firstContactAt>=createdTime) firstContactHours.push((firstContactAt-createdTime)/3600000);
     else if(asOfStage==="new"&&Math.min(end,Date.now())-createdTime>4*3600000) overdueFirstContact++;
 
@@ -219,14 +219,14 @@ export function buildPeriodAnalytics(applications: AnalyticsApplication[], histo
     const sourceKey=[app.source?.trim()||"Источник не указан",app.sourceCampaign].filter(Boolean).join(" · ");
     const sourceStats=sourceMap.get(sourceKey)??{candidates:0,approved:0,started:0,startDays:[]};
     sourceStats.candidates++;
-    if(firstReached.has("approved")) sourceStats.approved++;
+    if(firstReached.has("documents")) sourceStats.approved++;
 
     const createdDay=isoDay(new Date(createdTime));
     const createdPoint=dailyMap.get(createdDay)??{newCandidates:0,ready:0,started:0};
     createdPoint.newCandidates++;
     dailyMap.set(createdDay,createdPoint);
 
-    const readyAt=firstReached.get("ready");
+    const readyAt=firstReached.get("preparation");
     if(readyAt!=null&&readyAt>=start&&readyAt<=end){
       const readyDay=isoDay(new Date(readyAt));
       const readyPoint=dailyMap.get(readyDay)??{newCandidates:0,ready:0,started:0};
@@ -234,7 +234,7 @@ export function buildPeriodAnalytics(applications: AnalyticsApplication[], histo
       dailyMap.set(readyDay,readyPoint);
     }
 
-    const startedAt=firstReached.get("started");
+    const startedAt=firstReached.get("first_shift");
     if(startedAt!=null){
       started++;
       const startDays=(startedAt-createdTime)/86400000;
@@ -258,7 +258,7 @@ export function buildPeriodAnalytics(applications: AnalyticsApplication[], histo
 
     const nextStage=recruitingStages[index+1];
     const notAdvanced=nextStage?cohortStates.filter(x=>x.reached.has(stage)&&!x.reached.has(nextStage)).length:0;
-    const waiting=cohortStates.filter(x=>x.stage===stage&&x.stage!=="started").length;
+    const waiting=cohortStates.filter(x=>x.stage===stage&&x.stage!=="first_shift").length;
     const lost=cohortStates.filter(x=>terminalStages.has(x.stage)&&x.lastActive===stage).length;
     const reserved=cohortStates.filter(x=>x.stage==="reserve"&&x.lastActive===stage).length;
     const skipped=nextStage?cohortStates.filter(x=>x.reached.has(stage)&&!x.reached.has(nextStage)&&recruitingStages.slice(index+2).some(later=>x.reached.has(later))).length:0;
@@ -266,7 +266,7 @@ export function buildPeriodAnalytics(applications: AnalyticsApplication[], histo
     const durations=stageDurations.get(stage)??[];
     return {
       stage,
-      label:stage==="new"?"Новые / отклики":stage==="preparation"?"Документы / подготовка":stage==="started"?"Вышел на работу":recruitingStageLabels[stage],
+      label:stage==="new"?"Новые контакты":stage==="first_shift"?"Первый выход":recruitingStageLabels[stage],
       candidates,
       shareTotal:total?Math.round(candidates/total*100):0,
       conversion:index===0?(total?100:0):(previous?Math.round(transitioned/previous*100):0),
