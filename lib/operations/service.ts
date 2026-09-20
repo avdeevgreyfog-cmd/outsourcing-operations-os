@@ -487,7 +487,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
       SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM worker_profiles w
-      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) a ON true
+      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
       LEFT JOIN objects o ON o.id=a.object_id
       WHERE w.id=${workerId}::uuid
     `;
@@ -595,7 +595,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
       SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM worker_profiles w
-      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) a ON true
+      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
       LEFT JOIN objects o ON o.id=a.object_id
       WHERE w.id=${workerId}::uuid
     `;
