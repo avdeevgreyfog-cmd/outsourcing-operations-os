@@ -9,7 +9,7 @@ const schema = z.object({
   fullName: z.string().trim().min(2).max(240),
   phone: z.string().trim().min(5).max(60).nullable().optional(),
   email: z.string().email().nullable().optional(),
-  preferredChannel: z.enum(["phone","whatsapp","telegram","email","other"]).nullable().optional(),
+  preferredChannel: z.enum(["phone","whatsapp","telegram","max","email","other"]).nullable().optional(),
   telegram: z.string().trim().max(120).nullable().optional(),
   whatsapp: z.string().trim().max(120).nullable().optional(),
   city: z.string().trim().max(240).nullable().optional(),
@@ -18,6 +18,12 @@ const schema = z.object({
   sourceCampaign: z.string().trim().max(500).nullable().optional(),
   sourceReference: z.string().trim().max(500).nullable().optional(),
   notes: z.string().trim().max(3000).nullable().optional(),
+  contacts: z.array(z.object({
+    channel:z.enum(["phone","email","telegram","whatsapp","max","other"]),
+    value:z.string().trim().min(1).max(240),
+    label:z.string().trim().max(120).nullable().optional(),
+    isPreferred:z.boolean().optional(),
+  })).max(20).optional(),
   needId: z.string().uuid(),
   nextActionAt: z.string().datetime().nullable().optional(),
 });
@@ -42,11 +48,26 @@ export async function POST(request: Request) {
       if (!need) throw new Error("Потребность не найдена или уже закрыта");
       if (!canReadRow(actor.access,"recruiting.candidate.create",need,actor)) throw new AccessDeniedError("recruiting.candidate.create");
 
+      const contactValues=[
+        ...(body.phone?[{channel:"phone",value:body.phone}]:[]),
+        ...(body.email?[{channel:"email",value:body.email}]:[]),
+        ...(body.telegram?[{channel:"telegram",value:body.telegram}]:[]),
+        ...(body.whatsapp?[{channel:"whatsapp",value:body.whatsapp}]:[]),
+        ...(body.contacts??[]).map(item=>({channel:item.channel,value:item.value})),
+      ];
       const [existing] = await tx<Array<{id:string}>>`
-        SELECT id FROM candidates
-        WHERE (${body.phone??null} IS NOT NULL AND regexp_replace(COALESCE(phone,''),'\\D','','g')=regexp_replace(${body.phone??''},'\\D','','g'))
-           OR (${body.email??null} IS NOT NULL AND lower(COALESCE(email,''))=lower(${body.email??''}))
-        ORDER BY created_at LIMIT 1
+        SELECT DISTINCT c.id FROM candidates c
+        LEFT JOIN candidate_contact_methods cm ON cm.candidate_id=c.id AND cm.active
+        WHERE (${body.phone??null} IS NOT NULL AND regexp_replace(COALESCE(c.phone,''),'\\D','','g')=regexp_replace(${body.phone??''},'\\D','','g'))
+           OR (${body.email??null} IS NOT NULL AND lower(COALESCE(c.email,''))=lower(${body.email??''}))
+           OR EXISTS (
+             SELECT 1 FROM jsonb_to_recordset(${tx.json(contactValues)}::jsonb) AS x(channel text,value text)
+             WHERE cm.channel=x.channel AND (
+               (x.channel IN ('phone','whatsapp','max') AND regexp_replace(cm.value,'\\D','','g')=regexp_replace(x.value,'\\D','','g'))
+               OR (x.channel NOT IN ('phone','whatsapp','max') AND lower(cm.value)=lower(x.value))
+             )
+           )
+        ORDER BY c.id LIMIT 1
       `;
       let candidateId = existing?.id;
       if (!candidateId) {
@@ -56,6 +77,29 @@ export async function POST(request: Request) {
           RETURNING id
         `;
         candidateId = candidate.id;
+      } else {
+        await tx`
+          UPDATE candidates SET
+            full_name=CASE WHEN full_name='Без имени' AND ${body.fullName}<>'Без имени' THEN ${body.fullName} ELSE full_name END,
+            city=COALESCE(city,${body.city??null}),updated_at=now()
+          WHERE id=${candidateId}::uuid
+        `;
+      }
+
+      const contacts=[
+        ...(body.phone?[{channel:"phone",value:body.phone,label:"Основной телефон",isPreferred:(body.preferredChannel??"phone")==="phone"}]:[]),
+        ...(body.email?[{channel:"email",value:body.email,label:null,isPreferred:body.preferredChannel==="email"}]:[]),
+        ...(body.telegram?[{channel:"telegram",value:body.telegram,label:null,isPreferred:body.preferredChannel==="telegram"}]:[]),
+        ...(body.whatsapp?[{channel:"whatsapp",value:body.whatsapp,label:null,isPreferred:body.preferredChannel==="whatsapp"}]:[]),
+        ...(body.contacts??[]),
+      ].filter((item,index,array)=>array.findIndex(other=>other.channel===item.channel&&other.value.trim().toLocaleLowerCase()===item.value.trim().toLocaleLowerCase())===index);
+      if(contacts.some(item=>item.isPreferred))await tx`UPDATE candidate_contact_methods SET is_preferred=false,updated_at=now() WHERE candidate_id=${candidateId}::uuid`;
+      for(const contact of contacts){
+        await tx`
+          INSERT INTO candidate_contact_methods(organization_id,candidate_id,channel,value,label,is_preferred,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${contact.channel},${contact.value},${contact.label??null},${contact.isPreferred??false},${actor.userId}::uuid)
+          ON CONFLICT(candidate_id,channel,value) DO UPDATE SET label=COALESCE(EXCLUDED.label,candidate_contact_methods.label),is_preferred=EXCLUDED.is_preferred,active=true,updated_at=now()
+        `;
       }
       const [duplicate] = await tx<Array<{id:string}>>`SELECT id FROM candidate_applications WHERE candidate_id=${candidateId}::uuid AND need_id=${body.needId}::uuid`;
       if (duplicate) return {candidateId,applicationId:duplicate.id,duplicate:true};
