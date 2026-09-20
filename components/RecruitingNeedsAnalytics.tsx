@@ -78,7 +78,7 @@ export function RecruitingNeedsAnalytics({applications,data:serverData,options,n
     label:stage.label,
     value:stage.candidates,
     note:`${stage.shareTotal}% заявок набора`,
-    aside:mode==="candidates"?`${stage.shareTotal}%`:mode==="conversion"?`${stage.conversion}%`:mode==="losses"?(stage.stage==="started"?"—":`−${stage.notAdvanced} · ${stage.notAdvancedRate}%`):formatDuration(stage.avgHours),
+    aside:mode==="candidates"?`${stage.shareTotal}%`:mode==="conversion"?`${stage.conversion}%`:mode==="losses"?(stage.stage==="retention_30"?"—":`−${stage.notAdvanced} · ${stage.notAdvancedRate}%`):formatDuration(stage.avgHours),
   })),[data.stages,mode]);
 
   const gaps=data.stages.filter(stage=>stage.lost>0).map(stage=>({from:stage.label,to:'Выбытие',count:stage.lost,rate:stage.candidates?Math.round(stage.lost/stage.candidates*100):0})).sort((a,b)=>b.count-a.count);
