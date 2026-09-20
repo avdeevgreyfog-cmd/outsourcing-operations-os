@@ -270,14 +270,14 @@ export function RecruitingFunnelWorkspace({
     {error&&<div className="recruiting-error">{error}</div>}
 
     <div className="recruiting-funnel-scroll">
-      <div className="recruiting-funnel recruiting-funnel-compact" style={{gridTemplateColumns:`repeat(${boardStages.length}, minmax(190px, 1fr))`,minWidth:boardStages.length*200-10}}>
+      <div className="sales-board recruiting-board recruiting-funnel-compact" aria-label="Воронка подбора">
         {boardStages.map(stage=><section className={`recruiting-column${dragged?" is-drop-target":""}`} key={stage} onDragOver={e=>{if(canEdit)e.preventDefault();}} onDrop={e=>{e.preventDefault();void drop(stage);}}>
-          <header><span>{stageLabelByCode.get(stage)??recruitingStageLabels[stage]}</span><span>{scoped.filter(x=>x.stage===stage).length}</span></header>
-          <div className="recruiting-cards">
+          <header><span>{stageLabelByCode.get(stage)??recruitingStageLabels[stage]}</span><b>{scoped.filter(x=>x.stage===stage).length}</b></header>
+          <div className="sales-board-cards recruiting-cards">
             {scoped.filter(x=>x.stage===stage).sort((a,b)=>(a.nextActionAt??"9999").localeCompare(b.nextActionAt??"9999")).map(row=>
               <CompactCandidateCard key={row.applicationId} row={row} showOwner={canConfigurePipeline} busy={Boolean(busy)} draggable={canEdit&&!busy&&!["retention_30"].includes(row.stage)} onDragStart={()=>setDragged(row.applicationId)} onDragEnd={()=>setDragged(null)} onOpen={()=>{setTargetStage(undefined);setSelected(row);}}/>
             )}
-            {!scoped.some(x=>x.stage===stage)&&<div className="empty-inline">Нет кандидатов</div>}
+            {!scoped.some(x=>x.stage===stage)&&<div className="sales-board-empty">Нет кандидатов</div>}
           </div>
         </section>)}
       </div>
@@ -380,7 +380,7 @@ function CompactCandidateCard({row,showOwner,busy,draggable,onDragStart,onDragEn
   else if(row.stage==="first_shift")middle=<><span>Первый выход: <b>{row.workflow?.firstShiftOutcome==="worked"?"подтверждён":"ожидается"}</b></span><span>{row.actualStartAt?formatWorkDate(row.actualStartAt):row.plannedStartDate?`План: ${row.plannedStartDate}`:"Дата не назначена"}</span></>;
   else if(row.stage==="retention_7"||row.stage==="retention_30")middle=<><span>Работает: <b>{retentionDays} дн.</b></span><span>Первый выход: {row.actualStartAt?formatWorkDate(row.actualStartAt):"—"}</span></>;
   else middle=<><span>{row.rejectionReason??"Заявка завершена"}</span><span>{row.object??row.need}</span></>;
-  return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`recruiting-card recruiting-card-compact${urgent?" is-overdue":""}`} onClick={onOpen}>
+  return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`sales-board-card recruiting-card recruiting-card-compact${urgent?" is-overdue":""}`} onClick={onOpen}>
     <div className="recruiting-card-title"><strong>{row.fullName}</strong>{row.nextActionAt&&<time>{formatWorkDate(row.nextActionAt)}</time>}</div>
     <span className="recruiting-card-vacancy">{row.need}{row.object?` · ${row.object}`:""}</span>
     <div className="recruiting-card-stage-info">{middle}</div>
