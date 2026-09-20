@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import {notFound} from "next/navigation";
 import {requireActor} from "@/lib/auth/server";
@@ -15,6 +17,10 @@ function day(value:string|null){if(!value)return "—";const d=new Date(value);r
 function tone(stage:string){if(stage==="completed")return "neutral" as const;if(["submitted","awaiting_result"].includes(stage))return "good" as const;if(["clarification","approval","preparation"].includes(stage))return "warn" as const;return "info" as const;}
 function textCondition(value:unknown){return typeof value==="string"&&value.trim()?value.trim():"—";}
 function guaranteedVolume(value:unknown){return value==="yes"?"Да":value==="no"?"Нет":value==="partial"?"Частично / минимальный объём":"Не определено";}
+
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.tenders.map((id)=>({id})) : [];
+}
 
 export default async function TenderPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
   const {id}=await params;const query=await searchParams;const actor=await requireActor();
