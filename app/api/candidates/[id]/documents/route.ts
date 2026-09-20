@@ -29,12 +29,17 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         WHERE ca.id=${applicationId}::uuid AND ca.candidate_id=${id}::uuid
       `;
       if(!row||!canReadRow(actor.access,"recruiting.candidate.read",row,actor))throw new AccessDeniedError("recruiting.candidate.read");
-      return sql<Array<{documentTypeId:string;name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client";status:string;note:string|null}>>`
-        SELECT dt.id "documentTypeId",dt.name,dt.group_type "groupType",ndr.provider,
-          COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END) status,cad.note
+      return sql<Array<{documentTypeId:string;name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client";requiredBy:"employment"|"first_shift"|"day7"|"day30"|"non_blocking";status:string;note:string|null}>>`
+        SELECT dt.id "documentTypeId",dt.name,dt.group_type "groupType",ndr.provider,ndr.required_by "requiredBy",
+          CASE WHEN dt.group_type='employment'
+            THEN COALESCE(cd.status,'missing')
+            ELSE COALESCE(cad.status,CASE WHEN ndr.provider='candidate' THEN 'missing' ELSE 'to_prepare' END)
+          END status,
+          CASE WHEN dt.group_type='employment' THEN cd.note ELSE cad.note END note
         FROM need_document_requirements ndr
         JOIN candidate_applications ca ON ca.need_id=ndr.need_id AND ca.id=${applicationId}::uuid
         JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
+        LEFT JOIN candidate_documents cd ON cd.candidate_id=ca.candidate_id AND cd.document_type_id=dt.id
         LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
         WHERE ndr.required
         ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,dt.name
@@ -62,23 +67,32 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         WHERE ca.id=${body.applicationId}::uuid AND ca.candidate_id=${id}::uuid
       `;
       if(!row||!canReadRow(actor.access,"recruiting.candidate.edit",row,actor))throw new AccessDeniedError("recruiting.candidate.edit");
-      const [requirement]=await tx<Array<{provider:string;name:string}>>`
-        SELECT ndr.provider,dt.name FROM candidate_applications ca
+      const [requirement]=await tx<Array<{provider:"candidate"|"company"|"client";name:string;groupType:"employment"|"clearance";requiredBy:"employment"|"first_shift"|"day7"|"day30"|"non_blocking"}>>`
+        SELECT ndr.provider,dt.name,dt.group_type "groupType",ndr.required_by "requiredBy" FROM candidate_applications ca
         JOIN need_document_requirements ndr ON ndr.need_id=ca.need_id AND ndr.document_type_id=${body.documentTypeId}::uuid
         JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id
         WHERE ca.id=${body.applicationId}::uuid AND ndr.required
       `;
       if(!requirement)throw new Error("Документ не входит в требования потребности");
-      await tx`
-        INSERT INTO candidate_application_documents(organization_id,application_id,document_type_id,status,note,updated_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${body.applicationId}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${actor.userId}::uuid)
-        ON CONFLICT(application_id,document_type_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
-      `;
+      if(requirement.groupType==="employment"){
+        if(!["missing","requested","received","verified","rejected","not_required"].includes(body.status))throw new Error("Недопустимый статус основного документа");
+        await tx`
+          INSERT INTO candidate_documents(organization_id,candidate_id,document_type_id,status,note,updated_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${actor.userId}::uuid)
+          ON CONFLICT(candidate_id,document_type_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
+        `;
+      }else{
+        await tx`
+          INSERT INTO candidate_application_documents(organization_id,application_id,document_type_id,status,note,updated_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${body.applicationId}::uuid,${body.documentTypeId}::uuid,${body.status},${body.note??null},${actor.userId}::uuid)
+          ON CONFLICT(application_id,document_type_id) DO UPDATE SET status=EXCLUDED.status,note=EXCLUDED.note,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()
+        `;
+      }
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${id}::uuid,'document_updated',
           ${`Документ «${requirement.name}»: ${body.status}`},
-          ${sql.json({applicationId:body.applicationId,documentTypeId:body.documentTypeId,status:body.status,provider:requirement.provider})})
+          ${sql.json({applicationId:body.applicationId,documentTypeId:body.documentTypeId,status:body.status,provider:requirement.provider,groupType:requirement.groupType,requiredBy:requirement.requiredBy})})
       `;
     }));
     return NextResponse.json({ok:true});
