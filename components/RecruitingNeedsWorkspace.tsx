@@ -35,7 +35,7 @@ export function RecruitingNeedsWorkspace({applications,rows,options,analytics,me
  const [newDocumentProvider,setNewDocumentProvider]=useState<"candidate"|"company"|"client">("candidate");
  const [saving,setSaving]=useState(false);const [error,setError]=useState("");const [localRows,setLocalRows]=useState<RecruitingNeedRow[]>([]);
  useEffect(()=>{if(!demo)return;let frame=0;try{const value=localStorage.getItem(storageKey);if(value){const parsed=JSON.parse(value) as RecruitingNeedRow[];frame=requestAnimationFrame(()=>setLocalRows(parsed));}}catch{}return()=>{if(frame)cancelAnimationFrame(frame)}},[demo]);
- useEffect(()=>{if(!demo)return;try{const value=localStorage.getItem(documentStorageKey);if(value){const parsed=JSON.parse(value) as RecruitingDocumentType[];setLocalDocumentTypes(parsed);setDocumentDraft(parsed);}}catch{}},[demo]);
+ useEffect(()=>{if(!demo)return;let frame=0;try{const value=localStorage.getItem(documentStorageKey);if(value){const parsed=JSON.parse(value) as RecruitingDocumentType[];frame=requestAnimationFrame(()=>{setLocalDocumentTypes(parsed);setDocumentDraft(parsed)});}}catch{}return()=>{if(frame)cancelAnimationFrame(frame)}},[demo]);
  const applicationRows=useRecruitingApplications(applications,demo);
  const mergedNeeds=useMemo(()=>[...localRows,...rows.filter(row=>!localRows.some(local=>local.id===row.id))],[localRows,rows]);
  const allRows=useMemo(()=>demo?mergedNeeds.map(need=>{
