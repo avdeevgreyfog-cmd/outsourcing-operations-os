@@ -672,8 +672,8 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         COALESCE(absences.confirmed,0)::int "confirmedAbsences",
         COALESCE(absences.tentative,0)::int "tentativeAbsences",
         COALESCE(exits.planned,0)::int "plannedExits",
-        GREATEST(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
-        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(absences.confirmed,0)-COALESCE(exits.planned,0)+COALESCE(incoming.preparing,0),0),0)::int "projectedDeficit",
+        GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
+        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0),0)::int "projectedDeficit",
         o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM demand d JOIN objects o ON o.id=d.object_id JOIN specialties s ON s.id=d.specialty_id
@@ -688,7 +688,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         JOIN needs cn ON cn.id=ca.need_id
         WHERE ca.object_id=o.id AND cn.specialty_id=d.specialty_id AND ca.stage IN ('documents','clearance','preparation','first_shift')
           AND ca.actual_start_at IS NULL
-          AND (ca.planned_start_date IS NULL OR ca.planned_start_date<=current_date+${horizon}::int)
+          AND ((ca.planned_start_date IS NOT NULL AND ca.planned_start_date<=current_date+${horizon}::int) OR ca.stage IN ('preparation','first_shift'))
       ) incoming ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT CASE WHEN ap.status='confirmed' THEN ap.worker_id END)::int confirmed,
@@ -710,6 +710,27 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
           AND (a.effective_to IS NULL OR a.effective_to>=ep.effective_date)
           AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
       ) exits ON true
+      LEFT JOIN LATERAL (
+        SELECT count(DISTINCT x.worker_id)::int count
+        FROM (
+          SELECT ap.worker_id
+          FROM worker_absence_plans ap
+          JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
+          WHERE ap.status='confirmed'
+            AND a.effective_from<=current_date+${horizon}::int
+            AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+            AND ap.planned_from<=current_date+${horizon}::int
+            AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
+          UNION
+          SELECT ep.worker_id
+          FROM worker_exit_processes ep
+          JOIN worker_object_assignments a ON a.worker_id=ep.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
+          WHERE ep.status='planned'
+            AND a.effective_from<=ep.effective_date
+            AND (a.effective_to IS NULL OR a.effective_to>=ep.effective_date)
+            AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
+        ) x
+      ) unavailable ON true
       ORDER BY "projectedDeficit" DESC,o.name,s.name
     `;
     return rows.filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
