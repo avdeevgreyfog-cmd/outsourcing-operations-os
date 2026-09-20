@@ -53,19 +53,11 @@ ALTER TABLE approval_instances DROP CONSTRAINT IF EXISTS approval_instances_subj
 ALTER TABLE approval_instances ADD CONSTRAINT approval_instances_subject_type_check
   CHECK (subject_type IN ('calculation_scenario','proposal','tender','contract','supply_request'));
 
-CREATE OR REPLACE FUNCTION validate_supply_approval_subject() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF NEW.subject_type='supply_request'
-     AND organization_reference_org('supply_requests',NEW.subject_id) IS DISTINCT FROM NEW.organization_id THEN
-    RAISE EXCEPTION 'supply approval subject belongs to another organization' USING ERRCODE='23514';
-  END IF;
-  RETURN NEW;
-END $$;
-
-DROP TRIGGER IF EXISTS approval_supply_tenant_integrity ON approval_instances;
-CREATE TRIGGER approval_supply_tenant_integrity
-  BEFORE INSERT OR UPDATE ON approval_instances
-  FOR EACH ROW EXECUTE FUNCTION validate_supply_approval_subject();
+ALTER TABLE approval_instances DROP CONSTRAINT IF EXISTS approval_supply_tenant_check;
+ALTER TABLE approval_instances ADD CONSTRAINT approval_supply_tenant_check
+  CHECK (
+    subject_type <> 'supply_request'
+    OR organization_reference_org('supply_requests',subject_id) = organization_id
+  );
 
 COMMIT;
