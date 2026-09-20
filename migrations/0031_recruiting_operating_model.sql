@@ -194,6 +194,48 @@ AFTER INSERT OR UPDATE OR DELETE ON candidate_application_documents
 FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 CREATE INDEX idx_candidate_application_documents_app ON candidate_application_documents(organization_id,application_id,sort_order);
 
+CREATE OR REPLACE FUNCTION validate_recruiting_operating_reference_integrity() RETURNS trigger
+LANGUAGE plpgsql AS $recruiting_integrity$
+DECLARE
+  related_org uuid;
+BEGIN
+  IF TG_TABLE_NAME='need_headcount_changes' THEN
+    SELECT organization_id INTO related_org FROM needs WHERE id=NEW.need_id;
+    IF related_org IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'need belongs to another organization' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME IN ('candidate_application_assignment_history','candidate_application_documents') THEN
+    SELECT organization_id INTO related_org FROM candidate_applications WHERE id=NEW.application_id;
+    IF related_org IS DISTINCT FROM NEW.organization_id THEN
+      RAISE EXCEPTION 'candidate application belongs to another organization' USING ERRCODE='23514';
+    END IF;
+  ELSIF TG_TABLE_NAME='candidate_applications' THEN
+    IF NEW.responsible_user_id IS NOT NULL AND NOT EXISTS (
+      SELECT 1 FROM organization_memberships m
+      WHERE m.organization_id=NEW.organization_id AND m.user_id=NEW.responsible_user_id AND m.status='active'
+    ) THEN
+      RAISE EXCEPTION 'responsible user is not an active organization member' USING ERRCODE='23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $recruiting_integrity$;
+
+CREATE TRIGGER need_headcount_changes_tenant_integrity
+BEFORE INSERT OR UPDATE ON need_headcount_changes
+FOR EACH ROW EXECUTE FUNCTION validate_recruiting_operating_reference_integrity();
+
+CREATE TRIGGER candidate_assignment_history_tenant_integrity
+BEFORE INSERT OR UPDATE ON candidate_application_assignment_history
+FOR EACH ROW EXECUTE FUNCTION validate_recruiting_operating_reference_integrity();
+
+CREATE TRIGGER candidate_documents_tenant_integrity
+BEFORE INSERT OR UPDATE ON candidate_application_documents
+FOR EACH ROW EXECUTE FUNCTION validate_recruiting_operating_reference_integrity();
+
+CREATE TRIGGER candidate_responsible_tenant_integrity
+BEFORE INSERT OR UPDATE OF responsible_user_id ON candidate_applications
+FOR EACH ROW EXECUTE FUNCTION validate_recruiting_operating_reference_integrity();
+
 INSERT INTO permission_definitions(capability,domain,resource,action,field_sensitive,description)
 VALUES
   ('recruiting.pipeline.configure','recruiting','pipeline','configure',false,'Настройка этапов воронки подбора'),
