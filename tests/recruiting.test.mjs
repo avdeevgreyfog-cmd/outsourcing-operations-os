@@ -12,10 +12,12 @@ const {validateStageChange,workRisks,formatWorkDate}=await import(loadSource('wo
 const {buildPeriodAnalytics}=await import(loadSource('analytics-engine.ts',{'./model':model}));
 const now=Date.parse('2026-09-19T12:00:00Z');
 
-test('first shift requires planned date and a nonfuture fact; post-start placement cannot move backward',()=>{
- assert.ok(validateStageChange({stage:'new',plannedStartDate:null},{stage:'first_shift',actualStartAt:'2026-09-19T10:00:00Z'},now));
- assert.ok(validateStageChange({stage:'preparation',plannedStartDate:'2026-09-20'},{stage:'first_shift',actualStartAt:'2026-09-20T10:00:00Z'},now));
- assert.equal(validateStageChange({stage:'preparation',plannedStartDate:'2026-09-20'},{stage:'first_shift',actualStartAt:'2026-09-19T10:00:00Z'},now),null);
+test('preparation separates arrival from first shift and confirmed work requires a real fact',()=>{
+ assert.ok(validateStageChange({stage:'new',plannedStartDate:null,workflow:{}},{stage:'first_shift'},now));
+ assert.equal(validateStageChange({stage:'preparation',plannedStartDate:'2026-09-20',workflow:{travelState:'not_required'}},{stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{travelState:'not_required'}},now),null);
+ assert.ok(validateStageChange({stage:'preparation',plannedStartDate:'2026-09-20',workflow:{travelState:'ticket_required'}},{stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{travelState:'ticket_required'}},now));
+ assert.ok(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{}},{stage:'first_shift',actualStartAt:'2026-09-20T10:00:00Z',workflow:{firstShiftOutcome:'worked'}},now));
+ assert.equal(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{}},{stage:'first_shift',actualStartAt:'2026-09-19T10:00:00Z',workflow:{firstShiftOutcome:'worked'}},now),null);
  assert.ok(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',actualStartAt:'2026-09-19T10:00:00Z'},{stage:'interview'},now));
 });
 
