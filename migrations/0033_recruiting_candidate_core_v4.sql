@@ -26,6 +26,10 @@ SET required_by_stage=CASE WHEN dt.group_type='employment' THEN 'documents' ELSE
 FROM recruiting_document_types dt
 WHERE dt.id=ndr.document_type_id;
 
+ALTER TABLE candidate_application_documents
+  ADD COLUMN IF NOT EXISTS responsible_user_id uuid REFERENCES app_users(id),
+  ADD COLUMN IF NOT EXISTS due_at timestamptz;
+
 CREATE TABLE candidate_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
