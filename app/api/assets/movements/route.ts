@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
+import { canReadRow } from "@/lib/core/access.mjs";
 import type { Sql } from "postgres";
 
 const schema=z.object({
@@ -50,6 +51,34 @@ export async function POST(request:Request){
     if(type==="return"&&!body.toLocationId)return NextResponse.json({error:"Укажите место возврата"},{status:400});
     if(type==="writeoff"&&!body.fromLocationId&&!body.workerId)return NextResponse.json({error:"Укажите место хранения или сотрудника"},{status:400});
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+      const locationIds=[body.fromLocationId,body.toLocationId].filter((value):value is string=>Boolean(value));
+      if(locationIds.length){
+        const locations=await tx<Array<{id:string;organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+          SELECT l.id,l.organization_id "organizationId",l.object_id "objectId",
+            COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+            ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+              WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+              || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds"
+          FROM storage_locations l LEFT JOIN objects o ON o.id=l.object_id
+          WHERE l.id=ANY(${locationIds}::uuid[]) AND l.active
+        `;
+        if(locations.length!==new Set(locationIds).size||locations.some(row=>!canReadRow(actor.access,"assets.manage",{...row,objectId:row.objectId??undefined,ownerUserId:row.ownerUserId??undefined,regionId:row.regionId??undefined},actor)))throw new AccessDeniedError("assets.manage");
+      }
+      if(body.workerId){
+        const [worker]=await tx<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+          SELECT w.organization_id "organizationId",a.object_id "objectId",COALESCE(a.manager_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+            ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+              WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+          FROM worker_profiles w
+          LEFT JOIN LATERAL (
+            SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id
+            ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1
+          ) a ON true
+          LEFT JOIN objects o ON o.id=a.object_id
+          WHERE w.id=${body.workerId}::uuid
+        `;
+        if(!worker||!canReadRow(actor.access,"assets.manage",{...worker,objectId:worker.objectId??undefined,ownerUserId:worker.ownerUserId??undefined,regionId:worker.regionId??undefined},actor))throw new AccessDeniedError("assets.manage");
+      }
       if(body.fromLocationId&&["transfer","issue","writeoff","adjustment_out"].includes(type)){
         const balance=await locationBalance(tx,body.itemId,body.variant,body.fromLocationId);
         if(balance<body.quantity)throw new Error(`Недостаточный остаток: доступно ${balance}`);
