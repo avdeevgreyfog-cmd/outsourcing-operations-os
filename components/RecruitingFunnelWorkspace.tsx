@@ -310,23 +310,34 @@ export function RecruitingFunnelWorkspace({
   </div>;
 }
 
+function RecruitingPortal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body);}
+
 function CompactCandidateCard({row,showOwner,busy,draggable,onDragStart,onDragEnd,onOpen}:{row:RecruitingApplicationRow;showOwner:boolean;busy:boolean;draggable:boolean;onDragStart:()=>void;onDragEnd:()=>void;onOpen:()=>void}){
-  const risk=workRisks(row)[0];
+  const risks=workRisks(row);
+  const risk=risks[0];
+  const urgent=Boolean(risk&&risk!=="Нужно взять в работу"&&risk!=="Ожидается подтверждение выхода");
   const docs=row.documentSummary;
   const retentionDays=row.stage==="retention_30"?"30+":row.stage==="retention_7"?"7+":"—";
   let middle:React.ReactNode;
   if(row.stage==="new")middle=<><span>{row.phone??row.email??"Контакт не указан"}</span><span>{[row.source,row.city].filter(Boolean).join(" · ")||"Источник не указан"}</span></>;
-  else if(row.stage==="interview")middle=<><span>{row.workflow?.lastContact||"Интервью ещё не зафиксировано"}</span><span>{row.workflow?.nextActionText||"Уточнить интерес и условия"}</span></>;
-  else if(row.stage==="documents")middle=<><span>Документы: <b>{docs?.received??row.workflow?.documentsReceived??0}/{docs?.required??row.workflow?.documentsRequired??0}</b></span><span>{docs?.missing?.length?`Нет: ${docs.missing.slice(0,2).join(", ")}`:row.workflow?.missingDocuments?.length?`Нет: ${row.workflow.missingDocuments.slice(0,2).join(", ")}`:"Чек-лист не заполнен"}</span></>;
-  else if(row.stage==="preparation")middle=<><span>План выхода: <b>{row.plannedStartDate??"не назначен"}</b></span><span>{travelLabel(row.workflow?.travelState)}</span></>;
-  else if(row.stage==="first_shift")middle=<><span>Первый выход: <b>{row.actualStartAt?formatWorkDate(row.actualStartAt):"ожидается"}</b></span><span>{row.workflow?.plannedShift||"Смена не указана"}</span></>;
+  else if(row.stage==="interview")middle=<><span>{row.workflow?.managerInterviewState==="pending"?"Ожидает интервью мастера":row.workflow?.outcomeCode==="interested"?"Кандидат заинтересован":row.workflow?.lastContact||"Нужно провести интервью"}</span><span>{row.nextActionAt?`Следующее: ${formatWorkDate(row.nextActionAt)}`:"Решение ещё не зафиксировано"}</span></>;
+  else if(row.stage==="documents"){
+    const ready=docs?.employmentReady??0,required=docs?.employmentRequired??0,missing=docs?.employmentMissing??[];
+    middle=<><span>Для оформления: <b>{ready}/{required}</b></span><span>{missing.length?`Осталось ${missing.length} док.`:"Комплект готов"}</span></>;
+  }
+  else if(row.stage==="clearance"){
+    const ready=docs?.clearanceReady??0,required=docs?.clearanceRequired??0,pending=docs?.clearancePending??[];
+    middle=<><span>Допуски: <b>{ready}/{required}</b></span><span>{pending.length?`В работе: ${pending.length}`:"Всё готово"}</span></>;
+  }
+  else if(row.stage==="preparation")middle=<><span>Прибытие: <b>{row.plannedArrivalAt?formatWorkDate(row.plannedArrivalAt):"не назначено"}</b></span><span>{row.workflow?.housingState==="needs_booking"?"Нужно подтвердить жильё":row.workflow?.travelState==="ticket_required"?"Нужно купить билет":row.plannedStartDate?`Выход: ${row.plannedStartDate}`:"Дата выхода не назначена"}</span></>;
+  else if(row.stage==="first_shift")middle=<><span>Первый выход: <b>{row.workflow?.firstShiftOutcome==="worked"?"подтверждён":"ожидается"}</b></span><span>{row.actualStartAt?formatWorkDate(row.actualStartAt):row.plannedStartDate?`План: ${row.plannedStartDate}`:"Дата не назначена"}</span></>;
   else if(row.stage==="retention_7"||row.stage==="retention_30")middle=<><span>Работает: <b>{retentionDays} дн.</b></span><span>Первый выход: {row.actualStartAt?formatWorkDate(row.actualStartAt):"—"}</span></>;
   else middle=<><span>{row.rejectionReason??"Заявка завершена"}</span><span>{row.object??row.need}</span></>;
-  return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`recruiting-card recruiting-card-compact${risk?" is-overdue":""}`} onClick={onOpen}>
+  return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`recruiting-card recruiting-card-compact${urgent?" is-overdue":""}`} onClick={onOpen}>
     <div className="recruiting-card-title"><strong>{row.fullName}</strong>{row.nextActionAt&&<time>{formatWorkDate(row.nextActionAt)}</time>}</div>
     <span className="recruiting-card-vacancy">{row.need}{row.object?` · ${row.object}`:""}</span>
     <div className="recruiting-card-stage-info">{middle}</div>
-    <div className="recruiting-card-footer">{showOwner&&<span>{row.owner??"Без ответственного"}</span>}{risk&&<span className="needs-overdue">{risk}</span>}</div>
+    <div className="recruiting-card-footer">{showOwner&&<span>{row.owner??"Без ответственного"}</span>}{risk&&<span className={urgent?"needs-overdue":"recruiting-card-signal"}>{risk}</span>}</div>
   </button>;
 }
 
