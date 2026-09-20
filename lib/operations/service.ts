@@ -529,6 +529,8 @@ export type SupplyRequestRow={
   vendor:string|null;
   neededBy:string|null;
   status:string;
+  approvalId:string|null;
+  approvalStatus:string|null;
   createdBy:string;
   assignedTo:string|null;
   createdAt:string;
@@ -543,7 +545,7 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
     return [{
       id:"demo-supply-request-1",organizationId:object.organizationId,objectId:object.id,object:object.name,requestType:"purchase",
       title:"Пополнить рабочую обувь",description:"Дефицит размера 43",itemId:"demo-item-boots",item:"Ботинки рабочие",locationId:null,location:null,
-      quantity:6,unit:"пар",amount:null,vendor:null,neededBy:"25.09.2026",status:"submitted",createdBy:actor.displayName,assignedTo:null,createdAt:"20.09.2026",
+      quantity:6,unit:"пар",amount:null,vendor:null,neededBy:"25.09.2026",status:"submitted",approvalId:null,approvalStatus:null,createdBy:actor.displayName,assignedTo:null,createdAt:"20.09.2026",
       ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],
     }];
   }
@@ -552,7 +554,7 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
       SELECT r.id,r.organization_id "organizationId",r.object_id "objectId",o.name object,r.request_type "requestType",
         r.title,r.description,r.item_id "itemId",i.name item,r.location_id "locationId",l.name location,
         r.quantity::numeric quantity,r.unit,r.amount::numeric amount,r.vendor,to_char(r.needed_by,'DD.MM.YYYY') "neededBy",
-        r.status,creator.display_name "createdBy",assignee.display_name "assignedTo",to_char(r.created_at,'DD.MM.YYYY') "createdAt",
+        r.status,approval.id "approvalId",approval.status "approvalStatus",creator.display_name "createdBy",assignee.display_name "assignedTo",to_char(r.created_at,'DD.MM.YYYY') "createdAt",
         COALESCE(o.owner_user_id,r.created_by_user_id) "ownerUserId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=r.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
@@ -562,6 +564,11 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
       LEFT JOIN storage_locations l ON l.id=r.location_id
       JOIN app_users creator ON creator.id=r.created_by_user_id
       LEFT JOIN app_users assignee ON assignee.id=r.assigned_to_user_id
+      LEFT JOIN LATERAL (
+        SELECT ai.id,ai.status FROM approval_instances ai
+        WHERE ai.subject_type='supply_request' AND ai.subject_id=r.id
+        ORDER BY ai.submitted_at DESC LIMIT 1
+      ) approval ON true
       ORDER BY r.status IN ('closed','rejected'),r.needed_by NULLS LAST,r.created_at DESC
     `;
     return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor)).map(row=>({...row,quantity:row.quantity==null?null:Number(row.quantity),amount:row.amount==null?null:Number(row.amount)}));
