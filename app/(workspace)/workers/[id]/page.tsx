@@ -5,8 +5,9 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listShifts, listWorkers } from "@/lib/data/service";
 import { hasCapability } from "@/lib/core/access.mjs";
-import { getOperationsReferenceData, getWorkerOperationsDetails } from "@/lib/operations/service";
+import { getOperationsReferenceData, getWorkerOffboardingContext, getWorkerOperationsDetails } from "@/lib/operations/service";
 import { WorkerAbsencesWorkspace, WorkerAssignmentsWorkspace } from "@/components/WorkerOperationsWorkspace";
+import { WorkerEmploymentWorkspace } from "@/components/WorkerEmploymentWorkspace";
 import { Empty, EntityTabs, KeyValue, Metric, PageHeader, Section, Status } from "@/components/UI";
 import { rub } from "@/lib/ui/format";
 
@@ -39,10 +40,12 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
   if(!worker)notFound();
 
   const canEdit=hasCapability(actor.access,"worker.edit");
+  const canOffboard=hasCapability(actor.access,"worker.offboarding.manage");
   const sensitive=hasCapability(actor.access,"worker.compensation.read");
   const payments=hasCapability(actor.access,"finance.payments.read");
-  const [details,options,shifts]=await Promise.all([
+  const [details,offboarding,options,shifts]=await Promise.all([
     getWorkerOperationsDetails(actor,id),
+    getWorkerOffboardingContext(actor,id),
     getOperationsReferenceData(actor),
     hasCapability(actor.access,"operations.shift.read")?listShifts(actor).then(rows=>rows.filter(row=>row.objectId===worker.objectId)):Promise.resolve([]),
   ]);
@@ -77,6 +80,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
       </div>
     </>}
 
+    {tab==="employment"&&<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} demo={actor.demo}/>}
     {tab==="assignments"&&<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} demo={actor.demo}/>}
     {tab==="schedule"&&<>
       <Section title="Ближайшие смены"><div className="stack-list">{shifts.map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.time}</strong><small>{row.specialty} · {row.object}</small></div><Status tone="info">{row.kind}</Status></div>)}</div>{!shifts.length&&<Empty title="Смен нет" text="Для текущего назначения смены не найдены."/>}</Section>
@@ -86,6 +90,6 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     {tab==="payments"&&<Section title="Выплаты"><div style={{padding:16,maxWidth:560}}><KeyValue label="Выплачено" value={worker.paid==null?"—":rub(worker.paid)} sensitive/><KeyValue label="К выплате" value={worker.payable==null?"—":rub(worker.payable)} sensitive/></div></Section>}
     {tab==="housing"&&<Section title="Проживание"><Empty title="Откройте контур жилья" text="Текущие и исторические заселения ведутся в едином реестре жилья." action={<Link className="button" href={"/supply/housing?worker="+worker.id}>Открыть жильё</Link>}/></Section>}
     {tab==="assets"&&<Section title="Имущество и СИЗ"><Empty title="Откройте учёт имущества" text="Выдачи, возвраты и списания ведутся через единый журнал движений." action={<Link className="button" href={"/assets?worker="+worker.id}>Открыть запасы</Link>}/></Section>}
-    {["employment","timesheets","documents","incidents","history"].includes(tab)&&<Section title={labels[tab]}><Empty title="Записей нет" text="В доступном контуре сотрудника записи этого типа отсутствуют."/></Section>}
+    {["timesheets","documents","incidents","history"].includes(tab)&&<Section title={labels[tab]}><Empty title="Записей нет" text="В доступном контуре сотрудника записи этого типа отсутствуют."/></Section>}
   </>;
 }
