@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Sql } from "postgres";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { requireCapability,AccessDeniedError } from "@/lib/access/server";
@@ -60,7 +61,7 @@ type ScopeRow={
   fullName:string;
 };
 
-async function ensureActiveAssignee(tx:any,organizationId:string,userId:string|null|undefined){
+async function ensureActiveAssignee(tx:Sql,organizationId:string,userId:string|null|undefined){
   if(!userId)return;
   const [row]=await tx<Array<{id:string}>>`
     SELECT user_id id FROM organization_memberships
@@ -70,7 +71,7 @@ async function ensureActiveAssignee(tx:any,organizationId:string,userId:string|n
 }
 
 async function syncPreparationTask(
-  tx:any,
+  tx:Sql,
   actor:{organizationId:string;userId:string},
   current:ScopeRow,
   kind:"ticket"|"housing",
