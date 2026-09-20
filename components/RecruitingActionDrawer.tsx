@@ -21,6 +21,9 @@ type DocumentRow={
   note:string|null;
   requiredByStage?:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
   blocksProgress?:boolean;
+  responsibleUserId?:string|null;
+  responsible?:string|null;
+  dueAt?:string|null;
 };
 
 type ActionOption={code:string;label:string;hint:string;tone?:"danger"|"neutral"};
@@ -267,13 +270,16 @@ export function RecruitingActionDrawer({
     finally{setBusy("")}
   }
 
-  async function updateDocument(document:DocumentRow,status:string){
-    if(demo){setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?{...item,status}:item));return;}
+  async function updateDocument(document:DocumentRow,patch:Partial<Pick<DocumentRow,"status"|"responsibleUserId"|"dueAt">>){
+    const next={...document,...patch};
+    if(demo){setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?next:item));return;}
     setBusy(document.documentTypeId);setError("");
     try{
-      const response=await fetch("/api/candidates/"+row.candidateId+"/documents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({applicationId:row.applicationId,documentTypeId:document.documentTypeId,status})});
+      const response=await fetch("/api/candidates/"+row.candidateId+"/documents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({
+        applicationId:row.applicationId,documentTypeId:document.documentTypeId,status:next.status,responsibleUserId:next.responsibleUserId??null,dueAt:next.dueAt??null,
+      })});
       const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error??"Не удалось обновить документ");
-      setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?{...item,status}:item));
+      setDocuments(current=>(current??[]).map(item=>item.documentTypeId===document.documentTypeId?next:item));
     }catch(e){setError(e instanceof Error?e.message:"Не удалось обновить документ");}
     finally{setBusy("")}
   }
@@ -299,7 +305,7 @@ export function RecruitingActionDrawer({
         </div>
       </section>
 
-      {visibleDocuments!==null&&showDocumentsAtStage(row.stage)&&<DocumentChecklist documents={visibleDocuments} canEdit={canEdit} busy={busy} onChange={updateDocument}/>}
+      {visibleDocuments!==null&&showDocumentsAtStage(row.stage)&&<DocumentChecklist documents={visibleDocuments} recruiters={recruiters} canEdit={canEdit} busy={busy} onChange={updateDocument}/>}
 
       {error&&<div role="alert" className="recruiting-error">{error}</div>}
 
@@ -344,16 +350,21 @@ export function RecruitingActionDrawer({
   </SalesDrawer>;
 }
 
-function DocumentChecklist({documents,canEdit,busy,onChange}:{documents:DocumentRow[];canEdit:boolean;busy:string;onChange:(document:DocumentRow,status:string)=>void}){
+function DocumentChecklist({documents,recruiters,canEdit,busy,onChange}:{documents:DocumentRow[];recruiters:Array<{id:string;name:string}>;canEdit:boolean;busy:string;onChange:(document:DocumentRow,patch:Partial<Pick<DocumentRow,"status"|"responsibleUserId"|"dueAt">>)=>void}){
   const group=documents[0]?.groupType;
   const ready=documents.filter(item=>["received","verified","ready","not_required"].includes(item.status)).length;
   return <section className="candidate-documents">
-    <header><div><h3>{group==="clearance"?"Оформление и допуски":"Документы для оформления"}</h3><p>Готово {ready} из {documents.length}. Состояние карточки рассчитывается из этого списка.</p></div></header>
+    <header><div><h3>{group==="clearance"?"Дополнительные документы и допуски":"Документы для оформления"}</h3><p>Готово {ready} из {documents.length}. Неблокирующие требования могут выполняться параллельно следующим этапам.</p></div></header>
     <div>{documents.map(document=>{
       const statuses=document.provider==="candidate"
         ? ["missing","requested","received","verified","not_required"]
         : ["to_prepare","in_progress","ready","not_required"];
-      return <div className="candidate-document-row" key={document.documentTypeId}><div><strong>{document.name}</strong><small>{providerLabels[document.provider]}</small></div><select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,e.target.value)}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select></div>;
+      const companyTask=document.groupType==="clearance"&&document.provider!=="candidate"&&!["ready","not_required"].includes(document.status);
+      return <div className="candidate-document-row candidate-document-row-v2" key={document.documentTypeId}>
+        <div className="candidate-document-meta"><strong>{document.name}</strong><small>{providerLabels[document.provider]} · {document.requiredByStage?deadlineLabel(document.requiredByStage):"Срок не задан"}{document.blocksProgress?" · блокирует":""}</small></div>
+        <select value={document.status} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{status:e.target.value})}>{statuses.map(status=><option key={status} value={status}>{statusLabels[status]??status}</option>)}</select>
+        {companyTask&&<div className="candidate-document-task"><select aria-label={"Ответственный: "+document.name} value={document.responsibleUserId??""} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{responsibleUserId:e.target.value||null})}><option value="">Ответственный</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><input aria-label={"Срок: "+document.name} type="datetime-local" value={localDate(document.dueAt)} disabled={!canEdit||busy===document.documentTypeId} onChange={e=>void onChange(document,{dueAt:e.target.value?new Date(e.target.value).toISOString():null})}/></div>}
+      </div>;
     })}</div>
   </section>;
 }
@@ -406,6 +417,7 @@ function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingAppli
   </section>;
 }
 
+function deadlineLabel(value:string){return value==="documents"?"до оформления":value==="preparation"?"до подготовки":value==="first_shift"?"до первого выхода":value==="retention_7"?"до 7-го дня":value==="retention_30"?"до 30-го дня":"без жёсткого срока";}
 function provision(c:Record<string,unknown>,key:string){const explicit=c[key+"Provided"];const detail=display(c[key]);if(explicit===true)return detail==="—"?"Предоставляется":detail;if(explicit===false)return detail==="—"?"Не предоставляется":detail;return detail;}
 function display(value:unknown){if(value==null||value==="")return"—";if(typeof value==="string"||typeof value==="number")return String(value);return JSON.stringify(value);}
 function localDate(value?:string|null){if(!value||!Number.isFinite(Date.parse(value)))return"";const date=new Date(value);return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16);}
