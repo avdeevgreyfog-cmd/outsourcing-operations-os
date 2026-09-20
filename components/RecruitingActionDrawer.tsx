@@ -19,6 +19,8 @@ type DocumentRow={
   provider:"candidate"|"company"|"client";
   status:string;
   note:string|null;
+  requiredByStage?:"documents"|"preparation"|"first_shift"|"retention_7"|"retention_30"|"none";
+  blocksProgress?:boolean;
 };
 
 type ActionOption={code:string;label:string;hint:string;tone?:"danger"|"neutral"};
@@ -40,7 +42,7 @@ const stageActions:Partial<Record<RecruitingStage,ActionOption[]>>={
   ],
   documents:[
     {code:"documents_wait",label:"Ожидаем документы",hint:"Назначить срок проверки"},
-    {code:"documents_complete",label:"Документы собраны",hint:"Перейти к допускам"},
+    {code:"documents_complete",label:"Документы собраны",hint:"Перейти к следующему активному этапу"},
     {code:"documents_stopped",label:"Оформление прекращено",hint:"Закрыть заявку",tone:"danger"},
   ],
   clearance:[
@@ -122,6 +124,10 @@ export function RecruitingActionDrawer({
     {code:"retention_30",label:"30 дней",sortOrder:80,active:true,systemType:"retention_final"},
   ] as RecruitingFunnelStageSetting[]).filter(item=>item.active).sort((a,b)=>a.sortOrder-b.sortOrder),[stages]);
   const stageLabel=(value:RecruitingStage)=>orderedStages.find(item=>item.code===value)?.label??recruitingStageLabels[value];
+  const nextActiveStage=(value:RecruitingStage)=>{
+    const index=orderedStages.findIndex(item=>item.code===value);
+    return (index>=0?orderedStages[index+1]?.code:null)??(value==="documents"?"preparation":value);
+  };
   const risks=workRisks(row);
   const activeNeeds=needs.filter(item=>["open","in_progress"].includes(item.status)&&item.id!==row.needId);
 
@@ -171,14 +177,14 @@ export function RecruitingActionDrawer({
     if(action==="documents_complete"){
       const employment=documents?.filter(item=>item.groupType==="employment")??[];
       if(employment.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не все документы для оформления готовы.");
-      targetStage="clearance";workflow.outcomeCode="documents_complete";
+      targetStage=nextActiveStage("documents");workflow.outcomeCode="documents_complete";
     }
     if(action==="documents_stopped"){targetStage="rejected";reasonValue="documents";workflow.outcomeCode="documents_stopped";}
 
     if(action==="clearance_progress"){targetStage="clearance";workflow.outcomeCode="clearance_progress";nextAction=requireNext();}
     if(action==="clearance_complete"){
-      const clearance=documents?.filter(item=>item.groupType==="clearance")??[];
-      if(clearance.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не все допуски и документы объекта готовы.");
+      const clearance=documents?.filter(item=>item.groupType==="clearance"&&item.blocksProgress)??[];
+      if(clearance.some(item=>!["received","verified","ready","not_required"].includes(item.status)))throw new Error("Не готовы обязательные блокирующие допуски.");
       targetStage="preparation";workflow.outcomeCode="clearance_complete";
     }
     if(action==="clearance_failed"){
@@ -386,8 +392,8 @@ function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
   const employmentReady=Math.min(row.documentSummary?.employmentReady??(row.stage==="documents"?2:4),4);
   const clearanceReady=Math.min(row.documentSummary?.clearanceReady??(["preparation","first_shift","retention_7","retention_30"].includes(row.stage)?2:0),2);
   return [
-    ...employment.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"employment" as const,provider:item.provider,status:index<employmentReady?"received":"requested",note:null})),
-    ...clearance.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"clearance" as const,provider:item.provider,status:index<clearanceReady?(item.provider==="candidate"?"received":"ready"):(item.provider==="candidate"?"requested":"to_prepare"),note:null})),
+    ...employment.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"employment" as const,provider:item.provider,status:index<employmentReady?"received":"requested",note:null,requiredByStage:"documents" as const,blocksProgress:true})),
+    ...clearance.map((item,index)=>({documentTypeId:item.id,name:item.name,groupType:"clearance" as const,provider:item.provider,status:index<clearanceReady?(item.provider==="candidate"?"received":"ready"):(item.provider==="candidate"?"requested":"to_prepare"),note:null,requiredByStage:index===0?"first_shift" as const:"retention_7" as const,blocksProgress:false})),
   ];
 }
 
