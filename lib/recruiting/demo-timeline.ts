@@ -1,5 +1,6 @@
 import { normalizeRecruitingStage, recruitingStages, recruitingStageLabels, type RecruitingStage } from './model';
 import type { RecruitingApplicationRow } from './service';
+import type { WorkflowDetails } from './workflow';
 
 type DemoCandidateSeed = {
   id:string;
@@ -134,7 +135,7 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     author:communicationIndex===0&&stage==="new"?"Система":author,
   }));
 
-  const workflow={
+  const workflow:WorkflowDetails={
     nextActionText:
       stage==="new"?"Позвонить по новому контакту":
       stage==="interview"?(index%3===0?"Повторить звонок и получить решение":"Уточнить решение по вакансии"):
