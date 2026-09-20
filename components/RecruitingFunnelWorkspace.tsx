@@ -8,7 +8,6 @@ import { Plus, Settings2, X } from "lucide-react";
 import { RecruitingActionDrawer } from "./RecruitingActionDrawer";
 import { useRecruitingApplications, saveDemoApplication } from "@/lib/recruiting/demo-client";
 import { isActiveStage, workRisks, formatWorkDate } from "@/lib/recruiting/workflow";
-import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 import type { RecruitingApplicationRow, RecruitingNeedRow, RecruitingOptions, RecruitingFunnelStageSetting, RecruitingSourceOption } from "@/lib/recruiting/service";
 import { recruitingStageLabels, recruitingStages, type RecruitingStage } from "@/lib/recruiting/model";
 
