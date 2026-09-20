@@ -93,9 +93,10 @@ export async function POST(request:Request){
           const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM candidate_applications WHERE candidate_id=${candidateId}::uuid AND need_id=${need.id}::uuid`;
           if(duplicate){duplicateApplications++;issues.push({row:index+2,type:"duplicate_application",candidateId,message:"Заявка на эту потребность уже существует"});}
           else{
+            const conditionSnapshot=JSON.parse(JSON.stringify(need.conditions??{}));
             const [app]=await tx<Array<{id:string}>>`
               INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,owner_user_id,manager_user_id,conditions_snapshot,source_snapshot,created_by_user_id)
-              VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${need.id}::uuid,${need.objectId}::uuid,'new',${body.ownerUserId??need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${tx.json(need.conditions??{})},${tx.json({source:body.source,channel:"Импорт базы",campaign:null,reference:null})},${actor.userId}::uuid)
+              VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${need.id}::uuid,${need.objectId}::uuid,'new',${body.ownerUserId??need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${tx.json(conditionSnapshot)},${tx.json({source:body.source,channel:"Импорт базы",campaign:null,reference:null})},${actor.userId}::uuid)
               RETURNING id
             `;
             await tx`
