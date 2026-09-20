@@ -8,6 +8,9 @@ import * as demo from "@/lib/demo/data";
 import { needSourceLabels, normalizeRecruitingStage, recruitingStageLabels, type RecruitingStage } from "./model";
 
 export type NeedRecruiterAssignment = { userId: string; name: string; targetCount: number };
+export type RecruitingFunnelStageSetting = { code: RecruitingStage; label: string; sortOrder: number; active: boolean; systemType: string };
+export type RecruitingSourceOption = { id:string; code:string; name:string; kind:string; active:boolean };
+export type NeedQuantityChange = { id:string; oldCount:number|null; newCount:number; delta:number; reason:string|null; changedAt:string; changedBy:string };
 
 export type RecruitingNeedRow = {
   id: string;
@@ -45,6 +48,7 @@ export type RecruitingNeedRow = {
   conditionVersion: number;
   stageCounts: Partial<Record<RecruitingStage, number>>;
   funnelReached: Partial<Record<RecruitingStage, number>>;
+  quantityHistory: NeedQuantityChange[];
 };
 
 export type RecruitingApplicationRow = {
@@ -87,6 +91,8 @@ export type RecruitingApplicationRow = {
   rejectionReason: string | null;
   rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
+  recentCommunications?: Array<{id:string;channel:string;summary:string;happenedAt:string;author:string}>;
+  documentSummary?: {required:number;received:number;missing:string[]};
 };
 
 export type CandidateCommunication = {
@@ -137,6 +143,9 @@ export type RecruitingOptions = {
   objects: Array<{id:string;name:string;regionId:string;region:string}>;
   recruiters: Array<{id:string;name:string}>;
   sources: string[];
+  sourceCatalog: RecruitingSourceOption[];
+  funnelStages: RecruitingFunnelStageSetting[];
+  documentTypes: Array<{id:string;code:string;name:string}>;
   exitReasons: Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>;
 };
 
@@ -171,7 +180,7 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
       approved: related.filter((candidate) => ["approved","preparation","ready","started"].includes(normalizeRecruitingStage(candidate.stage))).length,
-      ready, started, conditionVersion: 1,
+      ready, started, conditionVersion: 1, quantityHistory:[],
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
@@ -378,6 +387,30 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
     recruiters: [{id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"}],
     sources: [...new Set(demo.candidates.map((row)=>row.source).filter((value): value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),
+    sourceCatalog: [
+      {id:"demo-source-avito",code:"avito",name:"Авито",kind:"job_site",active:true},
+      {id:"demo-source-hh",code:"hh",name:"hh.ru",kind:"job_site",active:true},
+      {id:"demo-source-telegram",code:"telegram",name:"Telegram",kind:"social",active:true},
+      {id:"demo-source-referral",code:"referral",name:"Рекомендация",kind:"referral",active:true},
+      {id:"demo-source-partner",code:"partner",name:"Партнёр / подрядчик",kind:"partner",active:true},
+    ],
+    funnelStages: [
+      {code:"new",label:"Новый контакт",sortOrder:10,active:true,systemType:"intake"},
+      {code:"interview",label:"Интервью",sortOrder:20,active:true,systemType:"qualification"},
+      {code:"documents",label:"Документы",sortOrder:30,active:true,systemType:"documents"},
+      {code:"preparation",label:"Подготовка к выходу",sortOrder:40,active:true,systemType:"preparation"},
+      {code:"first_shift",label:"Первый выход",sortOrder:50,active:true,systemType:"start"},
+      {code:"retention_7",label:"7 дней",sortOrder:60,active:true,systemType:"retention"},
+      {code:"retention_30",label:"30 дней",sortOrder:70,active:true,systemType:"retention_final"},
+    ],
+    documentTypes: [
+      {id:"demo-doc-passport",code:"passport",name:"Паспорт"},
+      {id:"demo-doc-snils",code:"snils",name:"СНИЛС"},
+      {id:"demo-doc-inn",code:"inn",name:"ИНН"},
+      {id:"demo-doc-bank",code:"bank_details",name:"Банковские реквизиты"},
+      {id:"demo-doc-medical",code:"medical",name:"Медицинские документы"},
+      {id:"demo-doc-qualification",code:"qualification",name:"Удостоверение / допуск"},
+    ],
     exitReasons: [
       {code:"pay",name:"Не устроила зарплата",kind:"rejected"},
       {code:"schedule",name:"Не устроил график",kind:"rejected"},
@@ -396,7 +429,7 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     ],
   };
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [specialties,regions,objects,recruiters,sources,exitReasons] = await Promise.all([
+    const [specialties,regions,objects,recruiters,sources,sourceCatalog,funnelStages,documentTypes,exitReasons] = await Promise.all([
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;regionId:string;region:string}>>`
@@ -434,12 +467,25 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
         WHERE c.source IS NOT NULL AND btrim(c.source)<>''
         ORDER BY c.source
       `,
+      sql<RecruitingSourceOption[]>`
+        SELECT id,code,name,kind,active
+        FROM recruiting_candidate_sources
+        WHERE active ORDER BY sort_order,name
+      `,
+      sql<RecruitingFunnelStageSetting[]>`
+        SELECT code,label,sort_order "sortOrder",active,system_type "systemType"
+        FROM recruiting_funnel_stages
+        WHERE active ORDER BY sort_order,created_at
+      `,
+      sql<Array<{id:string;code:string;name:string}>>`
+        SELECT id,code,name FROM recruiting_document_types WHERE active ORDER BY sort_order,name
+      `,
       sql<Array<{code:string;name:string;kind:"rejected"|"no_show"|"both"}>>`
         SELECT code,name,kind FROM candidate_exit_reasons
         WHERE active ORDER BY sort_order,name
       `,
     ]);
-    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source),exitReasons};
+    return {specialties,regions,objects,recruiters,sources:sources.map((row)=>row.source),sourceCatalog,funnelStages,documentTypes,exitReasons};
 
   });
 }
