@@ -6,7 +6,7 @@ const ids = <T extends {id:string}>(rows:T[]) => rows.map((row)=>row.id);
 export const githubPagesStaticParams = {
   clients: ids(demo.clients),
   requests: ids(demo.requests),
-  calculations: ids(demo.calculations),
+  calculations: [...new Set(demo.calculations.map((row)=>row.requestId))],
   objects: ids(demo.objects),
   candidates: ids(demo.candidates),
   workers: ids(demo.workers),
