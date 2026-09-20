@@ -266,6 +266,7 @@ export function RecruitingFunnelWorkspace({
       row={selected}
       need={needById.get(selected.needId)??null}
       stages={activeStages}
+      recruiters={options.recruiters}
       initialStage={targetStage}
       demo={demo}
       canEdit={canEdit}
