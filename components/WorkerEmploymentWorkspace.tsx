@@ -18,7 +18,7 @@ const reasonLabels:Record<string,string>={
   other:"Другая причина",
 };
 
-export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffboard,demo}:{workerId:string;workerStatus:string;context:WorkerOffboardingContext;canOffboard:boolean;demo:boolean}){
+export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffboard,canAccessAssets,demo}:{workerId:string;workerStatus:string;context:WorkerOffboardingContext;canOffboard:boolean;canAccessAssets:boolean;demo:boolean}){
   const [show,setShow]=useState(false);
   const [effectiveDate,setEffectiveDate]=useState(new Date().toISOString().slice(0,10));
   const [reasonCode,setReasonCode]=useState("employee_request");
@@ -77,7 +77,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
 
     <div className="workspace-grid" style={{marginTop:16}}>
       <Section title="Имущество к возврату" note="Возвратное имущество должно быть возвращено или списано до фактического завершения работы.">
-        {context.outstandingAssets.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Позиция</th><th>Вариант</th><th>Количество</th></tr></thead><tbody>{context.outstandingAssets.map(row=><tr key={row.itemId+":"+row.variant}><td className="cell-title">{row.item}</td><td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td></tr>)}</tbody></table><div style={{padding:12}}><Link className="button" href={"/assets?worker="+workerId+"&action=return"}>Открыть возврат / списание</Link></div></div>:<div className="empty-inline">Возвратного имущества на сотруднике нет</div>}
+        {context.outstandingAssets.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Позиция</th><th>Вариант</th><th>Количество</th></tr></thead><tbody>{context.outstandingAssets.map(row=><tr key={row.itemId+":"+row.variant}><td className="cell-title">{row.item}</td><td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td></tr>)}</tbody></table>{canAccessAssets&&<div style={{padding:12}}><Link className="button" href={"/assets?worker="+workerId+"&action=return"}>Открыть возврат / списание</Link></div>}</div>:<div className="empty-inline">Возвратного имущества на сотруднике нет</div>}
       </Section>
       <Section title="Проживание">
         {context.housing.length?<div className="stack-list">{context.housing.map(row=><div className="stack-item" key={row.id}><div><strong>{row.site}</strong><small>Заезд {row.checkIn}{row.checkOut?" · выезд "+row.checkOut:""}</small></div><Status tone={row.status==="active"?"good":"info"}>{row.status==="active"?"Проживает":"Запланировано"}</Status></div>)}</div>:<div className="empty-inline">Активного проживания нет</div>}
