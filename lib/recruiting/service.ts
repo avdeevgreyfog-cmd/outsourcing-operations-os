@@ -713,9 +713,8 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         FROM recruiting_document_types dt
         LEFT JOIN candidate_documents cd ON cd.candidate_id=${id}::uuid AND cd.document_type_id=dt.id
         LEFT JOIN need_document_requirements ndr ON ndr.document_type_id=dt.id AND ndr.required
-        LEFT JOIN needs n ON n.id=ndr.need_id AND EXISTS(
-          SELECT 1 FROM candidate_applications ca WHERE ca.candidate_id=${id}::uuid AND ca.need_id=n.id
-        )
+          AND EXISTS(SELECT 1 FROM candidate_applications ca0 WHERE ca0.candidate_id=${id}::uuid AND ca0.need_id=ndr.need_id)
+        LEFT JOIN needs n ON n.id=ndr.need_id
         LEFT JOIN specialties s ON s.id=n.specialty_id
         LEFT JOIN objects o ON o.id=n.object_id
         LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id
