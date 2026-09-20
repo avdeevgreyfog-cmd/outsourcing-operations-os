@@ -226,6 +226,30 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
             VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,${actualStartValue}::timestamptz::date,${current.managerUserId??current.objectOwnerId}::uuid,${actor.userId}::uuid)
           `;
         }
+        const [activeRate]=await tx<Array<{id:string}>>`
+          SELECT id FROM worker_rates
+          WHERE worker_id=${workerId}::uuid AND object_id=${current.objectId}::uuid AND specialty_id=${current.specialtyId}::uuid AND effective_to IS NULL
+          LIMIT 1
+        `;
+        if(!activeRate&&current.sourceRequestRoleId){
+          const [rate]=await tx<Array<{amount:number|null}>>`
+            SELECT COALESCE(
+              NULLIF(cs.inputs_snapshot->>'workerNetHourly','')::numeric,
+              NULLIF(cs.inputs_snapshot->>'workerNet','')::numeric,
+              NULLIF(cs.result_snapshot->>'workerNetHourly','')::numeric,
+              NULLIF(cs.result_snapshot->>'workerNet','')::numeric
+            ) amount
+            FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id
+            WHERE cs.request_role_id=${current.sourceRequestRoleId}::uuid AND cs.status='accepted'
+            ORDER BY cs.accepted_at DESC NULLS LAST,cs.created_at DESC LIMIT 1
+          `;
+          if(rate?.amount!=null&&Number(rate.amount)>0){
+            await tx`
+              INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id)
+              VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.specialtyId}::uuid,${current.objectId}::uuid,${rate.amount},'hour','any',${actualStartValue}::timestamptz::date,${actor.userId}::uuid)
+            `;
+          }
+        }
         await tx`UPDATE candidates SET status='worker',updated_at=now() WHERE id=${current.candidateId}::uuid`;
         await tx`
           UPDATE needs SET count_filled=LEAST(count_required,(
@@ -234,7 +258,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           )),status=CASE WHEN (
             SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
             WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
-          )>=count_required THEN 'filled' ELSE 'in_progress' END
+          )>=count_required THEN 'filled' ELSE 'in_progress' END,
+          closed_at=CASE WHEN (
+            SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
+            WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+          )>=count_required THEN COALESCE(closed_at,now()) ELSE NULL END
           WHERE id=${current.needId}::uuid
         `;
       }else if(changed){
