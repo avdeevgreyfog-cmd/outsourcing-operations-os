@@ -13,7 +13,7 @@ export default async function Timesheets({searchParams}:{searchParams:Promise<{o
   const params=isGithubPagesDemo()?{}:await searchParams;
   const [data,options]=await Promise.all([
     getTimesheet(actor,{objectId:params.object??null,month:params.month??null}),
-    getOperationsReferenceData(actor),
+    getOperationsReferenceData(actor,"time.timesheet.read",{includeWorkers:false,includeSpecialties:false}),
   ]);
   if(!data)return <><PageHeader eyebrow="Операции" title="Табели"/><Empty title="Нет доступного табеля" text="Нет доступного объекта или сотрудников в выбранном контуре."/></>;
   const sensitive=hasCapability(actor.access,"worker.compensation.read");
