@@ -735,3 +735,15 @@
  .need-headcount-change>div{grid-template-columns:1fr}
  .pipeline-settings-row{grid-template-columns:24px minmax(160px,1fr) 90px}.pipeline-settings-toggle,.pipeline-settings-move{grid-column:auto}.pipeline-settings-kind{display:none}
 }
+
+
+/* Need editor: keep worker-facing essentials visible without making the modal excessively tall. */
+.recruiting-provision-editor{grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.recruiting-provision-editor-row{grid-template-columns:minmax(120px,.8fr) minmax(150px,1.2fr);border-right:1px solid var(--border)}
+.recruiting-provision-editor-row:nth-child(2n){border-right:0}
+.recruiting-provision-editor-row:nth-last-child(-n+2){border-bottom:0}
+@media(max-width:900px){
+ .recruiting-provision-editor{grid-template-columns:1fr}
+ .recruiting-provision-editor-row{border-right:0}
+ .recruiting-provision-editor-row:nth-last-child(2){border-bottom:1px solid var(--border)}
+}
