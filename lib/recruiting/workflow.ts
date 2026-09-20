@@ -3,6 +3,9 @@ export type WorkflowDetails = {
   nextActionText?: string; plannedShift?: string; confirmed?: boolean;
   readiness?: boolean; reviewRecipient?: string; reviewDueAt?: string;
   reserveReason?: string; lastContact?: string;
+  contactOutcome?: "interested"|"callback"|"no_answer"|"declined"|"documents_requested"|"documents_received"|"other";
+  travelStatus?: "not_required"|"planning"|"ticket_required"|"ticket_purchased"|"travelling"|"arrived";
+  arrivalDetails?: string;
 };
 export type WorkflowRow = { stage: RecruitingStage; nextActionAt?: string | null; plannedStartDate: string | null; stageEnteredAt?: string | null; workflow?: WorkflowDetails };
 export type StageChange = { stage: RecruitingStage; reason?: string; reasonCode?: string; nextActionAt?: string | null; plannedStartDate?: string | null; actualStartAt?: string | null; workflow?: WorkflowDetails; expectedStage?: string; expectedUpdatedAt?: string };
@@ -44,3 +47,14 @@ export function workRisks(row: WorkflowRow, now = Date.now()): string[] {
   return result;
 }
 export function formatWorkDate(value?: string | null) { return value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"}).format(new Date(value)) : "—"; }
+
+
+export type RecruitingDisplayStage = RecruitingStage | "retention_7" | "retention_30";
+
+export function displayRecruitingStage(row: Pick<WorkflowRow,"stage"> & {actualStartAt?:string|null}, now=Date.now()): RecruitingDisplayStage {
+  if(row.stage!=="started"||!row.actualStartAt||!Number.isFinite(Date.parse(row.actualStartAt))) return row.stage;
+  const days=Math.floor((now-Date.parse(row.actualStartAt))/86400000);
+  if(days>=30)return "retention_30";
+  if(days>=7)return "retention_7";
+  return "started";
+}
