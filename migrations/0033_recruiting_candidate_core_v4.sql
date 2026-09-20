@@ -18,6 +18,43 @@ SET required_by_stage=CASE WHEN dt.group_type='employment' THEN 'documents' ELSE
 FROM recruiting_document_types dt
 WHERE dt.id=ndr.document_type_id;
 
+CREATE TABLE candidate_documents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  candidate_id uuid NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  document_type_id uuid NOT NULL REFERENCES recruiting_document_types(id) ON DELETE CASCADE,
+  status text NOT NULL DEFAULT 'missing',
+  note text,
+  updated_by_user_id uuid REFERENCES app_users(id),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (status IN ('missing','requested','received','verified','rejected','not_required','to_prepare','in_progress','ready')),
+  UNIQUE(candidate_id,document_type_id)
+);
+
+ALTER TABLE candidate_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE candidate_documents FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON candidate_documents
+  USING (organization_id=app_current_organization_id())
+  WITH CHECK (organization_id=app_current_organization_id());
+
+CREATE TRIGGER audit_candidate_documents
+AFTER INSERT OR UPDATE OR DELETE ON candidate_documents
+FOR EACH ROW EXECUTE FUNCTION audit_row_change();
+
+CREATE INDEX idx_candidate_documents_candidate ON candidate_documents(candidate_id,status);
+
+INSERT INTO candidate_documents(organization_id,candidate_id,document_type_id,status,note,updated_by_user_id,updated_at)
+SELECT DISTINCT ON (ca.candidate_id,cad.document_type_id)
+  cad.organization_id,ca.candidate_id,cad.document_type_id,cad.status,cad.note,cad.updated_by_user_id,cad.updated_at
+FROM candidate_application_documents cad
+JOIN candidate_applications ca ON ca.id=cad.application_id
+JOIN recruiting_document_types dt ON dt.id=cad.document_type_id
+WHERE dt.group_type='employment'
+ORDER BY ca.candidate_id,cad.document_type_id,
+  CASE cad.status WHEN 'verified' THEN 6 WHEN 'received' THEN 5 WHEN 'ready' THEN 4 WHEN 'requested' THEN 3 WHEN 'missing' THEN 2 ELSE 1 END DESC,
+  cad.updated_at DESC
+ON CONFLICT(candidate_id,document_type_id) DO NOTHING;
+
 CREATE TABLE candidate_contact_methods (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
