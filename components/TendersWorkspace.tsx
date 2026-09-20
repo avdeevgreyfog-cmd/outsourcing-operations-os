@@ -224,13 +224,13 @@ function TenderList({rows}:{rows:TenderRow[]}){
 
 function TenderBoard({rows,bucket,canEdit,busyId,dragId,setDragId,onMove}:{rows:TenderRow[];bucket:Bucket;canEdit:boolean;busyId:string|null;dragId:string|null;setDragId:(id:string|null)=>void;onMove:(id:string,stage:string)=>Promise<void>}){
   const stages=tenderStages.filter(stage=>bucket==="completed"?stage.code==="completed":stage.code!=="completed");
-  return <div className="tender-board">{stages.map(stage=>{
+  return <div className="sales-board tender-board" aria-label="Доска тендеров">{stages.map(stage=>{
     const stageItems=rows.filter(row=>row.stage===stage.code);
-    return <section className="tender-board-column" key={stage.code} onDragOver={event=>{if(canEdit&&stage.code!=="completed")event.preventDefault();}} onDrop={()=>{if(dragId)void onMove(dragId,stage.code);setDragId(null);}}>
-      <header><strong>{stage.label}</strong><span>{stageItems.length}</span></header>
-      <div className="tender-board-stack">{stageItems.map(row=>{const state=tenderDeadlineState(row.submissionDeadline);const content=<><strong>{row.title}</strong><span>{row.customer}</span><div className="tender-card-finance"><span>{row.initialPrice?rub(row.initialPrice):"Цена не указана"}</span><small>{tenderDecisionLabels[row.decision]}</small></div><div className="tender-card-meta"><span className={`tender-deadline ${deadlineClass(state.key)}`}>{state.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<small>{row.nextActionText}</small>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<b>{row.blockerCount} блок.</b>}</footer></>;
-        return <article key={row.id} draggable={canEdit&&!isClientDemoRow(row)&&row.stage!=="completed"} onDragStart={()=>setDragId(row.id)} onDragEnd={()=>setDragId(null)} className={busyId===row.id?"busy":""}>{isClientDemoRow(row)?(row.sourceUrl?<a href={row.sourceUrl} target="_blank" rel="noreferrer">{content}</a>:<div className="tender-board-static">{content}</div>):<Link href={`/tenders/${row.id}`}>{content}</Link>}</article>;
-      })}{!stageItems.length&&<div className="tender-board-empty">Нет тендеров</div>}</div>
+    return <section className="sales-board-column tender-board-column" key={stage.code} onDragOver={event=>{if(canEdit&&stage.code!=="completed")event.preventDefault();}} onDrop={()=>{if(dragId)void onMove(dragId,stage.code);setDragId(null);}}>
+      <header><span>{stage.label}</span><b>{stageItems.length}</b></header>
+      <div className="sales-board-cards tender-board-stack">{stageItems.map(row=>{const state=tenderDeadlineState(row.submissionDeadline);const content=<><strong>{row.title}</strong><span>{row.customer}</span><div className="tender-card-finance"><span>{row.initialPrice?rub(row.initialPrice):"Цена не указана"}</span><small>{tenderDecisionLabels[row.decision]}</small></div><div className="tender-card-meta"><span className={`tender-deadline ${deadlineClass(state.key)}`}>{state.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<small>{row.nextActionText}</small>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<b>{row.blockerCount} блок.</b>}</footer></>;
+        return <article key={row.id} draggable={canEdit&&!isClientDemoRow(row)&&row.stage!=="completed"} onDragStart={()=>setDragId(row.id)} onDragEnd={()=>setDragId(null)} aria-busy={busyId===row.id} className={`sales-board-card tender-board-card${busyId===row.id?" busy":""}`}>{isClientDemoRow(row)?(row.sourceUrl?<a href={row.sourceUrl} target="_blank" rel="noreferrer">{content}</a>:<div className="tender-board-static">{content}</div>):<Link href={`/tenders/${row.id}`}>{content}</Link>}</article>;
+      })}{!stageItems.length&&<div className="sales-board-empty">Нет тендеров</div>}</div>
     </section>;
   })}</div>;
 }
