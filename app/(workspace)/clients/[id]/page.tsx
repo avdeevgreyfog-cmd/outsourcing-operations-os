@@ -56,7 +56,7 @@ export default async function ClientPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab } = isGithubPagesDemo() ? {} : await searchParams;
   const actor = await requireActor();
   const canReadFinance = hasCapability(actor.access, "finance.pnl.read");
   const clients = await listClients(actor);
