@@ -73,7 +73,6 @@ export type RecruitingApplicationRow = {
   preferredChannel: string | null;
   telegram: string | null;
   whatsapp: string | null;
-  contacts: CandidateContactMethod[];
   city: string | null;
   source: string | null;
   sourceChannel: string | null;
@@ -185,6 +184,7 @@ export type CandidateProfile = {
   preferredChannel: string | null;
   telegram: string | null;
   whatsapp: string | null;
+  contacts: CandidateContactMethod[];
   city: string | null;
   birthDate: string | null;
   source: string | null;
@@ -666,7 +666,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     };
   }
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
-    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"contacts"|"documents">>>`
+    const [candidate] = await sql<Array<Omit<CandidateProfile,"applications"|"communications"|"history"|"contacts"|"documents"> & {createdByUserId:string}>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
         c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
         c.created_by_user_id "createdByUserId",wp.id "workerId",wp.status "workerStatus"
