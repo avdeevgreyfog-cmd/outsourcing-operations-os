@@ -48,6 +48,7 @@ const patchSchema = z.object({
   documentRequirements: z.array(z.object({
     documentTypeId:z.string().uuid(),
     provider:z.enum(["candidate","company","client"]),
+    requiredBy:z.enum(["employment","first_shift","day7","day30","non_blocking"]).optional(),
   })).max(50).optional(),
 });
 
@@ -158,16 +159,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const ids=[...new Set(requestedDocs.map(item=>item.documentTypeId))];
         if(ids.length!==requestedDocs.length)throw new Error("Документ указан несколько раз");
         if(ids.length){
-          const valid=await tx<Array<{id:string}>>`
-            SELECT id FROM recruiting_document_types WHERE id=ANY(${ids}::uuid[]) AND active
+          const valid=await tx<Array<{id:string;groupType:"employment"|"clearance"}>>`
+            SELECT id,group_type "groupType" FROM recruiting_document_types WHERE id=ANY(${ids}::uuid[]) AND active
           `;
           if(valid.length!==ids.length)throw new Error("Один из типов документов недоступен");
         }
         await tx`DELETE FROM need_document_requirements WHERE need_id=${id}::uuid`;
         for(const requirement of requestedDocs){
           await tx`
-            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider)
-            VALUES(${actor.organizationId}::uuid,${id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider})
+            INSERT INTO need_document_requirements(organization_id,need_id,document_type_id,required,provider,required_by)
+            VALUES(${actor.organizationId}::uuid,${id}::uuid,${requirement.documentTypeId}::uuid,true,${requirement.provider},${requirement.requiredBy??(valid.find(item=>item.id===requirement.documentTypeId)?.groupType==="employment"?"employment":"first_shift")})
           `;
         }
       }
