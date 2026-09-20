@@ -43,6 +43,7 @@ type CandidateForm={
   sourceReference:string;
 };
 const blank:CandidateForm={needId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
+const stageSettingsStorage="operis.recruiting.funnel-stages.v2";
 
 const sourceKindLabels:Record<string,string>={
   job_site:"Работный сайт",social:"Соцсеть",referral:"Рекомендация",partner:"Партнёр",offline:"Оффлайн",internal:"База компании",other:"Другое",
@@ -76,6 +77,16 @@ export function RecruitingFunnelWorkspace({
   const [duplicateMatches,setDuplicateMatches]=useState<{exact:Array<{id:string;fullName:string;phone:string|null;need:string|null;object:string|null}>;possible:Array<{id:string;fullName:string;phone:string|null;need:string|null;object:string|null}>}>({exact:[],possible:[]});
   const [busy,setBusy]=useState("");
   const [error,setError]=useState("");
+
+  useEffect(()=>{
+    if(!demo)return;
+    let frame=0;
+    try{
+      const saved=localStorage.getItem(stageSettingsStorage);
+      if(saved){const parsed=JSON.parse(saved) as RecruitingFunnelStageSetting[];frame=requestAnimationFrame(()=>setStageSettings(parsed));}
+    }catch{}
+    return()=>{if(frame)cancelAnimationFrame(frame)};
+  },[demo]);
 
   useEffect(()=>{
     const phone=form.phone.trim();const fullName=form.fullName.trim();
@@ -112,7 +123,7 @@ export function RecruitingFunnelWorkspace({
 
   const allRows=useRecruitingApplications(rows,demo);
   const needById=useMemo(()=>new Map(needs.map(item=>[item.id,item])),[needs]);
-  const stageLabelByCode=useMemo(()=>new Map(options.funnelStages.map(item=>[item.code,item.label])),[options.funnelStages]);
+  const stageLabelByCode=useMemo(()=>new Map(stageSettings.map(item=>[item.code,item.label])),[stageSettings]);
   const objectOptions=useMemo(()=>Array.from(new Map(needs.filter(item=>item.objectId&&item.object).map(item=>[item.objectId!,item.object!])).entries()),[needs]);
   const specialtyOptions=useMemo(()=>Array.from(new Map(needs.map(item=>[item.specialtyId,item.specialty])).entries()),[needs]);
   const recruiterOptions=useMemo(()=>Array.from(new Map(needs.flatMap(item=>item.recruiters.map(recruiter=>[recruiter.userId,recruiter.name] as const))).entries()),[needs]);
@@ -139,7 +150,7 @@ export function RecruitingFunnelWorkspace({
     isActiveStage(row.stage)
   );
   const hasContext=needFilter!=="all"||objectFilter!=="all"||specialtyFilter!=="all"||recruiterFilter!=="all"||sourceFilter!=="all";
-  const activeStages=options.funnelStages.filter(x=>x.active).sort((a,b)=>a.sortOrder-b.sortOrder);
+  const activeStages=stageSettings.filter(x=>x.active||allRows.some(row=>row.stage===x.code)).sort((a,b)=>a.sortOrder-b.sortOrder);
   const boardStages:RecruitingStage[]=queue==="reserve"?["reserve"]:queue==="closed"?["rejected","no_show"]:activeStages.map(x=>x.code);
   const selectedNeed=form.needId?needById.get(form.needId):undefined;
 
@@ -212,7 +223,7 @@ export function RecruitingFunnelWorkspace({
   async function saveStageSettings(){
     setBusy("stages");setError("");
     try{
-      if(demo){setShowStageSettings(false);return;}
+      if(demo){const normalized=stageSettings.map((x,index)=>({...x,sortOrder:(index+1)*10}));setStageSettings(normalized);localStorage.setItem(stageSettingsStorage,JSON.stringify(normalized));setShowStageSettings(false);return;}
       const response=await fetch("/api/recruiting/funnel-stages",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({stages:stageSettings.map((x,index)=>({code:x.code,label:x.label,sortOrder:(index+1)*10,active:x.active}))})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось сохранить этапы");
