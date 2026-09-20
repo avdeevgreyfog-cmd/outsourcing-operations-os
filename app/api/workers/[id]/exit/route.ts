@@ -131,11 +131,23 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
 
       if(worker.objectId&&worker.specialtyId){
         await tx`
-          UPDATE needs n SET count_filled=LEAST(n.count_required,(
-            SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-            WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
-              AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
-          )),updated_at=now()
+          UPDATE needs n SET
+            count_filled=LEAST(n.count_required,(
+              SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+              WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
+                AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+            )),
+            status=CASE WHEN (
+              SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+              WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
+                AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+            )>=n.count_required THEN 'filled' ELSE 'in_progress' END,
+            closed_at=CASE WHEN (
+              SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+              WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
+                AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+            )>=n.count_required THEN COALESCE(n.closed_at,now()) ELSE NULL END,
+            updated_at=now()
           WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.status NOT IN ('cancelled','archived')
         `;
       }
