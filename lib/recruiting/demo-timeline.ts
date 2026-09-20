@@ -87,7 +87,7 @@ export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Pa
     });
   }
 
-  const employmentReady=stage==="documents"?2+(index%3):rank>=recruitingStages.indexOf("clearance")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?4:0;
+  const employmentReady=stage==="documents"?2+(index%2):rank>=recruitingStages.indexOf("clearance")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?4:0;
   const clearanceReady=stage==="clearance"?index%2:rank>=recruitingStages.indexOf("preparation")||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?2:0;
   const employmentMissing=employmentDocuments.slice(Math.min(employmentReady,employmentDocuments.length));
   const clearancePending=clearanceDocuments.slice(Math.min(clearanceReady,clearanceDocuments.length));
