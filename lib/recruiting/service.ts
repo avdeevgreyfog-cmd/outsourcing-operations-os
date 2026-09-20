@@ -49,6 +49,7 @@ export type RecruitingNeedRow = {
   stageCounts: Partial<Record<RecruitingStage, number>>;
   funnelReached: Partial<Record<RecruitingStage, number>>;
   quantityHistory: NeedQuantityChange[];
+  requiredDocumentTypeIds: string[];
 };
 
 export type RecruitingApplicationRow = {
@@ -180,7 +181,7 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
       conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
       candidates: related.length,
       approved: related.filter((candidate) => ["approved","preparation","ready","started"].includes(normalizeRecruitingStage(candidate.stage))).length,
-      ready, started, conditionVersion: 1, quantityHistory:[],
+      ready, started, conditionVersion: 1, quantityHistory:[], requiredDocumentTypeIds:[],
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
       funnelReached: buildDemoReached(related.map(candidate=>normalizeRecruitingStage(candidate.stage))),
     };
@@ -206,7 +207,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
         COALESCE(funnel."stageCounts",'{}'::jsonb) "stageCounts",
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
-        COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory"
+        COALESCE(versions.version,1)::int "conditionVersion",COALESCE(quantity.history,'[]'::jsonb) "quantityHistory",ARRAY(SELECT ndr.document_type_id::text FROM need_document_requirements ndr WHERE ndr.need_id=n.id AND ndr.required) "requiredDocumentTypeIds"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=n.object_id
