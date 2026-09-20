@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OPERIS · Воронка подбора — GitHub Preview</title>
+<style>
+:root{--bg:#f5f5f2;--panel:#fff;--panel2:#f9f9f7;--text:#20242a;--muted:#737b85;--soft:#a0a6ad;--border:#dedfdc;--border2:#ecece8;--accent:#315f51;--accentbg:#edf3f0;--danger:#a64b4b;--dangerbg:#fbf1f1;--warn:#9a6a22;--warnbg:#fbf7ec;--shadow:0 10px 28px rgba(28,33,36,.08)}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+button,input,select{font:inherit}button{color:inherit}
+.app{display:grid;grid-template-columns:212px minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;border-right:1px solid var(--border);background:#f0f0ed;padding:12px 10px;display:flex;flex-direction:column;gap:16px}
+.brand{display:flex;align-items:center;gap:9px;padding:4px 7px 12px;border-bottom:1px solid var(--border)}
+.brand-mark{width:24px;height:24px;border-radius:6px;background:var(--text);display:grid;place-items:center;color:#fff;font-size:10px;font-weight:800}
+.brand strong{font-size:13px;letter-spacing:.04em}.brand span{display:block;font-size:8px;color:var(--muted);margin-top:1px}
+.nav-group{display:grid;gap:3px}.nav-label{font-size:8px;text-transform:uppercase;letter-spacing:.09em;color:var(--soft);font-weight:700;padding:0 8px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;height:31px;padding:0 8px;border-radius:6px;font-size:10px;color:#50565d}.nav-item.active{background:var(--panel);color:var(--text);font-weight:650;border:1px solid var(--border)}.nav-dot{width:6px;height:6px;border-radius:50%;background:#aeb3b8}.active .nav-dot{background:var(--accent)}
+.sidebar-bottom{margin-top:auto;padding:9px;border-top:1px solid var(--border);font-size:9px;color:var(--muted);line-height:1.4}
+.main{min-width:0}.topbar{height:44px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.72);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:sticky;top:0;z-index:5}
+.crumb{font-size:9px;color:var(--muted)}.top-actions{display:flex;gap:6px}.pill{border:1px solid var(--border);background:var(--panel);border-radius:6px;height:27px;padding:0 9px;font-size:9px;display:inline-flex;align-items:center;gap:6px}.pill.preview{color:var(--accent);background:var(--accentbg)}
+.content{padding:18px 20px 24px;min-width:0}.head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}.eyebrow{font-size:8px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);font-weight:700}.head h1{font-size:22px;line-height:1.15;margin:3px 0 4px;letter-spacing:-.02em}.head p{margin:0;color:var(--muted);font-size:10px}.head-actions{display:flex;gap:6px;flex-wrap:wrap}
+.btn{height:30px;border:1px solid var(--border);background:var(--panel);border-radius:6px;padding:0 10px;font-size:9.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:600}.btn:hover{border-color:#c7cbc8}.btn.primary{background:var(--text);border-color:var(--text);color:#fff}.btn.active{background:var(--accentbg);border-color:#cbdcd5;color:var(--accent)}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--border);background:var(--panel);border-radius:7px;overflow:hidden;margin-bottom:10px}.metric{padding:9px 11px;border-right:1px solid var(--border)}.metric:last-child{border-right:0}.metric span{display:block;font-size:8.5px;color:var(--muted)}.metric strong{font-size:16px;line-height:1.25}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px;border:1px solid var(--border);background:var(--panel);border-radius:7px;margin-bottom:8px}.filters{display:flex;gap:6px;min-width:0;overflow:auto}.control{height:29px;border:1px solid var(--border);background:var(--panel2);border-radius:5px;padding:0 8px;font-size:9px;color:#4d535a}.search{width:220px}.queue{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.board-wrap{overflow:auto;padding-bottom:8px}.board{display:grid;grid-template-columns:repeat(7,minmax(190px,1fr));gap:8px;min-width:1380px;align-items:start}
+.column{background:var(--panel2);border:1px solid var(--border);border-radius:7px;min-height:520px;overflow:hidden}.column-head{height:34px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--panel)}.column-head span:first-child{font-size:9.5px;font-weight:700}.count{font-size:8px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:2px 6px}
+.cards{display:grid;gap:6px;padding:6px}.card{width:100%;border:1px solid var(--border);background:var(--panel);border-radius:6px;padding:8px 9px;text-align:left;cursor:pointer;display:grid;gap:4px;box-shadow:0 1px 0 rgba(0,0,0,.015)}.card:hover{border-color:#bfc5c1;box-shadow:0 4px 12px rgba(30,34,32,.05)}.card.overdue{border-left:3px solid #bd7d31}.card-title{display:flex;justify-content:space-between;gap:6px;align-items:baseline}.card-title strong{font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-title time{font-size:7.5px;color:var(--soft);white-space:nowrap}.vacancy{font-size:8.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stage-info{display:grid;gap:2px;padding-top:4px;border-top:1px solid var(--border2)}.stage-info span{font-size:8.6px;line-height:1.32;color:var(--muted)}.stage-info b{color:var(--text)}.card-foot{display:flex;justify-content:space-between;gap:5px;min-height:12px}.card-foot span{font-size:7.8px;color:var(--soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.risk{color:var(--warn)!important;font-weight:700}
+.drawer-backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(24,27,29,.28);z-index:30;display:none}.drawer-backdrop.open,.modal-backdrop.open{display:block}.drawer{position:absolute;right:0;top:0;height:100%;width:min(470px,94vw);background:var(--panel);border-left:1px solid var(--border);box-shadow:var(--shadow);display:flex;flex-direction:column}.drawer-head{padding:14px 15px 10px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:12px}.drawer-head h2{font-size:14px;margin:0 0 3px}.drawer-head p{font-size:9px;color:var(--muted);margin:0}.icon{border:1px solid var(--border);background:var(--panel);width:28px;height:28px;border-radius:6px;cursor:pointer}.drawer-body{padding:12px 14px 18px;overflow:auto;display:grid;gap:13px}.identity{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--border);border-left:1px solid var(--border);border-radius:6px;overflow:hidden}.identity div{padding:8px 9px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}.identity span,.kv dt{display:block;font-size:8px;color:var(--muted)}.identity strong,.kv dd{font-size:9.5px;margin:2px 0 0;font-weight:650}
+.section{border-top:1px solid var(--border);padding-top:10px}.section-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:7px}.section-title h3{font-size:10.5px;margin:0}.section-title p{font-size:8px;color:var(--muted);margin:2px 0 0}.salary{display:flex;justify-content:space-between;align-items:baseline;padding:8px 9px;background:var(--panel2);border:1px solid var(--border);border-radius:6px}.salary span{font-size:8px;color:var(--muted)}.salary strong{font-size:13px}
+.kv{display:grid;margin:7px 0 0;border-top:1px solid var(--border2)}.kv div{display:grid;grid-template-columns:95px 1fr;padding:5px 0;border-bottom:1px solid var(--border2);gap:7px}.kv dd{text-align:right}
+.timeline{display:grid}.event{display:grid;grid-template-columns:83px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--border2)}.event time{font-size:7.8px;color:var(--soft)}.event strong{font-size:8.8px}.event p{font-size:8.6px;color:var(--muted);margin:2px 0 0;line-height:1.35}
+.docs{display:grid}.doc{display:grid;grid-template-columns:18px 1fr auto;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border2);font-size:8.8px}.check{width:13px;height:13px;border-radius:3px;border:1px solid var(--border);display:grid;place-items:center;font-size:8px}.check.done{background:var(--accent);border-color:var(--accent);color:#fff}.doc small{font-size:7.5px;color:var(--muted)}
+.quick{display:flex;gap:5px;flex-wrap:wrap}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.field{display:grid;gap:3px}.field.wide{grid-column:1/-1}.field label{font-size:8px;color:var(--muted);font-weight:600}.field input,.field select{height:30px;border:1px solid var(--border);background:var(--panel);border-radius:5px;padding:0 7px;font-size:9px}.note{height:54px!important}
+.modal{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,94vw);max-height:88vh;background:var(--panel);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);overflow:auto}.modal-head{display:flex;justify-content:space-between;padding:13px 15px;border-bottom:1px solid var(--border)}.modal-head h2{font-size:13px;margin:0}.modal-head p{font-size:8.5px;color:var(--muted);margin:3px 0 0}.modal-body{padding:12px 15px}.stage-row{display:grid;grid-template-columns:26px minmax(0,1fr) 100px;gap:7px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border2)}.stage-index{width:21px;height:21px;border-radius:5px;background:var(--panel2);display:grid;place-items:center;font-size:8px;color:var(--muted)}.stage-row input{height:29px;border:1px solid var(--border);border-radius:5px;padding:0 7px;font-size:9px}.stage-code{font-size:7.5px;color:var(--soft)}
+.footer-note{font-size:8px;color:var(--muted);padding-top:8px}
+@media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{display:none}.content{padding:12px}.head{display:grid}.metrics{grid-template-columns:1fr 1fr}.metric:nth-child(2){border-right:0}.metric:nth-child(-n+2){border-bottom:1px solid var(--border)}.toolbar{align-items:stretch;flex-direction:column}.filters{width:100%}.search{width:100%}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">OP</div><div><strong>OPERIS</strong><span>Operations OS</span></div></div>
+    <nav class="nav-group"><div class="nav-label">Главное</div><div class="nav-item"><span class="nav-dot"></span>Рабочий стол</div><div class="nav-item"><span class="nav-dot"></span>Мои задачи</div></nav>
+    <nav class="nav-group"><div class="nav-label">Люди</div><div class="nav-item"><span class="nav-dot"></span>Потребности</div><div class="nav-item active"><span class="nav-dot"></span>Воронка подбора</div><div class="nav-item"><span class="nav-dot"></span>Кандидаты</div><div class="nav-item"><span class="nav-dot"></span>Сотрудники</div></nav>
+    <nav class="nav-group"><div class="nav-label">Операции</div><div class="nav-item"><span class="nav-dot"></span>Объекты</div><div class="nav-item"><span class="nav-dot"></span>Смены</div><div class="nav-item"><span class="nav-dot"></span>Табели</div></nav>
+    <div class="sidebar-bottom">GitHub visual preview<br>Демо-данные · 50 кандидатов</div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><div class="crumb">Люди / Подбор / Воронка</div><div class="top-actions"><span class="pill preview">GitHub Preview</span><span class="pill">Демо-организация</span></div></div>
+    <div class="content">
+      <div class="head">
+        <div><div class="eyebrow">Подбор</div><h1>Воронка подбора</h1><p>Контакт → интервью → документы → подготовка → выход → удержание.</p></div>
+        <div class="head-actions"><button class="btn" id="settingsBtn">⚙ Настроить воронку</button><button class="btn primary" id="addBtn">+ Добавить кандидата</button></div>
+      </div>
+      <div class="metrics" id="metrics"></div>
+      <div class="toolbar">
+        <div class="filters"><select class="control"><option>Все потребности</option><option>Комплектовщик · РЦ Север</option><option>Грузчик · РЦ Север</option><option>Сборщик мебели · Склад Калуга</option></select><select class="control"><option>Все объекты</option><option>РЦ Север</option><option>Склад Калуга</option></select><select class="control"><option>Все рекрутеры</option><option>Ольга Новикова</option><option>Алексей Волков</option><option>Дмитрий Орлов</option></select><select class="control"><option>Все источники</option><option>Авито</option><option>hh.ru</option><option>Telegram</option><option>Рекомендация</option><option>ООО «Регион Персонал»</option></select></div>
+        <input class="control search" id="search" placeholder="Кандидат, телефон, объект, источник">
+      </div>
+      <div class="queue"><button class="btn active" data-queue="active">В работе</button><button class="btn" data-queue="attention">Требуют действия</button><button class="btn" data-queue="closed">Завершённые</button><button class="btn" data-queue="reserve">Резерв</button></div>
+      <div class="board-wrap"><div class="board" id="board"></div></div>
+      <div class="footer-note">Это визуальный GitHub-preview актуальной демо-воронки из main. Рабочая серверная логика остаётся в production-приложении.</div>
+    </div>
+  </main>
+</div>
+
+<div class="drawer-backdrop" id="drawerBackdrop"><aside class="drawer"><div class="drawer-head"><div><h2 id="drawerName"></h2><p id="drawerSub"></p></div><button class="icon" id="drawerClose">×</button></div><div class="drawer-body" id="drawerBody"></div></aside></div>
+<div class="modal-backdrop" id="settingsModal"><div class="modal"><div class="modal-head"><div><h2>Настройка воронки</h2><p>Названия меняются, системный смысл этапов сохраняется.</p></div><button class="icon" data-close="settingsModal">×</button></div><div class="modal-body"><div id="stageSettings"></div><div style="display:flex;justify-content:flex-end;gap:6px;margin-top:12px"><button class="btn" data-close="settingsModal">Отмена</button><button class="btn primary" id="saveStages">Сохранить в preview</button></div></div></div></div>
+<div class="modal-backdrop" id="addModal"><div class="modal"><div class="modal-head"><div><h2>Добавить кандидата</h2><p>Быстрый ввод во время разговора; условия вакансии справа в рабочем приложении.</p></div><button class="icon" data-close="addModal">×</button></div><div class="modal-body"><div class="form-grid"><div class="field wide"><label>Потребность</label><select><option>Комплектовщик · РЦ Север · найти 7</option><option>Грузчик · РЦ Север · найти 3</option><option>Сборщик мебели · Склад Калуга · найти 1</option></select></div><div class="field"><label>Имя / ФИО</label><input placeholder="Можно заполнить в разговоре"></div><div class="field"><label>Телефон</label><input placeholder="+7 ..."></div><div class="field"><label>Город</label><input placeholder="Например, Тула"></div><div class="field"><label>Предпочтительный способ связи</label><select><option>Телефон</option><option>Telegram</option><option>WhatsApp</option></select></div><div class="field wide"><label>Источник</label><select><option>Авито</option><option>hh.ru</option><option>Telegram</option><option>Рекомендация</option><option>ООО «Регион Персонал»</option></select></div></div><div style="display:flex;justify-content:flex-end;gap:6px;margin-top:12px"><button class="btn" data-close="addModal">Отмена</button><button class="btn primary" onclick="alert('В preview данные не сохраняются')">Добавить кандидата</button></div></div></div></div>
+
+<script>
+const stages=[
+ {code:"new",label:"Новый контакт"},
+ {code:"interview",label:"Интервью"},
+ {code:"documents",label:"Документы"},
+ {code:"preparation",label:"Подготовка к выходу"},
+ {code:"first_shift",label:"Первый выход"},
+ {code:"retention_7",label:"7 дней"},
+ {code:"retention_30",label:"30 дней"}
+];
+const distribution={new:8,interview:9,documents:7,preparation:6,first_shift:5,retention_7:4,retention_30:3,rejected:5,no_show:2,reserve:1};
+const names=["Алексей Орлов","Максим Титов","Андрей Морозов","Денис Крылов","Егор Климов","Николай Руднев","Руслан Сафин","Дмитрий Князев","Роман Козлов","Никита Егоров","Степан Гусев","Иван Чернов","Кирилл Наумов","Василий Жуков","Игорь Белов","Марат Юсупов","Константин Лебедев","Павел Громов","Олег Панов","Георгий Мельников","Станислав Прохоров","Артур Киселёв","Виталий Савельев","Данила Фролов","Илья Котов","Антон Зайцев","Фёдор Данилов","Лев Соколов","Артём Комаров","Михаил Ершов","Сергей Волков","Михаил Серов","Александр Гаврилов","Вадим Щербаков","Пётр Филатов","Илья Воронов","Анатолий Демидов","Рустам Каримов","Вячеслав Марков","Юрий Осипов","Геннадий Макаров","Семён Федотов","Александр Борисов","Виктор Логинов","Андрей Шаров","Борис Капустин","Эдуард Никифоров","Арсений Крылов","Тимур Власов","Ринат Ахметов"];
+const sources=["Авито","hh.ru","Telegram","Рекомендация","ООО «Регион Персонал»"];
+const needs=[
+ {name:"Комплектовщик",object:"РЦ Север",pay:"130 000 ₽/мес",schedule:"6/1 · 11 оплачиваемых часов",shift:"08:00–20:00",housing:"Общежитие рядом с объектом",meals:"Столовая на территории, за свой счёт",travel:"Билеты компенсирует компания",shuttle:"Корпоративный автобус"},
+ {name:"Грузчик",object:"РЦ Север",pay:"120 000 ₽/мес",schedule:"6/1 · 11 оплачиваемых часов",shift:"08:00–20:00",housing:"Общежитие рядом с объектом",meals:"Столовая на территории",travel:"Компенсация после выхода",shuttle:"Развозка от общежития"},
+ {name:"Сборщик мебели",object:"Склад Калуга",pay:"115 000–135 000 ₽/мес",schedule:"5/2 · 10 оплачиваемых часов",shift:"09:00–20:00",housing:"Квартира, 2–3 человека",meals:"Комплексный обед",travel:"Билет до Калуги оплачивается",shuttle:"Не требуется"}
+];
+const owners=["Ольга Новикова","Ольга Новикова","Ольга Новикова","Алексей Волков","Дмитрий Орлов"];
+const stageSequence=[];Object.entries(distribution).forEach(([stage,count])=>{for(let i=0;i<count;i++)stageSequence.push(stage)});
+const candidates=names.map((name,i)=>{
+ const stage=stageSequence[i],need=needs[i%3],source=sources[i%sources.length],owner=["preparation","first_shift","retention_7","retention_30"].includes(stage)?owners[3+i%2]:"Ольга Новикова";
+ const docs=stage==="documents"?2+i%3:["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?5:0;
+ const risk=(stage==="interview"&&i%3===0)||(stage==="preparation"&&i%4===0);
+ return {id:i+1,name,stage,need,source,owner,city:["Тула","Калуга","Рязань","Москва","Пенза","Брянск"][i%6],phone:"+7 900 100-"+String(i+1).padStart(2,"0")+"-"+String((i*7+11)%100).padStart(2,"0"),docs,risk,reason:stage==="rejected"?["Не устроила зарплата","Принял другое предложение","Проблемы с документами","Передумал после согласования даты","Не устроил график"][i%5]:stage==="no_show"?["Не смог приехать на объект","Не вышел и перестал отвечать"][i%2]:""};
+});
+let queue="active",query="";
+function activeStage(s){return !["rejected","no_show","reserve"].includes(s)}
+function renderMetrics(){const active=candidates.filter(c=>activeStage(c.stage)).length;document.getElementById("metrics").innerHTML=[["В работе",active],["Интервью",candidates.filter(c=>c.stage==="interview").length],["Подготовка",candidates.filter(c=>c.stage==="preparation").length],["Первый выход+",candidates.filter(c=>["first_shift","retention_7","retention_30"].includes(c.stage)).length]].map(x=>'<div class="metric"><span>'+x[0]+'</span><strong>'+x[1]+'</strong></div>').join("")}
+function stageInfo(c){
+ if(c.stage==="new")return '<span>'+c.phone+'</span><span>'+c.source+' · '+c.city+'</span>';
+ if(c.stage==="interview")return '<span>'+(c.risk?'Не дозвонились, нужна повторная попытка':'Условия проговорили, кандидат заинтересован')+'</span><span><b>'+(c.risk?'Перезвонить сегодня':'Получить решение')+'</b></span>';
+ if(c.stage==="documents")return '<span>Документы: <b>'+c.docs+'/5</b></span><span>'+(c.docs<5?'Нет: '+["СНИЛС","ИНН","Реквизиты"].slice(0,5-c.docs).join(", "):"Комплект собран")+'</span>';
+ if(c.stage==="preparation")return '<span>План выхода: <b>'+(21+c.id%5)+'.09</b></span><span>'+(c.risk?'Билет: нужно купить':'Логистика подтверждена')+'</span>';
+ if(c.stage==="first_shift")return '<span>Первый выход: <b>подтверждён</b></span><span>Дневная · 08:00–20:00</span>';
+ if(c.stage==="retention_7")return '<span>Работает: <b>7+ дн.</b></span><span>Контроль недели пройден</span>';
+ if(c.stage==="retention_30")return '<span>Работает: <b>30+ дн.</b></span><span>Удержание подтверждено</span>';
+ if(c.stage==="reserve")return '<span>Готов вернуться позже</span><span>Повторный контакт: 27.09</span>';
+ return '<span>'+c.reason+'</span><span>'+c.need.object+'</span>';
+}
+function filtered(){return candidates.filter(c=>{if(query&&!((c.name+" "+c.phone+" "+c.source+" "+c.need.name+" "+c.need.object).toLowerCase().includes(query)))return false;if(queue==="closed")return ["rejected","no_show"].includes(c.stage);if(queue==="reserve")return c.stage==="reserve";if(queue==="attention")return c.risk&&activeStage(c.stage);return activeStage(c.stage)})}
+function render(){
+ const data=filtered();let shownStages=queue==="closed"?[{code:"rejected",label:"Отказ"},{code:"no_show",label:"Не вышел"}]:queue==="reserve"?[{code:"reserve",label:"Резерв"}]:stages;
+ document.getElementById("board").style.gridTemplateColumns="repeat("+shownStages.length+",minmax(190px,1fr))";
+ document.getElementById("board").style.minWidth=(shownStages.length*198)+"px";
+ document.getElementById("board").innerHTML=shownStages.map(s=>'<section class="column"><div class="column-head"><span>'+s.label+'</span><span class="count">'+data.filter(c=>c.stage===s.code).length+'</span></div><div class="cards">'+data.filter(c=>c.stage===s.code).map(c=>'<button class="card '+(c.risk?'overdue':'')+'" onclick="openDrawer('+c.id+')"><div class="card-title"><strong>'+c.name+'</strong><time>'+(c.risk?'сегодня':'')+'</time></div><div class="vacancy">'+c.need.name+' · '+c.need.object+'</div><div class="stage-info">'+stageInfo(c)+'</div><div class="card-foot"><span>'+c.owner+'</span>'+(c.risk?'<span class="risk">Требует действия</span>':'')+'</div></button>').join("")+'</div></section>').join("");
+}
+function openDrawer(id){
+ const c=candidates.find(x=>x.id===id);if(!c)return;document.getElementById("drawerName").textContent=c.name;document.getElementById("drawerSub").textContent=c.need.name+" · "+c.need.object;
+ const docs=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Медицинские документы"];
+ const showDocs=["documents","preparation","first_shift","retention_7","retention_30"].includes(c.stage);
+ const events=[
+  {t:"20.09 · 11:15",a:c.owner,x:c.stage==="new"?"Контакт получен, первичный звонок ещё не выполнен.":"Созвонились: условия вакансии проговорили, кандидат подтвердил интерес."},
+  {t:"19.09 · 16:40",a:"Система",x:"Этап: "+(stages.find(s=>s.code===c.stage)?.label||c.stage)},
+  {t:"19.09 · 13:10",a:"Ольга Новикова",x:c.stage==="documents"?"Запрошены паспорт, СНИЛС, ИНН и реквизиты.":c.stage==="preparation"?"Документы проверены, согласована дата выхода.":"Зафиксирован результат предыдущего контакта."}
+ ];
+ document.getElementById("drawerBody").innerHTML=
+ '<section class="identity"><div><span>Телефон</span><strong>'+c.phone+'</strong></div><div><span>Город</span><strong>'+c.city+'</strong></div><div><span>Источник</span><strong>'+c.source+'</strong></div><div><span>Ответственный</span><strong>'+c.owner+'</strong></div></section>'+
+ '<section class="section"><div class="section-title"><div><h3>Условия вакансии</h3><p>'+c.need.name+' · '+c.need.object+'</p></div></div><div class="salary"><span>На руки</span><strong>'+c.need.pay+'</strong></div><dl class="kv"><div><dt>График</dt><dd>'+c.need.schedule+'</dd></div><div><dt>Смена</dt><dd>'+c.need.shift+'</dd></div><div><dt>Проживание</dt><dd>'+c.need.housing+'</dd></div><div><dt>Питание</dt><dd>'+c.need.meals+'</dd></div><div><dt>Проезд</dt><dd>'+c.need.travel+'</dd></div><div><dt>Развозка</dt><dd>'+c.need.shuttle+'</dd></div></dl></section>'+
+ '<section class="section"><div class="section-title"><div><h3>Последние события</h3><p>Что уже происходило с кандидатом</p></div></div><div class="timeline">'+events.map(e=>'<div class="event"><time>'+e.t+'</time><div><strong>'+e.a+'</strong><p>'+e.x+'</p></div></div>').join("")+'</div></section>'+
+ (showDocs?'<section class="section"><div class="section-title"><div><h3>Документы</h3><p>Получено '+c.docs+' из 5</p></div></div><div class="docs">'+docs.map((d,i)=>'<div class="doc"><span class="check '+(i<c.docs?'done':'')+'">'+(i<c.docs?'✓':'')+'</span><span>'+d+'</span><small>'+(i<c.docs?'Получен':'Ожидается')+'</small></div>').join("")+'</div></section>':'')+
+ '<section class="section"><div class="quick"><button class="btn">☎ Не дозвонился</button><button class="btn">✓ Всё хорошо → дальше</button><button class="btn">× Отказ</button></div><div class="form-grid" style="margin-top:9px"><div class="field"><label>Текущий ответственный</label><select><option>'+c.owner+'</option><option>Ольга Новикова</option><option>Алексей Волков</option><option>Дмитрий Орлов</option></select></div><div class="field"><label>Этап</label><select>'+stages.map(s=>'<option '+(s.code===c.stage?'selected':'')+'>'+s.label+'</option>').join("")+'<option>Резерв</option><option>Отказ</option><option>Не вышел</option></select></div><div class="field wide"><label>Результат общения</label><input class="note" value="'+(c.risk?'Не дозвонились, нужна повторная попытка':'Условия обсуждены, следующий шаг согласован')+'"></div><div class="field wide"><label>Следующее действие</label><input value="'+(c.stage==="documents"?'Получить недостающие документы':c.stage==="preparation"?'Подтвердить дату и логистику':'Уточнить результат и следующий шаг')+'"></div></div></section>';
+ document.getElementById("drawerBackdrop").classList.add("open");
+}
+function renderSettings(){document.getElementById("stageSettings").innerHTML=stages.map((s,i)=>'<div class="stage-row"><span class="stage-index">'+(i+1)+'</span><input data-stage="'+s.code+'" value="'+s.label+'"><span class="stage-code">'+s.code+'</span></div>').join("")}
+document.querySelectorAll("[data-queue]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-queue]").forEach(x=>x.classList.remove("active"));b.classList.add("active");queue=b.dataset.queue;render()});
+document.getElementById("search").oninput=e=>{query=e.target.value.trim().toLowerCase();render()};
+document.getElementById("drawerClose").onclick=()=>document.getElementById("drawerBackdrop").classList.remove("open");
+document.getElementById("drawerBackdrop").onclick=e=>{if(e.target.id==="drawerBackdrop")e.currentTarget.classList.remove("open")};
+document.getElementById("settingsBtn").onclick=()=>{renderSettings();document.getElementById("settingsModal").classList.add("open")};
+document.getElementById("addBtn").onclick=()=>document.getElementById("addModal").classList.add("open");
+document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>document.getElementById(b.dataset.close).classList.remove("open"));
+document.getElementById("saveStages").onclick=()=>{document.querySelectorAll("#stageSettings input[data-stage]").forEach(input=>{const s=stages.find(x=>x.code===input.dataset.stage);if(s&&input.value.trim())s.label=input.value.trim()});document.getElementById("settingsModal").classList.remove("open");render()};
+renderMetrics();render();
+</script>
+</body>
+</html>
