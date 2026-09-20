@@ -61,10 +61,23 @@ export async function POST(request: Request) {
       if (duplicate) return {candidateId,applicationId:duplicate.id,duplicate:true};
       const conditionSnapshot = JSON.parse(JSON.stringify(need.conditions ?? {}));
       const [application] = await tx<Array<{id:string}>>`
-        INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,next_action_at,owner_user_id,manager_user_id,conditions_snapshot,source_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${body.needId}::uuid,${need.objectId}::uuid,'new',${body.nextActionAt??null}::timestamptz,${need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${sql.json(conditionSnapshot)},${sql.json({source:body.source??"Ручной ввод",channel:body.sourceChannel??null,campaign:body.sourceCampaign??null,reference:body.sourceReference??null})},${actor.userId}::uuid)
+        INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,next_action_at,owner_user_id,manager_user_id,responsible_user_id,conditions_snapshot,source_snapshot,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${body.needId}::uuid,${need.objectId}::uuid,'new',${body.nextActionAt??null}::timestamptz,${need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${need.ownerUserId??actor.userId}::uuid,${sql.json(conditionSnapshot)},${sql.json({source:body.source??"Ручной ввод",channel:body.sourceChannel??null,campaign:body.sourceCampaign??null,reference:body.sourceReference??null})},${actor.userId}::uuid)
         RETURNING id
       `;
+      const requiredDocuments=Array.isArray(conditionSnapshot.documents)
+        ? conditionSnapshot.documents.filter((value:unknown):value is string=>typeof value==="string"&&value.trim().length>0)
+        : [];
+      for(const [index,documentName] of requiredDocuments.entries()){
+        await tx`
+          INSERT INTO candidate_application_documents(
+            organization_id,application_id,document_name,status,required,sort_order,updated_by_user_id
+          ) VALUES(
+            ${actor.organizationId}::uuid,${application.id}::uuid,${documentName.trim()},'missing',true,${index*10},${actor.userId}::uuid
+          )
+          ON CONFLICT (application_id,document_name) DO NOTHING
+        `;
+      }
       await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,changed_by_user_id)
         VALUES(${actor.organizationId}::uuid,${application.id}::uuid,NULL,'new','Кандидат добавлен в потребность',${actor.userId}::uuid)`;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
