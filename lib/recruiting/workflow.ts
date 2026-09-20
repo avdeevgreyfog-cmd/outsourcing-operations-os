@@ -52,8 +52,8 @@ export function formatWorkDate(value?: string | null) { return value && Number.i
 
 export type RecruitingDisplayStage = RecruitingStage | "retention_7" | "retention_30";
 
-export function displayRecruitingStage(row: Pick<WorkflowRow,"stage"> & {actualStartAt?:string|null}, now=Date.now()): RecruitingDisplayStage {
-  if(row.stage!=="started"||!row.actualStartAt||!Number.isFinite(Date.parse(row.actualStartAt))) return row.stage;
+export function displayRecruitingStage(row: Pick<WorkflowRow,"stage"> & {actualStartAt?:string|null;workerActive?:boolean}, now=Date.now()): RecruitingDisplayStage {
+  if(row.stage!=="started"||!row.actualStartAt||!Number.isFinite(Date.parse(row.actualStartAt))||row.workerActive===false) return row.stage;
   const days=Math.floor((now-Date.parse(row.actualStartAt))/86400000);
   if(days>=30)return "retention_30";
   if(days>=7)return "retention_7";
