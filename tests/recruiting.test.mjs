@@ -48,5 +48,6 @@ test('retention columns are derived from actual first shift instead of manual st
  assert.equal(displayRecruitingStage({stage:'started',actualStartAt:firstShift},Date.parse('2026-09-05T08:00:00Z')),'started');
  assert.equal(displayRecruitingStage({stage:'started',actualStartAt:firstShift},Date.parse('2026-09-08T08:00:00Z')),'retention_7');
  assert.equal(displayRecruitingStage({stage:'started',actualStartAt:firstShift},Date.parse('2026-10-01T08:00:00Z')),'retention_30');
+ assert.equal(displayRecruitingStage({stage:'started',actualStartAt:firstShift,workerActive:false},Date.parse('2026-10-01T08:00:00Z')),'started');
  assert.equal(displayRecruitingStage({stage:'contact',actualStartAt:null},Date.parse('2026-10-01T08:00:00Z')),'contact');
 });
