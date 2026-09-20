@@ -11,7 +11,7 @@ const rateLabels:Record<string,string>={bed_day:"Койко-место / сут�
 
 export function HousingWorkspace({snapshot,options,canManage,demo,initialWorkerId}:{snapshot:HousingSnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean;initialWorkerId?:string|null}){
   const [showSite,setShowSite]=useState(false);
-  const [showStay,setShowStay]=useState(Boolean(initialWorkerId));
+  const [showStay,setShowStay]=useState(Boolean(initialWorkerId)&&canManage);
   const [name,setName]=useState("");
   const [address,setAddress]=useState("");
   const [vendor,setVendor]=useState("");
