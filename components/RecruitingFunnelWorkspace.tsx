@@ -90,9 +90,6 @@ export function RecruitingFunnelWorkspace({
     router.replace(qs?`/recruiting?${qs}`:"/recruiting",{scroll:false});
   },[needFilter,objectFilter,specialtyFilter,recruiterFilter,sourceFilter,queue,stageFilter,router]);
 
-  useEffect(()=>setLocalSources(options.sourceCatalog),[options.sourceCatalog]);
-  useEffect(()=>setStageSettings(options.funnelStages),[options.funnelStages]);
-
   const allRows=useRecruitingApplications(rows,demo);
   const needById=useMemo(()=>new Map(needs.map(item=>[item.id,item])),[needs]);
   const stageLabelByCode=useMemo(()=>new Map(options.funnelStages.map(item=>[item.code,item.label])),[options.funnelStages]);
@@ -316,14 +313,14 @@ export function RecruitingFunnelWorkspace({
 function CompactCandidateCard({row,showOwner,busy,draggable,onDragStart,onDragEnd,onOpen}:{row:RecruitingApplicationRow;showOwner:boolean;busy:boolean;draggable:boolean;onDragStart:()=>void;onDragEnd:()=>void;onOpen:()=>void}){
   const risk=workRisks(row)[0];
   const docs=row.documentSummary;
-  const days=row.actualStartAt?Math.max(0,Math.floor((Date.now()-Date.parse(row.actualStartAt))/(24*60*60*1000))):0;
+  const retentionDays=row.stage==="retention_30"?"30+":row.stage==="retention_7"?"7+":"—";
   let middle:React.ReactNode;
   if(row.stage==="new")middle=<><span>{row.phone??row.email??"Контакт не указан"}</span><span>{[row.source,row.city].filter(Boolean).join(" · ")||"Источник не указан"}</span></>;
   else if(row.stage==="interview")middle=<><span>{row.workflow?.lastContact||"Интервью ещё не зафиксировано"}</span><span>{row.workflow?.nextActionText||"Уточнить интерес и условия"}</span></>;
   else if(row.stage==="documents")middle=<><span>Документы: <b>{docs?.received??row.workflow?.documentsReceived??0}/{docs?.required??row.workflow?.documentsRequired??0}</b></span><span>{docs?.missing?.length?`Нет: ${docs.missing.slice(0,2).join(", ")}`:row.workflow?.missingDocuments?.length?`Нет: ${row.workflow.missingDocuments.slice(0,2).join(", ")}`:"Чек-лист не заполнен"}</span></>;
   else if(row.stage==="preparation")middle=<><span>План выхода: <b>{row.plannedStartDate??"не назначен"}</b></span><span>{travelLabel(row.workflow?.travelState)}</span></>;
   else if(row.stage==="first_shift")middle=<><span>Первый выход: <b>{row.actualStartAt?formatWorkDate(row.actualStartAt):"ожидается"}</b></span><span>{row.workflow?.plannedShift||"Смена не указана"}</span></>;
-  else if(row.stage==="retention_7"||row.stage==="retention_30")middle=<><span>Работает: <b>{days} дн.</b></span><span>Первый выход: {row.actualStartAt?formatWorkDate(row.actualStartAt):"—"}</span></>;
+  else if(row.stage==="retention_7"||row.stage==="retention_30")middle=<><span>Работает: <b>{retentionDays} дн.</b></span><span>Первый выход: {row.actualStartAt?formatWorkDate(row.actualStartAt):"—"}</span></>;
   else middle=<><span>{row.rejectionReason??"Заявка завершена"}</span><span>{row.object??row.need}</span></>;
   return <button type="button" draggable={draggable&&!busy} onDragStart={onDragStart} onDragEnd={onDragEnd} className={`recruiting-card recruiting-card-compact${risk?" is-overdue":""}`} onClick={onOpen}>
     <div className="recruiting-card-title"><strong>{row.fullName}</strong>{row.nextActionAt&&<time>{formatWorkDate(row.nextActionAt)}</time>}</div>
