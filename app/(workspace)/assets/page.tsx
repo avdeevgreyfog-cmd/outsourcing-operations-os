@@ -3,10 +3,11 @@ import { hasCapability } from "@/lib/core/access.mjs";
 import { PageHeader } from "@/components/UI";
 import { InventoryWorkspace } from "@/components/InventoryWorkspace";
 import { getInventorySnapshot, getOperationsReferenceData } from "@/lib/operations/service";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 
 export default async function Assets({searchParams}:{searchParams:Promise<{worker?:string}>}){
   const actor=await requireActor();
-  const params=await searchParams;
+  const params=isGithubPagesDemo()?{}:await searchParams;
   const [snapshot,options]=await Promise.all([getInventorySnapshot(actor),getOperationsReferenceData(actor)]);
   return <>
     <PageHeader eyebrow="Операции → Обеспечение" title="Запасы и имущество" subtitle="Распределённые места хранения, выдача сотрудникам, перемещения, возвраты и списания." breadcrumbs={[{label:"Операции"},{label:"Обеспечение"},{label:"Запасы и имущество"}]}/>
