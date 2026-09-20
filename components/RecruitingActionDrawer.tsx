@@ -284,7 +284,12 @@ export function RecruitingActionDrawer({
     finally{setBusy("")}
   }
 
-  const visibleDocuments=documents?.filter(item=>row.stage==="documents"?item.groupType==="employment":row.stage==="clearance"?item.groupType==="clearance":true)??null;
+  const visibleDocuments=documents?.filter(item=>
+    row.stage==="documents"?item.groupType==="employment":
+    row.stage==="clearance"?item.groupType==="clearance":
+    row.stage==="preparation"?item.groupType==="clearance"&&!["received","verified","ready","not_required"].includes(item.status):
+    false
+  )??null;
 
   return <SalesDrawer title={row.fullName} subtitle={row.need+" · "+(row.object??"Без объекта")} onClose={()=>{if(!busy)onClose();}}>
     <div className="candidate-work-drawer">
@@ -387,7 +392,7 @@ function PreparationFields({
   </>;
 }
 
-function showDocumentsAtStage(stage:RecruitingStage){return ["documents","clearance","preparation","first_shift","retention_7","retention_30"].includes(stage);}
+function showDocumentsAtStage(stage:RecruitingStage){return ["documents","clearance","preparation"].includes(stage);}
 
 function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
   const employment=[
