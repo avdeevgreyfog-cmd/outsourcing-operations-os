@@ -1,51 +1,168 @@
-import { normalizeRecruitingStage, recruitingStages, recruitingStageLabels } from './model';
+import { normalizeRecruitingStage, recruitingStages, recruitingStageLabels, type RecruitingStage } from './model';
 import type { RecruitingApplicationRow } from './service';
 
-// Fictional fixture dates are fixed: changing the report window never moves events.
-export function demoApplicationDetails(row: {id:string;stage?:string;reachedStage?:string;rejectionReason?:string;rejectionReasonCode?:string}, index:number): Partial<RecruitingApplicationRow> {
-  const stage=index===18?'reserve':normalizeRecruitingStage(row.stage);
-  const rank=Math.max(0,recruitingStages.indexOf(normalizeRecruitingStage(row.reachedStage??row.stage) as typeof recruitingStages[number]));
-  const base=Date.parse('2026-09-19T06:00:00Z')-(rank*24+index%4*8)*3600000;
-  const stageEvents: NonNullable<RecruitingApplicationRow['stageEvents']> = recruitingStages.slice(0,rank+1).map((toStage,i)=>({
-    toStage,
-    fromStage:i?recruitingStages[i-1]:null,
-    createdAt:new Date(base+i*24*3600000).toISOString(),
-  }));
-  if(stage==='reserve') stageEvents.push({toStage:'reserve',fromStage:recruitingStages[rank],createdAt:'2026-09-19T07:00:00Z',reason:'Сможет приступить после завершения текущей работы'});
-  if(index===7){
-    const interview=stageEvents.findIndex(x=>x.toStage==='interview');
-    if(interview>=0)stageEvents.splice(interview,1);
-    stageEvents[stageEvents.length-1].reason='Переведён дальше по рекомендации';
+type DemoCandidateSeed = {
+  id:string;
+  stage?:string;
+  reachedStage?:string;
+  rejectionReason?:string;
+  rejectionReasonCode?:string;
+  ownerUserId?:string|null;
+};
+
+const documentNames=["Паспорт","СНИЛС","ИНН","Банковские реквизиты","Медицинские документы"];
+const objectManager="10000000-0000-4000-8000-000000000004";
+const regionalManager="10000000-0000-4000-8000-000000000003";
+
+function ownerName(row:DemoCandidateSeed){
+  return row.ownerUserId===objectManager?"Алексей Волков":row.ownerUserId===regionalManager?"Дмитрий Орлов":"Ольга Новикова";
+}
+
+function stageDate(stage:RecruitingStage,index:number){
+  const baseDay=2+(index%12);
+  const hour=8+(index%8);
+  const day=(value:number)=>String(value).padStart(2,"0");
+  if(stage==="first_shift") return `2026-09-${day(Math.min(18,baseDay+4))}T${day(hour)}:00:00+03:00`;
+  if(stage==="retention_7") return `2026-09-${day(Math.min(12,baseDay))}T${day(hour)}:00:00+03:00`;
+  if(stage==="retention_30") return `2026-08-${day(8+(index%6))}T${day(hour)}:00:00+03:00`;
+  return `2026-09-${day(baseDay)}T${day(hour)}:00:00+03:00`;
+}
+
+function reachedActiveStage(row:DemoCandidateSeed): RecruitingStage {
+  const current=normalizeRecruitingStage(row.stage);
+  if(["rejected","no_show","reserve"].includes(current)){
+    const reached=normalizeRecruitingStage(row.reachedStage);
+    return recruitingStages.includes(reached as typeof recruitingStages[number])?reached:"interview";
   }
-  if(stage==='rejected'||stage==='no_show') stageEvents.push({toStage:stage,fromStage:recruitingStages[rank],createdAt:new Date(base+(rank*24+1)*3600000).toISOString(),reason:row.rejectionReason,reasonCode:row.rejectionReasonCode});
-  const postStart=['first_shift','retention_7','retention_30'].includes(stage);
-  const planned=stage==='preparation'?'2026-09-'+String(20+index%3).padStart(2,'0'):postStart||stage==='no_show'?stageEvents.at(-1)!.createdAt.slice(0,10):null;
-  const next=stage==='reserve'?'2026-09-23T09:00:00Z':postStart||['rejected','no_show'].includes(stage)?null:new Date(Date.parse('2026-09-19T08:00:00Z')+(index%7-2)*3600000).toISOString();
+  return current;
+}
+
+function communicationSummaries(stage:RecruitingStage,index:number){
+  if(stage==="new") return ["Контакт получен, первичный звонок ещё не выполнен."];
+  if(stage==="interview") return index%3===0
+    ? ["Первый звонок без ответа. Назначена повторная попытка.","Дозвонились: условия вакансии проговорили, кандидат задаёт вопросы по проживанию."]
+    : ["Созвонились: вакансия интересна, уточнили опыт и готовность к графику.","Кандидат подтвердил, что готов продолжить оформление."];
+  if(stage==="documents") return ["После интервью кандидат подтвердил интерес.","Запросили паспорт, СНИЛС, ИНН и реквизиты.","Часть документов получена, ожидаем оставшиеся."];
+  if(stage==="preparation") return ["Документы собраны и проверены.","Согласована ориентировочная дата выхода.","Уточнили проезд и подтверждение прибытия."];
+  if(stage==="first_shift") return ["Кандидат подтвердил приезд.","Мастер подтвердил первый выход на смену."];
+  if(stage==="retention_7") return ["Первый выход подтверждён.","Контроль после недели: сотрудник продолжает работать, критичных замечаний нет."];
+  if(stage==="retention_30") return ["Первый выход подтверждён.","Контроль 7 дней пройден.","Контроль 30 дней: сотрудник остаётся на объекте."];
+  if(stage==="reserve") return ["Условия подходят, но сейчас кандидат не может приступить.","Перенесён в резерв с датой повторного контакта."];
+  if(stage==="rejected") return ["Условия вакансии проговорили.", "Заявка завершена: "+(index%2?"кандидат отказался.":"зафиксирована причина отказа.")];
+  if(stage==="no_show") return ["Дата выхода и логистика были согласованы.","Кандидат не прибыл / не вышел в согласованную смену."];
+  return [];
+}
+
+// Deterministic recruiting history for the demo workspace.
+// Dates are intentionally fixed so analytics and screenshots do not move between renders.
+export function demoApplicationDetails(row: DemoCandidateSeed, index:number): Partial<RecruitingApplicationRow> {
+  const stage=normalizeRecruitingStage(row.stage);
+  const reached=reachedActiveStage(row);
+  const rank=Math.max(0,recruitingStages.indexOf(reached as typeof recruitingStages[number]));
+  const actualStartAt=stage==="retention_30"
+    ? `2026-08-${String(8+(index%6)).padStart(2,"0")}T08:00:00+03:00`
+    : stage==="retention_7"
+      ? `2026-09-${String(8+(index%5)).padStart(2,"0")}T08:00:00+03:00`
+      : ["first_shift"].includes(stage)
+        ? `2026-09-${String(16+(index%3)).padStart(2,"0")}T08:00:00+03:00`
+        : null;
+
+  const timelineStages=recruitingStages.slice(0,rank+1);
+  const stageEvents:NonNullable<RecruitingApplicationRow["stageEvents"]>=timelineStages.map((toStage,i)=>{
+    const eventDate=toStage==="first_shift"&&actualStartAt
+      ? actualStartAt
+      : new Date(Date.parse(stageDate(reached,index))-(rank-i)*24*60*60*1000).toISOString();
+    return {toStage,fromStage:i?timelineStages[i-1]:null,createdAt:eventDate};
+  });
+
+  if(["rejected","no_show","reserve"].includes(stage)){
+    stageEvents.push({
+      toStage:stage,
+      fromStage:reached,
+      createdAt:new Date(Date.parse(stageEvents.at(-1)?.createdAt??stageDate(reached,index))+3*60*60*1000).toISOString(),
+      reason:stage==="reserve"?"Готов вернуться к вакансии позже":row.rejectionReason??null,
+      reasonCode:row.rejectionReasonCode??null,
+    });
+  }
+
+  const received=stage==="documents"?2+(index%3):rank>=3||["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?5:0;
+  const missing=documentNames.slice(received);
+  const plannedStartDate=["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)
+    ? (actualStartAt?.slice(0,10)??`2026-09-${String(21+(index%5)).padStart(2,"0")}`)
+    : null;
+
+  const travelState=stage==="preparation"
+    ? (["ticket_required","ticket_bought","company","self"] as const)[index%4]
+    : ["first_shift","retention_7","retention_30"].includes(stage)
+      ? "ticket_bought" as const
+      : stage==="no_show"
+        ? "company" as const
+        : "not_required" as const;
+
+  const nextActionAt=["rejected","no_show","retention_30"].includes(stage)
+    ? null
+    : stage==="reserve"
+      ? "2026-09-27T10:00:00+03:00"
+      : stage==="new"
+        ? `2026-09-20T${String(10+(index%8)).padStart(2,"0")}:00:00+03:00`
+        : stage==="interview"
+          ? `2026-09-21T${String(9+(index%8)).padStart(2,"0")}:30:00+03:00`
+          : stage==="documents"
+            ? "2026-09-21T12:00:00+03:00"
+            : stage==="preparation"
+              ? "2026-09-21T17:00:00+03:00"
+              : "2026-09-22T10:00:00+03:00";
+
+  const summaries=communicationSummaries(stage,index);
+  const author=ownerName(row);
+  const recentCommunications=summaries.map((summary,communicationIndex)=>({
+    id:`demo-communication-${row.id}-${communicationIndex+1}`,
+    channel:communicationIndex===0&&stage==="new"?"system":index%3===0?"phone":index%3===1?"whatsapp":"telegram",
+    summary,
+    happenedAt:new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"}).format(new Date(Date.parse(stageEvents.at(-1)?.createdAt??stageDate(reached,index))-communicationIndex*3*60*60*1000)),
+    author:communicationIndex===0&&stage==="new"?"Система":author,
+  }));
+
+  const workflow={
+    nextActionText:
+      stage==="new"?"Позвонить по новому контакту":
+      stage==="interview"?(index%3===0?"Повторить звонок и получить решение":"Уточнить решение по вакансии"):
+      stage==="documents"?"Получить недостающие документы":
+      stage==="preparation"?(travelState==="ticket_required"?"Купить билет и подтвердить выезд":"Подтвердить дату прибытия"):
+      stage==="first_shift"?"Получить подтверждение мастера по первой смене":
+      stage==="retention_7"?"Контроль удержания после первой недели":
+      stage==="retention_30"?"Контроль 30 дней пройден":
+      stage==="reserve"?"Вернуться к кандидату в согласованную дату":"Заявка завершена",
+    lastContact:summaries.at(-1)??"",
+    contactAttempts:stage==="new"?0:stage==="interview"?1+(index%3):2,
+    plannedShift:["preparation","first_shift","retention_7","retention_30","no_show"].includes(stage)?"Дневная · 08:00–20:00":"",
+    confirmed:["preparation","first_shift","retention_7","retention_30"].includes(stage)&&stage!=="no_show",
+    readiness:["preparation","first_shift","retention_7","retention_30"].includes(stage),
+    reserveReason:stage==="reserve"?"Заканчивает текущую работу и сможет выйти позже":undefined,
+    travelState,
+    travelNote:
+      travelState==="ticket_required"?"Нужно купить билет до Москвы":
+      travelState==="ticket_bought"?"Билет оформлен, данные отправлены кандидату":
+      travelState==="company"?"Проезд организует компания":
+      travelState==="self"?"Кандидат добирается самостоятельно":"",
+    documentsRequired:5,
+    documentsReceived:received,
+    missingDocuments:missing,
+  };
+
   return {
     stage,
     stageLabel:recruitingStageLabels[stage],
-    createdAt:new Date(base).toISOString(),
-    updatedAt:stageEvents.at(-1)!.createdAt,
-    stageEnteredAt:stageEvents.at(-1)!.createdAt,
+    createdAt:stageEvents[0]?.createdAt??stageDate(reached,index),
+    updatedAt:stageEvents.at(-1)?.createdAt??stageDate(reached,index),
+    stageEnteredAt:stageEvents.at(-1)?.createdAt??stageDate(reached,index),
     stageEvents,
-    city:['Москва','Тула','Рязань','Калуга'][index%4],
-    sourceChannel:null,
-    sourceCampaign:'Тестовый набор · '+(index%2?'Калуга':'Москва'),
-    plannedStartDate:planned,
-    actualStartAt:postStart?(stageEvents.find(event=>event.toStage==='first_shift')?.createdAt??stageEvents.at(-1)!.createdAt):null,
-    nextActionAt:next,
-    nextAction:next,
-    workflow:{
-      ...(stage==='reserve'?{reserveReason:'Кандидат готов позже'}:{}),
-      nextActionText:stage==='new'?'Позвонить по отклику':stage==='preparation'?'Подтвердить дату выхода':'Уточнить результат и следующий шаг',
-      lastContact:stage==='new'?'':index%2?'Условия обсуждены, ожидает обратного звонка':'Документы запрошены; подтвердил интерес',
-      plannedShift:planned?'Дневная · 08:00–20:00':'',
-      confirmed:stage==='preparation'||postStart,
-      readiness:stage==='preparation'||postStart,
-      travelState:stage==='preparation'?'ticket_required':postStart?'ticket_bought':'not_required',
-      documentsRequired:rank>=2?5:0,
-      documentsReceived:rank>=3?5:rank===2?3:0,
-      missingDocuments:rank===2?['СНИЛС','Реквизиты']:[],
-    },
+    plannedStartDate,
+    actualStartAt,
+    nextActionAt,
+    nextAction:nextActionAt,
+    workflow,
+    recentCommunications,
+    documentSummary:{required:5,received,missing},
   };
 }

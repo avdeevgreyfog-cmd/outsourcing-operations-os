@@ -18,7 +18,7 @@ type Props={applications:RecruitingApplicationRow[];rows:RecruitingNeedRow[];opt
 type View="objects"|"needs"|"analytics"; type Bucket="active"|"attention"|"closed"|"all";
 type NeedForm={title:string;specialtyId:string;objectId:string;regionId:string;countRequired:string;deadline:string;sourceKind:string;priority:string;location:string;schedule:string;workerPay:string;dailyAllowanceProvided:string;dailyAllowanceAmount:string;shift:string;housing:string;housingProvided:string;travel:string;travelProvided:string;shuttle:string;shuttleProvided:string;meals:string;mealsProvided:string;ppe:string;ppeProvided:string;medical:string;medicalProvided:string;tools:string;toolsProvided:string;citizenship:string;requirements:string;comment:string};
 const emptyForm:NeedForm={title:"",specialtyId:"",objectId:"",regionId:"",countRequired:"",deadline:"",sourceKind:"manual",priority:"normal",location:"",schedule:"",workerPay:"",dailyAllowanceProvided:"unknown",dailyAllowanceAmount:"",shift:"",housing:"",housingProvided:"unknown",travel:"",travelProvided:"unknown",shuttle:"",shuttleProvided:"unknown",meals:"",mealsProvided:"unknown",ppe:"",ppeProvided:"unknown",medical:"",medicalProvided:"unknown",tools:"",toolsProvided:"unknown",citizenship:"",requirements:"",comment:""};
-const storageKey="operis.recruiting.needs.v1";
+const storageKey="operis.recruiting.needs.v2";
 const activeStatuses=new Set(["open","in_progress","paused"]); const closedStatuses=new Set(["filled","cancelled"]);
 
 export function RecruitingNeedsWorkspace({applications,rows,options,analytics,metricPreferences,initialView,canCreate,canManage,canConfigureAnalytics,demo}:Props){

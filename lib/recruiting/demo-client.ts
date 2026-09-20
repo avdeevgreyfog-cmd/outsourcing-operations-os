@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import type { RecruitingApplicationRow } from './service';
-export const applicationStorage='operis.recruiting.applications.v1';
+export const applicationStorage='operis.recruiting.applications.v2';
 export const recruitingEvent='operis:recruiting-changed';
 export function readDemoApplications():RecruitingApplicationRow[] { try {const value=JSON.parse(localStorage.getItem(applicationStorage)??'[]');return Array.isArray(value)?value:[];}catch{return [];} }
 export function saveDemoApplication(row:RecruitingApplicationRow) {

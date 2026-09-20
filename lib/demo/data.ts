@@ -42,34 +42,110 @@ export const needs = [
  {id:"83000000-0000-4000-8000-000000000003",organizationId:ORG,objectId:objects[4].id,object:"Склад Калуга",clientId:clients[1].id,regionId:KLG,specialty:"Сборщик мебели",required:5,filled:4,deficit:1,deadline:"04.09",status:"open",ownerUserId:recruiter,createdByUserId:regional,assigneeUserIds:[recruiter,regional],conditions:{workerPay:"115 000–135 000 ₽/мес",dailyAllowanceProvided:false,dailyAllowanceAmount:null,schedule:"5/2 · 10 оплачиваемых часов",shift:"09:00–20:00",location:"Калуга, промышленная зона",housingProvided:true,housing:"Квартира по 2–3 человека в комнате",travelProvided:true,travel:"Билет до Калуги оплачивается",shuttleProvided:false,shuttle:"Объект в пешей доступности от жилья",mealsProvided:true,meals:"Комплексный обед на смене",ppeProvided:true,ppe:"Форма и защитная обувь",medicalProvided:false,medical:"Медосмотр не требуется",toolsProvided:true,tools:"Электроинструмент выдаётся",citizenship:"РФ",requirements:"Опыт сборки мебели от 6 месяцев",comment:"Приоритет кандидатам с опытом работы по чертежам"}},
 ];
 
-export const candidates = [
- {id:"85000000-0000-4000-8000-000000000001",organizationId:ORG,fullName:"Алексей Орлов",phone:"+7 900 100-00-01",source:"Telegram",stage:"contact",stageLabel:"Контакт",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 14:30"},
- {id:"85000000-0000-4000-8000-000000000002",organizationId:ORG,fullName:"Илья Котов",phone:"+7 900 100-00-02",source:"Рекомендация",stage:"preparation",stageLabel:"Документы / подготовка",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 11:00"},
- {id:"85000000-0000-4000-8000-000000000003",organizationId:ORG,fullName:"Сергей Волков",phone:"+7 900 100-00-03",source:"Сайт вакансий",stage:"started",stageLabel:"Вышел",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Выход подтверждён"},
- {id:"85000000-0000-4000-8000-000000000004",organizationId:ORG,fullName:"Максим Титов",phone:"+7 900 100-00-04",source:"Авито",stage:"new",stageLabel:"Новый / отклик",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:"Сегодня 16:00"},
- {id:"85000000-0000-4000-8000-000000000005",organizationId:ORG,fullName:"Андрей Морозов",phone:"+7 900 100-00-05",source:"Авито",stage:"new",stageLabel:"Новый / отклик",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 13:00"},
- {id:"85000000-0000-4000-8000-000000000006",organizationId:ORG,fullName:"Денис Крылов",phone:"+7 900 100-00-06",source:"Telegram",stage:"new",stageLabel:"Новый / отклик",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 15:20"},
- {id:"85000000-0000-4000-8000-000000000007",organizationId:ORG,fullName:"Роман Козлов",phone:"+7 900 100-00-07",source:"Авито",stage:"contact",stageLabel:"Контакт",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 17:00"},
- {id:"85000000-0000-4000-8000-000000000008",organizationId:ORG,fullName:"Никита Егоров",phone:"+7 900 100-00-08",source:"Рекомендация",stage:"interview",stageLabel:"Интервью",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Завтра 10:00"},
- {id:"85000000-0000-4000-8000-000000000009",organizationId:ORG,fullName:"Владимир Фомин",phone:"+7 900 100-00-09",source:"Авито",stage:"manager_review",stageLabel:"На согласовании",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Ждём решение менеджера"},
- {id:"85000000-0000-4000-8000-000000000010",organizationId:ORG,fullName:"Павел Громов",phone:"+7 900 100-00-10",source:"Telegram",stage:"approved",stageLabel:"Согласован",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Запросить документы"},
- {id:"85000000-0000-4000-8000-000000000011",organizationId:ORG,fullName:"Артур Беляев",phone:"+7 900 100-00-11",source:"Авито",stage:"ready",stageLabel:"Готов к выходу",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Выход 20.09"},
- {id:"85000000-0000-4000-8000-000000000012",organizationId:ORG,fullName:"Михаил Серов",phone:"+7 900 100-00-12",source:"Рекомендация",stage:"started",stageLabel:"Вышел",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Вышел 17.09"},
- {id:"85000000-0000-4000-8000-000000000013",organizationId:ORG,fullName:"Егор Климов",phone:"+7 900 100-00-13",source:"Авито",stage:"new",stageLabel:"Новый / отклик",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 14:00"},
- {id:"85000000-0000-4000-8000-000000000014",organizationId:ORG,fullName:"Степан Гусев",phone:"+7 900 100-00-14",source:"Telegram",stage:"contact",stageLabel:"Контакт",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Сегодня 18:00"},
- {id:"85000000-0000-4000-8000-000000000015",organizationId:ORG,fullName:"Иван Чернов",phone:"+7 900 100-00-15",source:"Авито",stage:"interview",stageLabel:"Интервью",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Завтра 12:00"},
- {id:"85000000-0000-4000-8000-000000000016",organizationId:ORG,fullName:"Олег Панов",phone:"+7 900 100-00-16",source:"Рекомендация",stage:"manager_review",stageLabel:"На согласовании",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Передан менеджеру"},
- {id:"85000000-0000-4000-8000-000000000017",organizationId:ORG,fullName:"Антон Зайцев",phone:"+7 900 100-00-17",source:"Авито",stage:"preparation",stageLabel:"Документы / подготовка",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Проверка документов"},
- {id:"85000000-0000-4000-8000-000000000018",organizationId:ORG,fullName:"Фёдор Данилов",phone:"+7 900 100-00-18",source:"Telegram",stage:"ready",stageLabel:"Готов к выходу",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:"Выход 21.09"},
- {id:"85000000-0000-4000-8000-000000000019",organizationId:ORG,fullName:"Кирилл Наумов",phone:"+7 900 100-00-19",source:"Авито",stage:"contact",stageLabel:"Контакт",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:"Сегодня 13:30"},
- {id:"85000000-0000-4000-8000-000000000020",organizationId:ORG,fullName:"Василий Жуков",phone:"+7 900 100-00-20",source:"Рекомендация",stage:"interview",stageLabel:"Интервью",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:"Завтра 09:30"},
- {id:"85000000-0000-4000-8000-000000000021",organizationId:ORG,fullName:"Георгий Мельников",phone:"+7 900 100-00-21",source:"Авито",stage:"approved",stageLabel:"Согласован",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:"Собрать документы"},
- {id:"85000000-0000-4000-8000-000000000022",organizationId:ORG,fullName:"Лев Соколов",phone:"+7 900 100-00-22",source:"Telegram",stage:"ready",stageLabel:"Готов к выходу",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:"Выход 22.09"},
- {id:"85000000-0000-4000-8000-000000000023",organizationId:ORG,fullName:"Александр Борисов",phone:"+7 900 100-00-23",source:"Авито",stage:"rejected",stageLabel:"Отказ",reachedStage:"contact",rejectionReasonCode:"pay",rejectionReason:"Не устроил итоговый доход",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:null},
- {id:"85000000-0000-4000-8000-000000000024",organizationId:ORG,fullName:"Виктор Логинов",phone:"+7 900 100-00-24",source:"Telegram",stage:"rejected",stageLabel:"Отказ",reachedStage:"interview",rejectionReasonCode:"other_offer",rejectionReason:"Принял другое предложение",need:"Грузчик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:null},
- {id:"85000000-0000-4000-8000-000000000025",organizationId:ORG,fullName:"Арсений Крылов",phone:"+7 900 100-00-25",source:"Авито",stage:"no_show",stageLabel:"Не вышел",reachedStage:"ready",rejectionReasonCode:"transport",rejectionReason:"Не смог приехать на объект",need:"Комплектовщик",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,objectManager],nextAction:null},
- {id:"85000000-0000-4000-8000-000000000026",organizationId:ORG,fullName:"Тимур Власов",phone:"+7 900 100-00-26",source:"Рекомендация",stage:"no_show",stageLabel:"Не вышел",reachedStage:"ready",rejectionReasonCode:"no_show",rejectionReason:"Не вышел и перестал отвечать",need:"Сборщик мебели",object:"Склад Калуга",objectId:objects[4].id,clientId:clients[1].id,regionId:KLG,ownerUserId:recruiter,createdByUserId:recruiter,assigneeUserIds:[recruiter,regional],nextAction:null},
-];
+const candidateStageLabels: Record<string,string> = {
+ new:"Новый контакт",interview:"Интервью",documents:"Документы",preparation:"Подготовка к выходу",
+ first_shift:"Первый выход",retention_7:"7 дней",retention_30:"30 дней",rejected:"Отказ",no_show:"Не вышел",reserve:"Резерв",
+};
+
+const demoCandidateBlueprints = [
+ {name:"Алексей Орлов",stage:"new",need:0,source:"Авито",city:"Тула",channel:"phone"},
+ {name:"Максим Титов",stage:"new",need:2,source:"hh.ru",city:"Калуга",channel:"phone"},
+ {name:"Андрей Морозов",stage:"new",need:0,source:"Авито",city:"Рязань",channel:"whatsapp"},
+ {name:"Денис Крылов",stage:"new",need:0,source:"Telegram",city:"Москва",channel:"telegram"},
+ {name:"Егор Климов",stage:"new",need:1,source:"Авито",city:"Орёл",channel:"phone"},
+ {name:"Николай Руднев",stage:"new",need:2,source:"ООО «Регион Персонал»",city:"Брянск",channel:"whatsapp"},
+ {name:"Руслан Сафин",stage:"new",need:1,source:"Telegram",city:"Казань",channel:"telegram"},
+ {name:"Дмитрий Князев",stage:"new",need:0,source:"Рекомендация",city:"Владимир",channel:"phone"},
+
+ {name:"Роман Козлов",stage:"interview",need:0,source:"Авито",city:"Москва",channel:"phone"},
+ {name:"Никита Егоров",stage:"interview",need:0,source:"Рекомендация",city:"Коломна",channel:"whatsapp"},
+ {name:"Степан Гусев",stage:"interview",need:1,source:"Telegram",city:"Тверь",channel:"telegram"},
+ {name:"Иван Чернов",stage:"interview",need:1,source:"Авито",city:"Смоленск",channel:"phone"},
+ {name:"Кирилл Наумов",stage:"interview",need:2,source:"Авито",city:"Калуга",channel:"phone"},
+ {name:"Василий Жуков",stage:"interview",need:2,source:"hh.ru",city:"Обнинск",channel:"whatsapp"},
+ {name:"Игорь Белов",stage:"interview",need:0,source:"ООО «Регион Персонал»",city:"Пенза",channel:"phone"},
+ {name:"Марат Юсупов",stage:"interview",need:1,source:"Авито",city:"Ульяновск",channel:"whatsapp"},
+ {name:"Константин Лебедев",stage:"interview",need:0,source:"Telegram",city:"Москва",channel:"telegram"},
+
+ {name:"Павел Громов",stage:"documents",need:0,source:"Telegram",city:"Москва",channel:"telegram"},
+ {name:"Олег Панов",stage:"documents",need:1,source:"Рекомендация",city:"Рязань",channel:"phone"},
+ {name:"Георгий Мельников",stage:"documents",need:2,source:"Авито",city:"Калуга",channel:"whatsapp"},
+ {name:"Станислав Прохоров",stage:"documents",need:0,source:"hh.ru",city:"Тула",channel:"phone"},
+ {name:"Артур Киселёв",stage:"documents",need:1,source:"Авито",city:"Липецк",channel:"phone"},
+ {name:"Виталий Савельев",stage:"documents",need:2,source:"ООО «Регион Персонал»",city:"Курск",channel:"whatsapp"},
+ {name:"Данила Фролов",stage:"documents",need:0,source:"Telegram",city:"Москва",channel:"telegram"},
+
+ {name:"Илья Котов",stage:"preparation",need:0,source:"Рекомендация",city:"Ярославль",channel:"phone",owner:"object"},
+ {name:"Антон Зайцев",stage:"preparation",need:1,source:"Авито",city:"Омск",channel:"whatsapp",owner:"object"},
+ {name:"Фёдор Данилов",stage:"preparation",need:1,source:"Telegram",city:"Самара",channel:"telegram",owner:"object"},
+ {name:"Лев Соколов",stage:"preparation",need:2,source:"hh.ru",city:"Калуга",channel:"phone",owner:"regional"},
+ {name:"Артём Комаров",stage:"preparation",need:0,source:"Авито",city:"Псков",channel:"phone",owner:"object"},
+ {name:"Михаил Ершов",stage:"preparation",need:2,source:"ООО «Регион Персонал»",city:"Брянск",channel:"whatsapp",owner:"regional"},
+
+ {name:"Сергей Волков",stage:"first_shift",need:0,source:"hh.ru",city:"Москва",channel:"phone",owner:"object"},
+ {name:"Михаил Серов",stage:"first_shift",need:0,source:"Рекомендация",city:"Тула",channel:"whatsapp",owner:"object"},
+ {name:"Александр Гаврилов",stage:"first_shift",need:1,source:"Авито",city:"Рязань",channel:"phone",owner:"object"},
+ {name:"Вадим Щербаков",stage:"first_shift",need:2,source:"Telegram",city:"Калуга",channel:"telegram",owner:"regional"},
+ {name:"Пётр Филатов",stage:"first_shift",need:0,source:"ООО «Регион Персонал»",city:"Саратов",channel:"phone",owner:"object"},
+
+ {name:"Илья Воронов",stage:"retention_7",need:0,source:"Авито",city:"Москва",channel:"whatsapp",owner:"object"},
+ {name:"Анатолий Демидов",stage:"retention_7",need:1,source:"Telegram",city:"Тамбов",channel:"phone",owner:"object"},
+ {name:"Рустам Каримов",stage:"retention_7",need:2,source:"Рекомендация",city:"Калуга",channel:"phone",owner:"regional"},
+ {name:"Вячеслав Марков",stage:"retention_7",need:0,source:"hh.ru",city:"Тула",channel:"telegram",owner:"object"},
+
+ {name:"Юрий Осипов",stage:"retention_30",need:0,source:"Авито",city:"Москва",channel:"phone",owner:"object"},
+ {name:"Геннадий Макаров",stage:"retention_30",need:1,source:"Рекомендация",city:"Рязань",channel:"whatsapp",owner:"object"},
+ {name:"Семён Федотов",stage:"retention_30",need:2,source:"hh.ru",city:"Калуга",channel:"phone",owner:"regional"},
+
+ {name:"Александр Борисов",stage:"rejected",reachedStage:"interview",need:0,source:"Авито",city:"Тула",channel:"phone",reasonCode:"pay",reason:"Не устроил итоговый доход"},
+ {name:"Виктор Логинов",stage:"rejected",reachedStage:"interview",need:1,source:"Telegram",city:"Москва",channel:"telegram",reasonCode:"other_offer",reason:"Принял другое предложение"},
+ {name:"Андрей Шаров",stage:"rejected",reachedStage:"documents",need:2,source:"hh.ru",city:"Калуга",channel:"phone",reasonCode:"documents",reason:"Не смог предоставить обязательные документы"},
+ {name:"Борис Капустин",stage:"rejected",reachedStage:"preparation",need:0,source:"ООО «Регион Персонал»",city:"Пенза",channel:"whatsapp",reasonCode:"changed_mind",reason:"Передумал ехать после согласования даты"},
+ {name:"Эдуард Никифоров",stage:"rejected",reachedStage:"interview",need:1,source:"Авито",city:"Саранск",channel:"phone",reasonCode:"schedule",reason:"Не устроил график работы"},
+
+ {name:"Арсений Крылов",stage:"no_show",reachedStage:"preparation",need:0,source:"Авито",city:"Орёл",channel:"whatsapp",reasonCode:"transport",reason:"Не смог приехать на объект"},
+ {name:"Тимур Власов",stage:"no_show",reachedStage:"preparation",need:2,source:"Рекомендация",city:"Брянск",channel:"phone",reasonCode:"no_show",reason:"Не вышел и перестал отвечать"},
+
+ {name:"Ринат Ахметов",stage:"reserve",reachedStage:"interview",need:1,source:"Telegram",city:"Уфа",channel:"telegram"},
+] as const;
+
+export const candidates = demoCandidateBlueprints.map((item,index)=>{
+ const need=needs[item.need];
+ const object=objects.find(value=>value.id===need.objectId)!;
+ const number=String(index+1).padStart(12,"0");
+ const owner="owner" in item?item.owner:undefined;
+ const ownerUserId=owner==="object"?objectManager:owner==="regional"?regional:recruiter;
+ const sourceCampaign=item.source==="Авито"?"Авито · сентябрь":item.source==="hh.ru"?"hh.ru · складской персонал":item.source==="Telegram"?"Telegram · вахта":item.source==="Рекомендация"?"Рекомендации сотрудников":"Партнёрская поставка";
+ return {
+  id:`85000000-0000-4000-8000-${number}`,
+  organizationId:ORG,
+  fullName:item.name,
+  phone:`+7 900 100-${String(index+1).padStart(2,"0")}-${String((index*7+11)%100).padStart(2,"0")}`,
+  email:index%8===0?`candidate${index+1}@example.test`:null,
+  preferredChannel:item.channel,
+  telegram:item.channel==="telegram"?`@demo_candidate_${index+1}`:null,
+  whatsapp:item.channel==="whatsapp"?`+7 900 100-${String(index+1).padStart(2,"0")}-${String((index*7+11)%100).padStart(2,"0")}`:null,
+  city:item.city,
+  source:item.source,
+  sourceChannel:item.source,
+  sourceCampaign,
+  sourceReference:item.source==="Авито"?`avito-${2026000+index+1}`:item.source==="hh.ru"?`hh-${88000+index+1}`:null,
+  stage:item.stage,
+  stageLabel:candidateStageLabels[item.stage],
+  reachedStage:"reachedStage" in item?item.reachedStage:undefined,
+  rejectionReasonCode:"reasonCode" in item?item.reasonCode:undefined,
+  rejectionReason:"reason" in item?item.reason:undefined,
+  need:need.specialty,
+  object:need.object,
+  objectId:need.objectId,
+  clientId:need.clientId,
+  regionId:need.regionId,
+  ownerUserId,
+  createdByUserId:recruiter,
+  assigneeUserIds:Array.from(new Set([recruiter,ownerUserId,...(need.assigneeUserIds??[])])),
+  nextAction:["rejected","no_show"].includes(item.stage)?null:"Следующее действие по этапу",
+ };
+});
 
 export const workers = [
  {id:"88000000-0000-4000-8000-000000000001",organizationId:ORG,fullName:"Сергей Волков",status:"active",origin:"Сергей Волков · сайт вакансий",originalRecruiter:"Ольга Новикова",object:"РЦ Север",objectId:objects[0].id,clientId:clients[0].id,regionId:MOW,createdByUserId:recruiter,ownerUserId:objectManager,assigneeUserIds:[objectManager,recruiter,regional],employment:"ТК",rate:390,rateUnit:"₽/ч",monthHours:88,accrued:35820,paid:5000,payable:30820},
