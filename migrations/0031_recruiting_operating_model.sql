@@ -86,7 +86,7 @@ WHERE c.source IS NOT NULL AND btrim(c.source)<>''
 ON CONFLICT (organization_id,name) DO NOTHING;
 
 CREATE OR REPLACE FUNCTION seed_recruiting_organization_defaults() RETURNS trigger
-LANGUAGE plpgsql AS $
+LANGUAGE plpgsql AS $recruiting$
 BEGIN
   INSERT INTO recruiting_pipeline_stage_settings(organization_id,stage_code,label,stage_kind,sort_order,active,virtual,is_system)
   VALUES
@@ -112,7 +112,7 @@ BEGIN
     (NEW.id,'Ручной ввод','other',100)
   ON CONFLICT (organization_id,name) DO NOTHING;
   RETURN NEW;
-END $;
+END $recruiting$;
 
 DROP TRIGGER IF EXISTS seed_recruiting_defaults_on_organization ON organizations;
 CREATE TRIGGER seed_recruiting_defaults_on_organization
