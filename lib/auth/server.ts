@@ -7,6 +7,7 @@ import type { AccessPreviewTargetType, Actor, WorkspaceContext, WorkspaceOption 
 import { getDemoActor } from "@/lib/demo/access";
 import { isDemoMode } from "@/lib/demo/mode";
 import { hasCapability } from "@/lib/core/access.mjs";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 
 export const SESSION_COOKIE = "oo_session";
 export const DEMO_COOKIE = "oo_demo_role";
@@ -29,6 +30,7 @@ function buildDemoActor(roleCode: string): Actor {
 }
 
 export async function getCurrentActor(options: ActorOptions = {}): Promise<Actor | null> {
+  if (isGithubPagesDemo()) return buildDemoActor("director");
   const store = await cookies();
   if (store.get(WORKSPACE_MODE_COOKIE)?.value === "demo" && isDemoMode()) {
     return buildDemoActor(store.get(DEMO_COOKIE)?.value ?? "director");
@@ -197,6 +199,14 @@ async function getRealSessionOrganization(): Promise<WorkspaceOption | null> {
 }
 
 export async function getWorkspaceContext(actor: Actor): Promise<WorkspaceContext> {
+  if (isGithubPagesDemo()) return {
+    organizations: [{ key: "demo", id: null, name: "Демо-организация", slug: "operis-demo", kind: "demo" }],
+    currentOrganizationKey: "demo",
+    previewOptions: [],
+    previewTarget: null,
+    actualRoleName: actor.baseRoleName ?? actor.roleName,
+    hasRealSession: false,
+  };
   const organizations: WorkspaceOption[] = [];
   if (isDemoMode()) {
     organizations.push({ key: "demo", id: null, name: "Демо-организация", slug: "operis-demo", kind: "demo" });
