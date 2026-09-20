@@ -239,7 +239,7 @@ INSERT INTO permission_grants(organization_id,role_template_id,capability,effect
 SELECT r.organization_id,r.id,p.capability,'allow','all_org','{}'::uuid[]
 FROM role_templates r
 JOIN permission_definitions p ON p.capability IN (
-  'operations.crew.read','operations.crew.manage','assets.read','assets.manage','supply.housing.read','supply.housing.manage'
+  'operations.crew.read','operations.crew.manage','assets.read','assets.manage','supply.housing.read','supply.housing.manage','procurement.read','procurement.manage'
 )
 WHERE r.code='director'
 ON CONFLICT DO NOTHING;
