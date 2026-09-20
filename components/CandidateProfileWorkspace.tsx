@@ -64,7 +64,7 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
         sourceCampaign:custom?.sourceCampaign??profile?.sourceCampaign??first?.sourceCampaign??null,
         sourceReference:custom?.sourceReference??profile?.sourceReference??first?.sourceReference??null,
         notes:custom?.notes??profile?.notes??null,
-        status:profile?.status??(applications.some(x=>["first_shift","retention_7","retention_30"].includes(x.stage))?"worker":"active"),
+        status:profile?.status??(applications.some(x=>["first_shift","retention_7","retention_30"].includes(x.stage))?"worker":"active"),archivedAt:custom?.archivedAt??profile?.archivedAt??null,
         workerId:custom?.workerId??profile?.workerId??null,
         contacts:custom?.contacts??profile?.contacts??[],
         documents:custom?.documents??profile?.documents??[],
@@ -136,6 +136,25 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
     finally{setBusy("")}
   }
 
+  async function toggleArchive(){
+    if(!current)return;
+    const archived=!current.archivedAt;
+    if(archived&&current.applications.some(app=>isActiveStage(app.stage))){setError("Сначала завершите активные заявки кандидата.");return;}
+    if(archived&&current.workerId){setError("Карточку сотрудника нельзя отправить в архив кандидатов.");return;}
+    setBusy("archive");setError("");
+    try{
+      if(demo){
+        const next={...current,archivedAt:archived?new Date().toISOString():null};
+        const all=JSON.parse(localStorage.getItem(profileStorage)||"{}");all[candidateId]={...(all[candidateId]??{}),archivedAt:next.archivedAt};localStorage.setItem(profileStorage,JSON.stringify(all));setCurrent(next);
+      }else{
+        const response=await fetch("/api/candidates/"+candidateId+"/archive",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({archived})});
+        const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить архив");
+        setCurrent({...current,archivedAt:archived?new Date().toISOString():null});router.refresh();
+      }
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить архив")}
+    finally{setBusy("")}
+  }
+
   async function updateDocument(document:CandidateDocumentRecord,status:string){
     if(!current)return;setBusy("document-"+document.id);setError("");
     try{
@@ -156,8 +175,8 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
   if(!current)return <div className="empty"><strong>Кандидат не найден</strong><span>Карточка недоступна в вашем контуре.</span><Link className="button" href="/candidates">Вернуться к кандидатам</Link></div>;
 
   const activeApplications=sortedApplications.filter(item=>isActiveStage(item.stage));
-  const statusLabel=current.workerId||current.status==="worker"?"Сотрудник":activeApplications.length?"В подборе":latest?.stage==="reserve"?"Резерв":"В базе";
-  const statusTone=current.workerId||current.status==="worker"?"good":activeApplications.length?"info":latest?.stage==="reserve"?"warn":"neutral";
+  const statusLabel=current.workerId||current.status==="worker"?"Сотрудник":current.archivedAt?"Архив":activeApplications.length?"В подборе":latest?.stage==="reserve"?"Резерв":"В базе";
+  const statusTone=current.workerId||current.status==="worker"?"good":current.archivedAt?"neutral":activeApplications.length?"info":latest?.stage==="reserve"?"warn":"neutral";
 
   return <div className="recruiting-workspace candidate-dossier">
     {error&&<div className="recruiting-error">{error}</div>}
@@ -165,7 +184,7 @@ export function CandidateProfileWorkspace({profile,candidateId,demo,canEdit,canC
     <section className="candidate-dossier-head">
       <div className="candidate-dossier-person"><div><span>Карточка человека</span><h2>{current.fullName}</h2><div className="candidate-dossier-tags"><Status tone={statusTone}>{statusLabel}</Status>{latest&&<span>{latest.stageLabel}</span>}{current.workerId&&<Link href={"/workers/"+current.workerId}>Карточка сотрудника →</Link>}</div></div></div>
       <div className="candidate-dossier-contact"><span>Предпочтительная связь</span><strong>{preferredContact?.value??current.phone??current.email??"Не указана"}</strong><small>{preferredContact?contactLabel(preferredContact.kind):contactChannelLabels[current.preferredChannel??""]??""}</small></div>
-      <div className="candidate-dossier-actions">{(canEdit||demo)&&<button className="button" onClick={startEdit}>Редактировать</button>}{current.workerId&&<Link className="button primary" href={"/workers/"+current.workerId}><BriefcaseBusiness size={14}/> Сотрудник</Link>}</div>
+      <div className="candidate-dossier-actions">{(canEdit||demo)&&<button className="button" onClick={startEdit}>Редактировать</button>}{(canEdit||demo)&&!current.workerId&&<button className="button" disabled={busy==="archive"} onClick={()=>void toggleArchive()}>{current.archivedAt?"Восстановить из архива":"В архив"}</button>}{current.workerId&&<Link className="button primary" href={"/workers/"+current.workerId}><BriefcaseBusiness size={14}/> Сотрудник</Link>}</div>
     </section>
 
     <nav className="entity-tabs candidate-dossier-tabs" aria-label="Разделы карточки кандидата">{tabs.map(([key,label])=><button type="button" key={key} className={tab===key?"active":""} onClick={()=>setTab(key)}>{label}{key==="applications"&&<span>{current.applications.length}</span>}{key==="documents"&&<span>{current.documents.length}</span>}{key==="communications"&&<span>{current.communications.length}</span>}</button>)}</nav>
