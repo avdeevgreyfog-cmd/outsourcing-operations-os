@@ -492,6 +492,85 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   });
 }
 
+export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirectoryRow[]>{
+  requireCapability(actor,"recruiting.candidate.read");
+  if(actor.demo){
+    const applications=demoApplications(actor);
+    const ids=[...new Set(applications.map(row=>row.candidateId))];
+    return ids.map(id=>{
+      const related=applications.filter(row=>row.candidateId===id).sort((a,b)=>(b.updatedAt??"").localeCompare(a.updatedAt??""));
+      const latest=related[0];
+      const preferredContact=latest?.preferredChannel==="telegram"?latest.telegram:
+        latest?.preferredChannel==="whatsapp"?latest.whatsapp:
+        latest?.preferredChannel==="email"?latest.email:latest?.phone;
+      const last=related.flatMap(row=>row.recentCommunications??[]).sort((a,b)=>b.happenedAt.localeCompare(a.happenedAt))[0];
+      return {
+        id,fullName:latest?.fullName??"Кандидат",phone:latest?.phone??null,email:latest?.email??null,city:latest?.city??null,
+        preferredChannel:latest?.preferredChannel??null,preferredContact:preferredContact??null,source:latest?.source??null,
+        status:related.some(row=>["first_shift","retention_7","retention_30"].includes(row.stage))?"worker":
+          related.some(row=>isActiveCandidateStage(row.stage))?"active":"inactive",
+        applicationCount:related.length,activeApplicationCount:related.filter(row=>isActiveCandidateStage(row.stage)).length,
+        latestApplicationId:latest?.applicationId??null,latestStage:latest?.stage??null,latestStageLabel:latest?.stageLabel??null,
+        latestNeed:latest?.need??null,latestObject:latest?.object??null,latestOwner:latest?.owner??null,
+        lastContactAt:last?.happenedAt??null,lastContactSummary:last?.summary??null,workerId:null,archivedAt:null,
+        createdAt:latest?.createdAt??"",updatedAt:latest?.updatedAt??"",
+      };
+    });
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<Array<CandidateDirectoryRow & {
+      rawStage:string|null;ownerUserId:string|null;regionId:string|null;objectId:string|null;clientId:string|null;assigneeUserIds:string[];
+    }>>\`
+      SELECT c.id,c.full_name "fullName",c.phone,c.email,c.city,c.preferred_channel "preferredChannel",
+        COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.status,
+        COALESCE(apps.total,0)::int "applicationCount",COALESCE(apps.active,0)::int "activeApplicationCount",
+        latest.id "latestApplicationId",latest.stage "rawStage",COALESCE(n.title,s.name) "latestNeed",o.name "latestObject",
+        owner.display_name "latestOwner",latest.owner_user_id "ownerUserId",COALESCE(n.region_id,o.region_id) "regionId",
+        latest.object_id "objectId",o.client_company_id "clientId",
+        ARRAY_REMOVE(ARRAY[latest.owner_user_id::text,latest.manager_user_id::text,c.current_recruiter_user_id::text],NULL) "assigneeUserIds",
+        to_char(last_comm.happened_at,'DD.MM.YYYY HH24:MI') "lastContactAt",last_comm.summary "lastContactSummary",
+        wp.id "workerId",c.archived_at::text "archivedAt",c.created_at::text "createdAt",c.updated_at::text "updatedAt"
+      FROM candidates c
+      LEFT JOIN LATERAL (
+        SELECT cc.value FROM candidate_contacts cc
+        WHERE cc.candidate_id=c.id AND cc.is_preferred
+        ORDER BY cc.updated_at DESC LIMIT 1
+      ) pref ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*)::int total,
+          count(*) FILTER(WHERE ca.stage NOT IN ('rejected','no_show','reserve'))::int active
+        FROM candidate_applications ca WHERE ca.candidate_id=c.id
+      ) apps ON true
+      LEFT JOIN LATERAL (
+        SELECT ca.* FROM candidate_applications ca
+        WHERE ca.candidate_id=c.id
+        ORDER BY (ca.stage NOT IN ('rejected','no_show','reserve')) DESC,ca.updated_at DESC LIMIT 1
+      ) latest ON true
+      LEFT JOIN needs n ON n.id=latest.need_id
+      LEFT JOIN specialties s ON s.id=n.specialty_id
+      LEFT JOIN objects o ON o.id=latest.object_id
+      LEFT JOIN app_users owner ON owner.id=latest.owner_user_id
+      LEFT JOIN LATERAL (
+        SELECT cc.happened_at,cc.summary FROM candidate_communications cc
+        WHERE cc.candidate_id=c.id ORDER BY cc.happened_at DESC LIMIT 1
+      ) last_comm ON true
+      LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id
+      WHERE c.organization_id=\${actor.organizationId}::uuid
+      ORDER BY c.archived_at NULLS FIRST,
+        COALESCE(last_comm.happened_at,c.updated_at) DESC,c.full_name
+    \`;
+    return rows
+      .filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor))
+      .map(row=>{
+        const {rawStage,...rest}=row;
+        const latestStage=rawStage?normalizeRecruitingStage(rawStage):null;
+        return {...rest,latestStage,latestStageLabel:latestStage?recruitingStageLabels[latestStage]:null};
+      });
+  });
+}
+
+function isActiveCandidateStage(stage:RecruitingStage){return !["rejected","no_show","reserve"].includes(stage);}
+
 export async function getCandidateProfile(actor: Actor, id: string): Promise<CandidateProfile | null> {
   const applications = (await listRecruitingApplications(actor)).filter((row) => row.candidateId === id);
   if (!applications.length) return null;
