@@ -68,8 +68,6 @@ export type RecruitingNeedRow = {
   owner: string | null;
   managerUserId: string | null;
   manager: string | null;
-  responsibleUserId: string | null;
-  responsible: string | null;
   assigneeUserIds: string[];
   recruiters: NeedRecruiterAssignment[];
   conditions: Record<string, unknown>;
@@ -110,6 +108,8 @@ export type RecruitingApplicationRow = {
   owner: string | null;
   managerUserId: string | null;
   manager: string | null;
+  responsibleUserId: string | null;
+  responsible: string | null;
   assigneeUserIds: string[];
   createdAt?: string;
   updatedAt?: string;
