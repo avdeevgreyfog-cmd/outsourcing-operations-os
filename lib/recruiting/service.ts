@@ -237,7 +237,8 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(funnel.ready,0)::int ready,COALESCE(funnel.started,0)::int started,
         COALESCE(funnel."stageCounts",'{}'::jsonb) "stageCounts",
         COALESCE(funnel."reachedCounts",'{}'::jsonb) "funnelReached",
-        COALESCE(versions.version,1)::int "conditionVersion"
+        COALESCE(versions.version,1)::int "conditionVersion",
+        headcount."lastHeadcountChange"
       FROM needs n
       JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=n.object_id
@@ -308,6 +309,25 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
       LEFT JOIN LATERAL (
         SELECT max(nv.version)::int version FROM need_versions nv WHERE nv.need_id=n.id
       ) versions ON true
+      LEFT JOIN LATERAL (
+        SELECT jsonb_build_object(
+          'id',hc.id,
+          'previousCount',hc.previous_count,
+          'newCount',hc.new_count,
+          'delta',hc.delta,
+          'responsibleUserId',hc.responsible_user_id,
+          'responsible',ru.display_name,
+          'reason',hc.reason,
+          'createdBy',cu.display_name,
+          'createdAt',to_char(hc.created_at,'DD.MM.YYYY HH24:MI')
+        ) "lastHeadcountChange"
+        FROM need_headcount_changes hc
+        LEFT JOIN app_users ru ON ru.id=hc.responsible_user_id
+        JOIN app_users cu ON cu.id=hc.created_by_user_id
+        WHERE hc.need_id=n.id
+        ORDER BY hc.created_at DESC
+        LIMIT 1
+      ) headcount ON true
       ORDER BY n.status IN ('open','in_progress','paused') DESC,n.deadline NULLS LAST,n.created_at DESC
     `;
     return rows.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor))
