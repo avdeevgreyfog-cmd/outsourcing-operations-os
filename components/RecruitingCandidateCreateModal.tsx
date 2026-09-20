@@ -80,7 +80,7 @@ export function RecruitingCandidateCreateModal({
           ownerUserId:need.ownerUserId,owner:need.owner,managerUserId:need.managerUserId,manager:need.manager,responsibleUserId:need.ownerUserId,responsible:need.owner,
           assigneeUserIds:need.assigneeUserIds,createdAt:now,updatedAt:now,stageEnteredAt:now,nextActionAt:form.nextAction?new Date(form.nextAction).toISOString():null,
           nextAction:form.nextAction||null,plannedStartDate:null,actualStartAt:null,rejectionReason:null,rejectionReasonCode:null,conditions:need.conditions,
-          workflow:{},stageEvents:[{toStage:"new",createdAt:now}],documentsReceived:0,documentsRequired:documents.length,
+          workflow:{},stageEvents:[{toStage:"new",createdAt:now}],documentsReceived:0,documentsRequired:documents.length,workerActive:false,
         };
         saveDemoApplication(created);
       }else{
