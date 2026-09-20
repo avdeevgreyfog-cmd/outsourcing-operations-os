@@ -11,13 +11,15 @@ export async function saveApplicationChange(row:RecruitingApplicationRow, change
   const updated:RecruitingApplicationRow={...row,stage:change.stage,stageLabel:recruitingStageLabels[change.stage],updatedAt:now,stageEnteredAt:changed?now:row.stageEnteredAt,ownerUserId:change.ownerUserId===undefined?row.ownerUserId:change.ownerUserId,owner:change.ownerUserId===undefined?row.owner:(change.ownerUserId?demoOwnerNames[change.ownerUserId]??"Сотрудник":null),
     workflow:{...row.workflow,...change.workflow},nextActionAt:change.nextActionAt===undefined?row.nextActionAt:change.nextActionAt,nextAction:change.nextActionAt===undefined?row.nextAction:change.nextActionAt,
     plannedStartDate:change.plannedStartDate===undefined?row.plannedStartDate:change.plannedStartDate,
-    actualStartAt:change.stage==='first_shift'&&changed?change.actualStartAt??null:row.actualStartAt,
+    plannedArrivalAt:change.plannedArrivalAt===undefined?row.plannedArrivalAt:change.plannedArrivalAt,
+    actualStartAt:change.actualStartAt===undefined?row.actualStartAt:change.actualStartAt,
     rejectionReason:change.reason??null,rejectionReasonCode:change.reasonCode??null,
     stageEvents:changed?[...(row.stageEvents??[]),{fromStage:row.stage,toStage:change.stage,createdAt:now,reason:change.reason,reasonCode:change.reasonCode}]:row.stageEvents};
-  if(change.workflow?.lastContact?.trim() && change.workflow.lastContact!==row.workflow?.lastContact){
+  const comment=change.workflow?.additionalComment?.trim()||change.workflow?.lastContact?.trim();
+  if(comment && comment!==(row.workflow?.additionalComment??row.workflow?.lastContact)){
     const key='operis.recruiting.communications.v1';
     const history=JSON.parse(localStorage.getItem(key)??'[]');
-    history.unshift({id:crypto.randomUUID(),candidateId:row.candidateId,applicationId:row.applicationId,channel:'note',direction:'internal',summary:change.workflow.lastContact,happenedAt:new Date().toLocaleString('ru-RU'),author:'Текущий пользователь'});
+    history.unshift({id:crypto.randomUUID(),candidateId:row.candidateId,applicationId:row.applicationId,channel:'note',direction:'internal',summary:comment,happenedAt:new Date().toLocaleString('ru-RU'),author:'Текущий пользователь'});
     localStorage.setItem(key,JSON.stringify(history));
   }
   saveDemoApplication(updated);
