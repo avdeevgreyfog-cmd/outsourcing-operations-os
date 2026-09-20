@@ -125,6 +125,7 @@ export type RecruitingApplicationRow = {
   conditions: Record<string, unknown>;
   documentsReceived: number;
   documentsRequired: number;
+  workerActive: boolean;
 };
 
 export type CandidateCommunication = {
@@ -349,7 +350,7 @@ function demoApplications(actor: Actor): RecruitingApplicationRow[] {
       owner: "Ольга Новикова", managerUserId: null, manager: null, responsibleUserId: row.ownerUserId ?? null, responsible: "Ольга Новикова", assigneeUserIds: row.assigneeUserIds ?? [],
       nextAction: row.nextAction ?? null, plannedStartDate: null, actualStartAt: stage === "started" ? "2026-09-12" : null,
       rejectionReason: (row as {rejectionReason?:string}).rejectionReason??null, rejectionReasonCode:(row as {rejectionReasonCode?:string}).rejectionReasonCode??null, conditions: need?.conditions ?? {},
-      documentsReceived: stage==="preparation"?2:0, documentsRequired: stage==="preparation"?4:0,
+      documentsReceived: stage==="preparation"?2:0, documentsRequired: stage==="preparation"?4:0, workerActive:stage==="started",
       ...demoApplicationDetails(row,demo.candidates.findIndex(x=>x.id===row.id)),
     };
   });
@@ -374,7 +375,8 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
         ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
         (SELECT count(*)::int FROM candidate_application_documents d WHERE d.application_id=ca.id AND d.required AND d.status IN ('received','verified')) "documentsReceived",
-        (SELECT count(*)::int FROM candidate_application_documents d WHERE d.application_id=ca.id AND d.required AND d.status<>'not_required') "documentsRequired"
+        (SELECT count(*)::int FROM candidate_application_documents d WHERE d.application_id=ca.id AND d.required AND d.status<>'not_required') "documentsRequired",
+        EXISTS(SELECT 1 FROM worker_profiles wp WHERE wp.origin_candidate_id=c.id AND wp.status='active') "workerActive"
       FROM candidate_applications ca
       JOIN candidates c ON c.id=ca.candidate_id
       JOIN needs n ON n.id=ca.need_id
