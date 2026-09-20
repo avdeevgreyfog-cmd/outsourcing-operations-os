@@ -1,3 +1,5 @@
+import { githubPagesStaticParams } from "@/lib/demo/static-params";
+import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -11,6 +13,10 @@ import { ProposalApprovalView, ProposalHistoryView } from "@/components/Proposal
 import { EntityTabs, PageHeader } from "@/components/UI";
 
 const tabLabels: Record<string, string> = {overview:"Обзор",document:"Документ",approval:"Согласование",history:"История"};
+
+export function generateStaticParams(){
+  return isGithubPagesDemo() ? githubPagesStaticParams.proposals.map((id)=>({id})) : [];
+}
 
 export default async function ProposalPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
   const {id}=await params;const {tab:rawTab}=await searchParams;const tab=rawTab&&tabLabels[rawTab]?rawTab:"overview";
