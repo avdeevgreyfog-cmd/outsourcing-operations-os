@@ -275,4 +275,28 @@ export async function POST(request:Request){
           await upsertTask(tx,actor,{key:baseKey+":correct",title:"Исправить табель после возврата клиентом",assignee:object.ownerUserId,entityType:"object",entityId:body.objectId,processCode:"timesheet.correction",priority:"critical",metadata:{snapshotId:client.id,comment:body.comment??null}});
         }else{
           const finance=(await responsibilityOwner(tx,"finance","control",object.regionId))??actor.userId;
-          await upsertTask(tx,actor,{key:baseKey+"
+          await upsertTask(tx,actor,{key:baseKey+":close",title:"Закрыть табель и сформировать начисления",assignee:finance,entityType:"object",entityId:body.objectId,processCode:"timesheet.finance_close",priority:"high",metadata:{snapshotId:client.id,periodStart:body.periodStart,periodEnd:body.periodEnd}});
+        }
+        return {status,snapshotId:client.id,version:client.version};
+      }
+
+      if(!client||client.status!=="client_approved")throw new Error("Период можно закрыть только после подтверждения клиентом");
+      const finance=await generateFinance(tx,actor,object,client,body.periodStart,body.periodEnd);
+      await tx`UPDATE timesheet_snapshots SET status='closed',closed_by_user_id=${actor.userId}::uuid,closed_at=now(),workflow_comment=COALESCE(${body.comment??null},workflow_comment) WHERE id=${client.id}::uuid`;
+      const linkedInternal=typeof client.snapshotJson.internalSnapshotId==="string"?client.snapshotJson.internalSnapshotId:null;
+      if(linkedInternal)await tx`UPDATE timesheet_snapshots SET status='closed',closed_by_user_id=${actor.userId}::uuid,closed_at=now() WHERE id=${linkedInternal}::uuid`;
+      await completeTask(tx,actor.organizationId,baseKey+":close");
+      await tx`
+        INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'timesheet',${client.id}::uuid,'period_closed',
+          'Табель закрыт: сформированы начисления, клиентская выручка и фактический P&L',${tx.json({objectId:body.objectId,periodStart:body.periodStart,periodEnd:body.periodEnd,...finance})})
+      `;
+      return {status:"closed",snapshotId:client.id,version:client.version,finance};
+    }));
+    return NextResponse.json(result,{status:body.action==="submit_internal"||body.action==="send_client"?201:200});
+  }catch(error){
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте действие с табелем",issues:error.issues},{status:400});
+    if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав для этого этапа табеля"},{status:403});
+    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось выполнить действие с табелем"},{status:500});
+  }
+}
