@@ -64,6 +64,10 @@ BEGIN
   UPDATE process_roles SET code='beta-tmp-process-'||replace(id::text,'-','') WHERE organization_id=org_id;
   UPDATE role_templates SET code='beta-tmp-role-'||replace(id::text,'-','') WHERE organization_id=org_id;
 
+  UPDATE approval_steps
+  SET approver_membership_id=NULL
+  WHERE organization_id=org_id AND approver_membership_id='50000000-0000-4000-8000-000000000007'::uuid;
+
   DELETE FROM organization_memberships
   WHERE organization_id=org_id AND id='50000000-0000-4000-8000-000000000007'::uuid;
 
