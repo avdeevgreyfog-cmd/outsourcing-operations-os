@@ -197,6 +197,66 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
   });
 }
 
+
+
+export type OperationsAnalyticsSummary = {
+  weeklyNoShows:Array<{label:string;value:number}>;
+  timesheetStatuses:Array<{status:string;count:number}>;
+  launches:{total:number;onTime:number;late:number;inProgress:number};
+  incidents30d:number;
+};
+
+export async function getOperationsAnalyticsSummary(actor:Actor):Promise<OperationsAnalyticsSummary>{
+  requireCapability(actor,"operations.object.read");
+  const visible=await listOperationsAnalytics(actor);
+  const ids=visible.map(row=>row.objectId);
+  if(actor.demo){
+    return {
+      weeklyNoShows:["18.08","25.08","01.09","08.09","15.09","22.09"].map(label=>({label,value:0})),
+      timesheetStatuses:[{status:"draft",count:1},{status:"submitted",count:0},{status:"approved",count:0},{status:"returned",count:0}],
+      launches:{total:new Set(demo.launchTasks.map(row=>row.objectId)).size,onTime:0,late:0,inProgress:new Set(demo.launchTasks.map(row=>row.objectId)).size},
+      incidents30d:demo.incidents.filter(row=>row.status!=="resolved").length,
+    };
+  }
+  if(!ids.length)return {weeklyNoShows:[],timesheetStatuses:[],launches:{total:0,onTime:0,late:0,inProgress:0},incidents30d:0};
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const weeklyNoShows=await sql<Array<{label:string;value:number}>>`
+      WITH weeks AS (
+        SELECT generate_series(date_trunc('week',current_date)-interval '5 weeks',date_trunc('week',current_date),interval '1 week')::date week_start
+      )
+      SELECT to_char(w.week_start,'DD.MM') label,count(ae.id)::int value
+      FROM weeks w
+      LEFT JOIN shifts sh ON sh.object_id=ANY(${ids}::uuid[]) AND sh.shift_date>=w.week_start AND sh.shift_date<w.week_start+7
+      LEFT JOIN shift_assignments sa ON sa.shift_id=sh.id
+      LEFT JOIN attendance_events ae ON ae.shift_assignment_id=sa.id AND ae.event_type='no_show'
+      GROUP BY w.week_start ORDER BY w.week_start
+    `;
+    const timesheetStatuses=await sql<Array<{status:string;count:number}>>`
+      WITH latest AS (
+        SELECT DISTINCT ON (ts.object_id) ts.object_id,ts.status
+        FROM timesheet_snapshots ts
+        WHERE ts.object_id=ANY(${ids}::uuid[])
+          AND ts.view_type='client'
+          AND ts.period_start>=date_trunc('month',current_date)::date
+        ORDER BY ts.object_id,ts.created_at DESC
+      )
+      SELECT status,count(*)::int count FROM latest GROUP BY status
+    `;
+    const [launches]=await sql<Array<{total:number;onTime:number;late:number;inProgress:number}>>`
+      SELECT count(*)::int total,
+        count(*) FILTER (WHERE COALESCE(forecast_date,target_date)<=target_date AND progress_pct>=100)::int "onTime",
+        count(*) FILTER (WHERE COALESCE(forecast_date,target_date)>target_date)::int late,
+        count(*) FILTER (WHERE progress_pct<100)::int "inProgress"
+      FROM launches WHERE object_id=ANY(${ids}::uuid[])
+    `;
+    const [incidents]=await sql<Array<{count:number}>>`
+      SELECT count(*)::int count FROM incidents
+      WHERE object_id=ANY(${ids}::uuid[]) AND occurred_at>=now()-interval '30 days'
+    `;
+    return {weeklyNoShows,timesheetStatuses,launches:launches??{total:0,onTime:0,late:0,inProgress:0},incidents30d:incidents?.count??0};
+  });
+}
+
 export async function getOperationsReferenceData(
   actor:Actor,
   capability="worker.read",
