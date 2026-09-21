@@ -168,4 +168,65 @@ async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnaps
         ORDER BY wa.effective_from DESC LIMIT 1
       ) a ON true
       JOIN LATERAL (
-        SELECT r.id,r.amount FROM client_
+        SELECT r.id,r.amount FROM client_rates r
+        WHERE r.object_id=${object.objectId}::uuid AND r.specialty_id=a.specialty_id
+          AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date)
+        ORDER BY r.effective_from DESC LIMIT 1
+      ) cr ON true
+    )
+    SELECT specialty_id "specialtyId",client_rate_id "clientRateId",sum(hours)::numeric hours,max(rate)::numeric rate
+    FROM rated GROUP BY specialty_id,client_rate_id
+  `;
+  for(const row of revenueRows){
+    const hours=Number(row.hours),rate=Number(row.rate);
+    await tx`
+      INSERT INTO client_revenue_lines(organization_id,client_company_id,object_id,client_rate_id,period_start,period_end,quantity,unit,rate,amount,source_snapshot_id,status,created_by_user_id)
+      SELECT ${actor.organizationId}::uuid,${object.clientId}::uuid,${object.objectId}::uuid,${row.clientRateId}::uuid,
+        ${periodStart}::date,${periodEnd}::date,${hours},'hour',${rate},${hours*rate},${clientSnapshot.id}::uuid,'approved',${actor.userId}::uuid
+      WHERE NOT EXISTS(
+        SELECT 1 FROM client_revenue_lines WHERE object_id=${object.objectId}::uuid AND source_snapshot_id=${clientSnapshot.id}::uuid AND client_rate_id=${row.clientRateId}::uuid
+      )
+    `;
+  }
+
+  const [totals]=await tx<Array<{revenue:number|string;workerCost:number|string;expenses:number|string}>>`
+    SELECT
+      COALESCE((SELECT sum(amount) FROM client_revenue_lines WHERE object_id=${object.objectId}::uuid AND source_snapshot_id=${clientSnapshot.id}::uuid),0)::numeric revenue,
+      COALESCE((SELECT sum(total_amount) FROM worker_accruals WHERE object_id=${object.objectId}::uuid AND source_snapshot_id=${internal.id}::uuid),0)::numeric "workerCost",
+      COALESCE((SELECT sum(amount) FROM object_expenses WHERE object_id=${object.objectId}::uuid AND expense_date BETWEEN ${periodStart}::date AND ${periodEnd}::date AND plan_fact='fact'),0)::numeric expenses
+  `;
+  const revenue=Number(totals?.revenue??0),workerCost=Number(totals?.workerCost??0),expenses=Number(totals?.expenses??0);
+  const contribution=revenue-workerCost-expenses;
+  const marginPct=revenue?contribution/revenue*100:0;
+  await tx`
+    INSERT INTO pnl_snapshots(organization_id,object_id,period_start,period_end,scenario,revenue,worker_cost,object_expenses,contribution,margin_pct,snapshot_json)
+    VALUES(${actor.organizationId}::uuid,${object.objectId}::uuid,${periodStart}::date,${periodEnd}::date,'fact',${revenue},${workerCost},${expenses},${contribution},${marginPct},
+      ${tx.json({source:"closed_timesheet",clientSnapshotId:clientSnapshot.id,internalSnapshotId:internal.id})})
+  `;
+  return {revenue,workerCost,expenses,contribution,marginPct,accruals:workerRows.length,revenueLines:revenueRows.length};
+}
+
+export async function POST(request:Request){
+  try{
+    const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
+    if(actor.demo)return NextResponse.json({error:"Демо-режим доступен только для чтения"},{status:409});
+    const body=schema.parse(await request.json());
+    const capability=body.action==="review_internal"||body.action==="return_internal"?"time.timesheet.review":
+      body.action==="client_approve"||body.action==="client_return"?"time.timesheet.approve_client":
+      body.action==="close"?"finance.worker_accrual.edit":"time.timesheet.submit";
+    requireCapability(actor,capability);
+    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+      const object=await loadObject(tx,body.objectId);
+      if(!object||!canReadRow(actor.access,capability,object,actor))throw new AccessDeniedError(capability);
+      const internal=await latestSnapshot(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
+      const client=await latestSnapshot(tx,body.objectId,"client",body.periodStart,body.periodEnd);
+      const baseKey=`timesheet:${body.objectId}:${body.periodStart}:${body.periodEnd}`;
+
+      if(body.action==="submit_internal"){
+        if(client&&["client_sent","client_approved","closed"].includes(client.status))throw new Error("Клиентская версия уже зафиксирована. Сначала завершите текущий цикл.");
+        if(internal&&internal.status==="internal_submitted")throw new Error("Внутренний табель уже передан на проверку");
+        if(internal&&internal.status==="internal_checked")throw new Error("Внутренний табель уже проверен");
+        const payload=await captureFact(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
+        const version=(internal?.version??0)+1;
+        const [row]=await tx<Array<{id:string}>>`
+          INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json,version,supersedes_snapshot_id,workflow_comment,submitted_by_use
