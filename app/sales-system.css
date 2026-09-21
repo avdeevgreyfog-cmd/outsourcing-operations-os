@@ -471,3 +471,18 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .schedule-worker-row small{color:var(--muted)}
 .schedule-worker-row select{min-width:138px}
 @media(max-width:760px){.timesheet-workflow-panel{align-items:stretch;flex-direction:column}.timesheet-workflow-panel>input{min-width:0;max-width:none;width:100%}.schedule-pattern-row{align-items:stretch;flex-wrap:wrap}.schedule-pattern-row>strong{width:100%;margin:0}}
+
+/* Beta company registry density fixes */
+.workers-table{table-layout:fixed;min-width:1040px;width:100%}
+.workers-table th:nth-child(1){width:17%}
+.workers-table th:nth-child(2){width:17%}
+.workers-table th:nth-child(3){width:22%}
+.workers-table th:nth-child(4){width:11%}
+.workers-table th:nth-child(5),
+.workers-table th:nth-child(6),
+.workers-table th:nth-child(7){width:10%}
+.workers-table th:last-child{width:11%}
+.workers-table td{min-width:0}
+.workers-source{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.workers-object-link{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--text)}
+.workers-object-link:hover{text-decoration:underline;text-underline-offset:3px}
