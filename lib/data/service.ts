@@ -18,7 +18,7 @@ export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:st
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
 export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; object?:string|null; objectId?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
-export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string };
+export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; specialtyId:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string; workerIds:string[]; reserveWorkerIds:string[] };
 export type TimesheetCellValue = number|string|null;
 export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,TimesheetCellValue>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
 export type ReconciliationIssue = { id?:string; difference:number|string; worker:string; date:string; reason:string; owner:string; status?:string };
@@ -216,10 +216,14 @@ export async function listShifts(actor: Actor): Promise<ShiftRow[]> {
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ShiftRow[]>`
       SELECT sh.id,sh.organization_id "organizationId",sh.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",
-             to_char(sh.shift_date,'DD.MM') date, sh.shift_kind kind, to_char(sh.starts_at,'HH24:MI')||'–'||to_char(sh.ends_at,'HH24:MI') time,
+             sh.specialty_id "specialtyId",to_char(sh.shift_date,'DD.MM') date, sh.shift_kind kind,
+             to_char(sh.starts_at,'HH24:MI')||'–'||to_char(sh.ends_at,'HH24:MI') time,
              s.name specialty,sh.demand_count demand,sh.assigned_count assigned,sh.reserve_count reserve,
-             (sh.demand_count-sh.assigned_count) deficit,sh.planned_cost cost,sh.status,o.owner_user_id "ownerUserId",sh.created_by_user_id "createdByUserId",
-             ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_to IS NULL) "assigneeUserIds"
+             (SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status='confirmed') confirmed,
+             GREATEST(sh.demand_count-sh.assigned_count,0) deficit,COALESCE(sh.planned_cost,0) cost,sh.status,o.owner_user_id "ownerUserId",sh.created_by_user_id "createdByUserId",
+             ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_to IS NULL) "assigneeUserIds",
+             ARRAY(SELECT sa.worker_id::text FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled' ORDER BY sa.created_at) "workerIds",
+             ARRAY(SELECT sa.worker_id::text FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled' ORDER BY sa.created_at) "reserveWorkerIds"
       FROM shifts sh JOIN objects o ON o.id=sh.object_id JOIN specialties s ON s.id=sh.specialty_id ORDER BY sh.shift_date,sh.starts_at
     `;
     return rows.filter((row) => canReadRow(actor.access, "operations.shift.read", row, actor));
