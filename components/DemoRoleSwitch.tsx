@@ -4,8 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const roles = [
-  ["director", "Директор"], ["sales", "Продажи"], ["regional", "Региональный менеджер"], ["object", "Менеджер объекта"],
-  ["recruiter", "Рекрутер"], ["economist", "Экономика и финансы"],
+  ["director", "Директор"],
+  ["sales", "Руководитель коммерции"],
+  ["client", "Менеджер клиентских заявок"],
+  ["regional", "Руководитель объектов"],
+  ["object", "Менеджер объекта"],
+  ["supply", "Снабжение и документооборот"],
+  ["recruiter", "Руководитель подбора"],
+  ["recruiter_staff", "Менеджер по подбору"],
+  ["economist", "Экономика и финансы"],
 ] as const;
 
 export function DemoRoleSwitch({ current }: { current: string }) {
