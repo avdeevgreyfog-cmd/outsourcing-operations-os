@@ -211,7 +211,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
 }
 
 export async function listShifts(actor: Actor): Promise<ShiftRow[]> {
-  if (actor.demo) return allowed(actor, "operations.shift.read", demo.shifts);
+  if (actor.demo) return allowed(actor, "operations.shift.read", demo.shifts).map((row,index)=>({...row,specialtyId:`demo-specialty-${index+1}`,workerIds:[],reserveWorkerIds:[]}));
   requireCapability(actor, "operations.shift.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ShiftRow[]>`
