@@ -90,7 +90,7 @@ async function upsertTask(tx:Sql,actor:Actor,args:{key:string;title:string;assig
   await tx`
     INSERT INTO tasks(organization_id,title,status,priority,assignee_user_id,due_at,entity_type,entity_id,checklist_json,created_by_user_id,automation_key,process_code)
     VALUES(${actor.organizationId}::uuid,${args.title},'open',${args.priority??"normal"},${args.assignee}::uuid,${args.dueAt??null}::timestamptz,
-      ${args.entityType},${args.entityId}::uuid,${tx.json(args.metadata??{})},${actor.userId}::uuid,${args.key},${args.processCode})
+      ${args.entityType},${args.entityId}::uuid,${tx.json((args.metadata??{}) as never)},${actor.userId}::uuid,${args.key},${args.processCode})
     ON CONFLICT(organization_id,automation_key) WHERE automation_key IS NOT NULL AND status NOT IN ('done','cancelled')
     DO UPDATE SET title=EXCLUDED.title,priority=EXCLUDED.priority,assignee_user_id=EXCLUDED.assignee_user_id,
       due_at=EXCLUDED.due_at,checklist_json=EXCLUDED.checklist_json,updated_at=now()
@@ -113,7 +113,7 @@ async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnaps
   const workerRows=await tx<Array<{workerId:string;base:number|string;premium:number|string;adjustment:number|string}>>`
     WITH entries AS (
       SELECT x."workerId"::uuid worker_id,x."workDate"::date work_date,x."factHours"::numeric hours
-      FROM jsonb_to_recordset(${tx.json(internal.snapshotJson)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
+      FROM jsonb_to_recordset(${tx.json(internal.snapshotJson as never)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
       WHERE COALESCE(x."factHours",0)>0
     ), base AS (
       SELECT e.worker_id,
@@ -156,7 +156,7 @@ async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnaps
   const revenueRows=await tx<Array<{specialtyId:string;clientRateId:string;hours:number|string;rate:number|string}>>`
     WITH entries AS (
       SELECT x."workerId"::uuid worker_id,x."workDate"::date work_date,x."factHours"::numeric hours
-      FROM jsonb_to_recordset(${tx.json(clientSnapshot.snapshotJson)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
+      FROM jsonb_to_recordset(${tx.json(clientSnapshot.snapshotJson as never)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
       WHERE COALESCE(x."factHours",0)>0
     ), rated AS (
       SELECT e.hours,a.specialty_id,cr.id client_rate_id,cr.amount rate
