@@ -233,12 +233,14 @@ export async function getWorkspaceContext(actor: Actor): Promise<WorkspaceContex
         WHERE organization_id=${actor.organizationId}::uuid
         ORDER BY CASE code
           WHEN 'director' THEN 0
-          WHEN 'sales_manager' THEN 10
-          WHEN 'regional_manager' THEN 20
-          WHEN 'object_manager' THEN 30
-          WHEN 'recruiter' THEN 40
-          WHEN 'economist' THEN 50
-          WHEN 'finance' THEN 60
+          WHEN 'commercial_lead' THEN 10
+          WHEN 'client_manager' THEN 20
+          WHEN 'operations_head' THEN 30
+          WHEN 'object_manager' THEN 40
+          WHEN 'supply_specialist' THEN 50
+          WHEN 'recruitment_head' THEN 60
+          WHEN 'recruiter' THEN 70
+          WHEN 'finance_economist' THEN 80
           ELSE 100
         END,name
       `;
