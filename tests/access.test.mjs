@@ -55,3 +55,13 @@ test("resolved org unit subtree scope includes descendants but not other branche
   assert.equal(canReadRow(access, "organization.read", { organizationId: "org1", orgUnitId: "ops-team" }, actor), true);
   assert.equal(canReadRow(access, "organization.read", { organizationId: "org1", orgUnitId: "finance" }, actor), false);
 });
+
+
+test("object scope filters rows by objectId", () => {
+  const access = {
+    capabilities: ["operations.object.read"],
+    scopes: { "operations.object.read": [{ type: "objects", ids: ["object-1", "object-3"] }] },
+  };
+  assert.equal(canReadRow(access, "operations.object.read", { organizationId: "org1", objectId: "object-1" }, actor), true);
+  assert.equal(canReadRow(access, "operations.object.read", { organizationId: "org1", objectId: "object-2" }, actor), false);
+});
