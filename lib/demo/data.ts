@@ -1,10 +1,3 @@
-const ORG="00000000-0000-4000-8000-000000000001";
-const MOW="30000000-0000-4000-8000-000000000001";
-const KLG="30000000-0000-4000-8000-000000000002";
-const VLA="30000000-0000-4000-8000-000000000003";
-const SALES="20000000-0000-4000-8000-000000000001";
-const OPS="20000000-0000-4000-8000-000000000002";
-
 export const clients = [
   {
     "id": "70000000-0000-4000-8000-000000000001",
@@ -1785,19 +1778,6 @@ export const needs = [
   }
 ];
 
-const candidateStageLabels:Record<string,string>={
-  "new": "Новый контакт",
-  "interview": "Интервью",
-  "documents": "Документы для оформления",
-  "clearance": "Оформление и допуски",
-  "preparation": "Подготовка к выходу",
-  "first_shift": "Первый выход",
-  "retention_7": "7 дней",
-  "retention_30": "30 дней",
-  "rejected": "Отказ",
-  "no_show": "Не вышел",
-  "reserve": "Резерв"
-};
 
 export const candidates = [
   {
