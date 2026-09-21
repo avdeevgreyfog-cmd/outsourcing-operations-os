@@ -33,9 +33,9 @@ test("beta company fixture covers all operating modules",()=>{
 });
 
 test("beta organization is a filled working company",()=>{
-  assert.equal(organization.companyEmployees.length,14);
-  assert.equal(organization.staffPositions.length,14);
-  assert.equal(organization.positionAssignments.length,14);
+  assert.equal(organization.companyEmployees.length,13);
+  assert.equal(organization.staffPositions.length,13);
+  assert.equal(organization.positionAssignments.length,13);
   assert.ok(organization.organizationUnits.length>=8);
   assert.ok(organization.processRoles.length>=8);
 
@@ -47,4 +47,10 @@ test("beta organization is a filled working company",()=>{
   assert.equal(organization.companyEmployees.filter(row=>row.position==="Менеджер объекта").length,2);
   assert.equal(organization.companyEmployees.filter(row=>row.position==="Менеджер по подбору").length,3);
   assert.equal(organization.companyEmployees.filter(row=>row.position==="Менеджер по клиентским заявкам").length,2);
+  assert.equal(organization.companyEmployees.filter(row=>row.position==="Экономист / финансовый менеджер").length,1);
+  const finance=organization.companyEmployees.find(row=>row.position==="Экономист / финансовый менеджер");
+  const supply=organization.companyEmployees.find(row=>row.position==="Специалист по снабжению и документообороту");
+  assert.equal(finance?.manager,"Анна Лебедева");
+  assert.equal(supply?.manager,"Анна Лебедева");
+  assert.deepEqual(finance?.roles.map(row=>row.code).sort(),["calculation-economist","finance-controller"]);
 });
