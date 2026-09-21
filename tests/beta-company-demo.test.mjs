@@ -53,4 +53,10 @@ test("beta organization is a filled working company",()=>{
   assert.equal(finance?.manager,"Анна Лебедева");
   assert.equal(supply?.manager,"Анна Лебедева");
   assert.deepEqual(finance?.roles.map(row=>row.code).sort(),["calculation-economist","finance-controller"]);
+  const commercial=organization.companyEmployees.find(row=>row.name==="Михаил Соколов");
+  assert.equal(commercial?.position,"Руководитель коммерческого направления");
+  assert.equal(commercial?.orgUnit,"Коммерция");
+  assert.equal(commercial?.manager,"Анна Лебедева");
+  assert.equal(commercial?.roles[0]?.code,"commercial-owner");
+  assert.equal(commercial?.objectCount,5);
 });
