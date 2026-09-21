@@ -82,36 +82,28 @@ export const companyEmployees: CompanyEmployeeRow[] = [
   {id:membershipId(14),userId:userId(14),organizationId:ORG,name:"Наталья Фомина",email:"recruiter3@beta.local",phone:"+7 900 200-14-14",status:"active",positionId:positions[7].id,position:positions[7].name,orgUnitId:unitId(9),orgUnit:"Группа подбора",regionId:null,region:null,managerMembershipId:membershipId(5),manager:"Мария Лебедева",roles:[role(7)],responsibilities:["ЭлектроМаш Владимир","Склад Маркет Подольск"],primaryStaffPositionId:staffPositionId(12),primaryStaffPosition:"Менеджер по подбору",additionalAssignments:0,objectCount:2},
 ];
 
-const seat=(index:number,code:string,name:string,profileIndex:number,unitIndex:number,reportsTo:number|null,level:number):StaffPositionRow=>({
+const seat=(index:number,code:string,name:string,profileIndex:number,unitIndex:number,reportsTo:number|null,reportsToName:string|null,level:number):StaffPositionRow=>({
   id:staffPositionId(index),organizationId:ORG,code,name,jobProfileId:positionId(profileIndex),jobProfile:positions[profileIndex-1].name,
   orgUnitId:unitId(unitIndex),orgUnit:organizationUnits[unitIndex-1].name,regionId:organizationUnits[unitIndex-1].regionId,region:organizationUnits[unitIndex-1].region,
-  reportsToPositionId:reportsTo?staffPositionId(reportsTo):null,reportsToPosition:reportsTo?null:null,capacity:1,occupied:1,open:0,level,status:"filled",effectiveFrom:"2026-01-01",effectiveTo:null,
+  reportsToPositionId:reportsTo?staffPositionId(reportsTo):null,reportsToPosition:reportsToName,capacity:1,occupied:1,open:0,level,status:"filled",effectiveFrom:"2026-01-01",effectiveTo:null,
 });
 
 export const staffPositions: StaffPositionRow[] = [
-  seat(1,"CEO-01","Генеральный директор / собственник",1,2,null,0),
-  seat(2,"COMM-HEAD-01","Руководитель коммерческого направления",2,3,1,1),
-  seat(3,"CLIENT-01","Менеджер по клиентским заявкам",3,4,2,2),
-  seat(4,"CLIENT-02","Менеджер по клиентским заявкам",3,4,2,2),
-  seat(5,"OPS-HEAD-01","Руководитель объектов",4,5,1,1),
-  seat(6,"OBJECT-01","Менеджер объекта",5,6,5,2),
-  seat(7,"OBJECT-02","Менеджер объекта",5,6,5,2),
-  seat(8,"SUPPLY-01","Специалист по снабжению и документообороту",6,7,5,2),
-  seat(9,"REC-HEAD-01","Руководитель отдела подбора",7,8,1,1),
-  seat(10,"REC-01","Менеджер по подбору",8,9,9,2),
-  seat(11,"REC-02","Менеджер по подбору",8,9,9,2),
-  seat(12,"REC-03","Менеджер по подбору",8,9,9,2),
-  seat(13,"ECON-01","Экономист",9,10,14,2),
-  seat(14,"FIN-01","Финансовый менеджер",10,10,1,1),
-].map((item)=>{
-  if(!item.reportsToPositionId)return item;
-  const parent=staffPositionsPlaceholder[item.reportsToPositionId]??null;
-  return {...item,reportsToPosition:parent};
-});
-const staffPositionsPlaceholder:Record<string,string>={};
-
-for(const item of staffPositions)staffPositionsPlaceholder[item.id]=item.name;
-for(const item of staffPositions)if(item.reportsToPositionId)item.reportsToPosition=staffPositionsPlaceholder[item.reportsToPositionId]??null;
+  seat(1,"CEO-01","Генеральный директор / собственник",1,2,null,null,0),
+  seat(2,"COMM-HEAD-01","Руководитель коммерческого направления",2,3,1,"Генеральный директор / собственник",1),
+  seat(3,"CLIENT-01","Менеджер по клиентским заявкам",3,4,2,"Руководитель коммерческого направления",2),
+  seat(4,"CLIENT-02","Менеджер по клиентским заявкам",3,4,2,"Руководитель коммерческого направления",2),
+  seat(5,"OPS-HEAD-01","Руководитель объектов",4,5,1,"Генеральный директор / собственник",1),
+  seat(6,"OBJECT-01","Менеджер объекта",5,6,5,"Руководитель объектов",2),
+  seat(7,"OBJECT-02","Менеджер объекта",5,6,5,"Руководитель объектов",2),
+  seat(8,"SUPPLY-01","Специалист по снабжению и документообороту",6,7,5,"Руководитель объектов",2),
+  seat(9,"REC-HEAD-01","Руководитель отдела подбора",7,8,1,"Генеральный директор / собственник",1),
+  seat(10,"REC-01","Менеджер по подбору",8,9,9,"Руководитель отдела подбора",2),
+  seat(11,"REC-02","Менеджер по подбору",8,9,9,"Руководитель отдела подбора",2),
+  seat(12,"REC-03","Менеджер по подбору",8,9,9,"Руководитель отдела подбора",2),
+  seat(13,"ECON-01","Экономист",9,10,14,"Финансовый менеджер",2),
+  seat(14,"FIN-01","Финансовый менеджер",10,10,1,"Генеральный директор / собственник",1),
+];
 
 export const positionAssignments: PositionAssignmentRow[] = companyEmployees.map((employee,index)=>({
   id:`44000000-0000-4000-8000-${String(index+1).padStart(12,"0")}`,organizationId:ORG,staffPositionId:staffPositionId(index+1),
