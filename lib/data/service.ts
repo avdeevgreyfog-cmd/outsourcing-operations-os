@@ -14,7 +14,7 @@ export type ClientRow = ScopedRow & { id:string; name:string; legalName?:string|
 export type RequestRoleRow = { name:string; count:number };
 export type RequestRow = ScopedRow & { id:string; title:string; client:string; status:string; location:string; start?:string|null; roles:RequestRoleRow[]; schedule?:unknown; housing?:string|null; vat?:string|null };
 export type CalculationRow = ScopedRow & { id:string; requestId:string; request:string; role:string; name:string; model:string; status:string; workerNet:number|string; totalCost:number|string; clientRate:number|string; marginPct:number|string; monthlyContribution:number|string };
-export type ObjectRow = ScopedRow & { id:string; ownerName?:string|null; sourceRequestId?:string|null; name:string; code:string; client:string; status:string; region:string; targetStart?:string|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; revenueForecast?:number|string|null; marginForecast?:number|string|null };
+export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; name:string; code:string; client:string; status:string; region:string; targetStart?:string|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
 export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; object?:string|null; objectId?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
@@ -108,7 +108,7 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
   requireCapability(actor, "operations.object.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ObjectRow[]>`
-      SELECT o.id, o.organization_id "organizationId", o.name, o.code, o.status, o.source_request_id "sourceRequestId",
+      SELECT o.id, o.id "objectId", o.organization_id "organizationId", o.name, o.code, o.status, o.source_request_id "sourceRequestId",
              (SELECT u.display_name FROM app_users u WHERE u.id=o.owner_user_id) "ownerName",
              o.region_id "regionId", rg.name region,o.owner_user_id "ownerUserId",o.created_by_user_id "createdByUserId",
              o.client_company_id "clientId",c.name client,to_char(o.target_start_date,'DD.MM') "targetStart",
