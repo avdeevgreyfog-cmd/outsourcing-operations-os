@@ -325,7 +325,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       ORDER BY r.created_at DESC LIMIT 1
     `;
     const internalHours=rows.reduce((sum,row)=>sum+Number(row.total),0);
-    const clientHours=Number(clientSnap?.hours??internalHours);
+    const clientHours=Number(clientSnap?.[0]?.hours??internalHours);
     const period=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(periodStart+"T00:00:00Z"));
     const mapSnapshot=(row:SnapshotMetaRow|undefined):TimesheetSnapshotMeta|null=>row?{id:row.id,status:row.status,version:Number(row.version??1),hours:Number(row.hours??0),comment:row.comment??null,createdAt:row.createdAt}:null;
     const internalSnapshot=mapSnapshot(internalSnap?.[0]);
