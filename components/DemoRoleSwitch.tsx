@@ -5,7 +5,7 @@ import { useState } from "react";
 
 const roles = [
   ["director", "Директор"], ["sales", "Продажи"], ["regional", "Региональный менеджер"], ["object", "Менеджер объекта"],
-  ["recruiter", "Рекрутер"], ["economist", "Экономист"], ["finance", "Финансист"],
+  ["recruiter", "Рекрутер"], ["economist", "Экономика и финансы"],
 ] as const;
 
 export function DemoRoleSwitch({ current }: { current: string }) {
