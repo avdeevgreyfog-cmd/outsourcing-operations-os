@@ -22,7 +22,7 @@ export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; 
 export type TimesheetCellValue = number|string|null;
 export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,TimesheetCellValue>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
 export type ReconciliationIssue = { id?:string; difference:number|string; worker:string; date:string; reason:string; owner:string; status?:string };
-export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; month:string; periodStart:string; periodEnd:string; clientHours:number; internalHours:number; discrepancy:number; status:string; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null };
+export type TimesheetSnapshotMeta = { id:string; status:string; version:number; hours:number; comment:string|null; createdAt:string };\nexport type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; month:string; periodStart:string; periodEnd:string; clientHours:number; internalHours:number; discrepancy:number; status:string; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null; internalSnapshot:TimesheetSnapshotMeta|null; clientSnapshot:TimesheetSnapshotMeta|null };
 export type FinanceRow = ScopedRow & { id:string; objectId:string; object:string; revenue:number|string; workerCost:number|string; expenses:number|string; contribution:number|string; marginPct:number|string; planMarginPct?:number|string|null; periodStart?:string|null; periodEnd?:string|null };
 export type TaskRow = ScopedRow & { id:string; title:string; status:string; priority:string; due?:string|null; entity?:string|null };
 export type AccessUserRow = { id:string; membershipId:string; name:string; email:string|null; role:string; roleCode:string; processRoles:string[]; teams:number; regions:number; scopes:string[]; capabilities:number; systemCapabilities:string[]; isOwner:boolean };
@@ -34,7 +34,7 @@ export type AccrualRow = ScopedRow & { id:string; workerId:string; worker:string
 export type PaymentRow = ScopedRow & { id:string; workerId:string; worker:string; objectId?:string|null; object?:string|null; kind:"advance"|"payment"; date?:string|null; amount:number|string; status:string; reference?:string|null };
 export type IncidentRow = ScopedRow & { id:string; objectId:string; object:string; title:string; type:string; occurredAt:string; severity:string; status:string; responsible?:string|null; worker?:string|null; description:string };
 type TimesheetMeta = ScopedRow & { objectId:string; object:string };
-type ClientSnapshot = { hours:number|string|null; status:string };
+type SnapshotMetaRow = { id:string; hours:number|string|null; status:string; version:number; comment:string|null; createdAt:string };
 
 function allowed<T extends Record<string, unknown>>(actor: Actor, capability: string, rows: T[]): T[] {
   requireCapability(actor, capability);
@@ -240,7 +240,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     const scoped={...demo.timesheet,ownerUserId:"10000000-0000-4000-8000-000000000004",assigneeUserIds:["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000003"]};
     if (!canReadRow(actor.access,"time.timesheet.read",scoped,actor)) return null;
     const demoMonth="2026-08";
-    return {...demo.timesheet,month:demoMonth,periodStart:demoMonth+"-01",periodEnd:demoMonth+"-31"};
+    return {...demo.timesheet,month:demoMonth,periodStart:demoMonth+"-01",periodEnd:demoMonth+"-31",internalSnapshot:null,clientSnapshot:null};
   }
   const maySeeComp=!actor.access.denies.includes("worker.compensation.read")&&(actor.access.capabilities.includes("*")||actor.access.capabilities.includes("worker.compensation.read"));
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
@@ -299,13 +299,22 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       row.overtime=Number(row.overtime??0)+Number(entry.overtimeHours);
     }
     const rows=[...byWorker.values()];
-    const [clientSnap]=await sql<ClientSnapshot[]>`
-      SELECT (snapshot_json->>'hours')::numeric hours,status
-      FROM timesheet_snapshots
-      WHERE object_id=${meta.objectId}::uuid AND view_type='client'
-        AND period_start=${periodStart}::date AND period_end=${periodEnd}::date
-      ORDER BY created_at DESC LIMIT 1
-    `;
+    const [clientSnap,internalSnap]=await Promise.all([
+      sql<SnapshotMetaRow[]>`
+        SELECT id,(snapshot_json->>'hours')::numeric hours,status,COALESCE(version,1)::int version,workflow_comment comment,to_char(created_at,'DD.MM.YYYY HH24:MI') "createdAt"
+        FROM timesheet_snapshots
+        WHERE object_id=${meta.objectId}::uuid AND view_type='client'
+          AND period_start=${periodStart}::date AND period_end=${periodEnd}::date
+        ORDER BY COALESCE(version,1) DESC,created_at DESC LIMIT 1
+      `,
+      sql<SnapshotMetaRow[]>`
+        SELECT id,(snapshot_json->>'hours')::numeric hours,status,COALESCE(version,1)::int version,workflow_comment comment,to_char(created_at,'DD.MM.YYYY HH24:MI') "createdAt"
+        FROM timesheet_snapshots
+        WHERE object_id=${meta.objectId}::uuid AND view_type='internal'
+          AND period_start=${periodStart}::date AND period_end=${periodEnd}::date
+        ORDER BY COALESCE(version,1) DESC,created_at DESC LIMIT 1
+      `,
+    ]);
     const [issue]=await sql<Array<{difference:number|string;worker:string;date:string;reason:string;owner:string;status:string}>>`
       SELECT r.difference_hours difference,w.full_name worker,to_char(r.work_date,'DD.MM.YYYY') date,
         COALESCE(r.reason,'Причина не указана') reason,COALESCE(u.display_name,'Не назначен') owner,r.status
@@ -318,7 +327,10 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     const internalHours=rows.reduce((sum,row)=>sum+Number(row.total),0);
     const clientHours=Number(clientSnap?.hours??internalHours);
     const period=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(periodStart+"T00:00:00Z"));
-    return {...meta,period,month:requestedMonth,periodStart,periodEnd,clientHours,internalHours,discrepancy:internalHours-clientHours,status:clientSnap?.status??"draft",rows,issue:issue??null};
+    const mapSnapshot=(row:SnapshotMetaRow|undefined):TimesheetSnapshotMeta|null=>row?{id:row.id,status:row.status,version:Number(row.version??1),hours:Number(row.hours??0),comment:row.comment??null,createdAt:row.createdAt}:null;
+    const internalSnapshot=mapSnapshot(internalSnap?.[0]);
+    const clientSnapshot=mapSnapshot(clientSnap?.[0]);
+    return {...meta,period,month:requestedMonth,periodStart,periodEnd,clientHours,internalHours,discrepancy:internalHours-clientHours,status:clientSnapshot?.status??internalSnapshot?.status??"draft",rows,issue:issue??null,internalSnapshot,clientSnapshot};
   });
 }
 
