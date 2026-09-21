@@ -106,7 +106,7 @@ export const staffPositions: StaffPositionRow[] = [
 ];
 
 export const positionAssignments: PositionAssignmentRow[] = companyEmployees.map((employee,index)=>({
-  id:`44000000-0000-4000-8000-${String(index+1).padStart(12,"0")}`,organizationId:ORG,staffPositionId:staffPositionId(index+1),
+  id:`44000000-0000-4000-8000-${String(index+1).padStart(12,"0")}`,organizationId:ORG,staffPositionId:employee.primaryStaffPositionId!,
   membershipId:employee.id,employeeName:employee.name,assignmentType:"primary",fte:1,status:"active",effectiveFrom:"2026-01-01",effectiveTo:null,
 }));
 
