@@ -452,3 +452,22 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-board.tender-board .tender-board-static{display:grid;gap:7px;padding:11px;color:inherit;text-decoration:none}
 .sales-board.tender-board .tender-board-stack footer{margin-top:1px}
 .sales-board.tender-board .tender-board-empty{padding:22px 12px}
+
+
+/* Beta 1 operational controls */
+.timesheet-workflow-panel{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-top:1px solid var(--border)}
+.timesheet-workflow-panel>input{min-width:280px;max-width:520px;flex:1}
+.task-quick-actions{display:flex;align-items:center;gap:4px;min-width:112px}
+.schedule-modal{width:min(920px,calc(100vw - 40px));max-height:88vh}
+.schedule-pattern-row{display:flex;align-items:end;gap:10px;padding:12px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:12px 0}
+.schedule-pattern-row>strong{align-self:center;margin-right:auto}
+.schedule-pattern-row label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.schedule-pattern-row input{width:86px}
+.schedule-workers{margin-top:10px}
+.schedule-worker-list{border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:300px;overflow-y:auto}
+.schedule-worker-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:9px 11px;border-bottom:1px solid var(--border)}
+.schedule-worker-row:last-child{border-bottom:0}
+.schedule-worker-row>div{display:grid;gap:2px;min-width:0}
+.schedule-worker-row small{color:var(--muted)}
+.schedule-worker-row select{min-width:138px}
+@media(max-width:760px){.timesheet-workflow-panel{align-items:stretch;flex-direction:column}.timesheet-workflow-panel>input{min-width:0;max-width:none;width:100%}.schedule-pattern-row{align-items:stretch;flex-wrap:wrap}.schedule-pattern-row>strong{width:100%;margin:0}}
