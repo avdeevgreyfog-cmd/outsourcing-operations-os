@@ -24,7 +24,6 @@ const labels:Record<string,string>={
 };
 const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history"};
 const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
-const needStatusLabels:Record<string,string>={open:"Открыта",in_progress:"В работе",filled:"Закрыта",paused:"Приостановлена",cancelled:"Отменена"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 const stageLabels:Record<string,string>={new:"Новый",screening:"Первичный контакт",interview:"Интервью",documents:"Документы",clearance:"Проверка",preparation:"Подготовка",first_shift:"Первый выход",hired:"Вышел"};
 
@@ -68,7 +67,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     canProcurement?listSupplyRequests(actor):Promise.resolve([]),
   ]);
 
-  const objectNeeds=needs.filter(row=>row.objectId===id);
   const objectWorkers=workers.filter(row=>row.objectId===id);
   const objectShifts=shifts.filter(row=>row.objectId===id);
   const objectCandidates=candidates.filter(row=>row.objectId===id);
@@ -81,7 +79,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectSupplyRequests=supplyRequests.filter(row=>row.objectId===id);
   const objectAnalytics=analytics.find(row=>row.objectId===id);
   const objFinance=finance.find(row=>row.objectId===id);
-  const margin=object.marginForecast??objFinance?.marginPct;
 
   const projectedAvailable=objectForecast.reduce((sum,row)=>sum+row.projectedAvailable,0);
   const projectedDeficit=objectForecast.reduce((sum,row)=>sum+row.projectedDeficit,0);
