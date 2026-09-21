@@ -6,7 +6,7 @@ import { TimesheetWorkspace } from "@/components/TimesheetWorkspace";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 
-const statusLabels:Record<string,string>={draft:"Черновик",submitted:"На согласовании",approved:"Согласован",returned:"Возвращён"};
+const statusLabels:Record<string,string>={draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"};
 
 export default async function Timesheets({searchParams}:{searchParams:Promise<{object?:string;month?:string}>}){
   const actor=await requireActor();
@@ -25,7 +25,7 @@ export default async function Timesheets({searchParams}:{searchParams:Promise<{o
       <Metric label="Подтверждено клиентом" value={data.clientHours+" ч"}/>
       <Metric label="Расхождение" value={data.discrepancy+" ч"} tone={data.discrepancy?"warn":"good"}/>
     </div>
-    <TimesheetWorkspace data={data} options={options} sensitive={sensitive} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")}/>
+    <TimesheetWorkspace data={data} options={options} sensitive={sensitive} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")}/>
     <Section title="Сверка внутреннего факта с подтверждением клиента" note="Согласованная клиентская версия сохраняется отдельно и не перезаписывает внутренний факт.">
       <div style={{padding:14}}>
         <div className="reconcile"><div><span>Внутренний факт</span><strong>{data.internalHours} ч</strong></div><div><span>Разница</span><strong>{data.discrepancy}</strong></div><div><span>Подтверждено клиентом</span><strong>{data.clientHours} ч</strong></div><div><span>Статус</span><strong><Status tone={data.status==="approved"?"good":data.status==="submitted"?"warn":"neutral"}>{statusLabels[data.status]??"Черновик"}</Status></strong></div></div>
