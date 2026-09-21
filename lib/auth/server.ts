@@ -20,8 +20,8 @@ function buildDemoActor(roleCode: string): Actor {
   const actor = getDemoActor(roleCode);
   return {
     ...actor,
-    organizationName: "Демо-организация",
-    organizationSlug: "operis-demo",
+    organizationName: "БЕТА · ОПЕРИС Аутсорсинг",
+    organizationSlug: "operis-beta",
     baseRoleCode: actor.roleCode,
     baseRoleName: actor.roleName,
     accessPreview: null,
@@ -200,7 +200,7 @@ async function getRealSessionOrganization(): Promise<WorkspaceOption | null> {
 
 export async function getWorkspaceContext(actor: Actor): Promise<WorkspaceContext> {
   if (isGithubPagesDemo()) return {
-    organizations: [{ key: "demo", id: null, name: "Демо-организация", slug: "operis-demo", kind: "demo" }],
+    organizations: [{ key: "demo", id: null, name: "БЕТА · ОПЕРИС Аутсорсинг", slug: "operis-beta", kind: "demo" }],
     currentOrganizationKey: "demo",
     previewOptions: [],
     previewTarget: null,
