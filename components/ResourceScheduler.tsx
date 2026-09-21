@@ -83,12 +83,10 @@ export function ResourceScheduler({rows,options,canEdit}:{rows:ShiftRow[];option
 }
 
 function ScheduleModal({options,onClose,onSaved}:{options:OperationsReferenceData;onClose:()=>void;onSaved:(message:string)=>void}){
-  const today=new Date().toISOString().slice(0,10);
-  const finish=new Date(Date.now()+13*86400000).toISOString().slice(0,10);
   const [objectId,setObjectId]=useState(options.objects[0]?.id??"");
   const [specialtyId,setSpecialtyId]=useState(options.specialties[0]?.id??"");
-  const [startDate,setStartDate]=useState(today);
-  const [endDate,setEndDate]=useState(finish);
+  const [startDate,setStartDate]=useState("");
+  const [endDate,setEndDate]=useState("");
   const [workDays,setWorkDays]=useState(6);
   const [restDays,setRestDays]=useState(1);
   const [shiftKind,setShiftKind]=useState<"day"|"night"|"mixed">("day");
