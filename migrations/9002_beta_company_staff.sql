@@ -209,6 +209,18 @@ BEGIN
 
   INSERT INTO responsibility_rules(
     organization_id,process_code,process_name,step_code,step_name,responsibility_type,
+    subject_type,subject_id,scope_type,scope_ids,effective_from,active,created_by_user_id
+  ) VALUES
+    (org_id,'commercial_calculation','Коммерческий расчёт','calculation_approval','Согласование расчёта','approver','membership','50000000-0000-4000-8000-000000000001','all_org','{}','2026-01-01',true,director_user),
+    (org_id,'commercial_proposal','Коммерческое предложение','proposal_approval','Согласование КП','approver','membership','50000000-0000-4000-8000-000000000001','all_org','{}','2026-01-01',true,director_user),
+    (org_id,'object_launch','Запуск объекта','owner','Ответственный за запуск','owner','membership','50000000-0000-4000-8000-000000000003','region',ARRAY[
+      '30000000-0000-4000-8000-000000000001'::uuid,
+      '30000000-0000-4000-8000-000000000002'::uuid,
+      '30000000-0000-4000-8000-000000000003'::uuid
+    ],'2026-01-01',true,director_user);
+
+  INSERT INTO responsibility_rules(
+    organization_id,process_code,process_name,step_code,step_name,responsibility_type,
     subject_type,subject_id,scope_type,scope_ids,fallback_subject_type,fallback_subject_id,effective_from,active,created_by_user_id
   ) VALUES
     (org_id,'commercial','Коммерция','calculation','Расчёт и коммерческое решение','owner','process_role','42000000-0000-4000-8000-000000000001','all_org','{}','staff_position','43000000-0000-4000-8000-000000000001','2026-01-01',true,director_user),
