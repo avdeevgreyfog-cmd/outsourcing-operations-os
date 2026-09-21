@@ -229,4 +229,50 @@ export async function POST(request:Request){
         const payload=await captureFact(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
         const version=(internal?.version??0)+1;
         const [row]=await tx<Array<{id:string}>>`
-          INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json,version,supersedes_snapshot_id,workflow_comment,submitted_by_use
+          INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json,version,supersedes_snapshot_id,workflow_comment,submitted_by_user_id,submitted_at)
+          VALUES(${actor.organizationId}::uuid,${body.objectId}::uuid,'internal','month',${body.periodStart}::date,${body.periodEnd}::date,'internal_submitted',
+            ${tx.json(payload)},${version},${internal?.id??null}::uuid,${body.comment??null},${actor.userId}::uuid,now()) RETURNING id
+        `;
+        const approver=(await managerFor(tx,object.ownerUserId??actor.userId))??(await responsibilityOwner(tx,"operations","portfolio",object.regionId));
+        await upsertTask(tx,actor,{key:baseKey+":review",title:"Проверить внутренний табель",assignee:approver,entityType:"object",entityId:body.objectId,processCode:"timesheet.internal_review",priority:"high",metadata:{snapshotId:row.id,periodStart:body.periodStart,periodEnd:body.periodEnd}});
+        return {status:"internal_submitted",snapshotId:row.id,version};
+      }
+
+      if(body.action==="review_internal"||body.action==="return_internal"){
+        if(!internal||internal.status!=="internal_submitted")throw new Error("Нет внутреннего табеля, ожидающего проверки");
+        const status=body.action==="review_internal"?"internal_checked":"returned";
+        await tx`UPDATE timesheet_snapshots SET status=${status},workflow_comment=${body.comment??null},checked_by_user_id=${actor.userId}::uuid,checked_at=now() WHERE id=${internal.id}::uuid`;
+        await completeTask(tx,actor.organizationId,baseKey+":review");
+        if(status==="returned")await upsertTask(tx,actor,{key:baseKey+":correct",title:"Исправить возвращённый табель",assignee:object.ownerUserId,entityType:"object",entityId:body.objectId,processCode:"timesheet.correction",priority:"high",metadata:{snapshotId:internal.id,comment:body.comment??null}});
+        return {status,snapshotId:internal.id,version:internal.version};
+      }
+
+      if(body.action==="send_client"){
+        if(!internal||internal.status!=="internal_checked")throw new Error("Сначала внутренний табель должен пройти проверку");
+        if(client&&client.status==="client_sent")throw new Error("Клиентская версия уже отправлена и ожидает решения");
+        if(client&&["client_approved","closed"].includes(client.status))throw new Error("Клиентская версия уже согласована");
+        const payload={...(await captureFact(tx,body.objectId,"client",body.periodStart,body.periodEnd)),internalSnapshotId:internal.id};
+        const version=(client?.version??0)+1;
+        const [row]=await tx<Array<{id:string}>>`
+          INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json,version,supersedes_snapshot_id,workflow_comment,submitted_by_user_id,submitted_at,client_sent_by_user_id,client_sent_at)
+          VALUES(${actor.organizationId}::uuid,${body.objectId}::uuid,'client','month',${body.periodStart}::date,${body.periodEnd}::date,'client_sent',
+            ${tx.json(payload)},${version},${client?.id??null}::uuid,${body.comment??null},${actor.userId}::uuid,now(),${actor.userId}::uuid,now()) RETURNING id
+        `;
+        await completeTask(tx,actor.organizationId,baseKey+":correct");
+        await upsertTask(tx,actor,{key:baseKey+":client",title:"Получить подтверждение клиентского табеля",assignee:object.ownerUserId??actor.userId,entityType:"object",entityId:body.objectId,processCode:"timesheet.client_approval",priority:"high",metadata:{snapshotId:row.id,periodStart:body.periodStart,periodEnd:body.periodEnd}});
+        return {status:"client_sent",snapshotId:row.id,version};
+      }
+
+      if(body.action==="client_approve"||body.action==="client_return"){
+        if(!client||client.status!=="client_sent")throw new Error("Нет клиентской версии, ожидающей решения");
+        const status=body.action==="client_approve"?"client_approved":"returned";
+        await tx`UPDATE timesheet_snapshots SET status=${status},workflow_comment=${body.comment??null},
+          approved_by_user_id=${status==="client_approved"?actor.userId:null}::uuid,approved_at=${status==="client_approved"?new Date().toISOString():null}::timestamptz
+          WHERE id=${client.id}::uuid`;
+        await completeTask(tx,actor.organizationId,baseKey+":client");
+        if(status==="returned"){
+          await tx`UPDATE timesheet_snapshots SET status='returned',workflow_comment=${body.comment??null} WHERE id=${internal?.id??null}::uuid`;
+          await upsertTask(tx,actor,{key:baseKey+":correct",title:"Исправить табель после возврата клиентом",assignee:object.ownerUserId,entityType:"object",entityId:body.objectId,processCode:"timesheet.correction",priority:"critical",metadata:{snapshotId:client.id,comment:body.comment??null}});
+        }else{
+          const finance=(await responsibilityOwner(tx,"finance","control",object.regionId))??actor.userId;
+          await upsertTask(tx,actor,{key:baseKey+"
