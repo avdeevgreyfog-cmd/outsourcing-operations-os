@@ -359,6 +359,10 @@ export async function listTasks(actor: Actor): Promise<TaskRow[]> {
         CASE
           WHEN t.entity_type='candidate_application' THEN trim(concat_ws(' · ',c.full_name,COALESCE(n.title,s.name),o.name))
           WHEN t.entity_type='candidate' THEN COALESCE(c_direct.full_name,'Кандидат')
+          WHEN t.entity_type='object' THEN COALESCE(task_object.name,'Объект')
+          WHEN t.entity_type='worker' THEN COALESCE(task_worker.full_name,'Сотрудник')
+          WHEN t.entity_type='supply_request' THEN COALESCE(task_supply.title,'Заявка на обеспечение')
+          WHEN t.entity_type='timesheet' THEN COALESCE(task_timesheet_object.name,'Табель')
           ELSE COALESCE(NULLIF(t.entity_type,''),'Без связи')
         END entity,
         t.created_by_user_id "createdByUserId"
@@ -369,7 +373,12 @@ export async function listTasks(actor: Actor): Promise<TaskRow[]> {
       LEFT JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=ca.object_id
       LEFT JOIN candidates c_direct ON t.entity_type='candidate' AND c_direct.id=t.entity_id
-      ORDER BY t.due_at NULLS LAST,t.created_at DESC
+      LEFT JOIN objects task_object ON t.entity_type='object' AND task_object.id=t.entity_id
+      LEFT JOIN worker_profiles task_worker ON t.entity_type='worker' AND task_worker.id=t.entity_id
+      LEFT JOIN supply_requests task_supply ON t.entity_type='supply_request' AND task_supply.id=t.entity_id
+      LEFT JOIN timesheet_snapshots task_timesheet ON t.entity_type='timesheet' AND task_timesheet.id=t.entity_id
+      LEFT JOIN objects task_timesheet_object ON task_timesheet_object.id=task_timesheet.object_id
+      ORDER BY (t.status IN ('done','cancelled')),t.due_at NULLS LAST,t.created_at DESC
     `;
     return rows.filter((row)=>canReadRow(actor.access,"task.read",row,actor));
   });
