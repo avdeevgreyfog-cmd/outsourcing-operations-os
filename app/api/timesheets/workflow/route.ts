@@ -92,4 +92,80 @@ async function upsertTask(tx:Sql,actor:Actor,args:{key:string;title:string;assig
     VALUES(${actor.organizationId}::uuid,${args.title},'open',${args.priority??"normal"},${args.assignee}::uuid,${args.dueAt??null}::timestamptz,
       ${args.entityType},${args.entityId}::uuid,${tx.json(args.metadata??{})},${actor.userId}::uuid,${args.key},${args.processCode})
     ON CONFLICT(organization_id,automation_key) WHERE automation_key IS NOT NULL AND status NOT IN ('done','cancelled')
-    DO UPDATE SE
+    DO UPDATE SET title=EXCLUDED.title,priority=EXCLUDED.priority,assignee_user_id=EXCLUDED.assignee_user_id,
+      due_at=EXCLUDED.due_at,checklist_json=EXCLUDED.checklist_json,updated_at=now()
+  `;
+}
+
+async function completeTask(tx:Sql,organizationId:string,key:string){
+  await tx`UPDATE tasks SET status='done',completed_at=COALESCE(completed_at,now()),updated_at=now()
+    WHERE organization_id=${organizationId}::uuid AND automation_key=${key} AND status NOT IN ('done','cancelled')`;
+}
+
+async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnapshot:SnapshotRow,periodStart:string,periodEnd:string){
+  const internalSnapshotId=typeof clientSnapshot.snapshotJson.internalSnapshotId==="string"?clientSnapshot.snapshotJson.internalSnapshotId:null;
+  if(!internalSnapshotId)throw new Error("Не найдена внутренняя версия, на основании которой сформирован клиентский табель");
+  const [internal]=await tx<Array<{id:string;snapshotJson:Record<string,unknown>}>>`
+    SELECT id,snapshot_json "snapshotJson" FROM timesheet_snapshots WHERE id=${internalSnapshotId}::uuid
+  `;
+  if(!internal)throw new Error("Внутренняя версия табеля не найдена");
+
+  const workerRows=await tx<Array<{workerId:string;base:number|string;premium:number|string;adjustment:number|string}>>`
+    WITH entries AS (
+      SELECT x."workerId"::uuid worker_id,x."workDate"::date work_date,x."factHours"::numeric hours
+      FROM jsonb_to_recordset(${tx.json(internal.snapshotJson)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
+      WHERE COALESCE(x."factHours",0)>0
+    ), base AS (
+      SELECT e.worker_id,
+        COALESCE(sum(CASE rate.unit
+          WHEN 'hour' THEN e.hours*rate.amount
+          WHEN 'shift' THEN CASE WHEN e.hours>0 THEN rate.amount ELSE 0 END
+          WHEN 'month' THEN 0
+          ELSE e.hours*rate.amount END),0)::numeric base,
+        COALESCE(max(CASE WHEN rate.unit='month' AND e.hours>0 THEN rate.amount ELSE 0 END),0)::numeric monthly
+      FROM entries e
+      LEFT JOIN LATERAL (
+        SELECT r.amount,r.unit FROM worker_rates r
+        WHERE r.worker_id=e.worker_id AND r.object_id=${object.objectId}::uuid
+          AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date)
+        ORDER BY r.effective_from DESC LIMIT 1
+      ) rate ON true
+      GROUP BY e.worker_id
+    )
+    SELECT b.worker_id "workerId",(b.base+b.monthly)::numeric base,
+      COALESCE(sum(pa.amount) FILTER(WHERE pa.adjustment_type IN ('bonus','reimbursement')),0)::numeric premium,
+      COALESCE(sum(CASE WHEN pa.adjustment_type='lawful_deduction' THEN -abs(pa.amount)
+                        WHEN pa.adjustment_type IN ('correction','other') THEN pa.amount ELSE 0 END),0)::numeric adjustment
+    FROM base b
+    LEFT JOIN pay_adjustments pa ON pa.worker_id=b.worker_id AND (pa.object_id IS NULL OR pa.object_id=${object.objectId}::uuid)
+      AND pa.created_at::date BETWEEN ${periodStart}::date AND ${periodEnd}::date
+    GROUP BY b.worker_id,b.base,b.monthly
+  `;
+  for(const row of workerRows){
+    const base=Number(row.base),premium=Number(row.premium),adjustment=Number(row.adjustment),total=base+premium+adjustment;
+    await tx`
+      INSERT INTO worker_accruals(organization_id,worker_id,object_id,period_start,period_end,base_amount,premium_amount,adjustment_amount,total_amount,status,source_snapshot_id,created_by_user_id,approved_by_user_id)
+      SELECT ${actor.organizationId}::uuid,${row.workerId}::uuid,${object.objectId}::uuid,${periodStart}::date,${periodEnd}::date,
+        ${base},${premium},${adjustment},${total},'approved',${internal.id}::uuid,${actor.userId}::uuid,${actor.userId}::uuid
+      WHERE NOT EXISTS(
+        SELECT 1 FROM worker_accruals WHERE worker_id=${row.workerId}::uuid AND object_id=${object.objectId}::uuid AND source_snapshot_id=${internal.id}::uuid
+      )
+    `;
+  }
+
+  const revenueRows=await tx<Array<{specialtyId:string;clientRateId:string;hours:number|string;rate:number|string}>>`
+    WITH entries AS (
+      SELECT x."workerId"::uuid worker_id,x."workDate"::date work_date,x."factHours"::numeric hours
+      FROM jsonb_to_recordset(${tx.json(clientSnapshot.snapshotJson)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
+      WHERE COALESCE(x."factHours",0)>0
+    ), rated AS (
+      SELECT e.hours,a.specialty_id,cr.id client_rate_id,cr.amount rate
+      FROM entries e
+      JOIN LATERAL (
+        SELECT wa.specialty_id FROM worker_object_assignments wa
+        WHERE wa.worker_id=e.worker_id AND wa.object_id=${object.objectId}::uuid
+          AND wa.effective_from<=e.work_date AND (wa.effective_to IS NULL OR wa.effective_to>=e.work_date)
+        ORDER BY wa.effective_from DESC LIMIT 1
+      ) a ON true
+      JOIN LATERAL (
+        SELECT r.id,r.amount FROM client_
