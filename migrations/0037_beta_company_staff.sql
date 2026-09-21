@@ -162,7 +162,7 @@ BEGIN
     ('44000000-0000-4000-8000-000000000012',org_id,'43000000-0000-4000-8000-000000000012','50000000-0000-4000-8000-000000000014','primary',1,'active','2026-01-01','Бета-компания',director_user),
     ('44000000-0000-4000-8000-000000000013',org_id,'43000000-0000-4000-8000-000000000013','50000000-0000-4000-8000-000000000006','primary',1,'active','2026-01-01','Бета-компания',director_user);
 
-  UPDATE organization_memberships SET
+  UPDATE organization_memberships m SET
     position_id=sp.job_profile_id,
     primary_org_unit_id=sp.organization_unit_id,
     manager_membership_id=CASE m.id
@@ -202,6 +202,18 @@ BEGIN
     (org_id,'50000000-0000-4000-8000-000000000014','42000000-0000-4000-8000-000000000007','21000000-0000-4000-8000-000000000009','2026-01-01',director_user),
     (org_id,'50000000-0000-4000-8000-000000000006','42000000-0000-4000-8000-000000000008','21000000-0000-4000-8000-000000000010','2026-01-01',director_user),
     (org_id,'50000000-0000-4000-8000-000000000006','42000000-0000-4000-8000-000000000009','21000000-0000-4000-8000-000000000010','2026-01-01',director_user);
+
+  INSERT INTO responsibility_rules(
+    organization_id,process_code,process_name,step_code,step_name,responsibility_type,
+    subject_type,subject_id,scope_type,scope_ids,fallback_subject_type,fallback_subject_id,effective_from,active,created_by_user_id
+  ) VALUES
+    (org_id,'commercial','Коммерция','calculation','Расчёт и коммерческое решение','owner','process_role','42000000-0000-4000-8000-000000000001','all_org','{}','staff_position','43000000-0000-4000-8000-000000000001','2026-01-01',true,director_user),
+    (org_id,'client_requests','Клиентские заявки','intake','Приём и квалификация','executor','process_role','42000000-0000-4000-8000-000000000002','all_org','{}','process_role','42000000-0000-4000-8000-000000000001','2026-01-01',true,director_user),
+    (org_id,'operations','Операции','portfolio','Портфель объектов','owner','process_role','42000000-0000-4000-8000-000000000003','all_org','{}','staff_position','43000000-0000-4000-8000-000000000001','2026-01-01',true,director_user),
+    (org_id,'operations','Операции','object_daily','Ежедневное управление объектом','owner','process_role','42000000-0000-4000-8000-000000000004','objects','{}','staff_position','43000000-0000-4000-8000-000000000005','2026-01-01',true,director_user),
+    (org_id,'recruitment','Подбор','need_distribution','Распределение потребностей','owner','process_role','42000000-0000-4000-8000-000000000006','all_org','{}','staff_position','43000000-0000-4000-8000-000000000001','2026-01-01',true,director_user),
+    (org_id,'supply','Обеспечение','request_execution','Исполнение заявки','executor','process_role','42000000-0000-4000-8000-000000000005','all_org','{}','staff_position','43000000-0000-4000-8000-000000000001','2026-01-01',true,director_user),
+    (org_id,'finance','Финансы','period_close','Закрытие периода','approver','process_role','42000000-0000-4000-8000-000000000009','all_org','{}','staff_position','43000000-0000-4000-8000-000000000001','2026-01-01',true,director_user);
 
   INSERT INTO responsibility_assignments(organization_id,membership_id,process_role_id,resource_type,resource_label,responsibility_type,effective_from,created_by_user_id) VALUES
     (org_id,'50000000-0000-4000-8000-000000000001',NULL,'company','Стратегия и результат компании','owner','2026-01-01',director_user),
