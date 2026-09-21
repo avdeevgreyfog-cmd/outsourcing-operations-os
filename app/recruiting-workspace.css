@@ -1172,3 +1172,5 @@
 .needs-object-actions{display:flex;align-items:center;gap:7px;padding-right:12px}
 .needs-object-actions .button{white-space:nowrap}
 @media(max-width:760px){.sales-board.recruiting-board.recruiting-funnel-compact>.recruiting-column{flex-basis:210px;width:210px;min-width:210px;max-width:210px}}
+
+.candidate-need-links{display:flex;align-items:center;gap:10px;white-space:nowrap}
