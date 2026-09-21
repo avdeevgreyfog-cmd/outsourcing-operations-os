@@ -217,10 +217,21 @@ export type RecruitingOptions = {
 
 const recruitingStageOrder: RecruitingStage[]=["new","interview","documents","clearance","preparation","first_shift","retention_7","retention_30"];
 const demoUserNames:Record<string,string>={
-  "10000000-0000-4000-8000-000000000003":"Дмитрий Орлов",
-  "10000000-0000-4000-8000-000000000004":"Алексей Волков",
-  "10000000-0000-4000-8000-000000000005":"Ольга Новикова",
-};
+  "10000000-0000-4000-8000-000000000001":"Анна Лебедева",
+  "10000000-0000-4000-8000-000000000002":"Михаил Соколов",
+  "10000000-0000-4000-8000-000000000003":"Алексей Громов",
+  "10000000-0000-4000-8000-000000000004":"Дмитрий Орлов",
+  "10000000-0000-4000-8000-000000000005":"Мария Лебедева",
+  "10000000-0000-4000-8000-000000000006":"Елена Котова",
+  "10000000-0000-4000-8000-000000000007":"Татьяна Миронова",
+  "10000000-0000-4000-8000-000000000008":"Анна Воронова",
+  "10000000-0000-4000-8000-000000000009":"Елена Морозова",
+  "10000000-0000-4000-8000-000000000010":"Павел Никитин",
+  "10000000-0000-4000-8000-000000000011":"Ирина Белова",
+  "10000000-0000-4000-8000-000000000012":"Ольга Зайцева",
+  "10000000-0000-4000-8000-000000000013":"Ксения Волкова",
+  "10000000-0000-4000-8000-000000000014":"Наталья Фомина",
+}
 const demoDocumentIds=["demo-doc-passport","demo-doc-snils","demo-doc-inn","demo-doc-bank","demo-doc-employment-record","demo-doc-military","demo-doc-medical","demo-doc-qualification"];
 const demoDocumentRequirements:NeedDocumentRequirement[]=[
   {documentTypeId:"demo-doc-passport",provider:"candidate",requiredByStage:"documents",blocksProgress:true},
@@ -241,39 +252,48 @@ function buildDemoReached(stages: RecruitingStage[]): Partial<Record<RecruitingS
 }
 
 function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
+  const specialtyIds:Record<string,string>={
+    "Комплектовщик":"60000000-0000-4000-8000-000000000001",
+    "Грузчик":"60000000-0000-4000-8000-000000000002",
+    "Водитель погрузчика":"60000000-0000-4000-8000-000000000003",
+    "Бригадир":"60000000-0000-4000-8000-000000000004",
+    "Упаковщик":"60000000-0000-4000-8000-000000000005",
+    "Фасовщик":"60000000-0000-4000-8000-000000000006",
+    "Мойщик оборудования":"60000000-0000-4000-8000-000000000007",
+    "Электромонтажник":"60000000-0000-4000-8000-000000000008",
+    "Сборщик":"60000000-0000-4000-8000-000000000009",
+    "Сварщик":"60000000-0000-4000-8000-000000000010",
+    "Разнорабочий":"60000000-0000-4000-8000-000000000011",
+    "Приёмщик товара":"60000000-0000-4000-8000-000000000012",
+    "Уборщик производственных помещений":"60000000-0000-4000-8000-000000000013",
+    "Оператор поломоечной машины":"60000000-0000-4000-8000-000000000014",
+  };
   return demo.needs.filter((row) => canReadRow(actor.access, "operations.need.read", row, actor)).map((row) => {
     const related = demo.candidates.filter((candidate) => candidate.objectId === row.objectId && candidate.need === row.specialty);
     const ready = related.filter((candidate) => normalizeRecruitingStage(candidate.stage) === "preparation").length;
     const started = related.filter((candidate) => ["first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length;
     const working = row.filled;
-    const recruiterId = row.ownerUserId ?? "10000000-0000-4000-8000-000000000005";
-    const recruiterName = "Ольга Новикова";
+    const recruiterId = row.ownerUserId ?? "10000000-0000-4000-8000-000000000012";
+    const recruiterName = demoUserNames[recruiterId] ?? "Рекрутер";
+    const object=demo.objects.find((value)=>value.id===row.objectId);
+    const managerUserId=object?.ownerUserId??null;
+    const manager=managerUserId?demoUserNames[managerUserId]??"Менеджер объекта":null;
     return {
       id: row.id, organizationId: row.organizationId, objectId: row.objectId, object: row.object,
       clientId: row.clientId, client: demo.clients.find((client) => client.id === row.clientId)?.name ?? null,
-      regionId: row.regionId, region: demo.objects.find((object) => object.id === row.objectId)?.region ?? null,
-      specialtyId: row.specialty === "Грузчик" ? "60000000-0000-4000-8000-000000000002" : row.specialty === "Сборщик мебели" ? "60000000-0000-4000-8000-000000000003" : "60000000-0000-4000-8000-000000000001",
+      regionId: row.regionId, region: object?.region ?? null,
+      specialtyId: specialtyIds[row.specialty] ?? "60000000-0000-4000-8000-000000000001",
       specialty: row.specialty, title: row.specialty, sourceKind: "object", sourceLabel: needSourceLabels.object,
-      priority: row.deficit >= 7 ? "high" : "normal", required: row.required, filled: working, working,
+      priority: row.deficit >= 5 ? "high" : row.deficit >= 2 ? "normal" : "low", required: row.required, filled: working, working,
       deficit: Math.max(row.required-working,0), toRecruit: Math.max(row.required-working-ready,0),
       deadline: row.deadline ?? null, status: row.status, ownerUserId: recruiterId, owner: recruiterName,
-      managerUserId: null, manager: null, assigneeUserIds: row.assigneeUserIds ?? [recruiterId],
+      managerUserId, manager, assigneeUserIds: row.assigneeUserIds ?? [recruiterId],
       recruiters: [{userId:recruiterId,name:recruiterName,targetCount:Math.max(row.deficit,1)}],
-      conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: demo.objects.find((object) => object.id === row.objectId)?.name ?? null },
+      conditions: row.conditions ?? { schedule: "6/1 · 11 оплачиваемых часов", housing: "Проживание по условиям объекта", location: object?.name ?? null },
       candidates: related.length,
       approved: related.filter((candidate) => ["documents","clearance","preparation","first_shift","retention_7","retention_30"].includes(normalizeRecruitingStage(candidate.stage))).length,
-      ready, started, conditionVersion: 2,
-      quantityHistory: row.specialty==="Комплектовщик"
-        ? [
-            {id:`demo-qty-${row.id}-2`,oldCount:16,newCount:row.required,delta:row.required-16,reason:"Заказчик расширил заявку после запуска",changedAt:"18.09.2026 11:20",changedBy:"Алексей Волков"},
-            {id:`demo-qty-${row.id}-1`,oldCount:null,newCount:16,delta:16,reason:"Исходный объём потребности",changedAt:"02.09.2026 09:10",changedBy:"Алексей Волков"},
-          ]
-        : row.specialty==="Сборщик мебели"
-          ? [
-              {id:`demo-qty-${row.id}-2`,oldCount:3,newCount:row.required,delta:row.required-3,reason:"Добавлены дополнительные места на объекте",changedAt:"17.09.2026 16:40",changedBy:"Дмитрий Орлов"},
-              {id:`demo-qty-${row.id}-1`,oldCount:null,newCount:3,delta:3,reason:"Исходный объём потребности",changedAt:"04.09.2026 10:00",changedBy:"Дмитрий Орлов"},
-            ]
-          : [{id:`demo-qty-${row.id}-1`,oldCount:null,newCount:row.required,delta:row.required,reason:"Исходный объём потребности",changedAt:"03.09.2026 10:30",changedBy:"Алексей Волков"}],
+      ready, started, conditionVersion: 1,
+      quantityHistory: [{id:`demo-qty-${row.id}-1`,oldCount:null,newCount:row.required,delta:row.required,reason:"Исходный объём потребности",changedAt:"18.09.2026 10:00",changedBy:manager??recruiterName}],
       requiredDocumentTypeIds:demoDocumentIds,
       documentRequirements:demoDocumentRequirements,
       stageCounts: related.reduce<Partial<Record<RecruitingStage,number>>>((acc,candidate)=>{const stage=normalizeRecruitingStage(candidate.stage);acc[stage]=(acc[stage]??0)+1;return acc;},{}),
@@ -281,7 +301,6 @@ function demoNeedRows(actor: Actor): RecruitingNeedRow[] {
     };
   });
 }
-
 export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedRow[]> {
   requireCapability(actor, "operations.need.read");
   if (actor.demo) return demoNeedRows(actor);
@@ -750,17 +769,30 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
     specialties: [
       {id:"60000000-0000-4000-8000-000000000001",name:"Комплектовщик"},
       {id:"60000000-0000-4000-8000-000000000002",name:"Грузчик"},
-      {id:"60000000-0000-4000-8000-000000000003",name:"Сборщик мебели"},
+      {id:"60000000-0000-4000-8000-000000000003",name:"Водитель погрузчика"},
+      {id:"60000000-0000-4000-8000-000000000004",name:"Бригадир"},
+      {id:"60000000-0000-4000-8000-000000000005",name:"Упаковщик"},
+      {id:"60000000-0000-4000-8000-000000000006",name:"Фасовщик"},
+      {id:"60000000-0000-4000-8000-000000000007",name:"Мойщик оборудования"},
+      {id:"60000000-0000-4000-8000-000000000008",name:"Электромонтажник"},
+      {id:"60000000-0000-4000-8000-000000000009",name:"Сборщик"},
+      {id:"60000000-0000-4000-8000-000000000010",name:"Сварщик"},
+      {id:"60000000-0000-4000-8000-000000000011",name:"Разнорабочий"},
+      {id:"60000000-0000-4000-8000-000000000012",name:"Приёмщик товара"},
+      {id:"60000000-0000-4000-8000-000000000013",name:"Уборщик производственных помещений"},
+      {id:"60000000-0000-4000-8000-000000000014",name:"Оператор поломоечной машины"},
     ],
     regions: [
-      {id:"30000000-0000-4000-8000-000000000001",name:"Москва и МО"},
+      {id:"30000000-0000-4000-8000-000000000001",name:"Москва и Московская область"},
       {id:"30000000-0000-4000-8000-000000000002",name:"Калужская область"},
+      {id:"30000000-0000-4000-8000-000000000003",name:"Владимирская область"},
     ],
-    objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
+    objects: demo.objects.filter((row) => actor.access.allOrg || actor.regionIds.includes(row.regionId) || (row.assigneeUserIds??[]).includes(actor.userId)).map((row) => ({id:row.id,name:row.name,regionId:row.regionId,region:row.region})),
     recruiters: [
-      {id:"10000000-0000-4000-8000-000000000005",name:"Ольга Новикова"},
-      {id:"10000000-0000-4000-8000-000000000004",name:"Алексей Волков"},
-      {id:"10000000-0000-4000-8000-000000000003",name:"Дмитрий Орлов"},
+      {id:"10000000-0000-4000-8000-000000000012",name:"Ольга Зайцева"},
+      {id:"10000000-0000-4000-8000-000000000013",name:"Ксения Волкова"},
+      {id:"10000000-0000-4000-8000-000000000014",name:"Наталья Фомина"},
+      {id:"10000000-0000-4000-8000-000000000005",name:"Мария Лебедева"},
     ],
     sources: [...new Set(demo.candidates.map((row)=>row.source))].sort((a,b)=>a.localeCompare(b,"ru")),
     sourceCatalog: [
