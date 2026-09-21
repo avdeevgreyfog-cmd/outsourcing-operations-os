@@ -1162,3 +1162,13 @@
 .sales-board.recruiting-board .sales-board-card:hover{border-color:var(--border-strong);background:var(--panel);box-shadow:0 3px 10px #00000009}
 .sales-board.recruiting-board .recruiting-card.is-overdue{border-left:2px solid var(--bad)}
 .sales-board.recruiting-board .sales-board-empty{padding:22px 8px}
+
+/* Beta company QA fixes */
+.sales-board.recruiting-board.recruiting-funnel-compact>.recruiting-column{flex:0 0 228px;width:228px;min-width:228px;max-width:228px;min-height:360px}
+.sales-board.recruiting-board.recruiting-funnel-compact>.recruiting-column>header{min-height:44px;padding:10px 11px}
+.sales-board.recruiting-board.recruiting-funnel-compact .recruiting-card{min-width:0}
+.sales-board.recruiting-board.recruiting-funnel-compact .recruiting-card-stage-info,
+.sales-board.recruiting-board.recruiting-funnel-compact .recruiting-card-vacancy{min-width:0;overflow-wrap:anywhere}
+.needs-object-actions{display:flex;align-items:center;gap:7px;padding-right:12px}
+.needs-object-actions .button{white-space:nowrap}
+@media(max-width:760px){.sales-board.recruiting-board.recruiting-funnel-compact>.recruiting-column{flex-basis:210px;width:210px;min-width:210px;max-width:210px}}
