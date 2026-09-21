@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Printer, Save, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Download, Printer, RotateCcw, Send, ShieldCheck, WalletCards } from "lucide-react";
 import { Metric, Status } from "@/components/UI";
 import { rub } from "@/lib/ui/format";
 import type { TimesheetData, TimesheetWorkerRow } from "@/lib/data/service";
@@ -11,13 +11,15 @@ import type { OperationsReferenceData } from "@/lib/operations/service";
 type Mode="first"|"second"|"month";
 type View="client"|"internal";
 
-export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean}){
+export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canApproveClient,canClose}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApproveClient:boolean;canClose:boolean}){
   const router=useRouter();
   const [mode,setMode]=useState<Mode>("month");
   const [view,setView]=useState<View>(sensitive?"internal":"client");
   const [rows,setRows]=useState<TimesheetWorkerRow[]>(data.rows);
   const [saving,setSaving]=useState("");
+  const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
+  const [comment,setComment]=useState("");
   const lastDay=Number(data.periodEnd.slice(8,10));
   const allDays=useMemo(()=>range(1,lastDay),[lastDay]);
   const days=mode==="first"?allDays.filter(day=>day<=15):mode==="second"?allDays.filter(day=>day>=16):allDays;
@@ -26,13 +28,17 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit}:{d
   const totalHours=visibleRows.reduce((sum,row)=>sum+row.visibleTotal,0);
   const totalNight=visibleRows.reduce((sum,row)=>sum+Number(row.night??0),0);
   const totalOvertime=visibleRows.reduce((sum,row)=>sum+Number(row.overtime??0),0);
+  const internal=data.internalSnapshot;
+  const client=data.clientSnapshot;
+  const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";
+  const canEditFact=canEdit&&view==="internal"&&!locked;
 
   function changeContext(objectId:string,month:string){
     const params=new URLSearchParams();if(objectId)params.set("object",objectId);if(month)params.set("month",month);
     router.push("/timesheets?"+params.toString());
   }
   async function saveCell(workerId:string,day:number,value:string){
-    if(!canEdit||view!=="internal")return;
+    if(!canEditFact)return;
     const key=workerId+":"+day;setSaving(key);setMessage("");
     try{
       const workDate=data.month+"-"+String(day).padStart(2,"0");
@@ -43,14 +49,25 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit}:{d
     }catch(e){setMessage(e instanceof Error?e.message:"Не удалось сохранить");}
     finally{setSaving("");}
   }
-  async function submitSnapshot(){
-    setMessage("");
+  async function workflow(action:"submit_internal"|"review_internal"|"return_internal"|"send_client"|"client_approve"|"client_return"|"close"){
+    setBusy(true);setMessage("");
     try{
-      const response=await fetch("/api/timesheets/snapshots",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({objectId:data.objectId,periodStart:data.periodStart,periodEnd:data.periodEnd,viewType:view})});
-      const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось зафиксировать табель");
-      setMessage(view==="client"?"Клиентская версия зафиксирована":"Внутренняя версия зафиксирована");
-      router.refresh();
-    }catch(e){setMessage(e instanceof Error?e.message:"Не удалось зафиксировать табель");}
+      const response=await fetch("/api/timesheets/workflow",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
+        action,objectId:data.objectId,periodStart:data.periodStart,periodEnd:data.periodEnd,comment:comment||null,
+      })});
+      const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось выполнить действие");
+      const labels:Record<string,string>={
+        submit_internal:"Табель передан на внутреннюю проверку",
+        review_internal:"Внутренний табель проверен",
+        return_internal:"Табель возвращён менеджеру",
+        send_client:"Клиентская версия зафиксирована и отправлена",
+        client_approve:"Подтверждение клиента зафиксировано",
+        client_return:"Возврат клиента зафиксирован",
+        close:"Период закрыт: начисления и фактическая экономика сформированы",
+      };
+      setMessage(labels[action]??"Готово");setComment("");router.refresh();
+    }catch(e){setMessage(e instanceof Error?e.message:"Не удалось выполнить действие");}
+    finally{setBusy(false);}
   }
   function exportCsv(){
     const header=["Сотрудник",...days.map(day=>String(day).padStart(2,"0")+"."+data.month.slice(5,7)),"Часы",...(view==="internal"&&sensitive?["Ставка","Начислено"]:[])];
@@ -70,7 +87,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit}:{d
         <div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Клиентский</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Внутренний</button>}</div>
         <button className="button" type="button" onClick={exportCsv}><Download size={14}/> CSV</button>
         {view==="client"&&<button className="button" type="button" onClick={()=>window.print()}><Printer size={14}/> Печать</button>}
-        {canSubmit&&<button className="button primary" type="button" onClick={()=>void submitSnapshot()}><Save size={14}/> {view==="client"?"Зафиксировать клиентский":"Зафиксировать внутренний"}</button>}
+        
       </div>
     </div>
     <div className="timesheet-summary">
@@ -82,15 +99,29 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit}:{d
     <div className="timesheet-mode-note">
       <Status tone={view==="client"?"info":"warn"}>{view==="client"?"Клиентский вид":"Внутренний факт"}</Status>
       <span>{view==="client"?"Только согласуемые часы и коды присутствия. Ставки, начисления и внутренние корректировки скрыты.":"Рабочий табель менеджера. Ячейки можно вводить часами или кодами отсутствия."}</span>
-      <span>Состояние периода: <strong>{statusLabel(data.status)}</strong></span>
+      <span>Состояние периода: <strong>{statusLabel(data.status)}</strong></span><span>Внутренняя версия: <strong>{internal?`v${internal.version} · ${statusLabel(internal.status)}`:"не создана"}</strong></span><span>Клиентская версия: <strong>{client?`v${client.version} · ${statusLabel(client.status)}`:"не создана"}</strong></span>
       {message&&<span><strong>{message}</strong></span>}
     </div>
+    <section className="section">
+      <div className="section-head"><div><h2>Маршрут табеля</h2><p>Версии сохраняются отдельно: отправленная клиенту версия не перезаписывается.</p></div><Status tone={client?.status==="closed"?"good":client?.status==="client_sent"?"warn":internal?.status==="internal_submitted"?"warn":"neutral"}>{statusLabel(data.status)}</Status></div>
+      <div className="timesheet-workflow-panel">
+        <input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Комментарий к передаче или возврату" aria-label="Комментарий к действию"/>
+        <div className="page-actions">
+          {canSubmit&&(!internal||["draft","returned"].includes(internal.status))&&<button className="button primary" disabled={busy} onClick={()=>void workflow("submit_internal")}><Send size={14}/> На внутреннюю проверку</button>}
+          {canReview&&internal?.status==="internal_submitted"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("review_internal")}><CheckCircle2 size={14}/> Проверено</button><button className="button" disabled={busy} onClick={()=>void workflow("return_internal")}><RotateCcw size={14}/> Вернуть менеджеру</button></>}
+          {canSubmit&&internal?.status==="internal_checked"&&(!client||client.status==="returned")&&<button className="button primary" disabled={busy} onClick={()=>void workflow("send_client")}><Send size={14}/> Отправить клиенту</button>}
+          {canApproveClient&&client?.status==="client_sent"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("client_approve")}><CheckCircle2 size={14}/> Клиент согласовал</button><button className="button" disabled={busy} onClick={()=>void workflow("client_return")}><RotateCcw size={14}/> Клиент вернул</button></>}
+          {canClose&&client?.status==="client_approved"&&<button className="button primary" disabled={busy} onClick={()=>void workflow("close")}><WalletCards size={14}/> Закрыть период</button>}
+          {client?.status==="closed"&&<span className="cell-sub">Период закрыт. Изменения факта заблокированы.</span>}
+        </div>
+      </div>
+    </section>
     <section className="section">
       <div className="section-head"><div><h2>{data.object} · {view==="client"?"клиентский табель":"внутренний табель"}</h2><p>{data.period}</p></div>{view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без внутренних ставок</Status>}</div>
       <div className="timesheet-wrap">
         <table className="data-table timesheet">
           <thead><tr><th className="sticky-col">Сотрудник</th>{days.map(day=><th className={"day "+(isWeekend(data.month,day)?"weekend":"")} key={day}><span>{weekday(data.month,day)}</span>{day}</th>)}<th className="timesheet-total">Часы</th><th>Ночь</th><th>Переработка</th>{view==="internal"&&sensitive&&<><th className="timesheet-financial">Ставка</th><th className="timesheet-financial">Начислено</th></>}</tr></thead>
-          <tbody>{visibleRows.map(row=><tr key={row.workerId}><td className="cell-title sticky-col">{row.name}</td>{days.map(day=>{const value=row.days?.[String(day)];const key=row.workerId+":"+day;return <td key={day} className={"day "+(isWeekend(data.month,day)?"weekend ":"")+(value===0?"day-zero":"")}>{canEdit&&view==="internal"?<input className="timesheet-cell-input" defaultValue={value==null?"":String(value)} disabled={saving===key} onBlur={e=>void saveCell(row.workerId,day,e.target.value)} aria-label={row.name+" "+day}/>:value==null?"—":value}</td>})}<td className="num timesheet-total">{row.visibleTotal}</td><td className="num">{row.night??0}</td><td className="num">{row.overtime??0}</td>{view==="internal"&&sensitive&&<><td className="num timesheet-financial">{row.rate?rub(row.rate):"—"}</td><td className="num timesheet-financial">{row.accrual?rub(row.accrual):"—"}</td></>}</tr>)}</tbody>
+          <tbody>{visibleRows.map(row=><tr key={row.workerId}><td className="cell-title sticky-col">{row.name}</td>{days.map(day=>{const value=row.days?.[String(day)];const key=row.workerId+":"+day;return <td key={day} className={"day "+(isWeekend(data.month,day)?"weekend ":"")+(value===0?"day-zero":"")}>{canEditFact?<input className="timesheet-cell-input" defaultValue={value==null?"":String(value)} disabled={saving===key} onBlur={e=>void saveCell(row.workerId,day,e.target.value)} aria-label={row.name+" "+day}/>:value==null?"—":value}</td>})}<td className="num timesheet-total">{row.visibleTotal}</td><td className="num">{row.night??0}</td><td className="num">{row.overtime??0}</td>{view==="internal"&&sensitive&&<><td className="num timesheet-financial">{row.rate?rub(row.rate):"—"}</td><td className="num timesheet-financial">{row.accrual?rub(row.accrual):"—"}</td></>}</tr>)}</tbody>
           <tfoot><tr><td className="sticky-col">Итого часов</td>{totals.map((value,index)=><td className={"day num "+(isWeekend(data.month,days[index])?"weekend":"")} key={days[index]}>{value||"—"}</td>)}<td className="num timesheet-total">{totalHours}</td><td className="num">{totalNight}</td><td className="num">{totalOvertime}</td>{view==="internal"&&sensitive&&<><td className="timesheet-financial">—</td><td className="num timesheet-financial">{rub(visibleRows.reduce((sum,row)=>sum+Number(row.accrual??0),0))}</td></>}</tr></tfoot>
         </table>
       </div>
@@ -104,4 +135,4 @@ function isWeekend(month:string,day:number){const value=dateFor(month,day).getUT
 function weekday(month:string,day:number){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(dateFor(month,day)).replace(".","")}
 function numericCell(value:unknown){return typeof value==="number"?value:typeof value==="string"&&/^\d+(?:[.,]\d+)?$/.test(value)?Number(value.replace(",",".")):0}
 function normalizeCell(value:string){const trimmed=value.trim().toUpperCase();if(trimmed==="")return null;if(/^\d+(?:[.,]\d+)?$/.test(trimmed))return Number(trimmed.replace(",","."));return trimmed}
-function statusLabel(value:string){return value==="submitted"?"Передан на согласование":value==="approved"?"Согласован":value==="returned"?"Возвращён на корректировку":"Черновик"}
+function statusLabel(value:string){const labels:Record<string,string>={draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён на корректировку",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"};return labels[value]??value}
