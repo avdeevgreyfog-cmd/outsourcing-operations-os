@@ -28,7 +28,7 @@ export type OperationsAnalyticsRow = {
 export type OperationsReferenceData = {
   objects:Array<{id:string;name:string;region:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>;
   specialties:Array<{id:string;name:string}>;
-  workers:Array<{id:string;fullName:string;objectId:string|null;object:string|null}>;
+  workers:Array<{id:string;fullName:string;objectId:string|null;object:string|null;specialtyId:string|null;specialty:string|null}>;
 };
 
 export type StorageLocationRow = {
@@ -272,7 +272,7 @@ export async function getOperationsReferenceData(
     return {
       objects:visibleObjects.map(row=>({id:row.id,name:row.name,region:row.region,ownerUserId:row.ownerUserId??null,assigneeUserIds:row.assigneeUserIds??[]})),
       specialties:specialtyNames.map((name,index)=>({id:`demo-specialty-${index+1}`,name})),
-      workers:includeWorkers?demo.workers.filter(row=>row.objectId&&objectIds.has(row.objectId)).map(row=>({id:row.id,fullName:row.fullName,objectId:row.objectId??null,object:row.object??null})):[],
+      workers:includeWorkers?demo.workers.filter(row=>row.objectId&&objectIds.has(row.objectId)).map(row=>({id:row.id,fullName:row.fullName,objectId:row.objectId??null,object:row.object??null,specialtyId:null,specialty:null})):[],
     };
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
@@ -288,8 +288,8 @@ export async function getOperationsReferenceData(
     const ids=visibleObjects.map(row=>row.id);
     const specialties=includeSpecialties?await sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`:[];
     const workers=includeWorkers&&ids.length
-      ? await sql<Array<{id:string;fullName:string;objectId:string|null;object:string|null}>>`
-          SELECT w.id,w.full_name "fullName",a.object_id "objectId",o.name object
+      ? await sql<Array<{id:string;fullName:string;objectId:string|null;object:string|null;specialtyId:string|null;specialty:string|null}>>`
+          SELECT w.id,w.full_name "fullName",a.object_id "objectId",o.name object,a.specialty_id "specialtyId",s.name specialty
           FROM worker_profiles w
           JOIN LATERAL (
             SELECT * FROM worker_object_assignments woa
@@ -298,6 +298,7 @@ export async function getOperationsReferenceData(
             ORDER BY woa.effective_from DESC LIMIT 1
           ) a ON true
           JOIN objects o ON o.id=a.object_id
+          LEFT JOIN specialties s ON s.id=a.specialty_id
           WHERE a.object_id=ANY(${ids}::uuid[])
           ORDER BY w.full_name
         `
