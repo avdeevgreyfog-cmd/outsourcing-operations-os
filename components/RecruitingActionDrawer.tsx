@@ -436,7 +436,7 @@ function buildDemoDocuments(row:RecruitingApplicationRow):DocumentRow[]{
 function NeedSummary({need,row}:{need:RecruitingNeedRow|null;row:RecruitingApplicationRow}){
   const c=need?.conditions??row.conditions;
   return <section className="candidate-work-need">
-    <header><div><h3>Условия вакансии</h3><p>{(need?.title??row.need)+" · "+(need?.object??row.object??need?.region??"Без локации")}</p></div><Link href="/needs?view=needs">Потребность</Link></header>
+    <header><div><h3>Условия вакансии</h3><p>{(need?.title??row.need)+" · "+(need?.object??row.object??need?.region??"Без локации")}</p></div><div className="candidate-need-links">{(need?.objectId??row.objectId)&&<Link href={"/objects/"+(need?.objectId??row.objectId)}>Объект</Link>}<Link href="/needs?view=needs">Потребность</Link></div></header>
     <div className="candidate-work-pay"><span>На руки</span><strong>{display(c.workerPay)}</strong></div>
     <dl><div><dt>График</dt><dd>{display(c.schedule)}</dd></div><div><dt>Смена</dt><dd>{display(c.shift)}</dd></div><div><dt>Проживание</dt><dd>{provision(c,"housing")}</dd></div><div><dt>Питание</dt><dd>{provision(c,"meals")}</dd></div><div><dt>Проезд</dt><dd>{provision(c,"travel")}</dd></div><div><dt>Развозка</dt><dd>{provision(c,"shuttle")}</dd></div></dl>
   </section>;
