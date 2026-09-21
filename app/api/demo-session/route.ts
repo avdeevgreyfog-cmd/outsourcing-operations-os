@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { DEMO_COOKIE } from "@/lib/auth/server";
 
-const allowed = new Set(["director","sales","regional","object","recruiter","economist","finance"]);
+const allowed = new Set(["director","sales","client","regional","object","supply","recruiter","recruiter_staff","economist","finance"]);
 export async function POST(request: Request) {
   if (process.env.DEMO_MODE !== "true") return NextResponse.json({ error: "Демонстрационный режим отключён" }, { status: 404 });
   const body = await request.json().catch(() => ({}));
