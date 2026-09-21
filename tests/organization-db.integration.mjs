@@ -112,6 +112,12 @@ try {
   await sql`INSERT INTO organization_units(id,organization_id,parent_id,code,name,kind) VALUES(${childUnit}::uuid,${org1}::uuid,${unit1}::uuid,${`child-${childUnit}`},'Cycle test','team')`;
   await rejectsConstraint(()=>sql`UPDATE organization_units SET parent_id=${childUnit}::uuid WHERE id=${unit1}::uuid`,/hierarchy cycle/);
 
+  const allocationUser=randomUUID();
+  const allocationMember=randomUUID();
+  const [allocationRole]=await sql`SELECT role_template_id FROM organization_memberships WHERE id=${member1}::uuid`;
+  await sql`INSERT INTO app_users(id,display_name,email) VALUES(${allocationUser}::uuid,'Allocation Test',${`${allocationUser}@test.local`})`;
+  await sql`INSERT INTO organization_memberships(id,organization_id,user_id,role_template_id) VALUES(${allocationMember}::uuid,${org1}::uuid,${allocationUser}::uuid,${allocationRole.role_template_id}::uuid)`;
+
   const seat1 = randomUUID();
   const seat2 = randomUUID();
   await sql`INSERT INTO staff_positions(id,organization_id,code,name,job_profile_id,organization_unit_id,status,capacity) VALUES
@@ -120,10 +126,10 @@ try {
   await sql`UPDATE staff_positions SET reports_to_position_id=${seat1}::uuid WHERE id=${seat2}::uuid`;
   await rejectsConstraint(()=>sql`UPDATE staff_positions SET reports_to_position_id=${seat2}::uuid WHERE id=${seat1}::uuid`,/hierarchy cycle/);
   await sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,created_by_user_id)
-    VALUES(${org1}::uuid,${seat1}::uuid,${member1}::uuid,'primary',0.6,'Integration test',${user1}::uuid)`;
+    VALUES(${org1}::uuid,${seat1}::uuid,${allocationMember}::uuid,'primary',0.6,'Integration test',${user1}::uuid)`;
 
   await rejectsConstraint(
-    () => sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,created_by_user_id) VALUES(${org1}::uuid,${seat2}::uuid,${member1}::uuid,'additional',0.5,'Integration test',${user1}::uuid)`,
+    () => sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,created_by_user_id) VALUES(${org1}::uuid,${seat2}::uuid,${allocationMember}::uuid,'additional',0.5,'Integration test',${user1}::uuid)`,
     /allocation exceeds/,
   );
   await rejectsConstraint(
@@ -131,16 +137,16 @@ try {
     /capacity exceeded/,
   );
   await rejectsConstraint(
-    () => sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,created_by_user_id) VALUES(${org1}::uuid,${seat2}::uuid,${member1}::uuid,'primary',0.4,'Integration test',${user1}::uuid)`,
+    () => sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,created_by_user_id) VALUES(${org1}::uuid,${seat2}::uuid,${allocationMember}::uuid,'primary',0.4,'Integration test',${user1}::uuid)`,
     /primary assignment overlaps/,
   );
   await sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,allow_overallocation,created_by_user_id)
-    VALUES(${org1}::uuid,${seat2}::uuid,${member1}::uuid,'additional',0.5,'Approved overallocation',true,${user1}::uuid)`;
+    VALUES(${org1}::uuid,${seat2}::uuid,${allocationMember}::uuid,'additional',0.5,'Approved overallocation',true,${user1}::uuid)`;
 
   const closedSeat=randomUUID();
   await sql`INSERT INTO staff_positions(id,organization_id,code,name,job_profile_id,organization_unit_id,status,capacity) VALUES(${closedSeat}::uuid,${org1}::uuid,${`seat-${closedSeat}`},'Closed seat',${profile1}::uuid,${unit1}::uuid,'closed',1)`;
   await rejectsConstraint(()=>sql`INSERT INTO position_assignments(organization_id,staff_position_id,membership_id,assignment_type,fte,reason,created_by_user_id) VALUES(${org1}::uuid,${closedSeat}::uuid,${member2}::uuid,'additional',0.5,'Invalid closed seat',${user1}::uuid)`,/not assignable/);
-  const currentAssignment=await sql`SELECT * FROM current_position_assignment(${member1}::uuid,current_date)`;
+  const currentAssignment=await sql`SELECT * FROM current_position_assignment(${allocationMember}::uuid,current_date)`;
   assert.equal(currentAssignment[0]?.staff_position_id,seat1);
 
   const auditRows = await sql`SELECT action FROM audit_events WHERE organization_id=${org1}::uuid AND resource_type='position_assignments'`;
