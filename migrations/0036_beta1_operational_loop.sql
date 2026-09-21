@@ -86,6 +86,12 @@ FROM role_templates r
 WHERE r.code IN ('director','regional_manager','finance')
 ON CONFLICT DO NOTHING;
 
+INSERT INTO position_permission_grants(organization_id,position_id,capability,effect,scope_type,scope_ids)
+SELECT pg.organization_id,pg.position_id,'time.timesheet.review','allow',pg.scope_type,pg.scope_ids
+FROM position_permission_grants pg
+WHERE pg.capability='finance.pnl.read' AND pg.effect='allow'
+ON CONFLICT DO NOTHING;
+
 DROP TRIGGER IF EXISTS audit_timesheet_snapshots ON timesheet_snapshots;
 CREATE TRIGGER audit_timesheet_snapshots
   AFTER INSERT OR UPDATE OR DELETE ON timesheet_snapshots
