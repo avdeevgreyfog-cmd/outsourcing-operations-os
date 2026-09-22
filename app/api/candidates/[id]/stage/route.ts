@@ -148,8 +148,10 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
             || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
           ca.stage,ca.workflow_details workflow,ca.planned_start_date::text "plannedStartDate",ca.planned_arrival_at::text "plannedArrivalAt",
           ca.actual_start_at::text "actualStartAt",ca.updated_at::text "updatedAt",n.specialty_id "specialtyId",o.owner_user_id "objectOwnerId",
-          n.source_request_role_id "sourceRequestRoleId",COALESCE(NULLIF(n.conditions_snapshot->>'workMode',''),'local') "workMode",
-          NULLIF(n.conditions_snapshot->>'paidHoursPerShift','')::numeric "paidHoursPerShift",c.full_name "fullName"
+          n.source_request_role_id "sourceRequestRoleId",
+          COALESCE(NULLIF(ca.conditions_snapshot->>'workMode',''),NULLIF(n.conditions_snapshot->>'workMode',''),'local') "workMode",
+          COALESCE(NULLIF(ca.conditions_snapshot->>'paidHoursPerShift','')::numeric,NULLIF(n.conditions_snapshot->>'paidHoursPerShift','')::numeric) "paidHoursPerShift",
+          c.full_name "fullName"
         FROM candidate_applications ca
         JOIN candidates c ON c.id=ca.candidate_id
         JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
