@@ -832,8 +832,12 @@ export async function getObjectContacts(actor:Actor,objectId:string):Promise<{as
   if(actor.demo){
     const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"operations.object.read",row,actor));
     if(!object)return {assigned:[],contacts:[]};
-    const contact:ClientContactOption={id:"demo-object-contact",fullName:"Алексей Петров",position:"Начальник участка",phone:"+7 900 555-01-01",email:"object@example.ru",telegram:"@object_contact",whatsapp:"+7 900 555-01-01",maxContact:null,preferredChannel:"telegram"};
-    return {contacts:[contact],assigned:[{assignmentId:"demo-object-contact-assignment",contactId:contact.id,fullName:contact.fullName,position:contact.position,phone:contact.phone,email:contact.email,telegram:contact.telegram,whatsapp:contact.whatsapp,maxContact:contact.maxContact,preferredChannel:contact.preferredChannel,roles:["operations","timesheet"],note:"Основной контакт по ежедневной работе"}]};
+    const contacts:ClientContactOption[]=demo.clientContacts.filter(contact=>contact.clientId===object.clientId);
+    const assigned:ObjectContactRow[]=demo.objectContactAssignments.filter(link=>link.objectId===objectId).flatMap(link=>{
+      const contact=contacts.find(item=>item.id===link.contactId);if(!contact)return[];
+      return [{assignmentId:link.id,contactId:contact.id,fullName:contact.fullName,position:contact.position,phone:contact.phone,email:contact.email,telegram:contact.telegram,whatsapp:contact.whatsapp,maxContact:contact.maxContact,preferredChannel:contact.preferredChannel,roles:link.roles,note:link.note}];
+    });
+    return {contacts,assigned};
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [scope]=await sql<Array<{organizationId:string;objectId:string;clientId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
