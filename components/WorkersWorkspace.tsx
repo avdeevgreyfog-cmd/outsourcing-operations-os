@@ -99,10 +99,12 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       {canEdit&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт Excel</button><button className="button primary" onClick={()=>setShowCreate(true)}><Plus size={14}/> Добавить сотрудника</button></div>}
     </div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table workers-table">
-      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
+      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Специальность</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
       <tbody>{filtered.map(row=><tr key={row.id}>
         <td><Link className="cell-title" href={`/workers/${row.id}`}>{row.fullName}</Link></td>
         <td>{row.object&&row.objectId?<Link className="workers-object-link" href={"/objects/"+row.objectId}>{row.object}</Link>:"Без назначения"}</td>
+        <td>{row.specialty??"—"}</td>
+        <td>{row.startDate?new Intl.DateTimeFormat("ru-RU").format(new Date(row.startDate+"T00:00:00")):"—"}</td>
         <td><span className="workers-source" title={row.origin??row.source??"—"}>{row.origin??row.source??"—"}</span></td>
         <td>{row.employment??"—"}</td>
         {sensitive&&<><td className="num">{row.rate==null?"—":rub(row.rate)}</td><td className="num">{row.accrued==null?"—":rub(row.accrued)}</td><td className="num">{row.payable==null?"—":rub(row.payable)}</td></>}
