@@ -26,7 +26,7 @@ export type OperationsAnalyticsRow = {
 };
 
 export type OperationsReferenceData = {
-  objects:Array<{id:string;name:string;region:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>;
+  objects:Array<{id:string;name:string;region:string|null;ownerUserId:string|null;ownerName:string|null;assigneeUserIds:string[]}>;
   specialties:Array<{id:string;name:string}>;
   workers:Array<{id:string;fullName:string;objectId:string|null;object:string|null;specialtyId:string|null;specialty:string|null}>;
 };
@@ -270,17 +270,17 @@ export async function getOperationsReferenceData(
     const objectIds=new Set(visibleObjects.map(row=>row.id));
     const specialtyNames=includeSpecialties?[...new Set(demo.needs.filter(row=>objectIds.has(row.objectId)).map(row=>row.specialty))]:[];
     return {
-      objects:visibleObjects.map(row=>({id:row.id,name:row.name,region:row.region,ownerUserId:row.ownerUserId??null,assigneeUserIds:row.assigneeUserIds??[]})),
+      objects:visibleObjects.map(row=>({id:row.id,name:row.name,region:row.region,ownerUserId:row.ownerUserId??null,ownerName:row.ownerName??null,assigneeUserIds:row.assigneeUserIds??[]})),
       specialties:specialtyNames.map((name,index)=>({id:`demo-specialty-${index+1}`,name})),
       workers:includeWorkers?demo.workers.filter(row=>row.objectId&&objectIds.has(row.objectId)).map(row=>({id:row.id,fullName:row.fullName,objectId:row.objectId??null,object:row.object??null,specialtyId:null,specialty:null})):[],
     };
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const objects=await sql<Array<{id:string;name:string;region:string|null;regionId:string|null;ownerUserId:string|null;assigneeUserIds:string[]}>>`
-      SELECT o.id,o.name,rg.name region,o.region_id "regionId",o.owner_user_id "ownerUserId",
+    const objects=await sql<Array<{id:string;name:string;region:string|null;regionId:string|null;ownerUserId:string|null;ownerName:string|null;assigneeUserIds:string[]}>>`
+      SELECT o.id,o.name,rg.name region,o.region_id "regionId",o.owner_user_id "ownerUserId",owner.display_name "ownerName",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-      FROM objects o LEFT JOIN regions rg ON rg.id=o.region_id ORDER BY o.name
+      FROM objects o LEFT JOIN regions rg ON rg.id=o.region_id LEFT JOIN app_users owner ON owner.id=o.owner_user_id ORDER BY o.name
     `;
     const visibleObjects=objects
       .filter(row=>canReadRow(actor.access,capability,{organizationId:actor.organizationId,objectId:row.id,regionId:row.regionId??undefined,ownerUserId:row.ownerUserId,assigneeUserIds:row.assigneeUserIds},actor))
