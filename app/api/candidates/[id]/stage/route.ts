@@ -160,6 +160,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         ORDER BY ca.updated_at DESC LIMIT 1 FOR UPDATE OF ca
       `;
       if(!current||!canReadRow(actor.access,"recruiting.candidate.edit",current,actor))throw new AccessDeniedError("recruiting.candidate.edit");
+      if(body.ownerUserId!==undefined)await ensureActiveAssignee(tx,actor.organizationId,body.ownerUserId);
       if((body.expectedStage && normalizeRecruitingStage(current.stage)!==body.expectedStage) || (body.expectedUpdatedAt && Date.parse(current.updatedAt)!==Date.parse(body.expectedUpdatedAt))) return {conflict:true};
       const workflow={...current.workflow,...body.workflow};
       const normalizedCurrent=normalizeRecruitingStage(current.stage);
