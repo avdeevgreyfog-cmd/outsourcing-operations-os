@@ -184,7 +184,9 @@ export function RecruitingFunnelWorkspace({
           preferredChannel:form.preferredChannel||"phone",telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,
           source:form.source||"Ручной ввод",sourceChannel:form.sourceChannel||null,sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,
           stage,stageLabel:stageLabelByCode.get(stage)??recruitingStageLabels[stage],needId:need.id,need:need.title,objectId:need.objectId,object:need.object,
-          regionId:need.regionId,clientId:need.clientId,ownerUserId:form.ownerUserId||null,owner:options.recruiters.find(item=>item.id===form.ownerUserId)?.name??null,managerUserId:need.managerUserId,manager:need.manager,
+          regionId:need.regionId,clientId:need.clientId,ownerUserId:form.ownerUserId||null,owner:options.recruiters.find(item=>item.id===form.ownerUserId)?.name??null,
+          originalRecruiterUserId:form.originalRecruiterUserId||null,originalRecruiter:options.recruiters.find(item=>item.id===form.originalRecruiterUserId)?.name??null,
+          managerUserId:need.managerUserId,manager:need.manager,
           assigneeUserIds:[...new Set([...need.assigneeUserIds,...(form.ownerUserId?[form.ownerUserId]:[])])],nextAction:null,plannedStartDate:null,plannedArrivalAt:null,actualStartAt:null,rejectionReason:null,rejectionReasonCode:null,
           conditions:need.conditions,workflow:{actionCode:"inbound_contact",outcomeCode:"unprocessed"},recentCommunications:[],
         };
