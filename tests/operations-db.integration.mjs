@@ -12,6 +12,7 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0034_operations_workforce_core.sql"),"operations workforce migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0035_operations_offboarding_and_supply_approval.sql"),"offboarding/supply approval migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0039_object_worker_manager_integrity.sql"),"object/worker manager integrity migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0041_object_contacts.sql"),"object contacts migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const [object]=await sql`SELECT id,owner_user_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
@@ -44,6 +45,37 @@ try{
       )
   `;
   assert.equal(managerlessObject.count,0,"staffed objects must always have a manager");
+
+  const [contactMismatch]=await sql`
+    SELECT count(*)::int count
+    FROM object_contact_assignments a
+    JOIN objects o ON o.id=a.object_id
+    JOIN contacts c ON c.id=a.contact_id
+    WHERE a.organization_id=${org}::uuid AND a.active
+      AND o.client_company_id IS DISTINCT FROM c.client_company_id
+  `;
+  assert.equal(contactMismatch.count,0,"object contacts must belong to the same client as the object");
+  const [seededObjectContacts]=await sql`
+    SELECT count(*)::int count FROM object_contact_assignments
+    WHERE organization_id=${org}::uuid AND active
+  `;
+  assert.ok(seededObjectContacts.count>=10,"beta company must provide object contact responsibilities");
+  const [foreignContact]=await sql`
+    SELECT c.id
+    FROM contacts c
+    JOIN objects o ON o.id=${object.id}::uuid
+    WHERE c.organization_id=${org}::uuid AND c.client_company_id<>o.client_company_id
+    ORDER BY c.id LIMIT 1
+  `;
+  assert.ok(foreignContact?.id,"seed must provide a contact from another client");
+  await assert.rejects(
+    sql`
+      INSERT INTO object_contact_assignments(organization_id,object_id,contact_id,roles,created_by_user_id)
+      VALUES(${org}::uuid,${object.id}::uuid,${foreignContact.id}::uuid,ARRAY['operations'],${director}::uuid)
+    `,
+    /same client/i,
+    "database must reject a contact belonging to another client"
+  );
 
   const worker=randomUUID();
   await sql`
