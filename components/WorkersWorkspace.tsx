@@ -29,7 +29,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
   const [importStart,setImportStart]=useState(today());
   const [importResult,setImportResult]=useState("");
 
-  const filtered=useMemo(()=>localRows.filter(row=>`${row.fullName} ${row.object??""} ${row.source??""}`.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"))),[localRows,query]);
+  const filtered=useMemo(()=>localRows.filter(row=>`${row.fullName} ${row.object??""} ${row.managerName??""} ${row.source??""}`.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"))),[localRows,query]);
 
   async function createWorker(){
     setBusy(true);setError("");
@@ -95,14 +95,15 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
 
   return <div>
     <div className="candidate-directory-viewbar">
-      <SalesSearch value={query} onChange={setQuery} placeholder="Сотрудник, объект или источник"/>
+      <SalesSearch value={query} onChange={setQuery} placeholder="Сотрудник, объект, менеджер или источник"/>
       {canEdit&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт Excel</button><button className="button primary" onClick={()=>setShowCreate(true)}><Plus size={14}/> Добавить сотрудника</button></div>}
     </div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table workers-table">
-      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Специальность</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
+      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Менеджер</th><th>Специальность</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
       <tbody>{filtered.map(row=><tr key={row.id}>
         <td><Link className="cell-title" href={`/workers/${row.id}`}>{row.fullName}</Link></td>
         <td>{row.object&&row.objectId?<Link className="workers-object-link" href={"/objects/"+row.objectId}>{row.object}</Link>:"Без назначения"}</td>
+        <td>{row.managerName??"—"}</td>
         <td>{row.specialty??"—"}</td>
         <td>{row.startDate?new Intl.DateTimeFormat("ru-RU").format(new Date(row.startDate+"T00:00:00")):"—"}</td>
         <td><span className="workers-source" title={row.origin??row.source??"—"}>{row.origin??row.source??"—"}</span></td>
