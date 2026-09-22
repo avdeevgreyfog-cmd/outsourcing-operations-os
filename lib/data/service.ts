@@ -17,7 +17,7 @@ export type CalculationRow = ScopedRow & { id:string; requestId:string; request:
 export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; targetStart?:string|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
-export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
+export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
 export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; specialtyId:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string; workerIds:string[]; reserveWorkerIds:string[] };
 export type TimesheetCellValue = number|string|null;
 export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,TimesheetCellValue>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
@@ -186,9 +186,11 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
     const rows = await sql<WorkerRow[]>`
       SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.status,w.source,
              w.created_by_user_id "createdByUserId",woa.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",
-             woa.manager_user_id "ownerUserId",ARRAY[woa.manager_user_id::text] "assigneeUserIds",
+             COALESCE(o.owner_user_id,woa.manager_user_id) "ownerUserId",
+             ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+               || ARRAY[COALESCE(o.owner_user_id,woa.manager_user_id)::text] "assigneeUserIds",
              s.name specialty,woa.specialty_id "specialtyId",woa.effective_from::text "startDate",
-             er.relation_type employment,rec.display_name "originalRecruiter",w.source origin,
+             er.relation_type employment,rec.display_name "originalRecruiter",mgr.display_name "managerName",w.source origin,
              ${maySeeComp ? sql`wr.amount` : sql`NULL::numeric`} rate,
              ${maySeeComp ? sql`COALESCE(wa.total_amount,0)` : sql`NULL::numeric`} accrued,
              ${maySeeComp ? sql`COALESCE(pay.paid,0)+COALESCE(adv.advances,0)` : sql`NULL::numeric`} paid,
@@ -201,6 +203,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
       ) woa ON true
       LEFT JOIN objects o ON o.id=woa.object_id
       LEFT JOIN specialties s ON s.id=woa.specialty_id
+      LEFT JOIN app_users mgr ON mgr.id=COALESCE(o.owner_user_id,woa.manager_user_id)
       LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
       LEFT JOIN app_users rec ON rec.id=w.original_recruiter_user_id
       LEFT JOIN LATERAL (SELECT amount FROM worker_rates x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) wr ON true
