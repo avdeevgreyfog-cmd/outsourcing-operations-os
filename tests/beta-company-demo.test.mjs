@@ -53,7 +53,18 @@ test("beta company fixture covers all operating modules",()=>{
   }
   assert.ok(new Set(demo.workers.map(row=>row.startDate)).size>=20);
   const operationsHeadId="10000000-0000-4000-8000-000000000003";
+  const objectManagers=["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000010"];
   assert.ok(demo.objects.every(row=>(row.assigneeUserIds??[]).includes(operationsHeadId)),"operations head must inherit subordinate managers' objects");
+  for(const object of demo.objects){
+    assert.ok((object.assigneeUserIds??[]).includes(object.ownerUserId),object.name+" owner must see own object");
+    assert.ok(objectManagers.filter(id=>id!==object.ownerUserId).every(id=>!(object.assigneeUserIds??[]).includes(id)),object.name+" must not leak to another object manager");
+  }
+  assert.ok(demo.workers.some(row=>row.workMode==="rotation"),"beta workers must include rotation workers");
+  assert.ok(demo.workers.some(row=>row.workMode==="local"),"beta workers must include local workers");
+  assert.ok(demo.workers.every(row=>Number(row.paidHoursPerShift)>0),"beta workers must have paid shift hours");
+  assert.ok(demo.workers.some(row=>row.absenceStatus==="confirmed"),"beta workers must include confirmed absences");
+  assert.ok(demo.needs.every(row=>["local","rotation"].includes(row.conditions?.workMode)),"beta needs must carry structured work mode");
+  assert.ok(demo.needs.every(row=>Number(row.conditions?.paidHoursPerShift)>0),"beta needs must carry paid shift hours");
 });
 
 test("beta organization is a filled working company",()=>{
