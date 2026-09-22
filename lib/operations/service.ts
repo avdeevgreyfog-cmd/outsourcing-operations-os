@@ -551,8 +551,9 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
   if(actor.demo){
     const worker=demo.workers.find(row=>row.id===workerId);
     if(!worker)return {assignments:[],absences:[]};
+    const assignmentWorker=worker as typeof worker&{workMode?:string|null;paidHoursPerShift?:number|string|null};
     return {
-      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:worker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:worker.paidHoursPerShift==null?null:Number(worker.paidHoursPerShift)}]:[],
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift)}]:[],
       absences:[],
     };
   }
