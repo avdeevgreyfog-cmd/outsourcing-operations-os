@@ -38,7 +38,8 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       if((form.objectId&&!form.specialtyId)||(!form.objectId&&form.specialtyId))throw new Error("Объект и специальность указываются вместе");
       if(demo){
         const object=options.objects.find(x=>x.id===form.objectId);
-        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,rate:form.rate?Number(form.rate):null,accrued:0,paid:0,payable:0},...current]);
+        const specialty=options.specialties.find(x=>x.id===form.specialtyId);
+        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:specialty?.name??null,specialtyId:specialty?.id??null,startDate:form.startDate,employment:form.relationType,rate:form.rate?Number(form.rate):null,accrued:0,paid:0,payable:0},...current]);
       }else{
         const response=await fetch("/api/workers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           ...form,phone:form.phone||null,email:form.email||null,city:form.city||null,birthDate:form.birthDate||null,
@@ -79,7 +80,8 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
     try{
       if(demo){
         const object=options.objects.find(x=>x.id===importObject);
-        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,rate:row.rate,accrued:0,paid:0,payable:0} as WorkerRow));
+        const fallbackSpecialty=options.specialties.find(x=>x.id===importSpecialty);
+        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:row.specialtyName??fallbackSpecialty?.name??null,specialtyId:fallbackSpecialty?.id??null,startDate:row.startDate??importStart,employment:row.relationType??"employment",rate:row.rate,accrued:0,paid:0,payable:0} as WorkerRow));
         setLocalRows(current=>[...created,...current]);
         setImportResult(`Добавлено сотрудников: ${created.length}`);
       }else{
