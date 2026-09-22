@@ -81,11 +81,6 @@ BEGIN
         '{paidHoursPerShift}','11'::jsonb,true)
   WHERE organization_id=org_id;
 
-  UPDATE candidate_applications ca
-  SET conditions_snapshot=n.conditions_snapshot
-  FROM needs n
-  WHERE ca.organization_id=org_id AND n.id=ca.need_id;
-
   INSERT INTO worker_absence_plans(
     id,organization_id,worker_id,object_id,absence_type,status,planned_from,planned_to,flexible_return,note,created_by_user_id
   ) VALUES
