@@ -4,9 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listCandidates,listFinance,listIncidents,listLaunchTasks,listNeeds,listObjects,listShifts,listWorkers } from "@/lib/data/service";
-import { getHousingSnapshot,getInventorySnapshot,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
+import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
+import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { pct,rub } from "@/lib/ui/format";
 
 const labels:Record<string,string>={
@@ -18,6 +19,7 @@ const labels:Record<string,string>={
   timesheets:"Табели",
   supply:"Обеспечение",
   quality:"Качество",
+  contacts:"Контакты",
   finance:"Финансы",
   documents:"Документы",
   history:"История",
@@ -49,8 +51,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canAssets=hasCapability(actor.access,"assets.read");
   const canHousing=hasCapability(actor.access,"supply.housing.read");
   const canProcurement=hasCapability(actor.access,"procurement.read");
+  const canEditObject=hasCapability(actor.access,"operations.object.edit");
 
-  const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests]=await Promise.all([
+  const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
     canNeeds?listNeeds(actor):Promise.resolve([]),
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
@@ -63,6 +66,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     canAssets?getInventorySnapshot(actor):Promise.resolve({locations:[],items:[],balances:[]}),
     canHousing?getHousingSnapshot(actor):Promise.resolve({sites:[],stays:[]}),
     canProcurement?listSupplyRequests(actor):Promise.resolve([]),
+    getObjectContacts(actor,id),
   ]);
 
   const objectWorkers=workers.filter(row=>row.objectId===id);
@@ -242,6 +246,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>row.status!=="resolved"&&row.severity==="critical").length} tone="bad"/><Metric label="Всего записей" value={objectIncidents.length}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
       <Section title="Инциденты и качество"><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Инцидент</th><th>Дата</th><th>Сотрудник</th><th>Ответственный</th><th>Критичность</th><th>Статус</th></tr></thead><tbody>{objectIncidents.map(row=><tr key={row.id}><td><strong className="cell-title">{row.title}</strong><span className="cell-sub">{row.description}</span></td><td>{row.occurredAt}</td><td>{row.worker??"—"}</td><td>{row.responsible??"—"}</td><td><Status tone={row.severity==="critical"?"bad":row.severity==="high"?"warn":"neutral"}>{row.severity==="critical"?"Критическая":row.severity==="high"?"Высокая":"Обычная"}</Status></td><td>{row.status==="resolved"?"Закрыт":"Открыт"}</td></tr>)}</tbody></table></div>{!objectIncidents.length&&<Empty title="Инцидентов нет" text="По объекту не зафиксировано инцидентов."/>}<div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Открыть все инциденты</Link></div></Section>
     </>}
+
+    {tab==="contacts"&&<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>}
 
     {tab==="finance"&&objFinance&&<><div className="metrics-grid"><Metric label="Выручка" value={rub(objFinance.revenue)}/><Metric label="Персонал" value={rub(objFinance.workerCost)}/><Metric label="Прямые расходы" value={rub(objFinance.expenses)}/><Metric label="Маржа" value={pct(objFinance.marginPct)} tone={Number(objFinance.marginPct)<15?"warn":"good"}/></div><Section title="Финансовый факт"><div style={{padding:16,maxWidth:640}}><KeyValue label="Выручка" value={rub(objFinance.revenue)} sensitive/><KeyValue label="Затраты на персонал" value={rub(objFinance.workerCost)} sensitive/><KeyValue label="Прямые расходы" value={rub(objFinance.expenses)} sensitive/><KeyValue label="Вклад в прибыль" value={rub(objFinance.contribution)} sensitive/><KeyValue label="Маржа" value={pct(objFinance.marginPct)} sensitive/></div></Section></>}
 
