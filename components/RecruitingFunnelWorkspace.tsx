@@ -36,6 +36,7 @@ type ExtraContact={kind:ContactKind;value:string};
 type CandidateForm={
   needId:string;
   ownerUserId:string;
+  originalRecruiterUserId:string;
   fullName:string;
   phone:string;
   preferredChannel:string;
@@ -45,7 +46,7 @@ type CandidateForm={
   sourceCampaign:string;
   sourceReference:string;
 };
-const blank:CandidateForm={needId:"",ownerUserId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
+const blank:CandidateForm={needId:"",ownerUserId:"",originalRecruiterUserId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
 const stageSettingsStorage="operis.recruiting.funnel-stages.v2";
 
 const sourceKindLabels:Record<string,string>={
@@ -194,7 +195,7 @@ export function RecruitingFunnelWorkspace({
         const response=await fetch("/api/candidates",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           fullName:form.fullName||"Без имени",phone:form.phone,email:email||null,preferredChannel:form.preferredChannel||"phone",
           telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,source:form.source||null,sourceChannel:form.sourceChannel||null,
-          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,ownerUserId:form.ownerUserId||null,
+          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,ownerUserId:form.ownerUserId||null,originalRecruiterUserId:form.originalRecruiterUserId||null,
           contacts:contacts.filter(item=>item.value.trim()).map(item=>({channel:item.kind,value:item.value.trim(),isPreferred:form.preferredChannel===item.kind})),
         })});
         const json=await response.json().catch(()=>({}));
@@ -306,7 +307,8 @@ export function RecruitingFunnelWorkspace({
         <div className="candidate-create-layout">
           <div className="recruiting-form candidate-create-form">
             <label>Потребность<select required value={form.needId} onChange={e=>setForm(x=>({...x,needId:e.target.value}))}><option value="">Выберите потребность</option>{needs.filter(x=>["open","in_progress"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"} · найти {x.toRecruit}</option>)}</select></label>
-            <label>Ответственный рекрутер<select value={form.ownerUserId} onChange={e=>setForm(x=>({...x,ownerUserId:e.target.value}))}><option value="">Не назначен</option>{options.recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Кто привёл кандидата<select value={form.originalRecruiterUserId} onChange={e=>setForm(x=>({...x,originalRecruiterUserId:e.target.value}))}><option value="">Не указан</option>{options.recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Ответственный сейчас<select value={form.ownerUserId} onChange={e=>setForm(x=>({...x,ownerUserId:e.target.value}))}><option value="">Не назначен</option>{options.recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <div className="candidate-create-grid"><label>Имя / ФИО<input value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="Можно заполнить после начала разговора"/></label><label>Телефон<input required value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label></div>
 
             <div className="candidate-contact-list">
