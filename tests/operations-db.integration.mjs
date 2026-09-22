@@ -11,11 +11,39 @@ try{
   const migrations=await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
   assert.ok(migrations.some(row=>row.filename==="0034_operations_workforce_core.sql"),"operations workforce migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0035_operations_offboarding_and_supply_approval.sql"),"offboarding/supply approval migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0039_object_worker_manager_integrity.sql"),"object/worker manager integrity migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const [object]=await sql`SELECT id,owner_user_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
   const [specialty]=await sql`SELECT id FROM specialties WHERE organization_id=${org}::uuid ORDER BY name LIMIT 1`;
   assert.ok(object?.id&&specialty?.id,"seed must provide object and specialty");
+
+  const [managerMismatch]=await sql`
+    SELECT count(*)::int count
+    FROM worker_object_assignments a
+    JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+    JOIN objects o ON o.id=a.object_id
+    WHERE a.organization_id=${org}::uuid
+      AND a.effective_from<=current_date
+      AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+      AND a.manager_user_id IS DISTINCT FROM o.owner_user_id
+  `;
+  assert.equal(managerMismatch.count,0,"every active worker assignment must inherit the current object manager");
+
+  const [managerlessObject]=await sql`
+    SELECT count(*)::int count
+    FROM objects o
+    WHERE o.organization_id=${org}::uuid
+      AND o.owner_user_id IS NULL
+      AND EXISTS(
+        SELECT 1 FROM worker_object_assignments a
+        JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+        WHERE a.object_id=o.id
+          AND a.effective_from<=current_date
+          AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+      )
+  `;
+  assert.equal(managerlessObject.count,0,"staffed objects must always have a manager");
 
   const worker=randomUUID();
   await sql`
@@ -28,8 +56,13 @@ try{
   `;
   await sql`
     INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
-    VALUES(${org}::uuid,${worker}::uuid,${object.id}::uuid,${specialty.id}::uuid,current_date,${object.owner_user_id??director}::uuid,${director}::uuid)
+    VALUES(${org}::uuid,${worker}::uuid,${object.id}::uuid,${specialty.id}::uuid,current_date,${director}::uuid,${director}::uuid)
   `;
+  const [workerManager]=await sql`
+    SELECT manager_user_id FROM worker_object_assignments
+    WHERE worker_id=${worker}::uuid AND effective_to IS NULL
+  `;
+  assert.equal(workerManager.manager_user_id,object.owner_user_id,"worker assignment trigger must override an arbitrary manager with the object manager");
 
   const location=randomUUID();
   const item=randomUUID();
