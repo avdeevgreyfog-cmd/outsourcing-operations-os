@@ -542,7 +542,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
 }
 
 
-export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null};
+export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null};
 export type WorkerAbsenceRow={id:string;absenceType:string;status:string;plannedFrom:string;plannedTo:string|null;actualFrom:string|null;actualTo:string|null;flexibleReturn:boolean;note:string|null};
 export type WorkerOperationsDetails={assignments:WorkerAssignmentHistoryRow[];absences:WorkerAbsenceRow[]};
 
@@ -552,7 +552,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
     const worker=demo.workers.find(row=>row.id===workerId);
     if(!worker)return {assignments:[],absences:[]};
     return {
-      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null}]:[],
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:worker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:worker.paidHoursPerShift==null?null:Number(worker.paidHoursPerShift)}]:[],
       absences:[],
     };
   }
@@ -569,7 +569,8 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
     const [assignments,absences]=await Promise.all([
       sql<WorkerAssignmentHistoryRow[]>`
         SELECT a.id,a.object_id "objectId",o.name object,a.specialty_id "specialtyId",s.name specialty,
-          to_char(a.effective_from,'DD.MM.YYYY') "effectiveFrom",to_char(a.effective_to,'DD.MM.YYYY') "effectiveTo",u.display_name manager
+          to_char(a.effective_from,'DD.MM.YYYY') "effectiveFrom",to_char(a.effective_to,'DD.MM.YYYY') "effectiveTo",u.display_name manager,
+          a.work_mode "workMode",a.paid_hours_per_shift::numeric "paidHoursPerShift"
         FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
         LEFT JOIN specialties s ON s.id=a.specialty_id LEFT JOIN app_users u ON u.id=a.manager_user_id
         WHERE a.worker_id=${workerId}::uuid ORDER BY a.effective_from DESC
