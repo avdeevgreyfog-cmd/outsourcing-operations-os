@@ -11,6 +11,7 @@ type ScopedRow = {
   teamId?: string; orgUnitId?: string; regionId?: string; objectId?: string; clientId?: string;
 };
 export type ClientRow = ScopedRow & { id:string; name:string; legalName?:string|null; status:string; contacts:number; requests:number; objects:number };
+export type ClientContactRow = ScopedRow & { id:string; clientId:string; fullName:string; position?:string|null; phone?:string|null; email?:string|null; telegram?:string|null; whatsapp?:string|null; maxContact?:string|null; preferredChannel?:string|null; objectAssignments:{objectId:string;object:string;roles:string[]}[] };
 export type RequestRoleRow = { name:string; count:number };
 export type RequestRow = ScopedRow & { id:string; title:string; client:string; status:string; location:string; start?:string|null; roles:RequestRoleRow[]; schedule?:unknown; housing?:string|null; vat?:string|null };
 export type CalculationRow = ScopedRow & { id:string; requestId:string; request:string; role:string; name:string; model:string; status:string; workerNet:number|string; totalCost:number|string; clientRate:number|string; marginPct:number|string; monthlyContribution:number|string };
@@ -58,6 +59,38 @@ export async function listClients(actor: Actor): Promise<ClientRow[]> {
       ORDER BY c.name
     `;
     return rows.filter((row) => canReadRow(actor.access, "sales.client.read", row, actor));
+  });
+}
+
+export async function listClientContacts(actor: Actor, clientId: string): Promise<ClientContactRow[]> {
+  requireCapability(actor, "sales.client.read");
+  if (actor.demo) {
+    const client = demo.clients.find(row => row.id === clientId && canReadRow(actor.access, "sales.client.read", row, actor));
+    if (!client) return [];
+    return [{
+      id:"demo-client-contact",organizationId:actor.organizationId,clientId,fullName:"Алексей Петров",position:"Начальник участка",
+      phone:"+7 900 555-01-01",email:"object@example.ru",telegram:"@object_contact",whatsapp:"+7 900 555-01-01",maxContact:null,preferredChannel:"telegram",
+      objectAssignments:demo.objects.filter(row=>row.clientId===clientId).slice(0,2).map(row=>({objectId:row.id,object:row.name,roles:["operations","timesheet"]})),
+    }];
+  }
+  return withTenant(actor.organizationId, actor.userId, async sql => {
+    const [client] = await sql<Array<{id:string;organizationId:string;ownerUserId:string|null;regionId:string|null;teamId:string|null}>>`
+      SELECT id,organization_id "organizationId",owner_user_id "ownerUserId",region_id "regionId",assigned_team_id "teamId"
+      FROM client_companies WHERE id=${clientId}::uuid
+    `;
+    if(!client||!canReadRow(actor.access,"sales.client.read",{...client,clientId:client.id},actor))return [];
+    return sql<ClientContactRow[]>`
+      SELECT c.id,c.organization_id "organizationId",c.client_company_id "clientId",c.full_name "fullName",c.position,c.phone,c.email,
+        c.telegram,c.whatsapp,c.max_contact "maxContact",c.communication_preference "preferredChannel",
+        COALESCE(jsonb_agg(jsonb_build_object('objectId',o.id,'object',o.name,'roles',oca.roles) ORDER BY o.name)
+          FILTER (WHERE oca.id IS NOT NULL AND oca.active),'[]'::jsonb) "objectAssignments"
+      FROM contacts c
+      LEFT JOIN object_contact_assignments oca ON oca.contact_id=c.id AND oca.active
+      LEFT JOIN objects o ON o.id=oca.object_id
+      WHERE c.client_company_id=${clientId}::uuid
+      GROUP BY c.id
+      ORDER BY c.full_name
+    `;
   });
 }
 
