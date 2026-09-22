@@ -5,7 +5,7 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
-const schema=z.object({objectId:z.string().uuid(),specialtyId:z.string().uuid(),effectiveFrom:z.string().date(),managerUserId:z.string().uuid().nullable().optional()});
+const schema=z.object({objectId:z.string().uuid(),specialtyId:z.string().uuid(),effectiveFrom:z.string().date()});
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -27,6 +27,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM objects o WHERE o.id=${body.objectId}::uuid
       `;
       if(!target||!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:target.id,ownerUserId:target.ownerUserId,regionId:target.regionId,assigneeUserIds:target.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
+      if(!target.ownerUserId)throw new Error("У целевого объекта не назначен менеджер. Сначала назначьте менеджера объекта.");
       await tx`
         UPDATE worker_object_assignments SET effective_to=(${body.effectiveFrom}::date-1)
         WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<${body.effectiveFrom}::date
@@ -37,7 +38,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       `;
       await tx`
         INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.effectiveFrom}::date,${body.managerUserId??target.ownerUserId??actor.userId}::uuid,${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.effectiveFrom}::date,${target.ownerUserId}::uuid,${actor.userId}::uuid)
       `;
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
