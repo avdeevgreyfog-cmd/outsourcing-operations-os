@@ -74,6 +74,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
       <div className="workspace-grid">
         <Section title="Текущий статус"><div style={{padding:"6px 15px 14px"}}>
           <KeyValue label="Объект" value={worker.object?<Link href={"/objects/"+worker.objectId}>{worker.object}</Link>:"Не назначен"}/>
+          <KeyValue label="Менеджер объекта" value={worker.managerName??"—"}/>
           <KeyValue label="Оформление" value={worker.employment??"—"}/>
           <KeyValue label="Источник" value={worker.origin??worker.source??"—"}/>
           <KeyValue label="Первичный рекрутер" value={worker.originalRecruiter??"—"}/>
