@@ -71,6 +71,33 @@ export const clients = [
   }
 ];
 
+
+export const clientContacts = [
+  {id:"8d000000-0000-4000-8000-000000000001",clientId:"70000000-0000-4000-8000-000000000001",fullName:"Алексей Петров",position:"Начальник участка",phone:"+7 900 555-01-01",email:"a.petrov@example.ru",telegram:"@petrov_object",whatsapp:"+7 900 555-01-01",maxContact:null,preferredChannel:"telegram"},
+  {id:"8d000000-0000-4000-8000-000000000006",clientId:"70000000-0000-4000-8000-000000000001",fullName:"Ольга Демина",position:"Бухгалтер по первичным документам",phone:"+7 900 555-01-06",email:"o.demina@example.ru",telegram:null,whatsapp:null,maxContact:null,preferredChannel:"email"},
+  {id:"8d000000-0000-4000-8000-000000000002",clientId:"70000000-0000-4000-8000-000000000002",fullName:"Игорь Крылов",position:"Руководитель производства",phone:"+7 900 555-02-02",email:"i.krylov@example.ru",telegram:null,whatsapp:"+7 900 555-02-02",maxContact:null,preferredChannel:"phone"},
+  {id:"8d000000-0000-4000-8000-000000000007",clientId:"70000000-0000-4000-8000-000000000002",fullName:"Наталья Орехова",position:"Специалист по документообороту",phone:"+7 900 555-02-07",email:"n.orekhova@example.ru",telegram:"@orekhova_docs",whatsapp:null,maxContact:null,preferredChannel:"telegram"},
+  {id:"8d000000-0000-4000-8000-000000000003",clientId:"70000000-0000-4000-8000-000000000003",fullName:"Марина Белова",position:"Специалист по персоналу",phone:"+7 900 555-03-03",email:"m.belova@example.ru",telegram:"@belova_hr",whatsapp:null,maxContact:null,preferredChannel:"telegram"},
+  {id:"8d000000-0000-4000-8000-000000000008",clientId:"70000000-0000-4000-8000-000000000003",fullName:"Роман Лыткин",position:"Инженер по охране труда",phone:"+7 900 555-03-08",email:"r.lytkin@example.ru",telegram:null,whatsapp:"+7 900 555-03-08",maxContact:null,preferredChannel:"whatsapp"},
+  {id:"8d000000-0000-4000-8000-000000000004",clientId:"70000000-0000-4000-8000-000000000004",fullName:"Олег Серов",position:"Начальник смены",phone:"+7 900 555-04-04",email:"o.serov@example.ru",telegram:null,whatsapp:"+7 900 555-04-04",maxContact:"+7 900 555-04-04",preferredChannel:"whatsapp"},
+  {id:"8d000000-0000-4000-8000-000000000009",clientId:"70000000-0000-4000-8000-000000000004",fullName:"Виктория Громова",position:"Координатор подрядчиков",phone:"+7 900 555-04-09",email:"v.gromova@example.ru",telegram:"@gromova_market",whatsapp:null,maxContact:null,preferredChannel:"telegram"},
+  {id:"8d000000-0000-4000-8000-000000000005",clientId:"70000000-0000-4000-8000-000000000005",fullName:"Елена Павлова",position:"Администратор объекта",phone:"+7 900 555-05-05",email:"e.pavlova@example.ru",telegram:"@pavlova_admin",whatsapp:null,maxContact:null,preferredChannel:"telegram"},
+  {id:"8d000000-0000-4000-8000-000000000010",clientId:"70000000-0000-4000-8000-000000000005",fullName:"Сергей Власов",position:"Финансовый контролёр",phone:"+7 900 555-05-10",email:"s.vlasov@example.ru",telegram:null,whatsapp:null,maxContact:null,preferredChannel:"email"}
+];
+
+export const objectContactAssignments = [
+  {id:"8e000000-0000-4000-8000-000000000001",objectId:"80000000-0000-4000-8000-000000000001",contactId:"8d000000-0000-4000-8000-000000000001",roles:["operations","timesheet","security"],note:"Основной контакт по ежедневной работе и табелю"},
+  {id:"8e000000-0000-4000-8000-000000000006",objectId:"80000000-0000-4000-8000-000000000001",contactId:"8d000000-0000-4000-8000-000000000006",roles:["finance","closing_signer"],note:"Сверка закрывающих документов и первички"},
+  {id:"8e000000-0000-4000-8000-000000000002",objectId:"80000000-0000-4000-8000-000000000002",contactId:"8d000000-0000-4000-8000-000000000002",roles:["operations","timesheet","closing_signer"],note:"Производство, табель и закрывающие документы"},
+  {id:"8e000000-0000-4000-8000-000000000007",objectId:"80000000-0000-4000-8000-000000000002",contactId:"8d000000-0000-4000-8000-000000000007",roles:["documents","approval"],note:"Документы и согласования по персоналу"},
+  {id:"8e000000-0000-4000-8000-000000000003",objectId:"80000000-0000-4000-8000-000000000003",contactId:"8d000000-0000-4000-8000-000000000003",roles:["documents","security","approval"],note:"Документы сотрудников и допуски на объект"},
+  {id:"8e000000-0000-4000-8000-000000000008",objectId:"80000000-0000-4000-8000-000000000003",contactId:"8d000000-0000-4000-8000-000000000008",roles:["security","warehouse_ppe"],note:"Охрана труда, СИЗ и допуски"},
+  {id:"8e000000-0000-4000-8000-000000000004",objectId:"80000000-0000-4000-8000-000000000004",contactId:"8d000000-0000-4000-8000-000000000004",roles:["operations","timesheet","warehouse_ppe"],note:"Смены, табель и выдача СИЗ"},
+  {id:"8e000000-0000-4000-8000-000000000009",objectId:"80000000-0000-4000-8000-000000000004",contactId:"8d000000-0000-4000-8000-000000000009",roles:["approval","documents"],note:"Координация подрядчиков и согласования"},
+  {id:"8e000000-0000-4000-8000-000000000005",objectId:"80000000-0000-4000-8000-000000000005",contactId:"8d000000-0000-4000-8000-000000000005",roles:["operations","documents","finance"],note:"Операционные вопросы, документы и сверки"},
+  {id:"8e000000-0000-4000-8000-000000000010",objectId:"80000000-0000-4000-8000-000000000005",contactId:"8d000000-0000-4000-8000-000000000010",roles:["finance","closing_signer"],note:"Финансовая сверка и закрывающие документы"}
+];
+
 export const requests = [
   {
     "id": "73000000-0000-4000-8000-000000000001",
