@@ -25,6 +25,7 @@ const schema = z.object({
     isPreferred:z.boolean().optional(),
   })).max(20).optional(),
   needId: z.string().uuid(),
+  ownerUserId: z.string().uuid().nullable().optional(),
   nextActionAt: z.string().datetime().nullable().optional(),
 });
 
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
       if (!candidateId) {
         const [candidate] = await tx<Array<{id:string}>>`
           INSERT INTO candidates(organization_id,full_name,phone,email,preferred_channel,telegram,whatsapp,city,source,source_channel,source_campaign,source_reference,notes,original_recruiter_user_id,current_recruiter_user_id,created_by_user_id,status)
-          VALUES(${actor.organizationId}::uuid,${body.fullName},${body.phone??null},${body.email??null},${body.preferredChannel??null},${body.telegram??null},${body.whatsapp??null},${body.city??null},${body.source??'Ручной ввод'},${body.sourceChannel??null},${body.sourceCampaign??null},${body.sourceReference??null},${body.notes??null},${actor.userId}::uuid,${actor.userId}::uuid,${actor.userId}::uuid,'active')
+          VALUES(${actor.organizationId}::uuid,${body.fullName},${body.phone??null},${body.email??null},${body.preferredChannel??null},${body.telegram??null},${body.whatsapp??null},${body.city??null},${body.source??'Ручной ввод'},${body.sourceChannel??null},${body.sourceCampaign??null},${body.sourceReference??null},${body.notes??null},${body.ownerUserId??null}::uuid,${body.ownerUserId??null}::uuid,${actor.userId}::uuid,'active')
           RETURNING id
         `;
         candidateId = candidate.id;
@@ -81,7 +82,10 @@ export async function POST(request: Request) {
         await tx`
           UPDATE candidates SET
             full_name=CASE WHEN full_name='Без имени' AND ${body.fullName}<>'Без имени' THEN ${body.fullName} ELSE full_name END,
-            city=COALESCE(city,${body.city??null}),updated_at=now()
+            city=COALESCE(city,${body.city??null}),
+            original_recruiter_user_id=COALESCE(original_recruiter_user_id,${body.ownerUserId??null}::uuid),
+            current_recruiter_user_id=COALESCE(${body.ownerUserId??null}::uuid,current_recruiter_user_id),
+            updated_at=now()
           WHERE id=${candidateId}::uuid
         `;
       }
@@ -106,7 +110,7 @@ export async function POST(request: Request) {
       const conditionSnapshot = JSON.parse(JSON.stringify(need.conditions ?? {}));
       const [application] = await tx<Array<{id:string}>>`
         INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,next_action_at,owner_user_id,manager_user_id,conditions_snapshot,source_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${body.needId}::uuid,${need.objectId}::uuid,'new',${body.nextActionAt??null}::timestamptz,${need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${sql.json(conditionSnapshot)},${sql.json({source:body.source??"Ручной ввод",channel:body.sourceChannel??null,campaign:body.sourceCampaign??null,reference:body.sourceReference??null})},${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${body.needId}::uuid,${need.objectId}::uuid,'new',${body.nextActionAt??null}::timestamptz,${body.ownerUserId??null}::uuid,${need.managerUserId}::uuid,${sql.json(conditionSnapshot)},${sql.json({source:body.source??"Ручной ввод",channel:body.sourceChannel??null,campaign:body.sourceCampaign??null,reference:body.sourceReference??null})},${actor.userId}::uuid)
         RETURNING id
       `;
       await tx`INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,changed_by_user_id)

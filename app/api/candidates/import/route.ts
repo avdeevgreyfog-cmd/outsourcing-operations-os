@@ -73,11 +73,21 @@ export async function POST(request:Request){
           LIMIT 1
         `;
         let candidateId=existing?.id;
-        if(candidateId)reused++;
-        else{
+        if(candidateId){
+          reused++;
+          if(body.ownerUserId){
+            await tx`
+              UPDATE candidates SET
+                original_recruiter_user_id=COALESCE(original_recruiter_user_id,${body.ownerUserId}::uuid),
+                current_recruiter_user_id=${body.ownerUserId}::uuid,
+                updated_at=now()
+              WHERE id=${candidateId}::uuid
+            `;
+          }
+        }else{
           const [candidate]=await tx<Array<{id:string}>>`
             INSERT INTO candidates(organization_id,full_name,phone,email,preferred_channel,telegram,whatsapp,city,source,source_channel,original_recruiter_user_id,current_recruiter_user_id,created_by_user_id,status)
-            VALUES(${actor.organizationId}::uuid,${row.fullName},${row.phone??null},${row.email??null},${row.preferredChannel??(row.telegram?"telegram":row.whatsapp?"whatsapp":row.max?"max":"phone")},${row.telegram??null},${row.whatsapp??null},${row.city??null},${body.source},'Импорт базы',${body.ownerUserId??actor.userId}::uuid,${body.ownerUserId??actor.userId}::uuid,${actor.userId}::uuid,'active')
+            VALUES(${actor.organizationId}::uuid,${row.fullName},${row.phone??null},${row.email??null},${row.preferredChannel??(row.telegram?"telegram":row.whatsapp?"whatsapp":row.max?"max":"phone")},${row.telegram??null},${row.whatsapp??null},${row.city??null},${body.source},'Импорт базы',${body.ownerUserId??null}::uuid,${body.ownerUserId??null}::uuid,${actor.userId}::uuid,'active')
             RETURNING id
           `;
           candidateId=candidate.id;created++;
@@ -96,7 +106,7 @@ export async function POST(request:Request){
             const conditionSnapshot=JSON.parse(JSON.stringify(need.conditions??{}));
             const [app]=await tx<Array<{id:string}>>`
               INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,owner_user_id,manager_user_id,conditions_snapshot,source_snapshot,created_by_user_id)
-              VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${need.id}::uuid,${need.objectId}::uuid,'new',${body.ownerUserId??need.ownerUserId??actor.userId}::uuid,${need.managerUserId}::uuid,${tx.json(conditionSnapshot)},${tx.json({source:body.source,channel:"Импорт базы",campaign:null,reference:null})},${actor.userId}::uuid)
+              VALUES(${actor.organizationId}::uuid,${candidateId}::uuid,${need.id}::uuid,${need.objectId}::uuid,'new',${body.ownerUserId??null}::uuid,${need.managerUserId}::uuid,${tx.json(conditionSnapshot)},${tx.json({source:body.source,channel:"Импорт базы",campaign:null,reference:null})},${actor.userId}::uuid)
               RETURNING id
             `;
             await tx`

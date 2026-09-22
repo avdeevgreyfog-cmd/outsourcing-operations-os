@@ -52,6 +52,8 @@ test("beta company fixture covers all operating modules",()=>{
     assert.ok(objectWorkers.every(row=>row.managerName===object.ownerName),object.name+" worker manager name");
   }
   assert.ok(new Set(demo.workers.map(row=>row.startDate)).size>=20);
+  const operationsHeadId="10000000-0000-4000-8000-000000000003";
+  assert.ok(demo.objects.every(row=>(row.assigneeUserIds??[]).includes(operationsHeadId)),"operations head must inherit subordinate managers' objects");
 });
 
 test("beta organization is a filled working company",()=>{
