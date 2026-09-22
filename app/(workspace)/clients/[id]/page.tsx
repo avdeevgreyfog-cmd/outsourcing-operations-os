@@ -3,7 +3,7 @@ import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
-import { listCalculations, listClients, listFinance, listObjects, listRequests } from "@/lib/data/service";
+import { listCalculations, listClientContacts, listClients, listFinance, listObjects, listRequests } from "@/lib/data/service";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { Empty, EntityTabs, KeyValue, PageHeader, Section, Status, SummaryStrip } from "@/components/UI";
 import { modelLabel, pct, rub } from "@/lib/ui/format";
@@ -63,11 +63,12 @@ export default async function ClientPage({
   const client = clients.find((item) => item.id === id);
   if (!client) notFound();
 
-  const [requests, objects, calculations, finance] = await Promise.all([
+  const [requests, objects, calculations, finance, contacts] = await Promise.all([
     hasCapability(actor.access, "sales.request.read") ? listRequests(actor) : Promise.resolve([]),
     hasCapability(actor.access, "operations.object.read") ? listObjects(actor) : Promise.resolve([]),
     hasCapability(actor.access, "calculation.scenario.read") ? listCalculations(actor) : Promise.resolve([]),
     canReadFinance ? listFinance(actor) : Promise.resolve([]),
+    listClientContacts(actor,id),
   ]);
 
   const clientRequests = requests.filter((item) => item.clientId === id);
@@ -89,6 +90,7 @@ export default async function ClientPage({
       key === "requests" ? clientRequests.length
       : key === "objects" ? clientObjects.length
       : key === "calculations" ? clientCalculations.length
+      : key === "contacts" ? contacts.length
       : undefined,
   }));
 
@@ -172,8 +174,33 @@ export default async function ClientPage({
       </Section>
     </div>}
 
-    {["contacts", "proposals", "documents", "activity"].includes(tab) && <div className="request-entity-tab-content">
+    {tab === "contacts" && <div className="request-entity-tab-content">
+      <Section title="Контакты клиента" note={contacts.length+" контактов"}>
+        {contacts.length ? <div className="request-table-wrap"><table className="data-table request-registry-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th></tr></thead><tbody>{contacts.map(item => <tr key={item.id}>
+          <td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position || "Должность не указана"}</span></td>
+          <td><strong>{contactPrimary(item)}</strong><span className="cell-sub">{contactSecondary(item)}</span></td>
+          <td>{item.objectAssignments.length ? item.objectAssignments.map(link => <div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role => contactRoleLabels[role]??role).join(" · ")}</span></div>) : "Не привязан к объектам"}</td>
+        </tr>)}</tbody></table></div> : <Empty title="Контактов пока нет" text="Контакты можно добавить при создании клиента или из карточки конкретного объекта."/>}
+      </Section>
+    </div>}
+
+    {["proposals", "documents", "activity"].includes(tab) && <div className="request-entity-tab-content">
       <Section title={labels[tab]}><Empty title="Записей нет" text="В доступном контуре клиента записи этого типа отсутствуют."/></Section>
     </div>}
   </>;
+}
+
+const contactRoleLabels:Record<string,string>={
+  operations:"Операционные вопросы",timesheet:"Табель",security:"СБ / пропуска",warehouse_ppe:"Склад / СИЗ",documents:"Документы",
+  finance:"Финансы",approval:"Согласования",contract_signer:"Подписание договора",closing_signer:"Подписание закрывающих",other:"Другое",
+};
+function contactPrimary(item:{preferredChannel?:string|null;phone?:string|null;email?:string|null;telegram?:string|null;whatsapp?:string|null;maxContact?:string|null}){
+  if(item.preferredChannel==="telegram"&&item.telegram)return "Telegram: "+item.telegram;
+  if(item.preferredChannel==="whatsapp"&&item.whatsapp)return "WhatsApp: "+item.whatsapp;
+  if(item.preferredChannel==="max"&&item.maxContact)return "MAX: "+item.maxContact;
+  if(item.preferredChannel==="email"&&item.email)return item.email;
+  return item.phone??item.telegram??item.whatsapp??item.email??item.maxContact??"—";
+}
+function contactSecondary(item:{phone?:string|null;email?:string|null;telegram?:string|null;whatsapp?:string|null;maxContact?:string|null}){
+  return [item.phone,item.telegram,item.whatsapp,item.email,item.maxContact].filter(Boolean).slice(0,3).join(" · ");
 }
