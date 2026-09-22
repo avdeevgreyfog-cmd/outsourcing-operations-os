@@ -3381,8 +3381,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000012"
     ],
     "employment": "ГПХ",
-    "rate": 430,
-    "rateUnit": "₽/ч",
+    "rate": 4730,
+    "rateUnit": "shift",
     "monthHours": 77,
     "accrued": 33110,
     "paid": 10000,
@@ -3390,7 +3390,16 @@ export const workers = [
     "startDate": "2026-09-03",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 168,
+    "absenceType": "intershift",
+    "absenceStatus": "confirmed",
+    "absenceFrom": "2026-09-18",
+    "absenceTo": "2026-09-28"
   },
   {
     "id": "88000000-0000-4000-8000-000000000002",
@@ -3412,7 +3421,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 88,
     "accrued": 37840,
     "paid": 0,
@@ -3420,7 +3429,12 @@ export const workers = [
     "startDate": "2026-09-05",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 170
   },
   {
     "id": "88000000-0000-4000-8000-000000000003",
@@ -3442,7 +3456,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 99,
     "accrued": 42570,
     "paid": 0,
@@ -3450,7 +3464,12 @@ export const workers = [
     "startDate": "2026-09-07",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 172
   },
   {
     "id": "88000000-0000-4000-8000-000000000004",
@@ -3472,7 +3491,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 110,
     "accrued": 47300,
     "paid": 0,
@@ -3480,7 +3499,12 @@ export const workers = [
     "startDate": "2026-09-09",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 174
   },
   {
     "id": "88000000-0000-4000-8000-000000000005",
@@ -3501,8 +3525,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000012"
     ],
     "employment": "ТК",
-    "rate": 430,
-    "rateUnit": "₽/ч",
+    "rate": 4730,
+    "rateUnit": "shift",
     "monthHours": 121,
     "accrued": 52030,
     "paid": 10000,
@@ -3510,7 +3534,12 @@ export const workers = [
     "startDate": "2026-09-11",
     "specialty": "Грузчик",
     "specialtyId": "60000000-0000-4000-8000-000000000002",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 176
   },
   {
     "id": "88000000-0000-4000-8000-000000000006",
@@ -3532,7 +3561,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 132,
     "accrued": 56760,
     "paid": 5000,
@@ -3540,7 +3569,12 @@ export const workers = [
     "startDate": "2026-09-13",
     "specialty": "Грузчик",
     "specialtyId": "60000000-0000-4000-8000-000000000002",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 178
   },
   {
     "id": "88000000-0000-4000-8000-000000000007",
@@ -3562,7 +3596,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 143,
     "accrued": 61490,
     "paid": 0,
@@ -3570,7 +3604,12 @@ export const workers = [
     "startDate": "2026-09-16",
     "specialty": "Водитель погрузчика",
     "specialtyId": "60000000-0000-4000-8000-000000000003",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 180
   },
   {
     "id": "88000000-0000-4000-8000-000000000008",
@@ -3592,7 +3631,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 77,
     "accrued": 33110,
     "paid": 0,
@@ -3600,7 +3639,12 @@ export const workers = [
     "startDate": "2026-09-18",
     "specialty": "Бригадир",
     "specialtyId": "60000000-0000-4000-8000-000000000004",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 182
   },
   {
     "id": "88000000-0000-4000-8000-000000000009",
@@ -3621,8 +3665,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000013"
     ],
     "employment": "ГПХ",
-    "rate": 430,
-    "rateUnit": "₽/ч",
+    "rate": 4730,
+    "rateUnit": "shift",
     "monthHours": 88,
     "accrued": 37840,
     "paid": 10000,
@@ -3630,7 +3674,12 @@ export const workers = [
     "startDate": "2026-05-12",
     "specialty": "Упаковщик",
     "specialtyId": "60000000-0000-4000-8000-000000000005",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 184
   },
   {
     "id": "88000000-0000-4000-8000-000000000010",
@@ -3652,7 +3701,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 430,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 99,
     "accrued": 42570,
     "paid": 0,
@@ -3660,7 +3709,16 @@ export const workers = [
     "startDate": "2026-05-20",
     "specialty": "Упаковщик",
     "specialtyId": "60000000-0000-4000-8000-000000000005",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 186,
+    "absenceType": "vacation",
+    "absenceStatus": "confirmed",
+    "absenceFrom": "2026-09-25",
+    "absenceTo": "2026-10-04"
   },
   {
     "id": "88000000-0000-4000-8000-000000000011",
@@ -3682,7 +3740,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 110,
     "accrued": 61600,
     "paid": 5000,
@@ -3690,7 +3748,12 @@ export const workers = [
     "startDate": "2026-06-02",
     "specialty": "Упаковщик",
     "specialtyId": "60000000-0000-4000-8000-000000000005",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 188
   },
   {
     "id": "88000000-0000-4000-8000-000000000012",
@@ -3712,7 +3775,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 121,
     "accrued": 67760,
     "paid": 0,
@@ -3720,7 +3783,12 @@ export const workers = [
     "startDate": "2026-06-18",
     "specialty": "Фасовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000006",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 168
   },
   {
     "id": "88000000-0000-4000-8000-000000000013",
@@ -3741,8 +3809,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000013"
     ],
     "employment": "ТК",
-    "rate": 560,
-    "rateUnit": "₽/ч",
+    "rate": 6160,
+    "rateUnit": "shift",
     "monthHours": 132,
     "accrued": 73920,
     "paid": 10000,
@@ -3750,7 +3818,12 @@ export const workers = [
     "startDate": "2026-07-01",
     "specialty": "Фасовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000006",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 170
   },
   {
     "id": "88000000-0000-4000-8000-000000000014",
@@ -3772,7 +3845,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 143,
     "accrued": 80080,
     "paid": 0,
@@ -3780,7 +3853,12 @@ export const workers = [
     "startDate": "2026-07-19",
     "specialty": "Мойщик оборудования",
     "specialtyId": "60000000-0000-4000-8000-000000000007",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 172
   },
   {
     "id": "88000000-0000-4000-8000-000000000015",
@@ -3802,7 +3880,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 77,
     "accrued": 43120,
     "paid": 0,
@@ -3810,7 +3888,12 @@ export const workers = [
     "startDate": "2026-08-03",
     "specialty": "Мойщик оборудования",
     "specialtyId": "60000000-0000-4000-8000-000000000007",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 174
   },
   {
     "id": "88000000-0000-4000-8000-000000000016",
@@ -3832,7 +3915,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 88,
     "accrued": 49280,
     "paid": 5000,
@@ -3840,7 +3923,12 @@ export const workers = [
     "startDate": "2026-08-21",
     "specialty": "Бригадир",
     "specialtyId": "60000000-0000-4000-8000-000000000004",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 176
   },
   {
     "id": "88000000-0000-4000-8000-000000000017",
@@ -3861,8 +3949,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000013"
     ],
     "employment": "ГПХ",
-    "rate": 560,
-    "rateUnit": "₽/ч",
+    "rate": 6160,
+    "rateUnit": "shift",
     "monthHours": 99,
     "accrued": 55440,
     "paid": 10000,
@@ -3870,7 +3958,12 @@ export const workers = [
     "startDate": "2026-09-10",
     "specialty": "Бригадир",
     "specialtyId": "60000000-0000-4000-8000-000000000004",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 178
   },
   {
     "id": "88000000-0000-4000-8000-000000000018",
@@ -3892,7 +3985,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 110,
     "accrued": 61600,
     "paid": 0,
@@ -3900,7 +3993,16 @@ export const workers = [
     "startDate": "2026-03-25",
     "specialty": "Электромонтажник",
     "specialtyId": "60000000-0000-4000-8000-000000000008",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 180,
+    "absenceType": "intershift",
+    "absenceStatus": "confirmed",
+    "absenceFrom": "2026-09-20",
+    "absenceTo": "2026-10-01"
   },
   {
     "id": "88000000-0000-4000-8000-000000000019",
@@ -3922,7 +4024,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 121,
     "accrued": 67760,
     "paid": 0,
@@ -3930,7 +4032,12 @@ export const workers = [
     "startDate": "2026-04-02",
     "specialty": "Электромонтажник",
     "specialtyId": "60000000-0000-4000-8000-000000000008",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 182
   },
   {
     "id": "88000000-0000-4000-8000-000000000020",
@@ -3952,7 +4059,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 132,
     "accrued": 73920,
     "paid": 0,
@@ -3960,7 +4067,12 @@ export const workers = [
     "startDate": "2026-04-17",
     "specialty": "Электромонтажник",
     "specialtyId": "60000000-0000-4000-8000-000000000008",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 184
   },
   {
     "id": "88000000-0000-4000-8000-000000000021",
@@ -3981,8 +4093,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000014"
     ],
     "employment": "ТК",
-    "rate": 560,
-    "rateUnit": "₽/ч",
+    "rate": 6160,
+    "rateUnit": "shift",
     "monthHours": 143,
     "accrued": 80080,
     "paid": 10000,
@@ -3990,7 +4102,12 @@ export const workers = [
     "startDate": "2026-05-05",
     "specialty": "Сборщик",
     "specialtyId": "60000000-0000-4000-8000-000000000009",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 186
   },
   {
     "id": "88000000-0000-4000-8000-000000000022",
@@ -4012,7 +4129,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 77,
     "accrued": 43120,
     "paid": 0,
@@ -4020,7 +4137,12 @@ export const workers = [
     "startDate": "2026-05-21",
     "specialty": "Сборщик",
     "specialtyId": "60000000-0000-4000-8000-000000000009",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 188
   },
   {
     "id": "88000000-0000-4000-8000-000000000023",
@@ -4042,7 +4164,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 88,
     "accrued": 49280,
     "paid": 0,
@@ -4050,7 +4172,12 @@ export const workers = [
     "startDate": "2026-06-10",
     "specialty": "Сборщик",
     "specialtyId": "60000000-0000-4000-8000-000000000009",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 168
   },
   {
     "id": "88000000-0000-4000-8000-000000000024",
@@ -4072,7 +4199,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 560,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 99,
     "accrued": 55440,
     "paid": 0,
@@ -4080,7 +4207,12 @@ export const workers = [
     "startDate": "2026-06-29",
     "specialty": "Сборщик",
     "specialtyId": "60000000-0000-4000-8000-000000000009",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 170
   },
   {
     "id": "88000000-0000-4000-8000-000000000025",
@@ -4101,8 +4233,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000014"
     ],
     "employment": "ГПХ",
-    "rate": 560,
-    "rateUnit": "₽/ч",
+    "rate": 6160,
+    "rateUnit": "shift",
     "monthHours": 110,
     "accrued": 61600,
     "paid": 10000,
@@ -4110,7 +4242,12 @@ export const workers = [
     "startDate": "2026-07-14",
     "specialty": "Сварщик",
     "specialtyId": "60000000-0000-4000-8000-000000000010",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 172
   },
   {
     "id": "88000000-0000-4000-8000-000000000026",
@@ -4132,7 +4269,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 121,
     "accrued": 55660,
     "paid": 5000,
@@ -4140,7 +4277,12 @@ export const workers = [
     "startDate": "2026-08-01",
     "specialty": "Разнорабочий",
     "specialtyId": "60000000-0000-4000-8000-000000000011",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 174
   },
   {
     "id": "88000000-0000-4000-8000-000000000027",
@@ -4162,7 +4304,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 132,
     "accrued": 60720,
     "paid": 0,
@@ -4170,7 +4312,12 @@ export const workers = [
     "startDate": "2026-08-18",
     "specialty": "Разнорабочий",
     "specialtyId": "60000000-0000-4000-8000-000000000011",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 176
   },
   {
     "id": "88000000-0000-4000-8000-000000000028",
@@ -4192,7 +4339,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 143,
     "accrued": 65780,
     "paid": 0,
@@ -4200,7 +4347,12 @@ export const workers = [
     "startDate": "2026-09-01",
     "specialty": "Бригадир",
     "specialtyId": "60000000-0000-4000-8000-000000000004",
-    "managerName": "Павел Никитин"
+    "managerName": "Павел Никитин",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 178
   },
   {
     "id": "88000000-0000-4000-8000-000000000029",
@@ -4221,8 +4373,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000012"
     ],
     "employment": "ТК",
-    "rate": 460,
-    "rateUnit": "₽/ч",
+    "rate": 5060,
+    "rateUnit": "shift",
     "monthHours": 77,
     "accrued": 35420,
     "paid": 10000,
@@ -4230,7 +4382,12 @@ export const workers = [
     "startDate": "2026-07-08",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 180
   },
   {
     "id": "88000000-0000-4000-8000-000000000030",
@@ -4252,7 +4409,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 88,
     "accrued": 40480,
     "paid": 0,
@@ -4260,7 +4417,16 @@ export const workers = [
     "startDate": "2026-07-15",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 182,
+    "absenceType": "sick",
+    "absenceStatus": "confirmed",
+    "absenceFrom": "2026-09-21",
+    "absenceTo": "2026-09-24"
   },
   {
     "id": "88000000-0000-4000-8000-000000000031",
@@ -4282,7 +4448,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 99,
     "accrued": 45540,
     "paid": 5000,
@@ -4290,7 +4456,12 @@ export const workers = [
     "startDate": "2026-07-23",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 184
   },
   {
     "id": "88000000-0000-4000-8000-000000000032",
@@ -4312,7 +4483,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 110,
     "accrued": 50600,
     "paid": 0,
@@ -4320,7 +4491,12 @@ export const workers = [
     "startDate": "2026-08-02",
     "specialty": "Комплектовщик",
     "specialtyId": "60000000-0000-4000-8000-000000000001",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 186
   },
   {
     "id": "88000000-0000-4000-8000-000000000033",
@@ -4341,8 +4517,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000012"
     ],
     "employment": "ГПХ",
-    "rate": 460,
-    "rateUnit": "₽/ч",
+    "rate": 5060,
+    "rateUnit": "shift",
     "monthHours": 121,
     "accrued": 55660,
     "paid": 10000,
@@ -4350,7 +4526,12 @@ export const workers = [
     "startDate": "2026-08-11",
     "specialty": "Приёмщик товара",
     "specialtyId": "60000000-0000-4000-8000-000000000012",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 188
   },
   {
     "id": "88000000-0000-4000-8000-000000000034",
@@ -4372,7 +4553,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 132,
     "accrued": 60720,
     "paid": 0,
@@ -4380,7 +4561,12 @@ export const workers = [
     "startDate": "2026-08-20",
     "specialty": "Упаковщик",
     "specialtyId": "60000000-0000-4000-8000-000000000005",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 168
   },
   {
     "id": "88000000-0000-4000-8000-000000000035",
@@ -4402,7 +4588,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 143,
     "accrued": 65780,
     "paid": 0,
@@ -4410,7 +4596,12 @@ export const workers = [
     "startDate": "2026-08-29",
     "specialty": "Упаковщик",
     "specialtyId": "60000000-0000-4000-8000-000000000005",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 170
   },
   {
     "id": "88000000-0000-4000-8000-000000000036",
@@ -4432,7 +4623,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 460,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 77,
     "accrued": 35420,
     "paid": 5000,
@@ -4440,7 +4631,12 @@ export const workers = [
     "startDate": "2026-09-05",
     "specialty": "Упаковщик",
     "specialtyId": "60000000-0000-4000-8000-000000000005",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 172
   },
   {
     "id": "88000000-0000-4000-8000-000000000037",
@@ -4461,8 +4657,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000012"
     ],
     "employment": "ТК",
-    "rate": 410,
-    "rateUnit": "₽/ч",
+    "rate": 4510,
+    "rateUnit": "shift",
     "monthHours": 88,
     "accrued": 36080,
     "paid": 10000,
@@ -4470,7 +4666,12 @@ export const workers = [
     "startDate": "2026-09-12",
     "specialty": "Бригадир",
     "specialtyId": "60000000-0000-4000-8000-000000000004",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 174
   },
   {
     "id": "88000000-0000-4000-8000-000000000038",
@@ -4492,7 +4693,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 410,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 99,
     "accrued": 40590,
     "paid": 0,
@@ -4500,7 +4701,16 @@ export const workers = [
     "startDate": "2026-06-05",
     "specialty": "Уборщик производственных помещений",
     "specialtyId": "60000000-0000-4000-8000-000000000013",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 176,
+    "absenceType": "intershift",
+    "absenceStatus": "confirmed",
+    "absenceFrom": "2026-09-16",
+    "absenceTo": "2026-09-25"
   },
   {
     "id": "88000000-0000-4000-8000-000000000039",
@@ -4522,7 +4732,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 410,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 110,
     "accrued": 45100,
     "paid": 0,
@@ -4530,7 +4740,12 @@ export const workers = [
     "startDate": "2026-06-22",
     "specialty": "Уборщик производственных помещений",
     "specialtyId": "60000000-0000-4000-8000-000000000013",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 178
   },
   {
     "id": "88000000-0000-4000-8000-000000000040",
@@ -4552,7 +4767,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 410,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 121,
     "accrued": 49610,
     "paid": 0,
@@ -4560,7 +4775,12 @@ export const workers = [
     "startDate": "2026-07-09",
     "specialty": "Уборщик производственных помещений",
     "specialtyId": "60000000-0000-4000-8000-000000000013",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "56",
+    "shoeSize": "45",
+    "heightCm": 180
   },
   {
     "id": "88000000-0000-4000-8000-000000000041",
@@ -4581,8 +4801,8 @@ export const workers = [
       "10000000-0000-4000-8000-000000000014"
     ],
     "employment": "ГПХ",
-    "rate": 410,
-    "rateUnit": "₽/ч",
+    "rate": 4510,
+    "rateUnit": "shift",
     "monthHours": 132,
     "accrued": 54120,
     "paid": 10000,
@@ -4590,7 +4810,12 @@ export const workers = [
     "startDate": "2026-07-27",
     "specialty": "Оператор поломоечной машины",
     "specialtyId": "60000000-0000-4000-8000-000000000014",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "48",
+    "shoeSize": "41",
+    "heightCm": 182
   },
   {
     "id": "88000000-0000-4000-8000-000000000042",
@@ -4612,7 +4837,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 410,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 143,
     "accrued": 58630,
     "paid": 0,
@@ -4620,7 +4845,12 @@ export const workers = [
     "startDate": "2026-08-13",
     "specialty": "Разнорабочий",
     "specialtyId": "60000000-0000-4000-8000-000000000011",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "50",
+    "shoeSize": "42",
+    "heightCm": 184
   },
   {
     "id": "88000000-0000-4000-8000-000000000043",
@@ -4642,7 +4872,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 410,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 77,
     "accrued": 31570,
     "paid": 0,
@@ -4650,7 +4880,12 @@ export const workers = [
     "startDate": "2026-08-30",
     "specialty": "Разнорабочий",
     "specialtyId": "60000000-0000-4000-8000-000000000011",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "local",
+    "paidHoursPerShift": 11,
+    "clothingSize": "52",
+    "shoeSize": "43",
+    "heightCm": 186
   },
   {
     "id": "88000000-0000-4000-8000-000000000044",
@@ -4672,7 +4907,7 @@ export const workers = [
     ],
     "employment": "ТК",
     "rate": 410,
-    "rateUnit": "₽/ч",
+    "rateUnit": "hour",
     "monthHours": 88,
     "accrued": 36080,
     "paid": 0,
@@ -4680,7 +4915,12 @@ export const workers = [
     "startDate": "2026-09-15",
     "specialty": "Бригадир",
     "specialtyId": "60000000-0000-4000-8000-000000000004",
-    "managerName": "Дмитрий Орлов"
+    "managerName": "Дмитрий Орлов",
+    "workMode": "rotation",
+    "paidHoursPerShift": 11,
+    "clothingSize": "54",
+    "shoeSize": "44",
+    "heightCm": 188
   }
 ];
 
