@@ -23,7 +23,9 @@ const schema=z.object({
   rateUnit:z.enum(["hour","shift","month"]).default("hour"),
   workMode:z.enum(["local","rotation"]).default("local"),
   paidHoursPerShift:z.number().positive().max(24).nullable().optional(),
-}).superRefine((value,ctx)=>{\n  if(value.rate&&value.rateUnit==="shift"&&!value.paidHoursPerShift)ctx.addIssue({code:"custom",path:["paidHoursPerShift"],message:"Для ставки за смену укажите оплачиваемые часы"});\n}).refine(value=>(!value.objectId&&!value.specialtyId)||(Boolean(value.objectId)&&Boolean(value.specialtyId)),{message:"Объект и специальность указываются вместе"});
+}).superRefine((value,ctx)=>{
+  if(value.rate&&value.rateUnit==="shift"&&!value.paidHoursPerShift)ctx.addIssue({code:"custom",path:["paidHoursPerShift"],message:"Для ставки за смену укажите оплачиваемые часы"});
+}).refine(value=>(!value.objectId&&!value.specialtyId)||(Boolean(value.objectId)&&Boolean(value.specialtyId)),{message:"Объект и специальность указываются вместе"});
 
 export async function POST(request:Request){
   try{
