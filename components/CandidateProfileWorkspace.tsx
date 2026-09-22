@@ -55,7 +55,9 @@ export function CandidateProfileWorkspace({profile,candidateId,options,needs,dem
     ...(profile??{
       id:candidateId,fullName:first?.fullName??"Кандидат",phone:first?.phone??null,email:first?.email??null,preferredChannel:first?.preferredChannel??null,
       telegram:first?.telegram??null,whatsapp:first?.whatsapp??null,contacts:[],city:first?.city??null,birthDate:null,source:first?.source??null,sourceChannel:first?.sourceChannel??null,
-      sourceCampaign:first?.sourceCampaign??null,sourceReference:first?.sourceReference??null,notes:null,status:"active",workerId:null,workerStatus:null,documents:[],applications:[],communications:[],history:[],
+      sourceCampaign:first?.sourceCampaign??null,sourceReference:first?.sourceReference??null,notes:null,status:"active",
+      originalRecruiter:first?.originalRecruiter??null,currentRecruiter:first?.owner??null,
+      workerId:null,workerStatus:null,documents:[],applications:[],communications:[],history:[],
     }),
     ...custom,
     applications:apps,
