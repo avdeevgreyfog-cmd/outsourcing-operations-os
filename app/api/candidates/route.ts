@@ -26,6 +26,7 @@ const schema = z.object({
   })).max(20).optional(),
   needId: z.string().uuid(),
   ownerUserId: z.string().uuid().nullable().optional(),
+  originalRecruiterUserId: z.string().uuid().nullable().optional(),
   nextActionAt: z.string().datetime().nullable().optional(),
 });
 
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       if (!candidateId) {
         const [candidate] = await tx<Array<{id:string}>>`
           INSERT INTO candidates(organization_id,full_name,phone,email,preferred_channel,telegram,whatsapp,city,source,source_channel,source_campaign,source_reference,notes,original_recruiter_user_id,current_recruiter_user_id,created_by_user_id,status)
-          VALUES(${actor.organizationId}::uuid,${body.fullName},${body.phone??null},${body.email??null},${body.preferredChannel??null},${body.telegram??null},${body.whatsapp??null},${body.city??null},${body.source??'Ручной ввод'},${body.sourceChannel??null},${body.sourceCampaign??null},${body.sourceReference??null},${body.notes??null},${body.ownerUserId??null}::uuid,${body.ownerUserId??null}::uuid,${actor.userId}::uuid,'active')
+          VALUES(${actor.organizationId}::uuid,${body.fullName},${body.phone??null},${body.email??null},${body.preferredChannel??null},${body.telegram??null},${body.whatsapp??null},${body.city??null},${body.source??'Ручной ввод'},${body.sourceChannel??null},${body.sourceCampaign??null},${body.sourceReference??null},${body.notes??null},${body.originalRecruiterUserId??null}::uuid,${body.ownerUserId??null}::uuid,${actor.userId}::uuid,'active')
           RETURNING id
         `;
         candidateId = candidate.id;
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
           UPDATE candidates SET
             full_name=CASE WHEN full_name='Без имени' AND ${body.fullName}<>'Без имени' THEN ${body.fullName} ELSE full_name END,
             city=COALESCE(city,${body.city??null}),
-            original_recruiter_user_id=COALESCE(original_recruiter_user_id,${body.ownerUserId??null}::uuid),
+            original_recruiter_user_id=COALESCE(original_recruiter_user_id,${body.originalRecruiterUserId??null}::uuid),
             current_recruiter_user_id=COALESCE(${body.ownerUserId??null}::uuid,current_recruiter_user_id),
             updated_at=now()
           WHERE id=${candidateId}::uuid
