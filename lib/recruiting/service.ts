@@ -46,6 +46,8 @@ export type RecruitingNeedRow = {
   status: string;
   ownerUserId: string | null;
   owner: string | null;
+  originalRecruiterUserId?: string | null;
+  originalRecruiter?: string | null;
   managerUserId: string | null;
   manager: string | null;
   assigneeUserIds: string[];
@@ -194,6 +196,8 @@ export type CandidateProfile = {
   sourceReference: string | null;
   notes: string | null;
   status: string;
+  originalRecruiter: string | null;
+  currentRecruiter: string | null;
   workerId: string | null;
   workerStatus: string | null;
   documents: CandidateDocumentDossierRow[];
@@ -687,6 +691,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
       ],
       city:first.city, birthDate:null, source:first.source, sourceChannel:first.sourceChannel,
       sourceCampaign:first.sourceCampaign, sourceReference:first.sourceReference, notes:"Демонстрационная карточка кандидата с историей подбора.", status,
+      originalRecruiter:first.originalRecruiter??first.owner??null,currentRecruiter:first.owner??null,
       workerId:status==="worker"?`demo-worker-${id}`:null,workerStatus:status==="worker"?"active":null,
       documents:buildDemoCandidateDocuments(applications),
       applications,
@@ -700,10 +705,14 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
     }>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
         c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
+        original_recruiter.display_name "originalRecruiter",current_recruiter.display_name "currentRecruiter",
         c.organization_id "organizationId",c.current_recruiter_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
         ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text] "assigneeUserIds",
         wp.id "workerId",wp.status "workerStatus"
-      FROM candidates c LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      FROM candidates c
+      LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      LEFT JOIN app_users original_recruiter ON original_recruiter.id=c.original_recruiter_user_id
+      LEFT JOIN app_users current_recruiter ON current_recruiter.id=c.current_recruiter_user_id
       WHERE c.id=${id}::uuid
     `;
     if (!candidate || !canReadRow(actor.access,"recruiting.candidate.read",candidate,actor)) return null;
