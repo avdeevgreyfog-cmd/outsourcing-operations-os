@@ -203,6 +203,16 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         WHERE id=${current.id}::uuid
       `;
 
+      if(body.ownerUserId!==undefined){
+        await tx`
+          UPDATE candidates SET
+            current_recruiter_user_id=${body.ownerUserId??null}::uuid,
+            original_recruiter_user_id=CASE WHEN ${body.ownerUserId??null}::uuid IS NULL THEN original_recruiter_user_id ELSE COALESCE(original_recruiter_user_id,${body.ownerUserId??null}::uuid) END,
+            updated_at=now()
+          WHERE id=${current.candidateId}::uuid
+        `;
+      }
+
       if(changed)await tx`
         INSERT INTO candidate_stage_history(organization_id,application_id,from_stage,to_stage,reason,reason_code,changed_by_user_id)
         VALUES(${actor.organizationId}::uuid,${current.id}::uuid,${current.stage},${body.stage},${body.reason??null},${body.reasonCode??null},${actor.userId}::uuid)
