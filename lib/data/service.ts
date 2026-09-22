@@ -79,7 +79,7 @@ export async function listClientContacts(actor: Actor, clientId: string): Promis
       FROM client_companies WHERE id=${clientId}::uuid
     `;
     if(!client||!canReadRow(actor.access,"sales.client.read",{...client,clientId:client.id},actor))return [];
-    return sql<ClientContactRow[]>`
+    const rows=await sql<ClientContactRow[]>`
       SELECT c.id,c.organization_id "organizationId",c.client_company_id "clientId",c.full_name "fullName",c.position,c.phone,c.email,
         c.telegram,c.whatsapp,c.max_contact "maxContact",c.communication_preference "preferredChannel",
         COALESCE(jsonb_agg(jsonb_build_object('objectId',o.id,'object',o.name,'roles',oca.roles) ORDER BY o.name)
@@ -91,6 +91,13 @@ export async function listClientContacts(actor: Actor, clientId: string): Promis
       GROUP BY c.id
       ORDER BY c.full_name
     `;
+    const objectScopes=await sql<Array<{organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string;assigneeUserIds:string[]}>>`
+      SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",o.client_company_id "clientId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM objects o WHERE o.client_company_id=${clientId}::uuid
+    `;
+    const visibleObjectIds=new Set(objectScopes.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor)).map(row=>row.objectId));
+    return rows.map(row=>({...row,objectAssignments:row.objectAssignments.filter(item=>visibleObjectIds.has(item.objectId))}));
   });
 }
 
