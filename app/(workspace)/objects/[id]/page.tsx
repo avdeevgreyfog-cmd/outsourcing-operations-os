@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listCandidates,listFinance,listIncidents,listLaunchTasks,listNeeds,listObjects,listShifts,listWorkers } from "@/lib/data/service";
 import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
-import { hasCapability } from "@/lib/core/access.mjs";
+import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { pct,rub } from "@/lib/ui/format";
@@ -51,7 +51,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canAssets=hasCapability(actor.access,"assets.read");
   const canHousing=hasCapability(actor.access,"supply.housing.read");
   const canProcurement=hasCapability(actor.access,"procurement.read");
-  const canEditObject=hasCapability(actor.access,"operations.object.edit");
+  const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
 
   const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
     canNeeds?listNeeds(actor):Promise.resolve([]),
