@@ -119,7 +119,7 @@ async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnaps
       SELECT e.worker_id,
         COALESCE(sum(CASE rate.unit
           WHEN 'hour' THEN e.hours*rate.amount
-          WHEN 'shift' THEN CASE WHEN e.hours>0 THEN rate.amount ELSE 0 END
+          WHEN 'shift' THEN CASE WHEN e.hours>0 AND assignment.paid_hours_per_shift>0 THEN e.hours*(rate.amount/assignment.paid_hours_per_shift) WHEN e.hours>0 THEN rate.amount ELSE 0 END
           WHEN 'month' THEN 0
           ELSE e.hours*rate.amount END),0)::numeric base,
         COALESCE(max(CASE WHEN rate.unit='month' AND e.hours>0 THEN rate.amount ELSE 0 END),0)::numeric monthly
@@ -130,6 +130,12 @@ async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnaps
           AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date)
         ORDER BY r.effective_from DESC LIMIT 1
       ) rate ON true
+      LEFT JOIN LATERAL (
+        SELECT a.paid_hours_per_shift FROM worker_object_assignments a
+        WHERE a.worker_id=e.worker_id AND a.object_id=${object.objectId}::uuid
+          AND a.effective_from<=e.work_date AND (a.effective_to IS NULL OR a.effective_to>=e.work_date)
+        ORDER BY a.effective_from DESC LIMIT 1
+      ) assignment ON true
       GROUP BY e.worker_id
     )
     SELECT b.worker_id "workerId",(b.base+b.monthly)::numeric base,
