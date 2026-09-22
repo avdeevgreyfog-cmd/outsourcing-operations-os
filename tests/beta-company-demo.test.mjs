@@ -21,6 +21,16 @@ test("beta company fixture covers all operating modules",()=>{
   assert.equal(demo.needs.length,21);
   assert.equal(demo.candidates.length,50);
   assert.equal(demo.workers.length,44);
+  assert.equal(demo.clientContacts.length,10);
+  assert.equal(demo.objectContactAssignments.length,10);
+  for(const client of demo.clients){
+    assert.equal(demo.clientContacts.filter(row=>row.clientId===client.id).length,client.contacts,client.name+" contact count");
+  }
+  for(const object of demo.objects){
+    const links=demo.objectContactAssignments.filter(row=>row.objectId===object.id);
+    assert.equal(links.length,2,object.name+" object contacts");
+    assert.ok(links.every(link=>demo.clientContacts.some(contact=>contact.id===link.contactId&&contact.clientId===object.clientId)),object.name+" contacts must belong to object client");
+  }
 
   const objectIds=new Set(demo.objects.map(row=>row.id));
   assert.deepEqual(new Set(demo.needs.map(row=>row.objectId)),objectIds);
