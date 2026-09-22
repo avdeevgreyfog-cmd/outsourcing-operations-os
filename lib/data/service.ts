@@ -17,7 +17,7 @@ export type CalculationRow = ScopedRow & { id:string; requestId:string; request:
 export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; targetStart?:string|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
-export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; rate:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
+export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; rate:number|string|null; rateUnit?:string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
 export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; specialtyId:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string; workerIds:string[]; reserveWorkerIds:string[] };
 export type TimesheetCellValue = number|string|null;
 export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,TimesheetCellValue>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
@@ -189,9 +189,11 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
              COALESCE(o.owner_user_id,woa.manager_user_id) "ownerUserId",
              ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
                || ARRAY[COALESCE(o.owner_user_id,woa.manager_user_id)::text] "assigneeUserIds",
-             s.name specialty,woa.specialty_id "specialtyId",woa.effective_from::text "startDate",
+             s.name specialty,woa.specialty_id "specialtyId",woa.effective_from::text "startDate",woa.work_mode "workMode",woa.paid_hours_per_shift "paidHoursPerShift",
+             w.clothing_size "clothingSize",w.shoe_size "shoeSize",w.height_cm "heightCm",
              er.relation_type employment,rec.display_name "originalRecruiter",mgr.display_name "managerName",w.source origin,
-             ${maySeeComp ? sql`wr.amount` : sql`NULL::numeric`} rate,
+             absence.absence_type "absenceType",absence.status "absenceStatus",absence.planned_from::text "absenceFrom",absence.planned_to::text "absenceTo",
+             ${maySeeComp ? sql`wr.amount` : sql`NULL::numeric`} rate,${maySeeComp ? sql`wr.unit` : sql`NULL::text`} "rateUnit",
              ${maySeeComp ? sql`COALESCE(wa.total_amount,0)` : sql`NULL::numeric`} accrued,
              ${maySeeComp ? sql`COALESCE(pay.paid,0)+COALESCE(adv.advances,0)` : sql`NULL::numeric`} paid,
              ${maySeeComp ? sql`GREATEST(COALESCE(wa.total_amount,0)-COALESCE(pay.paid,0)-COALESCE(adv.advances,0),0)` : sql`NULL::numeric`} payable
@@ -206,7 +208,12 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
       LEFT JOIN app_users mgr ON mgr.id=COALESCE(o.owner_user_id,woa.manager_user_id)
       LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
       LEFT JOIN app_users rec ON rec.id=w.original_recruiter_user_id
-      LEFT JOIN LATERAL (SELECT amount FROM worker_rates x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) wr ON true
+      LEFT JOIN LATERAL (
+        SELECT absence_type,status,planned_from,planned_to FROM worker_absence_plans x
+        WHERE x.worker_id=w.id AND x.status IN ('tentative','confirmed') AND COALESCE(x.planned_to,'infinity'::date)>=current_date
+        ORDER BY (x.planned_from<=current_date) DESC,(x.status='confirmed') DESC,x.planned_from LIMIT 1
+      ) absence ON true
+      LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) wr ON true
       LEFT JOIN LATERAL (SELECT id,total_amount,period_start,period_end FROM worker_accruals x WHERE x.worker_id=w.id ORDER BY x.period_end DESC LIMIT 1) wa ON true
       LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric paid FROM worker_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.accrual_id=wa.id)) pay ON true
       LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric advances FROM advance_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.payment_date BETWEEN wa.period_start AND wa.period_end)) adv ON true
@@ -261,13 +268,13 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
 
     const workers=await sql<Array<TimesheetWorkerRow & {organizationId:string}>>`
       SELECT DISTINCT w.id "workerId",w.full_name name,0::numeric total,0::numeric night,0::numeric overtime,
-        ${maySeeComp?sql`wr.amount`:sql`NULL::numeric`} rate,
+        ${maySeeComp?sql`CASE WHEN wr.unit='shift' AND a.paid_hours_per_shift>0 THEN wr.amount/a.paid_hours_per_shift ELSE wr.amount END`:sql`NULL::numeric`} rate,
         ${maySeeComp?sql`wa.total_amount`:sql`NULL::numeric`} accrual,
         w.organization_id "organizationId"
       FROM worker_profiles w
       JOIN worker_object_assignments a ON a.worker_id=w.id
       LEFT JOIN LATERAL (
-        SELECT amount FROM worker_rates r
+        SELECT amount,unit FROM worker_rates r
         WHERE r.worker_id=w.id AND r.object_id=${meta.objectId}::uuid
           AND r.effective_from<=${periodEnd}::date AND (r.effective_to IS NULL OR r.effective_to>=${periodStart}::date)
         ORDER BY r.effective_from DESC LIMIT 1
