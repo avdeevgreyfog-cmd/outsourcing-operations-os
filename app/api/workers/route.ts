@@ -21,7 +21,9 @@ const schema=z.object({
   relationType:z.enum(["employment","gph","npd","custom"]).default("employment"),
   rate:z.number().positive().nullable().optional(),
   rateUnit:z.enum(["hour","shift","month"]).default("hour"),
-}).refine(value=>(!value.objectId&&!value.specialtyId)||(Boolean(value.objectId)&&Boolean(value.specialtyId)),{message:"Объект и специальность указываются вместе"});
+  workMode:z.enum(["local","rotation"]).default("local"),
+  paidHoursPerShift:z.number().positive().max(24).nullable().optional(),
+}).superRefine((value,ctx)=>{\n  if(value.rate&&value.rateUnit==="shift"&&!value.paidHoursPerShift)ctx.addIssue({code:"custom",path:["paidHoursPerShift"],message:"Для ставки за смену укажите оплачиваемые часы"});\n}).refine(value=>(!value.objectId&&!value.specialtyId)||(Boolean(value.objectId)&&Boolean(value.specialtyId)),{message:"Объект и специальность указываются вместе"});
 
 export async function POST(request:Request){
   try{
@@ -60,8 +62,8 @@ export async function POST(request:Request){
       `;
       if(body.objectId&&body.specialtyId){
         await tx`
-          INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.startDate}::date,${object!.ownerUserId}::uuid,${actor.userId}::uuid)
+          INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.startDate}::date,${object!.ownerUserId}::uuid,${body.workMode},${body.paidHoursPerShift??null},${actor.userId}::uuid)
         `;
       }
       if(body.rate&&body.objectId&&body.specialtyId){
@@ -72,7 +74,7 @@ export async function POST(request:Request){
       }
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${worker.id}::uuid,'created',${`Сотрудник добавлен вручную: ${body.fullName}`},${tx.json({objectId:body.objectId??null,specialtyId:body.specialtyId??null,startDate:body.startDate})})
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${worker.id}::uuid,'created',${`Сотрудник добавлен вручную: ${body.fullName}`},${tx.json({objectId:body.objectId??null,specialtyId:body.specialtyId??null,startDate:body.startDate,workMode:body.workMode,paidHoursPerShift:body.paidHoursPerShift??null})})
       `;
       return {duplicate:false,workerId:worker.id};
     }));
