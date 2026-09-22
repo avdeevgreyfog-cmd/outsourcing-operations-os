@@ -848,7 +848,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Критично закрыть состав первой смены к запуску"
+      "comment": "Критично закрыть состав первой смены к запуску",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -895,7 +897,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Критично закрыть состав первой смены к запуску"
+      "comment": "Критично закрыть состав первой смены к запуску",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -942,7 +946,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Критично закрыть состав первой смены к запуску"
+      "comment": "Критично закрыть состав первой смены к запуску",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -989,7 +995,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт управления сменой от 1 года",
-      "comment": "Критично закрыть состав первой смены к запуску"
+      "comment": "Критично закрыть состав первой смены к запуску",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1036,7 +1044,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1083,7 +1093,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1130,7 +1142,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1177,7 +1191,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт управления сменой от 1 года",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1224,7 +1240,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1271,7 +1289,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1318,7 +1338,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1365,7 +1387,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1412,7 +1436,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт управления сменой от 1 года",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1459,7 +1485,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "local",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1506,7 +1534,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "local",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1553,7 +1583,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "local",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1600,7 +1632,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт управления сменой от 1 года",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "local",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1647,7 +1681,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1694,7 +1730,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1741,7 +1779,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт желателен, обучение на объекте",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   },
   {
@@ -1788,7 +1828,9 @@ export const needs = [
       "tools": "Инвентарь выдаётся на объекте",
       "citizenship": "РФ / РБ",
       "requirements": "Опыт управления сменой от 1 года",
-      "comment": "Действующая потребность объекта"
+      "comment": "Действующая потребность объекта",
+      "workMode": "rotation",
+      "paidHoursPerShift": 11
     }
   }
 ];
