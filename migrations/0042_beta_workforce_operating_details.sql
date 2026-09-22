@@ -2,8 +2,18 @@ BEGIN;
 
 DO $$
 DECLARE
-  org_id uuid := '00000000-0000-4000-8000-000000000001'::uuid;
+  org_id constant uuid := '00000000-0000-4000-8000-000000000001'::uuid;
+  director_user constant uuid := '10000000-0000-4000-8000-000000000001'::uuid;
 BEGIN
+  -- Beta data is optional in clean/non-demo installations. Match 0037/0038 and no-op
+  -- when the fixture organization was not created.
+  IF NOT EXISTS (SELECT 1 FROM organizations WHERE id=org_id) THEN
+    RETURN;
+  END IF;
+
+  PERFORM set_config('app.organization_id',org_id::text,true);
+  PERFORM set_config('app.user_id',director_user::text,true);
+
   -- Keep the beta company useful for checking local/rotation logic and size-based PPE.
   WITH ranked AS (
     SELECT id,row_number() OVER(ORDER BY id) rn
