@@ -24,6 +24,9 @@ test('recruiting demo has 50 candidates and covers the complete funnel',()=>{
   }
   assert.equal(demo.candidates.some(x=>['contact','manager_review','approved','ready','started'].includes(x.stage)),false);
   assert.ok(new Set(demo.candidates.map(x=>x.source)).size>=5);
+  const recruiterIds=new Set(["10000000-0000-4000-8000-000000000012","10000000-0000-4000-8000-000000000013","10000000-0000-4000-8000-000000000014"]);
+  assert.ok(demo.candidates.every(x=>recruiterIds.has(x.ownerUserId)));
+  assert.deepEqual(new Set(demo.candidates.map(x=>x.ownerUserId)),recruiterIds);
   assert.ok(demo.candidates.filter(x=>x.stage==='rejected').every(x=>x.rejectionReasonCode&&x.rejectionReason));
   assert.ok(demo.candidates.filter(x=>x.stage==='no_show').every(x=>x.rejectionReasonCode&&x.rejectionReason));
 });
