@@ -15,7 +15,7 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0041_object_contacts.sql"),"object contacts migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
-  const [object]=await sql`SELECT id,owner_user_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
+  const [object]=await sql`SELECT id,owner_user_id,client_company_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
   const [specialty]=await sql`SELECT id FROM specialties WHERE organization_id=${org}::uuid ORDER BY name LIMIT 1`;
   assert.ok(object?.id&&specialty?.id,"seed must provide object and specialty");
 
@@ -55,23 +55,35 @@ try{
       AND o.client_company_id IS DISTINCT FROM c.client_company_id
   `;
   assert.equal(contactMismatch.count,0,"object contacts must belong to the same client as the object");
-  const [seededObjectContacts]=await sql`
-    SELECT count(*)::int count FROM object_contact_assignments
-    WHERE organization_id=${org}::uuid AND active
+
+  const validContact=randomUUID();
+  await sql`
+    INSERT INTO contacts(id,organization_id,client_company_id,full_name,phone,communication_preference,created_by_user_id)
+    VALUES(${validContact}::uuid,${org}::uuid,${object.client_company_id}::uuid,'Integration object contact','+7 900 000-00-01','phone',${director}::uuid)
   `;
-  assert.ok(seededObjectContacts.count>=10,"beta company must provide object contact responsibilities");
-  const [foreignContact]=await sql`
-    SELECT c.id
-    FROM contacts c
-    JOIN objects o ON o.id=${object.id}::uuid
-    WHERE c.organization_id=${org}::uuid AND c.client_company_id<>o.client_company_id
-    ORDER BY c.id LIMIT 1
+  const validAssignment=randomUUID();
+  await sql`
+    INSERT INTO object_contact_assignments(id,organization_id,object_id,contact_id,roles,note,created_by_user_id)
+    VALUES(${validAssignment}::uuid,${org}::uuid,${object.id}::uuid,${validContact}::uuid,ARRAY['operations','timesheet'],'Integration valid contact',${director}::uuid)
   `;
-  assert.ok(foreignContact?.id,"seed must provide a contact from another client");
+  const [validLink]=await sql`SELECT active,roles FROM object_contact_assignments WHERE id=${validAssignment}::uuid`;
+  assert.equal(validLink.active,true,"same-client object contact must be accepted");
+  assert.deepEqual(validLink.roles,["operations","timesheet"]);
+
+  const foreignClient=randomUUID();
+  await sql`
+    INSERT INTO client_companies(id,organization_id,name,status,created_by_user_id)
+    VALUES(${foreignClient}::uuid,${org}::uuid,'Integration foreign client','active',${director}::uuid)
+  `;
+  const foreignContact=randomUUID();
+  await sql`
+    INSERT INTO contacts(id,organization_id,client_company_id,full_name,phone,communication_preference,created_by_user_id)
+    VALUES(${foreignContact}::uuid,${org}::uuid,${foreignClient}::uuid,'Integration foreign contact','+7 900 000-00-02','phone',${director}::uuid)
+  `;
   await assert.rejects(
     sql`
       INSERT INTO object_contact_assignments(organization_id,object_id,contact_id,roles,created_by_user_id)
-      VALUES(${org}::uuid,${object.id}::uuid,${foreignContact.id}::uuid,ARRAY['operations'],${director}::uuid)
+      VALUES(${org}::uuid,${object.id}::uuid,${foreignContact}::uuid,ARRAY['operations'],${director}::uuid)
     `,
     /same client/i,
     "database must reject a contact belonging to another client"
