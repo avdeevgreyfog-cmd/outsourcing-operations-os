@@ -5,7 +5,7 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
-const schema=z.object({objectId:z.string().uuid(),specialtyId:z.string().uuid(),effectiveFrom:z.string().date()});
+const schema=z.object({objectId:z.string().uuid(),specialtyId:z.string().uuid(),effectiveFrom:z.string().date(),workMode:z.enum(["local","rotation"]).default("local"),paidHoursPerShift:z.number().positive().max(24).nullable().optional()});
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -37,12 +37,12 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from>=${body.effectiveFrom}::date
       `;
       await tx`
-        INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.effectiveFrom}::date,${target.ownerUserId}::uuid,${actor.userId}::uuid)
+        INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.effectiveFrom}::date,${target.ownerUserId}::uuid,${body.workMode},${body.paidHoursPerShift??null},${actor.userId}::uuid)
       `;
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'transferred','Изменено назначение сотрудника',${tx.json({fromObjectId:worker.objectId,toObjectId:body.objectId,effectiveFrom:body.effectiveFrom,specialtyId:body.specialtyId})})
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'transferred','Изменено назначение сотрудника',${tx.json({fromObjectId:worker.objectId,toObjectId:body.objectId,effectiveFrom:body.effectiveFrom,specialtyId:body.specialtyId,workMode:body.workMode,paidHoursPerShift:body.paidHoursPerShift??null})})
       `;
     }));
     return NextResponse.json({ok:true},{status:201});
