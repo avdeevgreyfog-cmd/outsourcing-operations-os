@@ -46,8 +46,6 @@ export type RecruitingNeedRow = {
   status: string;
   ownerUserId: string | null;
   owner: string | null;
-  originalRecruiterUserId?: string | null;
-  originalRecruiter?: string | null;
   managerUserId: string | null;
   manager: string | null;
   assigneeUserIds: string[];
@@ -91,6 +89,8 @@ export type RecruitingApplicationRow = {
   clientId: string | null;
   ownerUserId: string | null;
   owner: string | null;
+  originalRecruiterUserId?: string | null;
+  originalRecruiter?: string | null;
   managerUserId: string | null;
   manager: string | null;
   assigneeUserIds: string[];
