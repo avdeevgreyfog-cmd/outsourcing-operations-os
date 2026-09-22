@@ -551,10 +551,14 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
   if(actor.demo){
     const worker=demo.workers.find(row=>row.id===workerId);
     if(!worker)return {assignments:[],absences:[]};
-    const assignmentWorker=worker as typeof worker&{workMode?:string|null;paidHoursPerShift?:number|string|null};
+    const assignmentWorker=worker as typeof worker&{workMode?:string|null;paidHoursPerShift?:number|string|null;absenceType?:string|null;absenceStatus?:string|null;absenceFrom?:string|null;absenceTo?:string|null};
     return {
       assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift)}]:[],
-      absences:[],
+      absences:assignmentWorker.absenceType&&assignmentWorker.absenceFrom?[{
+        id:"demo-absence-"+worker.id,absenceType:assignmentWorker.absenceType,status:assignmentWorker.absenceStatus??"tentative",
+        plannedFrom:assignmentWorker.absenceFrom.split("-").reverse().join("."),plannedTo:assignmentWorker.absenceTo?assignmentWorker.absenceTo.split("-").reverse().join("."):null,
+        actualFrom:null,actualTo:null,flexibleReturn:assignmentWorker.absenceType==="intershift",note:assignmentWorker.absenceType==="intershift"?"Плановая межвахта":null,
+      }]:[],
     };
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
@@ -720,11 +724,19 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
   requireCapability(actor,"operations.need.read");
   const horizon=Math.max(7,Math.min(90,horizonDays));
   if(actor.demo){
+    const today=new Date().toISOString().slice(0,10);
+    const horizonDate=new Date(today+"T00:00:00Z");horizonDate.setUTCDate(horizonDate.getUTCDate()+horizon);
+    const horizonEnd=horizonDate.toISOString().slice(0,10);
     return demo.needs.map((need,index)=>{
       const object=demo.objects.find(row=>row.id===need.objectId);
-      const working=demo.workers.filter(worker=>worker.objectId===need.objectId&&worker.status==="active").length;
-      const preparing=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
-      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,required:Number(need.required),working,preparing,confirmedAbsences:0,tentativeAbsences:0,plannedExits:0,projectedAvailable:working+preparing,projectedDeficit:Math.max(Number(need.required)-working-preparing,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
+      const workers=demo.workers.filter(worker=>worker.objectId===need.objectId&&worker.specialty===need.specialty&&worker.status==="active");
+      const working=workers.length;
+      const preparing=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&candidate.need===need.specialty&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
+      const absences=workers.filter(worker=>worker.absenceStatus&&worker.absenceFrom&&worker.absenceFrom<=horizonEnd&&(!worker.absenceTo||worker.absenceTo>=today));
+      const confirmedAbsences=absences.filter(worker=>worker.absenceStatus==="confirmed").length;
+      const tentativeAbsences=absences.filter(worker=>worker.absenceStatus==="tentative").length;
+      const projectedAvailable=Math.max(working-confirmedAbsences+preparing,0);
+      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
       return row;
     }).filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
   }
