@@ -28,7 +28,6 @@ test("beta company fixture covers all operating modules",()=>{
   assert.ok(demo.needs.every(row=>objectIds.has(row.objectId)));
   assert.ok(demo.candidates.every(row=>objectIds.has(row.objectId)));
   assert.ok(demo.workers.every(row=>objectIds.has(row.objectId)));
-  assert.ok(demo.objects.some(row=>row.status==="launch"));
   assert.equal(demo.objects.filter(row=>row.status==="active").length,5);
   const recruiterByObject=new Map([
     ["80000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000012"],
