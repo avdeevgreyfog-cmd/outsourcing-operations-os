@@ -806,3 +806,42 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
     return rows.filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
   });
 }
+
+export type ObjectContactRow={
+  assignmentId:string;contactId:string;fullName:string;position:string|null;phone:string|null;email:string|null;
+  telegram:string|null;whatsapp:string|null;maxContact:string|null;preferredChannel:string|null;roles:string[];note:string|null;
+};
+export type ClientContactOption={
+  id:string;fullName:string;position:string|null;phone:string|null;email:string|null;telegram:string|null;whatsapp:string|null;maxContact:string|null;preferredChannel:string|null;
+};
+export async function getObjectContacts(actor:Actor,objectId:string):Promise<{assigned:ObjectContactRow[];contacts:ClientContactOption[]}>{
+  requireCapability(actor,"operations.object.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"operations.object.read",row,actor));
+    if(!object)return {assigned:[],contacts:[]};
+    const contact:ClientContactOption={id:"demo-object-contact",fullName:"Алексей Петров",position:"Начальник участка",phone:"+7 900 555-01-01",email:"object@example.ru",telegram:"@object_contact",whatsapp:"+7 900 555-01-01",maxContact:null,preferredChannel:"telegram"};
+    return {contacts:[contact],assigned:[{assignmentId:"demo-object-contact-assignment",contactId:contact.id,fullName:contact.fullName,position:contact.position,phone:contact.phone,email:contact.email,telegram:contact.telegram,whatsapp:contact.whatsapp,maxContact:contact.maxContact,preferredChannel:contact.preferredChannel,roles:["operations","timesheet"],note:"Основной контакт по ежедневной работе"}]};
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const [scope]=await sql<Array<{organizationId:string;objectId:string;clientId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+      SELECT o.organization_id "organizationId",o.id "objectId",o.client_company_id "clientId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM objects o WHERE o.id=${objectId}::uuid
+    `;
+    if(!scope||!canReadRow(actor.access,"operations.object.read",scope,actor))return {assigned:[],contacts:[]};
+    const [assigned,contacts]=await Promise.all([
+      sql<ObjectContactRow[]>`
+        SELECT a.id "assignmentId",c.id "contactId",c.full_name "fullName",c.position,c.phone,c.email,c.telegram,c.whatsapp,c.max_contact "maxContact",
+          c.communication_preference "preferredChannel",a.roles,a.note
+        FROM object_contact_assignments a JOIN contacts c ON c.id=a.contact_id
+        WHERE a.object_id=${objectId}::uuid AND a.active
+        ORDER BY c.full_name
+      `,
+      sql<ClientContactOption[]>`
+        SELECT c.id,c.full_name "fullName",c.position,c.phone,c.email,c.telegram,c.whatsapp,c.max_contact "maxContact",c.communication_preference "preferredChannel"
+        FROM contacts c WHERE c.client_company_id=${scope.clientId}::uuid ORDER BY c.full_name
+      `,
+    ]);
+    return {assigned,contacts};
+  });
+}
