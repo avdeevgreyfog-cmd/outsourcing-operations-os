@@ -116,7 +116,7 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
           code:row.code,
           client:row.client,
           region:row.region,
-          manager:null,
+          manager:row.ownerName??null,
           ownerUserId:row.ownerUserId??null,
           assigneeUserIds:row.assigneeUserIds??[],
           required:Number(row.required??0),
@@ -552,7 +552,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
     const worker=demo.workers.find(row=>row.id===workerId);
     if(!worker)return {assignments:[],absences:[]};
     return {
-      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:null,specialty:null,effectiveFrom:"01.09.2026",effectiveTo:null,manager:null}]:[],
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null}]:[],
       absences:[],
     };
   }
