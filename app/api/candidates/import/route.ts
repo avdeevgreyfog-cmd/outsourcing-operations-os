@@ -78,7 +78,6 @@ export async function POST(request:Request){
           if(body.ownerUserId){
             await tx`
               UPDATE candidates SET
-                original_recruiter_user_id=COALESCE(original_recruiter_user_id,${body.ownerUserId}::uuid),
                 current_recruiter_user_id=${body.ownerUserId}::uuid,
                 updated_at=now()
               WHERE id=${candidateId}::uuid
@@ -87,7 +86,7 @@ export async function POST(request:Request){
         }else{
           const [candidate]=await tx<Array<{id:string}>>`
             INSERT INTO candidates(organization_id,full_name,phone,email,preferred_channel,telegram,whatsapp,city,source,source_channel,original_recruiter_user_id,current_recruiter_user_id,created_by_user_id,status)
-            VALUES(${actor.organizationId}::uuid,${row.fullName},${row.phone??null},${row.email??null},${row.preferredChannel??(row.telegram?"telegram":row.whatsapp?"whatsapp":row.max?"max":"phone")},${row.telegram??null},${row.whatsapp??null},${row.city??null},${body.source},'Импорт базы',${body.ownerUserId??null}::uuid,${body.ownerUserId??null}::uuid,${actor.userId}::uuid,'active')
+            VALUES(${actor.organizationId}::uuid,${row.fullName},${row.phone??null},${row.email??null},${row.preferredChannel??(row.telegram?"telegram":row.whatsapp?"whatsapp":row.max?"max":"phone")},${row.telegram??null},${row.whatsapp??null},${row.city??null},${body.source},'Импорт базы',NULL,${body.ownerUserId??null}::uuid,${actor.userId}::uuid,'active')
             RETURNING id
           `;
           candidateId=candidate.id;created++;
