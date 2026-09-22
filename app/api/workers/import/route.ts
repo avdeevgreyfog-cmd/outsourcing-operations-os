@@ -16,6 +16,8 @@ const rowSchema=z.object({
   relationType:z.enum(["employment","gph","npd","custom"]).nullable().optional(),
   rate:z.number().positive().nullable().optional(),
   rateUnit:z.enum(["hour","shift","month"]).nullable().optional(),
+  workMode:z.enum(["local","rotation"]).nullable().optional(),
+  paidHoursPerShift:z.number().positive().max(24).nullable().optional(),
 });
 const schema=z.object({
   rows:z.array(rowSchema).min(1).max(1000),
@@ -23,6 +25,8 @@ const schema=z.object({
   specialtyId:z.string().uuid().nullable().optional(),
   startDate:z.string().date(),
   relationType:z.enum(["employment","gph","npd","custom"]).default("employment"),
+  workMode:z.enum(["local","rotation"]).default("local"),
+  paidHoursPerShift:z.number().positive().max(24).nullable().optional(),
 });
 
 export async function POST(request:Request){
@@ -91,11 +95,19 @@ export async function POST(request:Request){
         const [assignment]=await tx<Array<{id:string}>>`
           SELECT id FROM worker_object_assignments WHERE worker_id=${workerId}::uuid AND object_id=${body.objectId}::uuid AND effective_to IS NULL LIMIT 1
         `;
+        const workMode=row.workMode??body.workMode;
+        const paidHoursPerShift=row.paidHoursPerShift??body.paidHoursPerShift??null;
         if(!assignment){
           await tx`
-            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${body.objectId}::uuid,${specialtyId}::uuid,${startDate}::date,${object.ownerUserId}::uuid,${actor.userId}::uuid)
+            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${body.objectId}::uuid,${specialtyId}::uuid,${startDate}::date,${object.ownerUserId}::uuid,${workMode},${paidHoursPerShift},${actor.userId}::uuid)
           `;assigned++;
+        }else if(row.workMode||row.paidHoursPerShift!=null){
+          await tx`
+            UPDATE worker_object_assignments
+            SET work_mode=${workMode},paid_hours_per_shift=COALESCE(${paidHoursPerShift},paid_hours_per_shift)
+            WHERE id=${assignment.id}::uuid
+          `;
         }
         if(row.rate){
           const [rate]=await tx<Array<{id:string}>>`
