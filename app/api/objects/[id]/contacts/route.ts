@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Sql } from "postgres";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -22,7 +23,7 @@ const contactSchema=z.object({
 const deleteSchema=z.object({assignmentId:z.string().uuid()});
 
 type Scope={organizationId:string;objectId:string;clientId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]};
-async function scopeFor(tx:any,organizationId:string,objectId:string):Promise<Scope|null>{
+async function scopeFor(tx:Sql,organizationId:string,objectId:string):Promise<Scope|null>{
   const [row]=await tx<Array<Scope>>`
     SELECT o.organization_id "organizationId",o.id "objectId",o.client_company_id "clientId",o.owner_user_id "ownerUserId",o.region_id "regionId",
       ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
