@@ -20,7 +20,7 @@ test("beta company fixture covers all operating modules",()=>{
   assert.equal(demo.proposals.length,5);
   assert.equal(demo.needs.length,21);
   assert.equal(demo.candidates.length,50);
-  assert.ok(demo.workers.length>=40);
+  assert.equal(demo.workers.length,44);
 
   const objectIds=new Set(demo.objects.map(row=>row.id));
   assert.deepEqual(new Set(demo.needs.map(row=>row.objectId)),objectIds);
@@ -29,7 +29,26 @@ test("beta company fixture covers all operating modules",()=>{
   assert.ok(demo.candidates.every(row=>objectIds.has(row.objectId)));
   assert.ok(demo.workers.every(row=>objectIds.has(row.objectId)));
   assert.ok(demo.objects.some(row=>row.status==="launch"));
-  assert.ok(demo.objects.filter(row=>row.status==="active").length>=4);
+  assert.equal(demo.objects.filter(row=>row.status==="active").length,5);
+  const recruiterByObject=new Map([
+    ["80000000-0000-4000-8000-000000000001","10000000-0000-4000-8000-000000000012"],
+    ["80000000-0000-4000-8000-000000000002","10000000-0000-4000-8000-000000000013"],
+    ["80000000-0000-4000-8000-000000000003","10000000-0000-4000-8000-000000000014"],
+    ["80000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000012"],
+    ["80000000-0000-4000-8000-000000000005","10000000-0000-4000-8000-000000000014"],
+  ]);
+  for(const object of demo.objects){
+    const objectWorkers=demo.workers.filter(row=>row.objectId===object.id);
+    const objectNeeds=demo.needs.filter(row=>row.objectId===object.id);
+    assert.ok(objectWorkers.length>0,object.name+" must have active workers");
+    assert.equal(objectWorkers.length,object.filled,object.name+" filled");
+    assert.equal(objectNeeds.reduce((sum,row)=>sum+row.filled,0),object.filled,object.name+" need staffing");
+    assert.equal(object.sourceRequestId,object.id.replace("80000000","73000000"));
+    assert.equal(object.sourceProposalId,object.id.replace("80000000","7a000000"));
+    assert.ok(demo.candidates.filter(row=>row.objectId===object.id).every(row=>row.ownerUserId===recruiterByObject.get(object.id)),object.name+" candidate recruiter");
+    assert.ok(objectWorkers.every(row=>row.startDate&&row.specialty&&row.specialtyId),object.name+" worker assignment metadata");
+  }
+  assert.ok(new Set(demo.workers.map(row=>row.startDate)).size>=20);
 });
 
 test("beta organization is a filled working company",()=>{
