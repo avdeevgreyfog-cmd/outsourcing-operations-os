@@ -207,7 +207,6 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         await tx`
           UPDATE candidates SET
             current_recruiter_user_id=${body.ownerUserId??null}::uuid,
-            original_recruiter_user_id=CASE WHEN ${body.ownerUserId??null}::uuid IS NULL THEN original_recruiter_user_id ELSE COALESCE(original_recruiter_user_id,${body.ownerUserId??null}::uuid) END,
             updated_at=now()
           WHERE id=${current.candidateId}::uuid
         `;
