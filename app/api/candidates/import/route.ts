@@ -30,6 +30,14 @@ export async function POST(request:Request){
     const body=schema.parse(await request.json());
 
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+      if(body.ownerUserId){
+        const [member]=await tx<Array<{id:string}>>`
+          SELECT user_id id FROM organization_memberships
+          WHERE organization_id=${actor.organizationId}::uuid AND user_id=${body.ownerUserId}::uuid AND status='active'
+        `;
+        if(!member)throw new Error("Ответственный не является активным сотрудником организации");
+      }
+
       let need:null|{id:string;objectId:string|null;ownerUserId:string|null;managerUserId:string|null;conditions:Record<string,unknown>;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}=null;
       if(body.needId){
         [need]=await tx<Array<{id:string;objectId:string|null;ownerUserId:string|null;managerUserId:string|null;conditions:Record<string,unknown>;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
