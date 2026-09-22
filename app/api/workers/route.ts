@@ -38,6 +38,7 @@ export async function POST(request:Request){
           FROM objects o WHERE o.id=${body.objectId}::uuid
         `;
         if(!object||!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:object.id,ownerUserId:object.ownerUserId,regionId:object.regionId,assigneeUserIds:object.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
+        if(!object.ownerUserId)throw new Error("У объекта не назначен менеджер. Сначала назначьте менеджера объекта.");
       }
       if(body.phone){
         const [existing]=await tx<Array<{id:string;fullName:string}>>`
@@ -60,7 +61,7 @@ export async function POST(request:Request){
       if(body.objectId&&body.specialtyId){
         await tx`
           INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.startDate}::date,${object?.ownerUserId??actor.userId}::uuid,${actor.userId}::uuid)
+          VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.startDate}::date,${object!.ownerUserId}::uuid,${actor.userId}::uuid)
         `;
       }
       if(body.rate&&body.objectId&&body.specialtyId){
