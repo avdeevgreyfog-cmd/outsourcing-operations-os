@@ -46,6 +46,10 @@ test("beta company fixture covers all operating modules",()=>{
     assert.equal(object.sourceProposalId,object.id.replace("80000000","7a000000"));
     assert.ok(demo.candidates.filter(row=>row.objectId===object.id).every(row=>row.ownerUserId===recruiterByObject.get(object.id)),object.name+" candidate recruiter");
     assert.ok(objectWorkers.every(row=>row.startDate&&row.specialty&&row.specialtyId),object.name+" worker assignment metadata");
+    assert.ok(object.ownerUserId&&object.ownerName,object.name+" manager must be visible");
+    assert.ok((object.assigneeUserIds??[]).includes(object.ownerUserId),object.name+" manager must be an object assignee");
+    assert.ok(objectWorkers.every(row=>row.ownerUserId===object.ownerUserId),object.name+" worker manager id");
+    assert.ok(objectWorkers.every(row=>row.managerName===object.ownerName),object.name+" worker manager name");
   }
   assert.ok(new Set(demo.workers.map(row=>row.startDate)).size>=20);
 });
