@@ -50,6 +50,15 @@ export async function POST(request: Request) {
       if (!need) throw new Error("Потребность не найдена или уже закрыта");
       if (!canReadRow(actor.access,"recruiting.candidate.create",need,actor)) throw new AccessDeniedError("recruiting.candidate.create");
 
+      const attributionIds=[...new Set([body.ownerUserId,body.originalRecruiterUserId].filter((value):value is string=>Boolean(value)))];
+      if(attributionIds.length){
+        const members=await tx<Array<{id:string}>>`
+          SELECT user_id id FROM organization_memberships
+          WHERE organization_id=${actor.organizationId}::uuid AND status='active' AND user_id=ANY(${attributionIds}::uuid[])
+        `;
+        if(members.length!==attributionIds.length)throw new Error("Ответственный или первичный рекрутер не является активным сотрудником организации");
+      }
+
       const contactValues=[
         ...(body.phone?[{channel:"phone",value:body.phone}]:[]),
         ...(body.email?[{channel:"email",value:body.email}]:[]),
