@@ -10,10 +10,10 @@ import type { WorkerRow } from "@/lib/data/service";
 import type { OperationsReferenceData } from "@/lib/operations/service";
 import { rub } from "@/lib/ui/format";
 
-type ImportRow={fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;specialtyName:string|null;startDate:string|null;relationType:"employment"|"gph"|"npd"|"custom"|null;rate:number|null;rateUnit:"hour"|"shift"|"month"|null};
-type FormState={fullName:string;phone:string;email:string;city:string;birthDate:string;objectId:string;specialtyId:string;startDate:string;relationType:"employment"|"gph"|"npd"|"custom";rate:string;rateUnit:"hour"|"shift"|"month";clothingSize:string;shoeSize:string;heightCm:string;notes:string};
+type ImportRow={fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;specialtyName:string|null;startDate:string|null;relationType:"employment"|"gph"|"npd"|"custom"|null;rate:number|null;rateUnit:"hour"|"shift"|"month"|null;workMode:"local"|"rotation"|null;paidHoursPerShift:number|null};
+type FormState={fullName:string;phone:string;email:string;city:string;birthDate:string;objectId:string;specialtyId:string;startDate:string;relationType:"employment"|"gph"|"npd"|"custom";rate:string;rateUnit:"hour"|"shift"|"month";workMode:"local"|"rotation";paidHoursPerShift:string;clothingSize:string;shoeSize:string;heightCm:string;notes:string};
 const today=()=>new Date().toISOString().slice(0,10);
-const blank=():FormState=>({fullName:"",phone:"",email:"",city:"",birthDate:"",objectId:"",specialtyId:"",startDate:today(),relationType:"employment",rate:"",rateUnit:"hour",clothingSize:"",shoeSize:"",heightCm:"",notes:""});
+const blank=():FormState=>({fullName:"",phone:"",email:"",city:"",birthDate:"",objectId:"",specialtyId:"",startDate:today(),relationType:"employment",rate:"",rateUnit:"hour",workMode:"local",paidHoursPerShift:"",clothingSize:"",shoeSize:"",heightCm:"",notes:""});
 
 export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:WorkerRow[];options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;demo:boolean}){
   const [query,setQuery]=useState("");
@@ -27,6 +27,8 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
   const [importObject,setImportObject]=useState(options.objects[0]?.id??"");
   const [importSpecialty,setImportSpecialty]=useState("");
   const [importStart,setImportStart]=useState(today());
+  const [importWorkMode,setImportWorkMode]=useState<"local"|"rotation">("local");
+  const [importPaidHours,setImportPaidHours]=useState("");
   const [importResult,setImportResult]=useState("");
 
   const filtered=useMemo(()=>localRows.filter(row=>`${row.fullName} ${row.object??""} ${row.managerName??""} ${row.source??""}`.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"))),[localRows,query]);
@@ -39,11 +41,11 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       if(demo){
         const object=options.objects.find(x=>x.id===form.objectId);
         const specialty=options.specialties.find(x=>x.id===form.specialtyId);
-        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:specialty?.name??null,specialtyId:specialty?.id??null,startDate:form.startDate,employment:form.relationType,rate:form.rate?Number(form.rate):null,accrued:0,paid:0,payable:0},...current]);
+        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:specialty?.name??null,specialtyId:specialty?.id??null,startDate:form.startDate,employment:form.relationType,workMode:form.workMode,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,rate:form.rate?Number(form.rate):null,rateUnit:form.rateUnit,accrued:0,paid:0,payable:0},...current]);
       }else{
         const response=await fetch("/api/workers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           ...form,phone:form.phone||null,email:form.email||null,city:form.city||null,birthDate:form.birthDate||null,
-          objectId:form.objectId||null,specialtyId:form.specialtyId||null,rate:form.rate?Number(form.rate):null,
+          objectId:form.objectId||null,specialtyId:form.specialtyId||null,rate:form.rate?Number(form.rate):null,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,
           clothingSize:form.clothingSize||null,shoeSize:form.shoeSize||null,heightCm:form.heightCm?Number(form.heightCm):null,notes:form.notes||null,
         })});
         const json=await response.json().catch(()=>({}));
@@ -57,7 +59,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
 
   async function downloadTemplate(){
     const XLSX=await import("xlsx");
-    const sheet=XLSX.utils.json_to_sheet([{"ФИО":"Иванов Иван Иванович","Телефон":"+7 900 000-00-00","Email":"","Город":"Тула","Дата рождения":"","Специальность":"Комплектовщик","Дата начала":today(),"Оформление":"employment","Ставка":3900,"Единица ставки":"shift"}]);
+    const sheet=XLSX.utils.json_to_sheet([{"ФИО":"Иванов Иван Иванович","Телефон":"+7 900 000-00-00","Email":"","Город":"Тула","Дата рождения":"","Специальность":"Комплектовщик","Дата начала":today(),"Оформление":"employment","Формат работы":"local","Ставка":3900,"Единица ставки":"shift","Оплачиваемых часов в смене":11}]);
     const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"Сотрудники");XLSX.writeFile(book,"operis_workers_import.xlsx");
   }
 
@@ -81,11 +83,11 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       if(demo){
         const object=options.objects.find(x=>x.id===importObject);
         const fallbackSpecialty=options.specialties.find(x=>x.id===importSpecialty);
-        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:row.specialtyName??fallbackSpecialty?.name??null,specialtyId:fallbackSpecialty?.id??null,startDate:row.startDate??importStart,employment:row.relationType??"employment",rate:row.rate,accrued:0,paid:0,payable:0} as WorkerRow));
+        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:row.specialtyName??fallbackSpecialty?.name??null,specialtyId:fallbackSpecialty?.id??null,startDate:row.startDate??importStart,employment:row.relationType??"employment",workMode:row.workMode??importWorkMode,paidHoursPerShift:row.paidHoursPerShift??(importPaidHours?Number(importPaidHours):null),rate:row.rate,rateUnit:row.rateUnit??"hour",accrued:0,paid:0,payable:0} as WorkerRow));
         setLocalRows(current=>[...created,...current]);
         setImportResult(`Добавлено сотрудников: ${created.length}`);
       }else{
-        const response=await fetch("/api/workers/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({rows:importRows,objectId:importObject,specialtyId:importSpecialty||null,startDate:importStart,relationType:"employment"})});
+        const response=await fetch("/api/workers/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({rows:importRows,objectId:importObject,specialtyId:importSpecialty||null,startDate:importStart,relationType:"employment",workMode:importWorkMode,paidHoursPerShift:importPaidHours?Number(importPaidHours):null})});
         const json=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(json.error??"Не удалось импортировать сотрудников");
         setImportResult(`Новых: ${json.created}, найдено существующих: ${json.reused}, назначено: ${json.assigned}, замечаний: ${json.issues?.length??0}`);
@@ -101,16 +103,19 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       {canEdit&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт Excel</button><button className="button primary" onClick={()=>setShowCreate(true)}><Plus size={14}/> Добавить сотрудника</button></div>}
     </div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table workers-table">
-      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Менеджер</th><th>Специальность</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
+      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Менеджер</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
       <tbody>{filtered.map(row=><tr key={row.id}>
         <td><Link className="cell-title" href={`/workers/${row.id}`}>{row.fullName}</Link></td>
         <td>{row.object&&row.objectId?<Link className="workers-object-link" href={"/objects/"+row.objectId}>{row.object}</Link>:"Без назначения"}</td>
         <td>{row.managerName??"—"}</td>
         <td>{row.specialty??"—"}</td>
+        <td>{row.workMode==="rotation"?"Вахта":"Местный"}</td>
+        <td><Status tone={operationalState(row)==="Работает"?"good":"info"}>{operationalState(row)}</Status></td>
+        <td>{availabilityChange(row)}</td>
         <td>{row.startDate?new Intl.DateTimeFormat("ru-RU").format(new Date(row.startDate+"T00:00:00")):"—"}</td>
         <td><span className="workers-source" title={row.origin??row.source??"—"}>{row.origin??row.source??"—"}</span></td>
         <td>{row.employment??"—"}</td>
-        {sensitive&&<><td className="num">{row.rate==null?"—":rub(row.rate)}</td><td className="num">{row.accrued==null?"—":rub(row.accrued)}</td><td className="num">{row.payable==null?"—":rub(row.payable)}</td></>}
+        {sensitive&&<><td className="num">{rateLabel(row)}</td><td className="num">{row.accrued==null?"—":rub(row.accrued)}</td><td className="num">{row.payable==null?"—":rub(row.payable)}</td></>}
         <td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Работает":row.status==="dismissed"?"Работа завершена":row.status}</Status></td>
       </tr>)}</tbody>
     </table>{!filtered.length&&<div className="empty-inline">Сотрудники не найдены</div>}</div></section>
@@ -126,9 +131,11 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
         <label>Объект<select value={form.objectId} onChange={e=>setForm({...form,objectId:e.target.value})}><option value="">Без назначения</option>{options.objects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
         <label>Специальность<select value={form.specialtyId} onChange={e=>setForm({...form,specialtyId:e.target.value})}><option value="">Выберите</option>{options.specialties.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
         <label>Дата начала<input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/></label>
+        <label>Формат работы<select value={form.workMode} onChange={e=>setForm({...form,workMode:e.target.value as FormState["workMode"]})}><option value="local">Местный</option><option value="rotation">Вахта</option></select></label>
         <label>Оформление<select value={form.relationType} onChange={e=>setForm({...form,relationType:e.target.value as FormState["relationType"]})}><option value="employment">Трудовой договор</option><option value="gph">ГПХ</option><option value="npd">Самозанятый</option><option value="custom">Другое</option></select></label>
         <label>Ставка<input type="number" min="0" value={form.rate} onChange={e=>setForm({...form,rate:e.target.value})}/></label>
         <label>Единица<select value={form.rateUnit} onChange={e=>setForm({...form,rateUnit:e.target.value as FormState["rateUnit"]})}><option value="hour">₽/час</option><option value="shift">₽/смену</option><option value="month">₽/месяц</option></select></label>
+        {form.rateUnit==="shift"&&<label>Оплачиваемых часов в смене<input type="number" min="0.5" max="24" step="0.5" value={form.paidHoursPerShift} onChange={e=>setForm({...form,paidHoursPerShift:e.target.value})} placeholder="Например, 11"/></label>}
         <label>Размер одежды<input value={form.clothingSize} onChange={e=>setForm({...form,clothingSize:e.target.value})}/></label>
         <label>Размер обуви<input value={form.shoeSize} onChange={e=>setForm({...form,shoeSize:e.target.value})}/></label>
       </div>{error&&<div className="recruiting-error">{error}</div>}</div>
@@ -143,7 +150,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
         <div className="candidate-import-options">
           <label>Объект<select value={importObject} onChange={e=>setImportObject(e.target.value)}><option value="">Выберите объект</option>{options.objects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <label>Специальность по умолчанию<select value={importSpecialty} onChange={e=>setImportSpecialty(e.target.value)}><option value="">Из файла</option>{options.specialties.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          <label>Дата начала по умолчанию<input type="date" value={importStart} onChange={e=>setImportStart(e.target.value)}/></label>
+          <label>Дата начала по умолчанию<input type="date" value={importStart} onChange={e=>setImportStart(e.target.value)}/></label><label>Формат по умолчанию<select value={importWorkMode} onChange={e=>setImportWorkMode(e.target.value as "local"|"rotation")}><option value="local">Местный</option><option value="rotation">Вахта</option></select></label><label>Оплачиваемых часов в смене<input type="number" min="0.5" max="24" step="0.5" value={importPaidHours} onChange={e=>setImportPaidHours(e.target.value)} placeholder="Если ставка за смену"/></label>
         </div>
         {importRows.length>0&&<div className="candidate-import-preview"><header><strong>Найдено строк: {importRows.length}</strong><span>Первые 6 строк</span></header><div className="request-table-wrap"><table className="data-table"><thead><tr><th>ФИО</th><th>Телефон</th><th>Специальность</th><th>Старт</th></tr></thead><tbody>{importRows.slice(0,6).map((row,index)=><tr key={index}><td>{row.fullName}</td><td>{row.phone??"—"}</td><td>{row.specialtyName??"по умолчанию"}</td><td>{row.startDate??importStart}</td></tr>)}</tbody></table></div></div>}
         {error&&<div className="recruiting-error">{error}</div>}{importResult&&<div className="candidate-import-result">{importResult}</div>}
@@ -161,7 +168,16 @@ function mapImportRow(row:Record<string,unknown>):ImportRow|null{
   const unitRaw=get("Единица ставки","rateUnit").toLowerCase();
   const rateUnit=(["hour","shift","month"].includes(unitRaw)?unitRaw:null) as ImportRow["rateUnit"];
   const rateRaw=get("Ставка","rate");
-  return {fullName,phone:nullable(get("Телефон","phone")),email:nullable(get("Email","E-mail","email")),city:nullable(get("Город","city")),birthDate:nullable(get("Дата рождения","birthDate")),specialtyName:nullable(get("Специальность","specialty")),startDate:nullable(get("Дата начала","startDate")),relationType,rate:rateRaw?Number(rateRaw.replace(",",".")):null,rateUnit};
+  const modeRaw=get("Формат работы","workMode").toLocaleLowerCase("ru");
+  const workMode=modeRaw==="rotation"||modeRaw==="вахта"?"rotation":modeRaw==="local"||modeRaw==="местный"?"local":null;
+  const paidHoursRaw=get("Оплачиваемых часов в смене","paidHoursPerShift");
+  return {fullName,phone:nullable(get("Телефон","phone")),email:nullable(get("Email","E-mail","email")),city:nullable(get("Город","city")),birthDate:nullable(get("Дата рождения","birthDate")),specialtyName:nullable(get("Специальность","specialty")),startDate:nullable(get("Дата начала","startDate")),relationType,rate:rateRaw?Number(rateRaw.replace(",",".")):null,rateUnit,workMode,paidHoursPerShift:paidHoursRaw?Number(paidHoursRaw.replace(",",".")):null};
 }
+const absenceLabels:Record<string,string>={intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Личное отсутствие",other:"Отсутствие"};
+function operationalState(row:WorkerRow){if(row.status==="dismissed")return"Работа завершена";const current=Boolean(row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()));return current?(absenceLabels[row.absenceType??""]??"Отсутствует"):"Работает"}
+function availabilityChange(row:WorkerRow){if(!row.absenceFrom)return"—";const label=absenceLabels[row.absenceType??""]??"Отсутствие";if(row.absenceStatus==="confirmed"&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()))return row.absenceTo?`возврат ${formatDate(addDays(row.absenceTo,1))}`:"дата возврата открыта";return `${label.toLocaleLowerCase("ru")} с ${formatDate(row.absenceFrom)}`}
+function addDays(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
+function formatDate(value:string){return new Intl.DateTimeFormat("ru-RU").format(new Date(value+"T00:00:00"))}
+function rateLabel(row:WorkerRow){if(row.rate==null)return"—";const unit=row.rateUnit==="shift"?"/смену":row.rateUnit==="month"?"/мес":"/ч";if(row.rateUnit==="shift"&&Number(row.paidHoursPerShift)>0)return`${rub(row.rate)}${unit} · ${rub(Number(row.rate)/Number(row.paidHoursPerShift))}/ч`;return`${rub(row.rate)}${unit}`}
 function nullable(value:string){return value||null}
 function Portal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body)}
