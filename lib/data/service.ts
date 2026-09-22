@@ -67,11 +67,13 @@ export async function listClientContacts(actor: Actor, clientId: string): Promis
   if (actor.demo) {
     const client = demo.clients.find(row => row.id === clientId && canReadRow(actor.access, "sales.client.read", row, actor));
     if (!client) return [];
-    return [{
-      id:"demo-client-contact",organizationId:actor.organizationId,clientId,fullName:"Алексей Петров",position:"Начальник участка",
-      phone:"+7 900 555-01-01",email:"object@example.ru",telegram:"@object_contact",whatsapp:"+7 900 555-01-01",maxContact:null,preferredChannel:"telegram",
-      objectAssignments:demo.objects.filter(row=>row.clientId===clientId).slice(0,2).map(row=>({objectId:row.id,object:row.name,roles:["operations","timesheet"]})),
-    }];
+    const visibleObjects=demo.objects.filter(row=>row.clientId===clientId&&canReadRow(actor.access,"operations.object.read",row,actor));
+    return demo.clientContacts.filter(contact=>contact.clientId===clientId).map(contact=>({
+      ...contact,organizationId:actor.organizationId,clientId,
+      objectAssignments:demo.objectContactAssignments.filter(link=>link.contactId===contact.id&&visibleObjects.some(object=>object.id===link.objectId)).map(link=>({
+        objectId:link.objectId,object:visibleObjects.find(object=>object.id===link.objectId)?.name??"Объект",roles:link.roles,
+      })),
+    }));
   }
   return withTenant(actor.organizationId, actor.userId, async sql => {
     const [client] = await sql<Array<{id:string;organizationId:string;ownerUserId:string|null;regionId:string|null;teamId:string|null}>>`
