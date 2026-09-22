@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listCandidates,listFinance,listIncidents,listLaunchTasks,listNeeds,listObjects,listShifts,listWorkers } from "@/lib/data/service";
-import { getHousingSnapshot,getInventorySnapshot,listCrews,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
+import { getHousingSnapshot,getInventorySnapshot,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { pct,rub } from "@/lib/ui/format";
@@ -49,9 +49,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canAssets=hasCapability(actor.access,"assets.read");
   const canHousing=hasCapability(actor.access,"supply.housing.read");
   const canProcurement=hasCapability(actor.access,"procurement.read");
-  const canCrews=hasCapability(actor.access,"operations.crew.read");
 
-  const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,crews,inventory,housing,supplyRequests]=await Promise.all([
+  const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests]=await Promise.all([
     canNeeds?listNeeds(actor):Promise.resolve([]),
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
@@ -61,7 +60,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     listIncidents(actor),
     listOperationsAnalytics(actor),
     canNeeds?listStaffingForecast(actor,30):Promise.resolve([]),
-    canCrews?listCrews(actor):Promise.resolve([]),
     canAssets?getInventorySnapshot(actor):Promise.resolve({locations:[],items:[],balances:[]}),
     canHousing?getHousingSnapshot(actor):Promise.resolve({sites:[],stays:[]}),
     canProcurement?listSupplyRequests(actor):Promise.resolve([]),
@@ -73,7 +71,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectLaunchTasks=launchTasks.filter(row=>row.objectId===id);
   const objectIncidents=incidents.filter(row=>row.objectId===id);
   const objectForecast=forecast.filter(row=>row.objectId===id);
-  const objectCrews=crews.filter(row=>row.objectId===id);
   const objectBalances=inventory.balances.filter(row=>row.objectId===id);
   const objectHousing=housing.sites.filter(row=>row.objectId===id);
   const objectSupplyRequests=supplyRequests.filter(row=>row.objectId===id);
@@ -215,12 +212,12 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     </>}
 
     {tab==="workforce"&&<>
-      <div className="metrics-grid"><Metric label="Сотрудники на объекте" value={objectWorkers.length}/><Metric label="Бригады" value={objectCrews.length}/><Metric label="Бригадиры" value={objectCrews.filter(row=>row.leaderWorkerId).length}/><Metric label="Без назначения" value={Math.max(0,working-objectWorkers.length)}/></div>
+      <div className="metrics-grid"><Metric label="Сотрудники на объекте" value={objectWorkers.length}/><Metric label="Местные" value={objectWorkers.filter(row=>row.workMode!=="rotation").length}/><Metric label="Вахта" value={objectWorkers.filter(row=>row.workMode==="rotation").length}/><Metric label="Сейчас отсутствуют" value={objectWorkers.filter(row=>objectWorkerState(row)!=="Работает").length} tone={objectWorkers.some(row=>objectWorkerState(row)!=="Работает")?"warn":undefined}/></div>
       <Section title="Сотрудники">
-        <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th><th>Менеджер</th><th>Специальность</th><th>Начало работы</th><th>Оформление</th><th>Источник</th><th>Статус</th></tr></thead><tbody>{objectWorkers.map(row=><tr key={row.id}><td><Link className="cell-title" href={"/workers/"+row.id}>{row.fullName}</Link></td><td>{row.managerName??object.ownerName??"—"}</td><td>{row.specialty??"—"}</td><td>{row.startDate?new Intl.DateTimeFormat("ru-RU").format(new Date(row.startDate+"T00:00:00")):"—"}</td><td>{row.employment??"—"}</td><td>{row.origin??row.source??"—"}</td><td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Работает":row.status==="dismissed"?"Работа завершена":row.status}</Status></td></tr>)}</tbody></table></div>
+        <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Ставка</th><th>Оформление</th></tr></thead><tbody>{objectWorkers.map(row=><tr key={row.id}><td><Link className="cell-title" href={"/workers/"+row.id}>{row.fullName}</Link></td><td>{row.specialty??"—"}</td><td>{row.workMode==="rotation"?"Вахта":"Местный"}</td><td><Status tone={objectWorkerState(row)==="Работает"?"good":"info"}>{objectWorkerState(row)}</Status></td><td>{objectWorkerAvailability(row)}</td><td className="num">{objectWorkerRate(row)}</td><td>{row.employment??"—"}</td></tr>)}</tbody></table></div>
         {!objectWorkers.length&&<Empty title="Назначений нет" text="На объект не назначены доступные вам сотрудники."/>}
       </Section>
-      {canCrews&&<Section title="Бригады"><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Бригада</th><th>Профессия</th><th>Бригадир</th><th>Формат</th><th>Состав</th></tr></thead><tbody>{objectCrews.map(row=><tr key={row.id}><td className="cell-title">{row.name}</td><td>{row.specialty??"Смешанная"}</td><td>{row.leader??"Не назначен"}</td><td>{row.leaderMode==="working_leader"?"Рабочий-бригадир":"Выделенный бригадир"}</td><td className="num">{row.memberCount}</td></tr>)}</tbody></table></div><div className="section-actions"><Link className="button" href="/crews">Управление бригадами</Link></div></Section>}
+      
     </>}
 
     {tab==="shifts"&&<Section title="Смены объекта"><ShiftTable rows={objectShifts}/>{!objectShifts.length&&<Empty title="Смен нет" text="На объекте пока нет запланированных смен."/>}<div className="section-actions"><Link className="button primary" href="/shifts">Открыть графики и смены</Link></div></Section>}
@@ -259,3 +256,7 @@ function ReadinessRow({label,value}:{label:string;value:number}){
 function ShiftTable({rows}:{rows:Awaited<ReturnType<typeof listShifts>>}){
   return <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Смена</th><th>Позиция</th><th>Потребность</th><th>Назначено</th><th>Резерв</th><th>Дефицит</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td><strong>{row.date} · {row.kind}</strong><span className="cell-sub">{row.time}</span></td><td>{row.specialty}</td><td className="num">{row.demand}</td><td className="num">{row.assigned}</td><td className="num">{row.reserve}</td><td className="num"><Status tone={row.deficit?"warn":"good"}>{row.deficit}</Status></td></tr>)}</tbody></table></div>;
 }
+
+function objectWorkerState(row:{status:string;absenceStatus?:string|null;absenceType?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){if(row.status==="dismissed")return"Работа завершена";const today=new Date().toISOString().slice(0,10);if(row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today&&(!row.absenceTo||row.absenceTo>=today))return({intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Личное отсутствие",other:"Отсутствие"} as Record<string,string>)[row.absenceType??""]??"Отсутствует";return"Работает"}
+function objectWorkerAvailability(row:{absenceStatus?:string|null;absenceType?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){if(!row.absenceFrom)return"—";const today=new Date().toISOString().slice(0,10);if(row.absenceStatus==="confirmed"&&row.absenceFrom<=today&&(!row.absenceTo||row.absenceTo>=today)){if(!row.absenceTo)return"Возврат не определён";const d=new Date(row.absenceTo+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+1);return"Возврат "+new Intl.DateTimeFormat("ru-RU").format(d)}return(({intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Отсутствие",other:"Отсутствие"} as Record<string,string>)[row.absenceType??""]??"Изменение")+" с "+new Intl.DateTimeFormat("ru-RU").format(new Date(row.absenceFrom+"T00:00:00"))}
+function objectWorkerRate(row:{rate:number|string|null;rateUnit?:string|null;paidHoursPerShift?:number|string|null}){if(row.rate==null)return"—";if(row.rateUnit==="shift"&&Number(row.paidHoursPerShift)>0)return rub(row.rate)+"/см · "+rub(Number(row.rate)/Number(row.paidHoursPerShift))+"/ч";return rub(row.rate)+(row.rateUnit==="shift"?"/см":row.rateUnit==="month"?"/мес":"/ч")}
