@@ -1,5 +1,4 @@
 import { githubPagesStaticParams } from "@/lib/demo/static-params";
-import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -9,7 +8,7 @@ import { ContractDetailWorkspace } from "@/components/ContractDetailWorkspace";
 import { PageHeader } from "@/components/UI";
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.contracts.map((id)=>({id})) : [];
+  return githubPagesStaticParams.contracts.map((id)=>({id}));
 }
 
 export default async function ContractPage({params}:{params:Promise<{id:string}>}){
