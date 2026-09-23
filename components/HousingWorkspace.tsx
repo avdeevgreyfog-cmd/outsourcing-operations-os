@@ -74,7 +74,7 @@ export function HousingWorkspace({snapshot,options,canManage,demo,initialWorkerI
       </tr>)}</tbody>
     </table>{!snapshot.sites.length&&<div className="empty-inline">Жильё ещё не добавлено</div>}</div></section>
 
-    <section className="section section-flush" style={{marginTop:16}}><div className="section-head"><div><h2>Заселения</h2><p>Активные и плановые размещения сотрудников</p></div></div><div className="request-table-wrap"><table className="data-table">
+    <section className="section section-flush housing-stays-section"><div className="section-head"><div><h2>Заселения</h2><p>Активные и плановые размещения сотрудников</p></div></div><div className="request-table-wrap"><table className="data-table">
       <thead><tr><th>Сотрудник</th><th>Объект</th><th>Жильё</th><th>Комната / место</th><th>Заезд</th><th>Выезд</th><th>Статус</th></tr></thead>
       <tbody>{activeStays.map(row=><tr key={row.id}><td className="cell-title">{row.worker}</td><td>{row.object??"—"}</td><td>{row.site}</td><td>{row.unit??"—"}{row.bedLabel&&<span className="cell-sub">место {row.bedLabel}</span>}</td><td>{row.checkIn}</td><td>{row.checkOut??"—"}</td><td><Status tone={row.status==="active"?"good":"info"}>{row.status==="active"?"Проживает":"Запланировано"}</Status></td></tr>)}</tbody>
     </table>{!activeStays.length&&<div className="empty-inline">Активных заселений нет</div>}</div></section>
