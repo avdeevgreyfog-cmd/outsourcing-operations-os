@@ -566,3 +566,24 @@ button,input,select,textarea{letter-spacing:inherit}
 .analytics-line-chart{padding:13px 14px 10px}.analytics-line-chart svg{width:100%;height:170px;overflow:visible}.analytics-line-chart polyline{stroke:var(--accent);stroke-width:2}.analytics-line-chart circle{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}.analytics-chart-labels{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;color:var(--soft);font-size:9px;text-align:center}.analytics-chart-labels span{display:block}.analytics-chart-labels small{display:block;margin-top:3px;color:var(--muted);font-size:10px}.analytics-line-chart-large svg{height:250px}
 .analytics-process-grid,.analytics-status-grid{display:grid;grid-template-columns:1fr 1fr}.analytics-process-grid>div,.analytics-status-grid>div{min-height:92px;padding:14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}.analytics-process-grid>div:nth-child(even),.analytics-status-grid>div:nth-child(even){border-right:0}.analytics-process-grid span,.analytics-status-grid span{display:block;color:var(--muted);font-size:10px}.analytics-process-grid strong,.analytics-status-grid strong{display:block;margin-top:7px;font-size:22px}.analytics-process-grid small{display:block;margin-top:5px;color:var(--soft);font-size:9px}
 @media(max-width:1180px){.object-focus-grid{grid-template-columns:repeat(3,1fr)}.launch-summary-grid,.analytics-dashboard-grid,.analytics-dashboard-grid-bottom{grid-template-columns:1fr}.staffing-drivers{grid-template-columns:1fr 1fr}.analytics-context-bar{align-items:flex-start;flex-direction:column}}
+
+
+/* Operations workspace cleanup */
+.object-portfolio-results{margin:-2px 0 8px;color:var(--muted);font-size:10.5px}
+.object-portfolio-table{min-width:1180px}
+.object-portfolio-table tbody tr{cursor:default}
+.object-portfolio-table tbody tr:hover td{background:var(--panel-2)}
+.object-portfolio-table .cell-title{font-weight:680}
+.object-hero{padding:13px 16px;background:var(--panel)}
+.object-meta{margin-top:10px;gap:14px 26px}
+.object-meta div{min-width:110px}
+.object-meta div strong{font-weight:650}
+.health{display:flex;flex-direction:column;justify-content:center;min-width:145px;padding-left:18px;border-left:1px solid var(--border)}
+.health strong{font-size:27px}
+.object-overview-grid{align-items:start}
+@media(max-width:760px){
+  .object-portfolio-toolbar input{min-width:100%;width:100%}
+  .object-portfolio-toolbar select{flex:1;min-width:150px}
+  .object-hero{grid-template-columns:1fr}
+  .health{padding:12px 0 0;border-left:0;border-top:1px solid var(--border);text-align:left}
+}
