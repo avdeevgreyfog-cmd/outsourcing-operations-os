@@ -1,4 +1,3 @@
-import { githubPagesStaticParams } from "@/lib/demo/static-params";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
