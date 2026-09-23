@@ -1,4 +1,3 @@
-import { githubPagesStaticParams } from "@/lib/demo/static-params";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
