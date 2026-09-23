@@ -50,3 +50,19 @@ jobs:
           test "$code" = "200"
           grep -q 'sergey-work' /tmp/login.html
           grep -q 'Демо-организация' /tmp/login.html
+
+      - name: Verify object and worker detail routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cookie='oo_workspace_mode=demo; oo_demo_role=director'
+          object_path='/objects/80000000-0000-4000-8000-000000000001'
+          worker_path='/workers/88000000-0000-4000-8000-000000000001'
+          object_code="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/object.html -w '%{http_code}' "$BASE_URL$object_path")"
+          worker_code="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/worker.html -w '%{http_code}' "$BASE_URL$worker_path")"
+          test "$object_code" = "200"
+          test "$worker_code" = "200"
+          grep -q 'Объект' /tmp/object.html
+          grep -q 'Сотрудник' /tmp/worker.html
+          ! grep -q "This page couldn" /tmp/object.html
+          ! grep -q "This page couldn" /tmp/worker.html
