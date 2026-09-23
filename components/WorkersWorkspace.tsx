@@ -17,6 +17,11 @@ const blank=():FormState=>({fullName:"",phone:"",email:"",city:"",birthDate:"",o
 
 export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:WorkerRow[];options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;demo:boolean}){
   const [query,setQuery]=useState("");
+  const [objectFilter,setObjectFilter]=useState("");
+  const [managerFilter,setManagerFilter]=useState("");
+  const [specialtyFilter,setSpecialtyFilter]=useState("");
+  const [workModeFilter,setWorkModeFilter]=useState("");
+  const [stateFilter,setStateFilter]=useState("");
   const [localRows,setLocalRows]=useState(rows);
   const [showCreate,setShowCreate]=useState(false);
   const [showImport,setShowImport]=useState(false);
@@ -31,7 +36,20 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
   const [importPaidHours,setImportPaidHours]=useState("");
   const [importResult,setImportResult]=useState("");
 
-  const filtered=useMemo(()=>localRows.filter(row=>`${row.fullName} ${row.object??""} ${row.managerName??""} ${row.source??""}`.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"))),[localRows,query]);
+  const objectOptions=useMemo(()=>[...new Set(localRows.map(row=>row.object).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
+  const managerOptions=useMemo(()=>[...new Set(localRows.map(row=>row.managerName).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
+  const specialtyOptions=useMemo(()=>[...new Set(localRows.map(row=>row.specialty).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
+  const stateOptions=useMemo(()=>[...new Set(localRows.map(operationalState))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
+  const hasFilters=Boolean(query||objectFilter||managerFilter||specialtyFilter||workModeFilter||stateFilter);
+  const filtered=useMemo(()=>localRows.filter(row=>{
+    const matchesQuery=`${row.fullName} ${row.object??""} ${row.managerName??""} ${row.specialty??""} ${row.source??""}`.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"));
+    return matchesQuery
+      &&(!objectFilter||row.object===objectFilter)
+      &&(!managerFilter||row.managerName===managerFilter)
+      &&(!specialtyFilter||row.specialty===specialtyFilter)
+      &&(!workModeFilter||(row.workMode??"local")===workModeFilter)
+      &&(!stateFilter||operationalState(row)===stateFilter);
+  }),[localRows,query,objectFilter,managerFilter,specialtyFilter,workModeFilter,stateFilter]);
 
   async function createWorker(){
     setBusy(true);setError("");
@@ -98,10 +116,19 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
   }
 
   return <div>
-    <div className="candidate-directory-viewbar">
-      <SalesSearch value={query} onChange={setQuery} placeholder="Сотрудник, объект, менеджер или источник"/>
+    <div className="workers-toolbar">
+      <div className="workers-filterbar">
+        <SalesSearch value={query} onChange={setQuery} placeholder="ФИО, объект, менеджер или источник"/>
+        <select aria-label="Фильтр по объекту" value={objectFilter} onChange={e=>setObjectFilter(e.target.value)}><option value="">Все объекты</option>{objectOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
+        <select aria-label="Фильтр по менеджеру" value={managerFilter} onChange={e=>setManagerFilter(e.target.value)}><option value="">Все менеджеры</option>{managerOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
+        <select aria-label="Фильтр по специальности" value={specialtyFilter} onChange={e=>setSpecialtyFilter(e.target.value)}><option value="">Все специальности</option>{specialtyOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
+        <select aria-label="Фильтр по формату работы" value={workModeFilter} onChange={e=>setWorkModeFilter(e.target.value)}><option value="">Все форматы</option><option value="local">Местный</option><option value="rotation">Вахта</option></select>
+        <select aria-label="Фильтр по состоянию" value={stateFilter} onChange={e=>setStateFilter(e.target.value)}><option value="">Все состояния</option>{stateOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
+        {hasFilters&&<button className="button" type="button" onClick={()=>{setQuery("");setObjectFilter("");setManagerFilter("");setSpecialtyFilter("");setWorkModeFilter("");setStateFilter("")}}>Сбросить</button>}
+      </div>
       {canEdit&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт Excel</button><button className="button primary" onClick={()=>setShowCreate(true)}><Plus size={14}/> Добавить сотрудника</button></div>}
     </div>
+    <div className="workers-resultbar"><span>Показано {filtered.length} из {localRows.length}</span>{objectOptions.length===1&&<span>Объект: {objectOptions[0]}</span>}</div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table workers-table">
       <thead><tr><th>Сотрудник</th><th>Объект</th><th>Менеджер</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
       <tbody>{filtered.map(row=><tr key={row.id}>
