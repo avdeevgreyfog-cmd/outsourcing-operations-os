@@ -7,9 +7,6 @@ import { getContractDetail } from "@/lib/commercial/contracts";
 import { ContractDetailWorkspace } from "@/components/ContractDetailWorkspace";
 import { PageHeader } from "@/components/UI";
 
-export function generateStaticParams(){
-  return githubPagesStaticParams.contracts.map((id)=>({id}));
-}
 
 export default async function ContractPage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;const actor=await requireActor();const contract=await getContractDetail(actor,id);if(!contract)notFound();
