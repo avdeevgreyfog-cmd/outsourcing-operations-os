@@ -19,7 +19,7 @@ function textCondition(value:unknown){return typeof value==="string"&&value.trim
 function guaranteedVolume(value:unknown){return value==="yes"?"Да":value==="no"?"Нет":value==="partial"?"Частично / минимальный объём":"Не определено";}
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.tenders.map((id)=>({id})) : [];
+  return githubPagesStaticParams.tenders.map((id)=>({id}));
 }
 
 export default async function TenderPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
