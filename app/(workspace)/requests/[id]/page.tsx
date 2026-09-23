@@ -155,9 +155,6 @@ function tone(status: string) {
   return "warn" as const;
 }
 
-export function generateStaticParams(){
-  return githubPagesStaticParams.requests.map((id)=>({id}));
-}
 
 export default async function RequestPage({
   params,
