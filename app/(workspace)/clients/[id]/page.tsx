@@ -44,9 +44,6 @@ function tone(value: string) {
   return "neutral" as const;
 }
 
-export function generateStaticParams(){
-  return githubPagesStaticParams.clients.map((id)=>({id}));
-}
 
 export default async function ClientPage({
   params,
