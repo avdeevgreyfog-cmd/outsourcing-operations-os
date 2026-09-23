@@ -93,3 +93,5 @@ jobs:
           test -f out/recruiting/index.html
           test -f out/candidates/index.html
           test -f out/objects/index.html
+          test -f out/objects/80000000-0000-4000-8000-000000000001/index.html
+          test -f out/workers/88000000-0000-4000-8000-000000000001/index.html
