@@ -156,7 +156,7 @@ function tone(status: string) {
 }
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.requests.map((id)=>({id})) : [];
+  return githubPagesStaticParams.requests.map((id)=>({id}));
 }
 
 export default async function RequestPage({
