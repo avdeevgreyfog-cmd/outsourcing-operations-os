@@ -34,7 +34,7 @@ export function HousingWorkspace({snapshot,options,canManage,demo,initialWorkerI
   const forecast=snapshot.sites.reduce((sum,row)=>sum+row.monthlyForecast,0);
 
   async function post(url:string,body:unknown){
-    if(demo){setError("В демо-режиме изменения жилья не сохраняются");return false;}
+    if(demo){setError("Изменения жилья в текущем режиме недоступны");return false;}
     const response=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
     const json=await response.json().catch(()=>({}));
     if(!response.ok)throw new Error(json.error??"Операция не выполнена");
