@@ -26,9 +26,6 @@ const labels:Record<string,string>={
   history:"История",
 };
 
-export function generateStaticParams(){
-  return isGithubPagesDemo()?githubPagesStaticParams.workers.map((id)=>({id})):[];
-}
 
 export default async function WorkerPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
   const {id}=await params;
