@@ -700,3 +700,32 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 
 .sales-workspace.operations-workspace .launch-operational-grid-content{padding:8px 18px 18px}
 .sales-workspace.operations-workspace .launch-task-cell{min-width:220px}
+
+
+/* OPERIS operations detail refinements */
+.sales-workspace.operations-workspace .object-coverage span{font-size:12px}
+.sales-workspace.operations-workspace .section-actions{padding:12px 18px}
+.sales-workspace.operations-workspace .readiness-list{padding:8px 18px 18px}
+.sales-workspace.operations-workspace .readiness-row{padding:10px 0}
+.sales-workspace.operations-workspace .readiness-row>div:first-child{margin-bottom:8px}
+.sales-workspace.operations-workspace .readiness-row strong{font-size:13px;font-weight:600}
+.sales-workspace.operations-workspace .readiness-row span{font-size:12px}
+.sales-workspace.operations-workspace .candidate-stage-strip>div{min-height:78px;padding:14px 16px}
+.sales-workspace.operations-workspace .candidate-stage-strip span{font-size:12px}
+.sales-workspace.operations-workspace .candidate-stage-strip strong{margin-top:6px;font-size:22px;font-weight:650}
+.sales-workspace.operations-workspace .launch-readiness-head span{font-size:12px}
+.sales-workspace.operations-workspace .launch-readiness-head strong{font-size:24px;font-weight:650}
+.sales-workspace.operations-workspace .launch-tabs{margin:0 18px 18px}
+.sales-workspace.operations-workspace .launch-summary-grid{padding:0 18px 18px;gap:16px}
+.sales-workspace.operations-workspace .launch-operational-grid{gap:10px}
+.sales-workspace.operations-workspace .launch-operational-grid div{padding:12px;border-radius:7px}
+.sales-workspace.operations-workspace .launch-operational-grid span{font-size:12px}
+.sales-workspace.operations-workspace .launch-operational-grid strong{font-size:20px;font-weight:650}
+.sales-workspace.operations-workspace .reconcile{border-radius:7px}
+.sales-workspace.operations-workspace .reconcile>div{padding:14px 16px;font-size:13px}
+.sales-workspace.operations-workspace .reconcile strong{font-size:18px;font-weight:650}
+.sales-workspace.operations-workspace .timesheet-mode-note{min-height:46px;margin-bottom:14px;padding:10px 12px;border-radius:7px;font-size:12px;line-height:1.45}
+.sales-workspace.operations-workspace .timesheet th.day span{font-size:10px}
+.sales-workspace.operations-workspace .timesheet tfoot td{height:42px;font-size:12px}
+.sales-workspace.operations-workspace .timesheet-cell-input{height:34px;border-radius:6px}
+.sales-workspace.operations-workspace .timesheet-legend{margin-top:12px;border-radius:10px}
