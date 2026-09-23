@@ -52,6 +52,19 @@ jobs:
           grep -q 'sergey-work' /tmp/login.html
           grep -q 'Демо-организация' /tmp/login.html
 
+      - name: Verify control detail routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cookie='oo_workspace_mode=demo; oo_demo_role=director'
+          client_code="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/client.html -w '%{http_code}' "$BASE_URL/clients/70000000-0000-4000-8000-000000000001")"
+          candidate_code="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/candidate.html -w '%{http_code}' "$BASE_URL/candidates/85000000-0000-4000-8000-000000000001")"
+          request_code="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/request.html -w '%{http_code}' "$BASE_URL/requests/73000000-0000-4000-8000-000000000001")"
+          echo "client_status=$client_code candidate_status=$candidate_code request_status=$request_code"
+          test "$client_code" = "200"
+          test "$candidate_code" = "200"
+          test "$request_code" = "200"
+
       - name: Diagnose detail route services
         shell: bash
         run: |
