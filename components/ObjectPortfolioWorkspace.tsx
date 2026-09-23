@@ -19,7 +19,7 @@ export function ObjectPortfolioWorkspace({objects,analytics}:{objects:ObjectRow[
   const regions=useMemo(()=>[...new Set(objects.map(row=>row.region).filter(Boolean))].sort(),[objects]);
   const managers=useMemo(()=>[...new Set(objects.map(row=>row.ownerName).filter((value):value is string=>Boolean(value)))].sort(),[objects]);
   const filtered=useMemo(()=>objects.filter(row=>{
-    const hay=`${row.name} ${row.code} ${row.client} ${row.region} ${row.ownerName??""}`.toLocaleLowerCase("ru");
+    const hay=`${row.name} ${row.code} ${row.client} ${row.region} ${row.address??""} ${row.ownerName??""}`.toLocaleLowerCase("ru");
     return (!query.trim()||hay.includes(query.trim().toLocaleLowerCase("ru")))
       &&(!status||row.status===status)
       &&(!region||row.region===region)
@@ -28,7 +28,7 @@ export function ObjectPortfolioWorkspace({objects,analytics}:{objects:ObjectRow[
 
   return <>
     <div className="object-portfolio-toolbar">
-      <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по объекту, клиенту, региону или коду"/>
+      <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по объекту, клиенту, локации или коду"/>
       <select value={region} onChange={e=>setRegion(e.target.value)}><option value="">Все регионы</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select>
       <select value={manager} onChange={e=>setManager(e.target.value)}><option value="">Все менеджеры</option>{managers.map(value=><option key={value} value={value}>{value}</option>)}</select>
       <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
@@ -38,7 +38,7 @@ export function ObjectPortfolioWorkspace({objects,analytics}:{objects:ObjectRow[
     <div className="object-portfolio-results"><span>Показано {filtered.length} из {objects.length}</span></div>
     <section className="section section-flush">
       <div className="request-table-wrap"><table className="data-table object-portfolio-table">
-        <thead><tr><th>Объект</th><th>Клиент</th><th>Регион</th><th>Менеджер</th><th>Статус</th><th>Работает / нужно</th><th>Укомплектованность</th><th>Дефицит</th><th>Старт</th><th>Риски</th></tr></thead>
+        <thead><tr><th>Объект</th><th>Клиент</th><th>Локация</th><th>Менеджер</th><th>Статус</th><th>Работает / нужно</th><th>Укомплектованность</th><th>Дефицит</th><th>Старт</th><th>Операционный риск</th></tr></thead>
         <tbody>{filtered.map(row=>{
           const fact=analyticsByObject.get(row.id);
           const working=fact?.working??row.filled;
@@ -46,7 +46,7 @@ export function ObjectPortfolioWorkspace({objects,analytics}:{objects:ObjectRow[
           const coverage=required?Math.round(working/required*100):100;
           return <tr key={row.id}>
             <td><Link className="cell-title" href={"/objects/"+row.id}>{row.name}</Link><span className="cell-sub">{row.code}</span></td>
-            <td>{row.client}</td><td>{row.region}</td><td>{row.ownerName??fact?.manager??"—"}</td>
+            <td>{row.client}</td><td><span className="object-location">{row.address??row.region}</span>{row.address&&row.address!==row.region&&<span className="cell-sub">{row.region}</span>}</td><td>{row.ownerName??fact?.manager??"—"}</td>
             <td><Status tone={row.status==="active"?"good":row.status==="paused"?"warn":"info"}>{statusLabels[row.status]??"В работе"}</Status></td>
             <td className="num">{working} / {required}</td>
             <td><div className="object-coverage"><div className="progress"><span style={{width:Math.min(100,coverage)+"%"}}/></div><span>{coverage}%</span></div></td>
