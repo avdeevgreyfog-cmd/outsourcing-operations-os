@@ -1,5 +1,4 @@
 import { githubPagesStaticParams } from "@/lib/demo/static-params";
-import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -8,7 +7,7 @@ import { CandidateProfileWorkspace } from "@/components/CandidateProfileWorkspac
 import { getCandidateProfile, getRecruitingOptions, listRecruitingNeeds } from "@/lib/recruiting/service";
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.candidates.map((id)=>({id})) : [];
+  return githubPagesStaticParams.candidates.map((id)=>({id}));
 }
 
 export default async function CandidatePage({params}:{params:Promise<{id:string}>}){
