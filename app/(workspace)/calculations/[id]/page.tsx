@@ -25,7 +25,7 @@ function dateLabel(value:string|null|undefined){if(!value)return "—";const dat
 function statusTone(status:string){if(status==="approved"||status==="accepted")return "good" as const;if(status==="review"||status==="pending")return "warn" as const;if(status==="rejected")return "bad" as const;return "neutral" as const;}
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.calculations.map((id)=>({id})) : [];
+  return githubPagesStaticParams.calculations.map((id)=>({id}));
 }
 
 export default async function CalculationWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;seed?:string;date?:string}>}){
