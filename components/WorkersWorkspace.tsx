@@ -9,6 +9,7 @@ import { SalesSearch } from "@/components/sales/SalesUI";
 import type { WorkerRow } from "@/lib/data/service";
 import type { OperationsReferenceData } from "@/lib/operations/service";
 import { rub } from "@/lib/ui/format";
+import { employmentTypeLabel,workerStatusLabel } from "@/lib/ui/labels";
 
 type ImportRow={fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;specialtyName:string|null;startDate:string|null;relationType:"employment"|"gph"|"npd"|"custom"|null;rate:number|null;rateUnit:"hour"|"shift"|"month"|null;workMode:"local"|"rotation"|null;paidHoursPerShift:number|null};
 type FormState={fullName:string;phone:string;email:string;city:string;birthDate:string;objectId:string;specialtyId:string;startDate:string;relationType:"employment"|"gph"|"npd"|"custom";rate:string;rateUnit:"hour"|"shift"|"month";workMode:"local"|"rotation";paidHoursPerShift:string;clothingSize:string;shoeSize:string;heightCm:string;notes:string};
@@ -141,9 +142,9 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
         <td>{availabilityChange(row)}</td>
         <td>{row.startDate?new Intl.DateTimeFormat("ru-RU").format(new Date(row.startDate+"T00:00:00")):"—"}</td>
         <td><span className="workers-source" title={row.origin??row.source??"—"}>{row.origin??row.source??"—"}</span></td>
-        <td>{row.employment??"—"}</td>
+        <td>{employmentTypeLabel(row.employment)}</td>
         {sensitive&&<><td className="num">{rateLabel(row)}</td><td className="num">{row.accrued==null?"—":rub(row.accrued)}</td><td className="num">{row.payable==null?"—":rub(row.payable)}</td></>}
-        <td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Работает":row.status==="dismissed"?"Работа завершена":row.status}</Status></td>
+        <td><Status tone={row.status==="active"?"good":"neutral"}>{workerStatusLabel(row.status)}</Status></td>
       </tr>)}</tbody>
     </table>{!filtered.length&&<div className="empty-inline">Сотрудники не найдены</div>}</div></section>
 
