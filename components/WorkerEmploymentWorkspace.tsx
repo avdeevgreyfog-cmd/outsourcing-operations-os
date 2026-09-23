@@ -7,7 +7,6 @@ import { CalendarClock, LogOut, X } from "lucide-react";
 import { KeyValue, Section, Status } from "@/components/UI";
 import type { WorkerOffboardingContext } from "@/lib/operations/service";
 
-const relationLabels:Record<string,string>={employment:"Трудовой договор",gph:"ГПХ",npd:"Самозанятый",custom:"Другое"};
 const reasonLabels:Record<string,string>={
   employee_request:"По инициативе сотрудника",
   employer_decision:"По инициативе компании",
@@ -60,7 +59,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
     <div className="workspace-grid">
       <Section title="Оформление и статус">
         <div style={{padding:"6px 15px 14px"}}>
-          <KeyValue label="Формат оформления" value={context.relationType?relationLabels[context.relationType]??context.relationType:"—"}/>
+          <KeyValue label="Формат оформления" value={employmentTypeLabel(context.relationType)}/>
           <KeyValue label="Действует с" value={context.relationFrom??"—"}/>
           <KeyValue label="Действует по" value={context.relationTo??"—"}/>
           <KeyValue label="Статус сотрудника" value={<Status tone={workerStatus==="active"?"good":"neutral"}>{workerStatus==="active"?"Работает":workerStatus==="dismissed"?"Работа завершена":workerStatus}</Status>}/>
