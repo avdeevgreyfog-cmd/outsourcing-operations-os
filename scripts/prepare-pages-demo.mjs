@@ -15,6 +15,9 @@ const routes = {
 for (const [path,key] of Object.entries(routes)) {
   let source = fs.readFileSync(path,"utf8");
   if (source.includes("export function generateStaticParams")) continue;
+  if (!source.includes('from "@/lib/demo/static-params"')) {
+    source = 'import { githubPagesStaticParams } from "@/lib/demo/static-params";\n' + source;
+  }
   const marker = "export default async function";
   const index = source.indexOf(marker);
   if (index < 0) throw new Error(`Default page export not found: ${path}`);
