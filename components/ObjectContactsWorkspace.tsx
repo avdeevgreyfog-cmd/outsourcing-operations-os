@@ -51,7 +51,7 @@ export function ObjectContactsWorkspace({
     if(!form.roles.length){setError("Укажите хотя бы одну роль контакта.");return;}
     setBusy(true);setError("");
     try{
-      if(demo){setError("В демо-режиме контакты доступны только для просмотра.");return;}
+      if(demo){setError("Изменение контактов в текущем режиме недоступно.");return;}
       const response=await fetch("/api/objects/"+objectId+"/contacts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
         contactId:form.contactId||null,fullName:form.fullName||null,position:form.position||null,phone:form.phone||null,email:form.email||null,
         telegram:form.telegram||null,whatsapp:form.whatsapp||null,maxContact:form.maxContact||null,preferredChannel:form.preferredChannel||null,
