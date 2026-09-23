@@ -52,6 +52,16 @@ jobs:
           grep -q 'sergey-work' /tmp/login.html
           grep -q 'Демо-организация' /tmp/login.html
 
+      - name: Diagnose detail route services
+        shell: bash
+        run: |
+          set -euo pipefail
+          cookie='oo_workspace_mode=demo; oo_demo_role=director'
+          code="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/detail-diagnostics.json -w '%{http_code}' "$BASE_URL/api/system/detail-diagnostics")"
+          cat /tmp/detail-diagnostics.json
+          echo
+          test "$code" = "200"
+
       - name: Verify object and worker detail routes
         shell: bash
         run: |
