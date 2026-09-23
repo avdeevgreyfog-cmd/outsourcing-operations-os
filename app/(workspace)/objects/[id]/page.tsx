@@ -29,9 +29,6 @@ const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка 
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 const stageLabels:Record<string,string>={new:"Новый",screening:"Первичный контакт",interview:"Интервью",documents:"Документы",clearance:"Проверка",preparation:"Подготовка",first_shift:"Первый выход",hired:"Вышел"};
 
-export function generateStaticParams(){
-  return githubPagesStaticParams.objects.map((id)=>({id}));
-}
 
 export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}) {
   const {id}=await params;
