@@ -9,6 +9,7 @@ import { WorkerAbsencesWorkspace, WorkerAssignmentsWorkspace } from "@/component
 import { WorkerEmploymentWorkspace } from "@/components/WorkerEmploymentWorkspace";
 import { Empty, EntityTabs, KeyValue, Metric, PageHeader, Section, Status } from "@/components/UI";
 import { rub } from "@/lib/ui/format";
+import { employmentTypeLabel } from "@/lib/ui/labels";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -57,7 +58,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     .map(([key,label])=>({label,href:"/workers/"+id+"?tab="+key}));
 
   return <>
-    <PageHeader eyebrow="Сотрудник" title={worker.fullName} subtitle={(worker.employment??"Оформление не указано")+" · "+(worker.object??"Без назначения")} breadcrumbs={[{label:"Операции"},{label:"Сотрудники",href:"/workers"},{label:worker.fullName}]}/>
+    <PageHeader eyebrow="Сотрудник" title={worker.fullName} subtitle={(worker.employment?employmentTypeLabel(worker.employment):"Оформление не указано")+" · "+(worker.object??"Без назначения")} breadcrumbs={[{label:"Операции"},{label:"Сотрудники",href:"/workers"},{label:worker.fullName}]}/>
     <EntityTabs items={tabs} active={labels[tab]}/>
 
     {tab==="overview"&&<>
@@ -75,7 +76,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
           <KeyValue label="Формат работы" value={worker.workMode==="rotation"?"Вахта":"Местный"}/>
           <KeyValue label="Сейчас" value={workerOperationalState(worker)}/>
           <KeyValue label="Возврат / изменение" value={workerAvailability(worker)}/>
-          <KeyValue label="Оформление" value={worker.employment??"—"}/>
+          <KeyValue label="Оформление" value={employmentTypeLabel(worker.employment)}/>
           <KeyValue label="Источник" value={worker.origin??worker.source??"—"}/>
           <KeyValue label="Первичный рекрутер" value={worker.originalRecruiter??"—"}/>
           {worker.originCandidateId&&<KeyValue label="История подбора" value={<Link href={"/candidates/"+worker.originCandidateId}>Открыть карточку кандидата</Link>}/>}
