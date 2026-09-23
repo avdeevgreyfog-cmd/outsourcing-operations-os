@@ -61,7 +61,7 @@ export function ResourceScheduler({rows,options,canEdit}:{rows:ShiftRow[];option
         <tbody>{visible.map(row=><tr key={row.id} onDoubleClick={()=>setSelected(row)}>
           <td><button type="button" className="cell-link" onClick={()=>setSelected(row)}><strong>{row.date} · {kindLabels[row.kind]??row.kind}</strong><span>{row.time}</span></button></td>
           <td>{row[group]}</td><td>{group==="object"?row.specialty:row.object}</td>
-          <td style={{minWidth:175}}><div className="scheduler-bar"><span className="assigned" style={{width:`${Math.min(100,row.assigned/Math.max(1,row.demand)*100)}%`}}/><span className="reserve" style={{width:`${Math.min(100,row.reserve/Math.max(1,row.demand)*100)}%`}}/><span className="deficit" style={{width:`${Math.min(100,Math.max(0,row.deficit)/Math.max(1,row.demand)*100)}%`}}/></div><span className="cell-sub">{row.assigned+row.reserve} из {row.demand}</span></td>
+          <td className="scheduler-coverage-cell"><div className="scheduler-bar"><span className="assigned" style={{width:`${Math.min(100,row.assigned/Math.max(1,row.demand)*100)}%`}}/><span className="reserve" style={{width:`${Math.min(100,row.reserve/Math.max(1,row.demand)*100)}%`}}/><span className="deficit" style={{width:`${Math.min(100,Math.max(0,row.deficit)/Math.max(1,row.demand)*100)}%`}}/></div><span className="cell-sub">{row.assigned+row.reserve} из {row.demand}</span></td>
           <td className="num">{row.demand}</td><td className="num">{row.assigned}</td><td className="num">{row.reserve}</td><td className="num">{row.confirmed??"—"}</td><td className="num">{row.deficit}</td><td className="num">{rub(row.cost)}</td>
           <td><Status tone={row.deficit>0?"warn":row.status==="closed"?"neutral":"good"}>{statusLabels[row.status]??row.status}</Status></td>
         </tr>)}</tbody>
@@ -74,7 +74,7 @@ export function ResourceScheduler({rows,options,canEdit}:{rows:ShiftRow[];option
       <div className="eyebrow">Смена · {selected.date}</div><h2>{selected.object}</h2>
       <Status tone={selected.deficit?"warn":"good"}>{kindLabels[selected.kind]??selected.kind} · {statusLabels[selected.status]??selected.status}</Status>
       <div className="drawer-content"><KeyValue label="Время" value={selected.time}/><KeyValue label="Специальность" value={selected.specialty}/><KeyValue label="Потребность" value={selected.demand}/><KeyValue label="Назначено" value={selected.assigned}/><KeyValue label="Резерв" value={selected.reserve}/><KeyValue label="Подтверждено" value={selected.confirmed??"—"}/><KeyValue label="Открытые позиции" value={selected.deficit}/><KeyValue label="Плановая стоимость" value={rub(selected.cost)} sensitive/></div>
-      <div className="drawer-actions">{canEdit&&<button className="button primary" onClick={()=>setShowAssignments(true)}><UsersRound size={14}/> Состав смены</button>}<Link className="button" href={`/objects/${selected.objectId}?tab=recruiting`}><CalendarDays size={14}/> Передать в подбор</Link></div>
+      <div className="drawer-actions">{canEdit&&<button className="button primary" onClick={()=>setShowAssignments(true)}><UsersRound size={14}/> Состав смены</button>}<Link className="button" href={`/objects/${selected.objectId}?tab=staffing`}><CalendarDays size={14}/> Передать в подбор</Link></div>
     </aside></>}
 
     {showCreate&&<ScheduleModal options={options} onClose={()=>setShowCreate(false)} onSaved={(text)=>{setShowCreate(false);setMessage(text);router.refresh()}}/>}
