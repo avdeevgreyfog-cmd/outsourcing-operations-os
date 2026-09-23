@@ -15,7 +15,7 @@ import { EntityTabs, PageHeader } from "@/components/UI";
 const tabLabels: Record<string, string> = {overview:"Обзор",document:"Документ",approval:"Согласование",history:"История"};
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.proposals.map((id)=>({id})) : [];
+  return githubPagesStaticParams.proposals.map((id)=>({id}));
 }
 
 export default async function ProposalPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
