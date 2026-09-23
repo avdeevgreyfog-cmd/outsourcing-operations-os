@@ -1,5 +1,4 @@
 import { githubPagesStaticParams } from "@/lib/demo/static-params";
-import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { notFound, redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -11,7 +10,7 @@ import { RequestIntakeFinalShell } from "@/components/RequestIntakeFinalShell";
 import { PageHeader } from "@/components/UI";
 
 export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.requests.map((id)=>({id})) : [];
+  return githubPagesStaticParams.requests.map((id)=>({id}));
 }
 
 export default async function EditRequestPage({ params }: { params: Promise<{ id: string }> }) {
