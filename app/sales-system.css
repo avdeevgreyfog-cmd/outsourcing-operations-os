@@ -697,3 +697,6 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .worker-employment-error{margin-top:12px}
 .sales-workspace.operations-workspace .worker-employment-secondary{margin-top:18px}
 .sales-workspace.operations-workspace .worker-employment-assets-action{padding:12px 18px}
+
+.sales-workspace.operations-workspace .launch-operational-grid-content{padding:8px 18px 18px}
+.sales-workspace.operations-workspace .launch-task-cell{min-width:220px}
