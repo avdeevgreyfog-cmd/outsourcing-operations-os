@@ -7,5 +7,6 @@ export async function GET(){
     ok:true,
     databaseConfigured:hasDatabase(),
     demoAvailable:isDemoMode(),
+    deploymentSha:process.env.VERCEL_GIT_COMMIT_SHA ?? null,
   });
 }
