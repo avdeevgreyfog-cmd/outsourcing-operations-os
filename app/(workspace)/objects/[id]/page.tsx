@@ -30,7 +30,7 @@ const riskLabels:Record<string,string>={normal:"Норма",watch:"Контро�
 const stageLabels:Record<string,string>={new:"Новый",screening:"Первичный контакт",interview:"Интервью",documents:"Документы",clearance:"Проверка",preparation:"Подготовка",first_shift:"Первый выход",hired:"Вышел"};
 
 export function generateStaticParams(){
-  return isGithubPagesDemo()?githubPagesStaticParams.objects.map(id=>({id})):[];
+  return githubPagesStaticParams.objects.map((id)=>({id}));
 }
 
 export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}) {
