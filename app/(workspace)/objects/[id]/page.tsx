@@ -8,6 +8,7 @@ import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { pct,rub } from "@/lib/ui/format";
+import { employmentTypeLabel } from "@/lib/ui/labels";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -233,7 +234,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {tab==="workforce"&&<>
       <div className="metrics-grid"><Metric label="Сотрудники на объекте" value={objectWorkers.length}/><Metric label="Местные" value={objectWorkers.filter(row=>row.workMode!=="rotation").length}/><Metric label="Вахта" value={objectWorkers.filter(row=>row.workMode==="rotation").length}/><Metric label="Сейчас отсутствуют" value={objectWorkers.filter(row=>objectWorkerState(row)!=="Работает").length} tone={objectWorkers.some(row=>objectWorkerState(row)!=="Работает")?"warn":undefined}/></div>
       <Section title="Сотрудники">
-        <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Ставка</th><th>Оформление</th></tr></thead><tbody>{objectWorkers.map(row=><tr key={row.id}><td><Link className="cell-title" href={"/workers/"+row.id}>{row.fullName}</Link></td><td>{row.specialty??"—"}</td><td>{row.workMode==="rotation"?"Вахта":"Местный"}</td><td><Status tone={objectWorkerState(row)==="Работает"?"good":"info"}>{objectWorkerState(row)}</Status></td><td>{objectWorkerAvailability(row)}</td><td className="num">{objectWorkerRate(row)}</td><td>{row.employment??"—"}</td></tr>)}</tbody></table></div>
+        <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Ставка</th><th>Оформление</th></tr></thead><tbody>{objectWorkers.map(row=><tr key={row.id}><td><Link className="cell-title" href={"/workers/"+row.id}>{row.fullName}</Link></td><td>{row.specialty??"—"}</td><td>{row.workMode==="rotation"?"Вахта":"Местный"}</td><td><Status tone={objectWorkerState(row)==="Работает"?"good":"info"}>{objectWorkerState(row)}</Status></td><td>{objectWorkerAvailability(row)}</td><td className="num">{objectWorkerRate(row)}</td><td>{employmentTypeLabel(row.employment)}</td></tr>)}</tbody></table></div>
         {!objectWorkers.length&&<Empty title="Назначений нет" text="На объект не назначены доступные вам сотрудники."/>}
       </Section>
       
