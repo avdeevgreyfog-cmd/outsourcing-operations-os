@@ -82,6 +82,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - name: Prepare static demo source
         run: |
+          node scripts/prepare-pages-demo.mjs
           rm -rf app/api
           rm -rf app/login app/activate
           rm -rf app/request-form app/request-intake
