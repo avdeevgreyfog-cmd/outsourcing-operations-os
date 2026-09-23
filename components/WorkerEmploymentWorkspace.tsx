@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { CalendarClock, LogOut, X } from "lucide-react";
 import { KeyValue, Section, Status } from "@/components/UI";
 import type { WorkerOffboardingContext } from "@/lib/operations/service";
+import { employmentTypeLabel,workerStatusLabel } from "@/lib/ui/labels";
 
 const reasonLabels:Record<string,string>={
   employee_request:"По инициативе сотрудника",
@@ -31,7 +32,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
   async function submit(){
     setBusy(true);setError("");
     try{
-      if(demo){setError("В демо-режиме изменения не сохраняются");return;}
+      if(demo){setError("Изменения в текущем режиме недоступны");return;}
       const response=await fetch("/api/workers/"+workerId+"/exit",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
         action:future?"plan":"complete",effectiveDate,reasonCode,reason:reason||null,
       })});
@@ -46,7 +47,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
     if(!activePlan)return;
     setBusy(true);setError("");
     try{
-      if(demo){setError("В демо-режиме изменения не сохраняются");return;}
+      if(demo){setError("Изменения в текущем режиме недоступны");return;}
       const response=await fetch("/api/workers/"+workerId+"/exit",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"cancel",exitId:activePlan.id})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось отменить план");
@@ -58,25 +59,25 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
   return <>
     <div className="workspace-grid">
       <Section title="Оформление и статус">
-        <div style={{padding:"6px 15px 14px"}}>
+        <div className="worker-employment-facts">
           <KeyValue label="Формат оформления" value={employmentTypeLabel(context.relationType)}/>
           <KeyValue label="Действует с" value={context.relationFrom??"—"}/>
           <KeyValue label="Действует по" value={context.relationTo??"—"}/>
-          <KeyValue label="Статус сотрудника" value={<Status tone={workerStatus==="active"?"good":"neutral"}>{workerStatus==="active"?"Работает":workerStatus==="dismissed"?"Работа завершена":workerStatus}</Status>}/>
+          <KeyValue label="Статус сотрудника" value={<Status tone={workerStatus==="active"?"good":"neutral"}>{workerStatusLabel(workerStatus)}</Status>}/>
         </div>
       </Section>
 
-      <Section title="Завершение работы" note="Операционные связи закрываются централизованно: объект, ставка, бригада, жильё и будущие смены.">
-        <div style={{padding:14}}>
+      <Section title="Завершение работы" note="Операционные связи закрываются централизованно: объект, ставка, жильё и будущие смены.">
+        <div className="worker-employment-content">
           {activePlan?<div className="stack-item"><div><strong>Завершение запланировано на {activePlan.effectiveDate}</strong><small>{reasonLabels[activePlan.reasonCode]??activePlan.reasonCode}{activePlan.reason?" · "+activePlan.reason:""}</small></div>{canOffboard&&<button className="button" disabled={busy} onClick={()=>void cancelPlan()}>Отменить план</button>}</div>:workerStatus==="active"?<div className="summary-strip"><span>Активного плана завершения работы нет.</span>{canOffboard&&<button className="button primary" onClick={()=>setShow(true)}><LogOut size={14}/> Завершение работы</button>}</div>:<Status tone="neutral">Работа завершена</Status>}
-          {error&&<div className="recruiting-error" style={{marginTop:10}}>{error}</div>}
+          {error&&<div className="recruiting-error worker-employment-error">{error}</div>}
         </div>
       </Section>
     </div>
 
-    <div className="workspace-grid" style={{marginTop:16}}>
+    <div className="workspace-grid worker-employment-secondary">
       <Section title="Имущество к возврату" note="Возвратное имущество должно быть возвращено или списано до фактического завершения работы.">
-        {context.outstandingAssets.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Позиция</th><th>Вариант</th><th>Количество</th></tr></thead><tbody>{context.outstandingAssets.map(row=><tr key={row.itemId+":"+row.variant}><td className="cell-title">{row.item}</td><td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td></tr>)}</tbody></table>{canAccessAssets&&<div style={{padding:12}}><Link className="button" href={"/assets?worker="+workerId+"&action=return"}>Открыть возврат / списание</Link></div>}</div>:<div className="empty-inline">Возвратного имущества на сотруднике нет</div>}
+        {context.outstandingAssets.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Позиция</th><th>Вариант</th><th>Количество</th></tr></thead><tbody>{context.outstandingAssets.map(row=><tr key={row.itemId+":"+row.variant}><td className="cell-title">{row.item}</td><td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td></tr>)}</tbody></table>{canAccessAssets&&<div className="worker-employment-assets-action"><Link className="button" href={"/assets?worker="+workerId+"&action=return"}>Открыть возврат / списание</Link></div>}</div>:<div className="empty-inline">Возвратного имущества на сотруднике нет</div>}
       </Section>
       <Section title="Проживание">
         {context.housing.length?<div className="stack-list">{context.housing.map(row=><div className="stack-item" key={row.id}><div><strong>{row.site}</strong><small>Заезд {row.checkIn}{row.checkOut?" · выезд "+row.checkOut:""}</small></div><Status tone={row.status==="active"?"good":"info"}>{row.status==="active"?"Проживает":"Запланировано"}</Status></div>)}</div>:<div className="empty-inline">Активного проживания нет</div>}
