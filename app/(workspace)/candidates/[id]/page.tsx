@@ -6,9 +6,6 @@ import { PageHeader } from "@/components/UI";
 import { CandidateProfileWorkspace } from "@/components/CandidateProfileWorkspace";
 import { getCandidateProfile, getRecruitingOptions, listRecruitingNeeds } from "@/lib/recruiting/service";
 
-export function generateStaticParams(){
-  return githubPagesStaticParams.candidates.map((id)=>({id}));
-}
 
 export default async function CandidatePage({params}:{params:Promise<{id:string}>}){
   const {id}=await params;
