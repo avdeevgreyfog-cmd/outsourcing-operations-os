@@ -82,7 +82,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
           {!selectedRows.some(row=>row.milestone)&&<div className="empty-inline">Контрольные точки не заданы</div>}
         </Section>
         <Section title="Операционная готовность">
-          <div style={{padding:"6px 15px 14px"}} className="launch-operational-grid">
+          <div className="launch-operational-grid launch-operational-grid-content">
             <div><span>Плановая численность</span><strong>{selectedAnalytics?.required??0}</strong></div>
             <div><span>Работает</span><strong>{selectedAnalytics?.working??0}</strong></div>
             <div><span>Готовятся</span><strong>{selectedAnalytics?.preparing??0}</strong></div>
@@ -93,7 +93,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
 
       {view==="plan"&&<div className="request-table-wrap"><table className="data-table">
         <thead><tr><th>Задача</th><th>Ответственный</th><th>Baseline</th><th>Текущий план</th><th>Прогресс</th><th>Статус</th><th>Риск</th></tr></thead>
-        <tbody>{selectedRows.map(row=><tr key={row.id}><td style={{paddingLeft:14+row.level*18}}><strong className="cell-title">{row.title}</strong>{row.critical&&<span className="cell-sub">Критический путь</span>}</td><td>{row.owner}</td><td>{(row.baselineStart??"—")+"–"+(row.baselineEnd??"—")}</td><td>{row.start+"–"+row.end}</td><td className="num">{row.progress}%</td><td><Status tone={row.status==="done"?"good":row.status==="blocked"?"bad":"info"}>{statusLabels[row.status]??"В работе"}</Status></td><td><Status tone={row.risk==="critical"?"bad":row.risk==="high"?"warn":"neutral"}>{riskLabels[row.risk]??"Норма"}</Status></td></tr>)}</tbody>
+        <tbody>{selectedRows.map(row=><tr key={row.id}><td className="launch-task-cell" style={{paddingLeft:14+row.level*18}}><strong className="cell-title">{row.title}</strong>{row.critical&&<span className="cell-sub">Критический путь</span>}</td><td>{row.owner}</td><td>{(row.baselineStart??"—")+"–"+(row.baselineEnd??"—")}</td><td>{row.start+"–"+row.end}</td><td className="num">{row.progress}%</td><td><Status tone={row.status==="done"?"good":row.status==="blocked"?"bad":"info"}>{statusLabels[row.status]??"В работе"}</Status></td><td><Status tone={row.risk==="critical"?"bad":row.risk==="high"?"warn":"neutral"}>{riskLabels[row.risk]??"Норма"}</Status></td></tr>)}</tbody>
       </table></div>}
 
       {view==="gantt"&&<LaunchGantt rows={selectedRows}/>}
