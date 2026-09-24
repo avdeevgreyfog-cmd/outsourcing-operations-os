@@ -15,7 +15,7 @@ function lifecycle(proposal: CommercialProposalDetail) {
   ].filter((item) => item.done);
 }
 
-export function ProposalApprovalView({ proposal, canSubmit, canClientDecision, canLaunch }: { proposal: CommercialProposalDetail; canSubmit: boolean; canClientDecision: boolean; canLaunch: boolean }) {
+export function ProposalApprovalView({ proposal, canSubmit, canClientDecision, canLaunch, legalEntities=[] }: { proposal: CommercialProposalDetail; canSubmit: boolean; canClientDecision: boolean; canLaunch: boolean; legalEntities?:Array<{id:string;name:string;shortName:string|null;primary:boolean}> }) {
   const items = lifecycle(proposal);
   return <div className="proposal-approval-layout">
     <Section title="Жизненный цикл" note="Внутренняя проверка отделена от решения заказчика; после принятия КП подготовка объекта идёт параллельно договорной работе.">
@@ -24,7 +24,7 @@ export function ProposalApprovalView({ proposal, canSubmit, canClientDecision, c
     <aside>
       <Section title="Действия">
         <div className="proposal-side-body">
-          <ProposalWorkflowActions proposalId={proposal.id} status={proposal.status} objectId={proposal.sourceObjectId} canSubmit={canSubmit} canClientDecision={canClientDecision} canLaunch={canLaunch}/>
+          <ProposalWorkflowActions proposalId={proposal.id} status={proposal.status} objectId={proposal.sourceObjectId} canSubmit={canSubmit} canClientDecision={canClientDecision} canLaunch={canLaunch} legalEntities={legalEntities}/>
           {proposal.status === "internal_review" && <Link className="button" href="/approvals">Открыть согласования</Link>}
         </div>
       </Section>

@@ -20,6 +20,8 @@ export const capabilities = {
   calculationsApprove: "calculation.scenario.approve",
   ratesRead: "calculation.rate_reference.read",
   objectsRead: "operations.object.read",
+  objectsCreate: "operations.object.create",
+  objectsAssign: "operations.object.assign",
   objectsEdit: "operations.object.edit",
   needsRead: "operations.need.read",
   needsCreate: "operations.need.create",

@@ -16,7 +16,10 @@ export const companyProfile: CompanyProfile = {
   id: ORG,
   name: "БЕТА · ОПЕРИС Аутсорсинг",
   slug: "operis-beta",
-  legalEntities: [{ id: "31000000-0000-4000-8000-000000000001", name: "ООО «Оперис Аутсорсинг»", shortName: "Оперис Аутсорсинг", inn: "7700000000", primary: true }],
+  legalEntities: [
+    { id: "31000000-0000-4000-8000-000000000001", name: "ООО «Оперис Аутсорсинг»", shortName: "Оперис Аутсорсинг", inn: "7700000000", primary: true },
+    { id: "31000000-0000-4000-8000-000000000002", name: "ООО «Оперис Персонал»", shortName: "Оперис Персонал", inn: "7700000001", primary: false },
+  ],
   regions: [
     { id: MOW, code: "MOW", name: "Москва и Московская область" },
     { id: KLG, code: "KLG", name: "Калужская область" },

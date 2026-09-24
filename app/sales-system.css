@@ -729,3 +729,138 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .timesheet tfoot td{height:42px;font-size:12px}
 .sales-workspace.operations-workspace .timesheet-cell-input{height:34px;border-radius:6px}
 .sales-workspace.operations-workspace .timesheet-legend{margin-top:12px;border-radius:10px}
+
+
+/* Object portfolio management — legal entity, team responsibility and explainable risk. */
+.sales-workspace.operations-workspace .object-portfolio-toolbar-row{
+  margin-bottom:9px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px
+}
+.sales-workspace.operations-workspace .object-portfolio-toolbar-row .object-portfolio-toolbar{margin:0;flex:1}
+.sales-workspace.operations-workspace .object-create-button{flex:0 0 auto;min-height:38px}
+.sales-workspace.operations-workspace .object-attention-filter{
+  min-height:38px;padding:0 10px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border-strong);
+  border-radius:7px;background:var(--panel);color:var(--muted);font-size:12px;white-space:nowrap;cursor:pointer
+}
+.sales-workspace.operations-workspace .object-attention-filter.active{border-color:var(--warn);background:var(--warn-bg);color:var(--text)}
+.sales-workspace.operations-workspace .object-attention-filter input{accent-color:var(--accent)}
+.sales-workspace.operations-workspace .object-portfolio-results{display:flex;align-items:center;gap:14px}
+.sales-workspace.operations-workspace .object-portfolio-table{min-width:1540px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(1){width:185px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(2){width:145px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(3){width:155px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(4){width:210px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(5){width:175px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(6){width:185px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(7){width:105px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(8){width:190px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(9){width:80px}
+.sales-workspace.operations-workspace .object-portfolio-table th:nth-child(10){width:95px}
+.object-people-cell,.object-recruiting-cell{min-width:0}
+.object-people-cell{display:flex;align-items:center;gap:6px}
+.object-people-cell strong,.object-recruiting-cell strong{font-size:12px;font-weight:650}
+.object-people-cell>span,.object-recruiting-cell>div>span{
+  min-width:23px;height:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:999px;background:var(--panel-2);color:var(--muted);font-size:10px;font-weight:700
+}
+.object-recruiting-cell>div{display:flex;align-items:center;gap:6px}
+.object-recruiting-cell small,.object-recruiting-cell em{display:block;margin-top:3px;font-size:10px;font-style:normal}
+.object-recruiting-cell small{color:var(--muted)}
+.object-recruiting-cell em{color:var(--warn)}
+.object-staffing-cell{min-width:150px;display:grid;gap:5px}
+.object-staffing-cell>div:first-child{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.object-staffing-cell strong{font-size:12px;font-weight:680;font-variant-numeric:tabular-nums}
+.object-staffing-cell>div:first-child span{color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
+.object-staffing-cell small{font-size:10px;color:var(--muted)}
+.object-staffing-cell.is-empty{gap:2px}
+.object-staffing-cell.is-empty strong{color:var(--muted);font-weight:600}
+.object-risk-cell{position:relative;display:inline-flex}
+.object-risk-trigger{padding:0;border:0;background:transparent;cursor:help}
+.object-risk-trigger:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:999px}
+.object-risk-popover{
+  position:absolute;z-index:12;right:0;top:calc(100% + 7px);width:300px;padding:11px 12px;
+  visibility:hidden;opacity:0;pointer-events:none;border:1px solid var(--border-strong);border-radius:8px;
+  background:var(--panel);box-shadow:var(--shadow);transition:opacity .12s ease
+}
+.object-risk-cell:hover .object-risk-popover,.object-risk-cell:focus-within .object-risk-popover{visibility:visible;opacity:1}
+.object-risk-popover>strong{display:block;margin-bottom:7px;font-size:12px}
+.object-risk-popover>span,.object-risk-popover>small{display:block;color:var(--muted);font-size:10.5px;line-height:1.45}
+.object-risk-popover ul{margin:0;padding:0;list-style:none}
+.object-risk-popover li{padding:7px 0;border-top:1px solid var(--border)}
+.object-risk-popover li:first-child{border-top:0;padding-top:0}
+.object-risk-popover li b,.object-risk-popover li span{display:block}
+.object-risk-popover li b{font-size:10.5px;font-weight:650}
+.object-risk-popover li span{margin-top:2px;color:var(--muted);font-size:10px}
+.object-risk-popover>small{margin-top:7px;padding-top:7px;border-top:1px solid var(--border)}
+
+.object-create-drawer{width:min(650px,94vw)}
+.object-create-drawer .form-hint{margin:4px 0 17px;color:var(--muted);font-size:11px;line-height:1.5}
+.object-create-form,.object-settings-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 12px}
+.object-create-form>label,.object-settings-form>label{display:grid;gap:5px;color:var(--muted);font-size:11px}
+.object-create-form .wide,.object-settings-form .wide{grid-column:1/-1}
+.object-create-form :is(input,select),.object-settings-form :is(input,select),.login-form select{
+  width:100%;min-height:36px;padding:0 9px;border:1px solid var(--border-strong);border-radius:7px;
+  background:var(--panel);color:var(--text);font-size:12px
+}
+.object-assignment-picker{display:grid;gap:7px}
+.object-assignment-picker>span{color:var(--muted);font-size:11px}
+.object-assignment-picker>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.object-assignment-picker>div>label{
+  min-height:38px;padding:0 10px;display:flex;align-items:center;gap:8px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+  color:var(--text);font-size:11.5px;cursor:pointer
+}
+.object-assignment-picker>div>label:nth-child(even){border-right:0}
+.object-assignment-picker>div>label:nth-last-child(-n+2){border-bottom:0}
+.object-assignment-picker input{width:auto!important;min-height:auto!important;accent-color:var(--accent)}
+.object-assignment-picker>small{color:var(--muted);font-size:10.5px;line-height:1.45}
+
+.object-settings-layout{display:grid;gap:14px}
+.object-source-links{padding:14px 18px;display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.object-source-links>a,.object-source-links>div{min-width:190px;padding:9px 10px;display:grid;grid-template-columns:1fr auto;gap:4px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);font-size:11.5px;text-decoration:none}
+.object-source-links>a:hover{background:var(--panel-2)}
+.object-source-links>div{grid-template-columns:1fr}
+.object-source-links>div span{color:var(--muted);font-size:10.5px}
+.object-settings-layout .section+.section{margin-top:0}
+.object-settings-form{padding:16px 18px}
+.object-settings-readonly{padding:14px 18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+.object-settings-readonly>div{display:grid;gap:3px}
+.object-settings-readonly span,.object-settings-readonly small{color:var(--muted);font-size:10.5px}
+.object-settings-readonly strong{font-size:12px;font-weight:650}
+.object-settings-readonly small{grid-column:1/-1;line-height:1.45}
+.object-routing-note,.object-handover-note{
+  padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);
+  color:var(--muted);font-size:11px;line-height:1.5
+}
+.object-handover-note{display:grid;gap:3px;border-color:color-mix(in srgb,var(--warn) 35%,var(--border));background:var(--warn-bg)}
+.object-handover-note strong{color:var(--text);font-size:11.5px}
+.object-settings-actions{display:flex;align-items:center;gap:12px}
+.object-settings-actions .form-error{grid-column:auto}
+.object-settings-success{color:var(--good);font-size:11px}
+
+.recruiter-allocation-editor{display:grid;gap:8px}
+.recruiter-allocation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.recruiter-allocation-head>div{display:grid;gap:3px}
+.recruiter-allocation-head strong{font-size:12px}
+.recruiter-allocation-head span{color:var(--muted);font-size:10.5px;line-height:1.4}
+.recruiter-allocation-head>b{font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.recruiter-allocation-list{border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.recruiter-allocation-list>div{min-height:41px;padding:5px 8px;display:grid;grid-template-columns:1fr 90px;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.recruiter-allocation-list>div:last-child{border-bottom:0}
+.recruiter-allocation-list>div.active{background:var(--panel-2)}
+.recruiter-allocation-list label{display:flex;align-items:center;gap:8px;color:var(--text);font-size:11.5px}
+.recruiter-allocation-list input[type=checkbox]{width:auto;min-height:auto;accent-color:var(--accent)}
+.recruiter-allocation-list input[type=number]{height:31px;text-align:right}
+.recruiter-allocation-editor>small{color:var(--muted);font-size:10.5px}
+
+@media(max-width:1180px){
+  .sales-workspace.operations-workspace .object-portfolio-toolbar-row{flex-direction:column}
+  .sales-workspace.operations-workspace .object-create-button{align-self:flex-end}
+}
+@media(max-width:720px){
+  .object-create-form,.object-settings-form,.object-settings-readonly{grid-template-columns:1fr}
+  .object-create-form .wide,.object-settings-form .wide{grid-column:auto}
+  .object-assignment-picker>div{grid-template-columns:1fr}
+  .object-assignment-picker>div>label{border-right:0}
+  .object-assignment-picker>div>label:nth-last-child(-n+2){border-bottom:1px solid var(--border)}
+  .object-assignment-picker>div>label:last-child{border-bottom:0}
+  .object-risk-popover{right:auto;left:0;width:min(300px,76vw)}
+}

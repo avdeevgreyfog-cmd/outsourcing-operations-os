@@ -10,6 +10,7 @@ import { ProposalDocumentView } from "@/components/ProposalDocumentView";
 import { ProposalOverview } from "@/components/ProposalOverview";
 import { ProposalApprovalView, ProposalHistoryView } from "@/components/ProposalLifecycle";
 import { EntityTabs, PageHeader } from "@/components/UI";
+import { getLegalEntityOptions } from "@/lib/operations/object-management";
 
 const tabLabels: Record<string, string> = {overview:"Обзор",document:"Документ",approval:"Согласование",history:"История"};
 
@@ -20,8 +21,9 @@ export default async function ProposalPage({params,searchParams}:{params:Promise
   const canEdit=proposal.status==="draft"&&hasCapability(actor.access,"sales.proposal.edit");
   const canSubmit=hasCapability(actor.access,"sales.proposal.submit");const canClientDecision=hasCapability(actor.access,"sales.proposal.client_decision");const canLaunch=hasCapability(actor.access,"sales.proposal.launch");
   const templates=canEdit?await listProposalTemplates(actor):[];
+  const legalEntities=canLaunch?await getLegalEntityOptions(actor,"sales.proposal.launch"):[];
   const templateOptions=templates.map(({id,name,kind,version,config})=>({id,name,kind,version,config}));
   const tabs=Object.entries(tabLabels).map(([key,label])=>({label,href:`/proposals/${proposal.id}?tab=${key}`}));
   const actions=<><Link className="button" href={`/requests/${proposal.requestId}`}>Открыть заявку</Link>{canEdit&&<ProposalDocumentEditor proposalId={proposal.id} content={proposal.content} templates={templateOptions}/>}<Link className="button primary" href={`/proposals/${proposal.id}/print`} target="_blank">PDF / печать</Link></>;
-  return <><PageHeader eyebrow="Коммерческое предложение" title={`КП №${proposal.version} · ${proposal.request}`} subtitle={`${proposal.client} · клиентская версия на основе согласованных расчётов`} breadcrumbs={[{label:"Коммерция"},{label:"Коммерческие предложения",href:"/proposals"},{label:`КП №${proposal.version}`}]} actions={actions}/><EntityTabs items={tabs} active={tabLabels[tab]}/>{tab==="overview"&&<ProposalOverview proposal={proposal}/>} {tab==="document"&&<ProposalDocumentView proposal={proposal} canEdit={canEdit} templates={templateOptions}/>} {tab==="approval"&&<ProposalApprovalView proposal={proposal} canSubmit={canSubmit} canClientDecision={canClientDecision} canLaunch={canLaunch}/>} {tab==="history"&&<ProposalHistoryView proposal={proposal}/>}</>;
+  return <><PageHeader eyebrow="Коммерческое предложение" title={`КП №${proposal.version} · ${proposal.request}`} subtitle={`${proposal.client} · клиентская версия на основе согласованных расчётов`} breadcrumbs={[{label:"Коммерция"},{label:"Коммерческие предложения",href:"/proposals"},{label:`КП №${proposal.version}`}]} actions={actions}/><EntityTabs items={tabs} active={tabLabels[tab]}/>{tab==="overview"&&<ProposalOverview proposal={proposal}/>} {tab==="document"&&<ProposalDocumentView proposal={proposal} canEdit={canEdit} templates={templateOptions}/>} {tab==="approval"&&<ProposalApprovalView proposal={proposal} canSubmit={canSubmit} canClientDecision={canClientDecision} canLaunch={canLaunch} legalEntities={legalEntities}/>} {tab==="history"&&<ProposalHistoryView proposal={proposal}/>}</>;
 }

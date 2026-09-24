@@ -15,7 +15,9 @@ export type ClientContactRow = ScopedRow & { id:string; clientId:string; fullNam
 export type RequestRoleRow = { name:string; count:number };
 export type RequestRow = ScopedRow & { id:string; title:string; client:string; status:string; location:string; start?:string|null; roles:RequestRoleRow[]; schedule?:unknown; housing?:string|null; vat?:string|null };
 export type CalculationRow = ScopedRow & { id:string; requestId:string; request:string; role:string; name:string; model:string; status:string; workerNet:number|string; totalCost:number|string; clientRate:number|string; marginPct:number|string; monthlyContribution:number|string };
-export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; revenueForecast?:number|string|null; marginForecast?:number|string|null };
+export type ObjectPersonRow = { userId:string; name:string };
+export type ObjectRiskReason = { code:string; label:string; detail:string };
+export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; legalEntityId?:string|null; legalEntity?:string|null; additionalManagers?:ObjectPersonRow[]; recruitingMode?:"company_rules"|"object_team"; recruitingTeam?:ObjectPersonRow[]; activeRecruiters?:ObjectPersonRow[]; unassignedNeedCount?:number; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; riskReasons?:ObjectRiskReason[]; attentionReasons?:string[]; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
 export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; rate:number|string|null; rateUnit?:string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
@@ -147,17 +149,80 @@ export async function listCalculations(actor: Actor): Promise<CalculationRow[]> 
 }
 
 export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
-  if (actor.demo) return allowed(actor, "operations.object.read", demo.objects);
+  if (actor.demo) {
+    const employeeNames=new Map(demoOrg.companyEmployees.map(item=>[item.userId,item.name]));
+    const person=(userId:string)=>({userId,name:employeeNames.get(userId)??"Сотрудник"});
+    const extraManagers:Record<string,string[]>={
+      "80000000-0000-4000-8000-000000000001":["10000000-0000-4000-8000-000000000010"],
+      "80000000-0000-4000-8000-000000000002":["10000000-0000-4000-8000-000000000004"],
+    };
+    const fixedRecruiters:Record<string,string[]>={
+      "80000000-0000-4000-8000-000000000001":["10000000-0000-4000-8000-000000000012","10000000-0000-4000-8000-000000000013"],
+      "80000000-0000-4000-8000-000000000004":["10000000-0000-4000-8000-000000000012","10000000-0000-4000-8000-000000000014"],
+    };
+    const entities=demoOrg.companyProfile.legalEntities;
+    const rows=demo.objects.map((row,index)=>{
+      const additionalIds=extraManagers[row.id]??[];
+      const recruitingIds=fixedRecruiters[row.id]??[];
+      const activeRecruiterIds=[...new Set(demo.needs.filter(need=>need.objectId===row.id&&need.ownerUserId).map(need=>need.ownerUserId as string))];
+      const entity=entities[index%Math.max(entities.length,1)]??null;
+      return {
+        ...row,
+        legalEntityId:entity?.id??null,
+        legalEntity:entity?.shortName??entity?.name??null,
+        additionalManagers:additionalIds.map(person),
+        recruitingMode:recruitingIds.length?"object_team" as const:"company_rules" as const,
+        recruitingTeam:recruitingIds.map(person),
+        activeRecruiters:activeRecruiterIds.map(person),
+        unassignedNeedCount:0,
+        assigneeUserIds:[...new Set([...(row.assigneeUserIds??[]),...additionalIds,...recruitingIds])],
+        coverage:Number(row.required)>0?Math.round(Number(row.filled)/Number(row.required)*100):0,
+      };
+    });
+    return allowed(actor, "operations.object.read", rows);
+  }
   requireCapability(actor, "operations.object.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ObjectRow[]>`
       SELECT o.id, o.id "objectId", o.organization_id "organizationId", o.name, o.code, o.status, o.source_request_id "sourceRequestId",o.source_proposal_id "sourceProposalId",
-             (SELECT u.display_name FROM app_users u WHERE u.id=o.owner_user_id) "ownerName",
+             owner.display_name "ownerName",
              o.region_id "regionId", rg.name region,o.address_text address,o.owner_user_id "ownerUserId",o.created_by_user_id "createdByUserId",
              o.client_company_id "clientId",c.name client,to_char(o.target_start_date,'DD.MM') "targetStart",
+             o.legal_entity_id "legalEntityId",COALESCE(le.short_name,le.name) "legalEntity",
+             o.recruiting_routing_mode "recruitingMode",
+             COALESCE((
+               SELECT jsonb_agg(jsonb_build_object('userId',oa.user_id,'name',u.display_name) ORDER BY u.display_name)
+               FROM object_assignments oa JOIN app_users u ON u.id=oa.user_id
+               WHERE oa.object_id=o.id AND oa.responsibility_type='additional_manager'
+                 AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)
+             ),'[]'::jsonb) "additionalManagers",
+             COALESCE((
+               SELECT jsonb_agg(jsonb_build_object('userId',oa.user_id,'name',u.display_name) ORDER BY u.display_name)
+               FROM object_assignments oa JOIN app_users u ON u.id=oa.user_id
+               WHERE oa.object_id=o.id AND oa.responsibility_type='recruiter'
+                 AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)
+             ),'[]'::jsonb) "recruitingTeam",
+             COALESCE((
+               SELECT jsonb_agg(jsonb_build_object('userId',x.user_id,'name',u.display_name) ORDER BY u.display_name)
+               FROM (
+                 SELECT DISTINCT na.recruiter_user_id user_id
+                 FROM needs n
+                 JOIN need_assignments na ON na.need_id=n.id
+                 WHERE n.object_id=o.id AND n.status IN ('open','in_progress','paused')
+                   AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL
+               ) x JOIN app_users u ON u.id=x.user_id
+             ),'[]'::jsonb) "activeRecruiters",
+             (
+               SELECT count(*)::int FROM needs n
+               WHERE n.object_id=o.id AND n.status IN ('open','in_progress','paused')
+                 AND NOT EXISTS (
+                   SELECT 1 FROM need_assignments na
+                   WHERE na.need_id=n.id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL
+                 )
+             ) "unassignedNeedCount",
              COALESCE(needs.required,0)::int required,COALESCE(workforce.working,0)::int filled,
              GREATEST(COALESCE(needs.required,0)-COALESCE(workforce.working,0),0)::int deficit,
-             CASE WHEN COALESCE(needs.required,0)=0 THEN 100 ELSE round(100.0*COALESCE(workforce.working,0)/needs.required) END::int coverage,
+             CASE WHEN COALESCE(needs.required,0)=0 THEN 0 ELSE round(100.0*COALESCE(workforce.working,0)/needs.required) END::int coverage,
              CASE
                WHEN COALESCE(needs.required,0)>0 AND COALESCE(workforce.working,0)*100.0/needs.required<60 THEN 'critical'
                WHEN COALESCE(needs.required,0)>0 AND COALESCE(workforce.working,0)*100.0/needs.required<80 THEN 'high'
@@ -168,6 +233,8 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
       FROM objects o
       JOIN client_companies c ON c.id=o.client_company_id
       JOIN regions rg ON rg.id=o.region_id
+      LEFT JOIN legal_entities le ON le.id=o.legal_entity_id
+      LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(n.count_required),0)::int required
         FROM needs n WHERE n.object_id=o.id AND n.status NOT IN ('cancelled','archived')

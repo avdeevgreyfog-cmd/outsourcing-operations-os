@@ -4,9 +4,11 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listCandidates,listFinance,listIncidents,listLaunchTasks,listNeeds,listObjects,listShifts,listWorkers } from "@/lib/data/service";
 import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
+import { getObjectManagementOptions } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
+import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { pct,rub } from "@/lib/ui/format";
 import { employmentTypeLabel } from "@/lib/ui/labels";
 
@@ -22,6 +24,7 @@ const labels:Record<string,string>={
   contacts:"Контакты",
   finance:"Финансы",
   documents:"Документы",
+  settings:"Настройки",
   history:"История",
 };
 const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history"};
@@ -49,6 +52,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canHousing=hasCapability(actor.access,"supply.housing.read");
   const canProcurement=hasCapability(actor.access,"procurement.read");
   const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
+  const canAssignObject=hasCapability(actor.access,"operations.object.assign");
+  const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
 
   const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
     canNeeds?listNeeds(actor):Promise.resolve([]),
@@ -109,8 +114,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   if(!canTimesheets)delete visibleLabels.timesheets;
   if(!(canAssets||canHousing||canProcurement))delete visibleLabels.supply;
   if(!canFinance)delete visibleLabels.finance;
+  if(!canEditObject)delete visibleLabels.settings;
   const tab=visibleLabels[requested]?requested:"overview";
-  const tabOrder=["overview",...(showLaunch?["launch"]:[]),"workforce","staffing","shifts","timesheets","supply","contacts","finance","documents","quality","history"];
+  const tabOrder=["overview",...(showLaunch?["launch"]:[]),"workforce","staffing","shifts","timesheets","supply","contacts","finance","documents","quality","settings","history"];
   const tabs=tabOrder.filter(key=>visibleLabels[key]).map(key=>({
     label:visibleLabels[key],
     href:`/objects/${id}?tab=${key}`,
@@ -126,8 +132,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
         <Status tone={operationalRisk==="critical"?"bad":operationalRisk==="high"?"warn":object.status==="active"?"good":"info"}>{objectStatusLabels[object.status]??"В работе"}</Status>
         <div className="object-meta">
           <div><span>Клиент</span><strong>{object.client}</strong></div>
+          <div><span>Наше юрлицо</span><strong>{object.legalEntity??"Не указано"}</strong></div>
           <div><span>Локация</span><strong>{object.address??object.region}</strong></div>
-          <div><span>Менеджер</span><strong>{object.ownerName??"—"}</strong></div>
+          <div><span>Менеджер</span><strong>{object.ownerName??"—"}{object.additionalManagers?.length?` +${object.additionalManagers.length}`:""}</strong></div>
           <div><span>Старт</span><strong>{object.targetStart??"—"}</strong></div>
           <div><span>Риск</span><strong>{riskLabels[operationalRisk]??"Контроль"}</strong></div>
         </div>
@@ -268,7 +275,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {tab==="finance"&&objFinance&&<><div className="metrics-grid"><Metric label="Выручка" value={rub(objFinance.revenue)}/><Metric label="Персонал" value={rub(objFinance.workerCost)}/><Metric label="Прямые расходы" value={rub(objFinance.expenses)}/><Metric label="Маржа" value={pct(objFinance.marginPct)} tone={Number(objFinance.marginPct)<15?"warn":"good"}/></div><Section title="Финансовый факт"><div className="object-finance-facts"><KeyValue label="Выручка" value={rub(objFinance.revenue)} sensitive/><KeyValue label="Затраты на персонал" value={rub(objFinance.workerCost)} sensitive/><KeyValue label="Прямые расходы" value={rub(objFinance.expenses)} sensitive/><KeyValue label="Вклад в прибыль" value={rub(objFinance.contribution)} sensitive/><KeyValue label="Маржа" value={pct(objFinance.marginPct)} sensitive/></div></Section></>}
 
     {tab==="documents"&&<Section title="Документы объекта"><Empty title="Документы объекта" text="Здесь останутся только объектовые документы и сроки; документы сотрудников ведутся в их карточках и контуре допусков."/></Section>}
-    {tab==="history"&&<Section title="История объекта"><Empty title="Системная история" text="Изменения запуска, назначений, численности, обеспечения и других связанных процессов будут собираться здесь одной лентой."/></Section>}
+    {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
+        {tab==="history"&&<Section title="История объекта"><Empty title="Системная история" text="Изменения запуска, назначений, численности, обеспечения и других связанных процессов будут собираться здесь одной лентой."/></Section>}
   </>;
 }
 

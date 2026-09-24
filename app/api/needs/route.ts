@@ -59,14 +59,28 @@ export async function POST(request: Request) {
     const result = await withTenant(actor.organizationId, actor.userId, async sql => sql.begin(async tx => {
       let regionId = body.regionId ?? null;
       let objectOwnerId: string | null = null;
+      let recruitingMode:"company_rules"|"object_team"="company_rules";
+      let objectRecruiters:Array<{userId:string;teamId:string|null}>=[];
       if (body.objectId) {
-        const [object] = await tx<Array<{regionId:string;ownerUserId:string|null}>>`
-          SELECT region_id "regionId",owner_user_id "ownerUserId" FROM objects WHERE id=${body.objectId}::uuid
+        const [object] = await tx<Array<{regionId:string;ownerUserId:string|null;recruitingMode:"company_rules"|"object_team"}>>`
+          SELECT region_id "regionId",owner_user_id "ownerUserId",recruiting_routing_mode "recruitingMode"
+          FROM objects WHERE id=${body.objectId}::uuid
         `;
         if (!object) throw new Error("Объект не найден");
         if (regionId && regionId !== object.regionId) throw new Error("Регион потребности не совпадает с регионом объекта");
         regionId = object.regionId;
         objectOwnerId = object.ownerUserId;
+        recruitingMode=object.recruitingMode;
+        if(recruitingMode==="object_team"){
+          objectRecruiters=await tx<Array<{userId:string;teamId:string|null}>>`
+            SELECT oa.user_id "userId",m.primary_team_id "teamId"
+            FROM object_assignments oa
+            JOIN organization_memberships m ON m.organization_id=oa.organization_id AND m.user_id=oa.user_id AND m.status='active'
+            WHERE oa.object_id=${body.objectId}::uuid AND oa.responsibility_type='recruiter'
+              AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)
+            ORDER BY oa.created_at
+          `;
+        }
       }
       if (!regionId) throw new Error("Регион потребности не определён");
       if (!actor.access.allOrg && !actor.regionIds.includes(regionId)) throw new AccessDeniedError("operations.need.create");
@@ -84,24 +98,28 @@ export async function POST(request: Request) {
           JOIN role_templates rt ON rt.id=m.role_template_id AND rt.code='recruiter'
           LEFT JOIN membership_regions mr ON mr.membership_id=m.id AND mr.region_id=${regionId}::uuid
           WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
-          ORDER BY (m.user_id=${actor.userId}::uuid) DESC,(mr.region_id IS NOT NULL) DESC,m.created_at
+          ORDER BY (mr.region_id IS NOT NULL) DESC,m.created_at
           LIMIT 1
         )
         SELECT "userId","teamId" FROM (SELECT * FROM responsibility UNION ALL SELECT * FROM recruiter) x
         WHERE "userId" IS NOT NULL ORDER BY priority LIMIT 1
       `;
-      const recruiterId = actor.roleCode === "recruiter" ? actor.userId : routed?.userId ?? actor.userId;
-      const recruiterTeamId = routed?.userId === recruiterId ? routed.teamId : null;
+      const routeOwnerId=routed?.userId??actor.userId;
+      const useObjectTeam=recruitingMode==="object_team"&&objectRecruiters.length>0;
 
       const [need] = await tx<Array<{id:string}>>`
         INSERT INTO needs(organization_id,object_id,region_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,manager_user_id,created_by_user_id,source_kind,title,priority,conditions_snapshot)
-        VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${regionId}::uuid,${body.specialtyId}::uuid,${body.countRequired},0,${body.deadline??null}::date,'open',${recruiterId}::uuid,${objectOwnerId}::uuid,${actor.userId}::uuid,${body.sourceKind},${body.title},${body.priority},${sql.json(body.conditions)})
+        VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${regionId}::uuid,${body.specialtyId}::uuid,${body.countRequired},0,${body.deadline??null}::date,'open',${routeOwnerId}::uuid,${objectOwnerId}::uuid,${actor.userId}::uuid,${body.sourceKind},${body.title},${body.priority},${sql.json(body.conditions)})
         RETURNING id
       `;
-      await tx`
-        INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${recruiterId}::uuid,${recruiterTeamId}::uuid,${body.countRequired},${actor.userId}::uuid)
-      `;
+      if(useObjectTeam){
+        for(const recruiter of objectRecruiters){
+          await tx`
+            INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${recruiter.userId}::uuid,${recruiter.teamId}::uuid,0,${actor.userId}::uuid)
+          `;
+        }
+      }
       const requestedDocs=body.documentRequirements?.length
         ? body.documentRequirements
         : (body.documentTypeIds??[]).map(documentTypeId=>({documentTypeId,provider:"candidate" as const,requiredByStage:"documents" as const,blocksProgress:true}));
@@ -124,7 +142,7 @@ export async function POST(request: Request) {
         VALUES(${actor.organizationId}::uuid,${need.id}::uuid,NULL,${body.countRequired},${body.countRequired},'Исходный объём потребности',${actor.userId}::uuid)
       `;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${need.id}::uuid,'created',${`Создана потребность: ${body.title}`},${sql.json({sourceKind:body.sourceKind,countRequired:body.countRequired,objectId:body.objectId??null,regionId})})`;
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${need.id}::uuid,'created',${`Создана потребность: ${body.title}`},${sql.json({sourceKind:body.sourceKind,countRequired:body.countRequired,objectId:body.objectId??null,regionId,recruitingMode,useObjectTeam,assignedRecruiters:objectRecruiters.map(item=>item.userId)})})`;
       return {id:need.id};
     }));
     return NextResponse.json(result,{status:201});

@@ -5,7 +5,7 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
-const schema=z.object({name:z.string().trim().min(2).max(240).optional(),code:z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).optional()});
+const schema=z.object({name:z.string().trim().min(2).max(240).optional(),code:z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).optional(),legalEntityId:z.string().uuid().optional()});
 
 type SourceRow={
   proposalId:string;requestId:string;proposalStatus:string;proposalVersion:number;scenarioIds:string[];content:Record<string,unknown>;
@@ -37,6 +37,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const [existing]=await tx<Array<{id:string;name:string;code:string;contractId:string|null}>>`SELECT id,name,code,contract_id "contractId" FROM objects WHERE source_proposal_id=${id}::uuid`;
       if(existing)return {...existing,alreadyExists:true};
 
+      const legalEntities=await tx<Array<{id:string;primary:boolean}>>`
+        SELECT id,is_primary "primary" FROM legal_entities WHERE active ORDER BY is_primary DESC,name
+      `;
+      let legalEntityId=body.legalEntityId??null;
+      if(legalEntityId&&!legalEntities.some(item=>item.id===legalEntityId))throw new Error("Выбранное юридическое лицо недоступно");
+      if(!legalEntityId&&legalEntities.length===1)legalEntityId=legalEntities[0].id;
+      if(!legalEntityId&&legalEntities.length>1)throw new Error("Выберите юридическое лицо, от которого будет работать объект");
+      if(!legalEntityId)throw new Error("В настройках компании нет активного юридического лица");
+
       const [resolved]=await tx<Array<{userId:string}>>`
         SELECT user_id "userId" FROM resolve_organization_responsibility('object_launch','owner','region',${source.regionId}::uuid,current_date) LIMIT 1
       `;
@@ -61,13 +70,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const needOwnerUserId=recruitingOwner?.userId??ownerUserId;
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`
-        INSERT INTO objects(organization_id,client_company_id,source_request_id,source_proposal_id,name,code,status,region_id,address_text,target_start_date,owner_user_id,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${source.clientId}::uuid,${source.requestId}::uuid,${id}::uuid,${body.name??source.title},${generatedCode},'prelaunch',${source.regionId}::uuid,${source.location??null},${source.startDate??null}::date,${ownerUserId}::uuid,${actor.userId}::uuid)
+        INSERT INTO objects(organization_id,client_company_id,legal_entity_id,source_request_id,source_proposal_id,name,code,status,region_id,address_text,target_start_date,owner_user_id,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${source.clientId}::uuid,${legalEntityId}::uuid,${source.requestId}::uuid,${id}::uuid,${body.name??source.title},${generatedCode},'prelaunch',${source.regionId}::uuid,${source.location??null},${source.startDate??null}::date,${ownerUserId}::uuid,${actor.userId}::uuid)
         RETURNING id,name,code
       `;
       await tx`
         INSERT INTO object_assignments(organization_id,object_id,user_id,responsibility_type,effective_from,assigned_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${ownerUserId}::uuid,'launch_owner',current_date,${actor.userId}::uuid)
+        VALUES
+          (${actor.organizationId}::uuid,${object.id}::uuid,${ownerUserId}::uuid,'object_manager',current_date,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${object.id}::uuid,${ownerUserId}::uuid,'launch_owner',current_date,${actor.userId}::uuid)
       `;
       const [launch]=await tx<Array<{id:string;targetDate:string}>>`
         INSERT INTO launches(organization_id,object_id,target_date,forecast_date,progress_pct,risk_level,checklist_json,phase,created_by_user_id)
@@ -104,14 +115,6 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM request_roles rr WHERE rr.request_id=${source.requestId}::uuid
         RETURNING id,count_required "countRequired"
       `;
-      if(recruitingOwner?.userId){
-        for(const need of needs){
-          await tx`
-            INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${recruitingOwner.userId}::uuid,${recruitingOwner.teamId??null}::uuid,${need.countRequired},${actor.userId}::uuid)
-          `;
-        }
-      }
       await tx`
         INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,pricing_snapshot,effective_from,created_by_user_id)
         SELECT ${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,rr.specialty_id,cs.id,
@@ -136,8 +139,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         roles:source.content.roles??[],proposalSnapshot:{proposalId:source.proposalId,proposalVersion:source.proposalVersion},
       }));
       const [contract]=await tx<Array<{id:string}>>`
-        INSERT INTO contracts(organization_id,client_company_id,request_id,proposal_id,object_id,kind,status,title,owner_user_id,launch_gate,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${source.clientId}::uuid,${source.requestId}::uuid,${source.proposalId}::uuid,${object.id}::uuid,'master','draft',${`Договор · ${source.title}`},${source.ownerUserId??actor.userId}::uuid,'blocked',${actor.userId}::uuid)
+        INSERT INTO contracts(organization_id,client_company_id,legal_entity_id,request_id,proposal_id,object_id,kind,status,title,owner_user_id,launch_gate,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${source.clientId}::uuid,${legalEntityId}::uuid,${source.requestId}::uuid,${source.proposalId}::uuid,${object.id}::uuid,'master','draft',${`Договор · ${source.title}`},${source.ownerUserId??actor.userId}::uuid,'blocked',${actor.userId}::uuid)
         RETURNING id
       `;
       const [contractVersion]=await tx<Array<{id:string}>>`
@@ -149,8 +152,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       await tx`UPDATE proposals SET prelaunch_at=now() WHERE id=${id}::uuid`;
       await tx`UPDATE requests SET status='prelaunch',updated_at=now() WHERE id=${source.requestId}::uuid`;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'proposal',${id}::uuid,'prelaunch_started','Начата параллельная подготовка: подбор, план запуска и договор',${sql.json({objectId:object.id,contractId:contract.id,needCount,recruiterUserId:recruitingOwner?.userId??null})})`;
-      return {...object,contractId:contract.id,needCount,recruiterUserId:recruitingOwner?.userId??null,alreadyExists:false};
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'proposal',${id}::uuid,'prelaunch_started','Начата параллельная подготовка: подбор, план запуска и договор',${sql.json({objectId:object.id,contractId:contract.id,needCount,legalEntityId,recruitingRouteOwnerUserId:recruitingOwner?.userId??null})})`;
+      return {...object,contractId:contract.id,needCount,legalEntityId,recruitingRouteOwnerUserId:recruitingOwner?.userId??null,alreadyExists:false};
     }));
     return NextResponse.json(result,{status:201});
   }catch(error){

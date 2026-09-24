@@ -41,7 +41,7 @@ const patchSchema = z.object({
   conditions: conditionSchema.partial().optional(),
   recruiters: z.array(z.object({
     userId: z.string().uuid(),
-    targetCount: z.number().int().min(1).max(10000),
+    targetCount: z.number().int().min(0).max(10000),
   })).max(50).optional(),
   quantityReason: z.string().trim().max(1000).nullable().optional(),
   documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
