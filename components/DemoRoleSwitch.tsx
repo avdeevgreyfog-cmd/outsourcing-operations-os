@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-const groups = [
+type DemoPerson = { code: string; userId: string; name: string; position: string };
+type DemoGroup = { label: string; people: DemoPerson[] };
+
+const groups: DemoGroup[] = [
   {
     label: "Руководство",
     people: [
@@ -47,7 +50,7 @@ const groups = [
       { code: "economist", userId: "10000000-0000-4000-8000-000000000006", name: "Елена Котова", position: "Экономист / финансовый менеджер" },
     ],
   },
-] as const;
+];
 
 export function DemoRoleSwitch({ currentUserId }: { currentUserId: string }) {
   const router = useRouter();
