@@ -93,7 +93,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE object_id=${id}::uuid AND responsibility_type='additional_manager'
             AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
         `).map(row=>row.userId);
-      let nextAdditional=[...new Set(requestedAdditional.filter(userId=>userId!==nextOwner))];
+      const nextAdditional=[...new Set(requestedAdditional.filter(userId=>userId!==nextOwner))];
       const ownerChanged=nextOwner!==current.ownerUserId;
       if(ownerChanged&&body.keepPreviousManager&&current.ownerUserId&&!nextAdditional.includes(current.ownerUserId))nextAdditional.push(current.ownerUserId);
 

@@ -56,8 +56,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
   const objectHistory=await listObjectHistory(actor,id,100);
 
-  const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
-    canNeeds?listNeeds(actor):Promise.resolve([]),
+  const [workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
     canFinance?listFinance(actor):Promise.resolve([]),
