@@ -86,20 +86,24 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
 
       const nextOwner=body.ownerUserId??current.ownerUserId;
       if(!nextOwner)throw new Error("У объекта должен быть основной менеджер");
-      const requestedAdditional=body.additionalManagerUserIds??await tx<Array<{userId:string}>>`
-        SELECT user_id "userId" FROM object_assignments
-        WHERE object_id=${id}::uuid AND responsibility_type='additional_manager'
-          AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
-      `.then(rows=>rows.map(row=>row.userId));
+      const requestedAdditional:string[]=body.additionalManagerUserIds!==undefined
+        ?body.additionalManagerUserIds
+        :(await tx<Array<{userId:string}>>`
+          SELECT user_id "userId" FROM object_assignments
+          WHERE object_id=${id}::uuid AND responsibility_type='additional_manager'
+            AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
+        `).map(row=>row.userId);
       let nextAdditional=[...new Set(requestedAdditional.filter(userId=>userId!==nextOwner))];
       const ownerChanged=nextOwner!==current.ownerUserId;
       if(ownerChanged&&body.keepPreviousManager&&current.ownerUserId&&!nextAdditional.includes(current.ownerUserId))nextAdditional.push(current.ownerUserId);
 
-      const requestedRecruiters=body.recruiterUserIds??await tx<Array<{userId:string}>>`
-        SELECT user_id "userId" FROM object_assignments
-        WHERE object_id=${id}::uuid AND responsibility_type='recruiter'
-          AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
-      `.then(rows=>rows.map(row=>row.userId));
+      const requestedRecruiters:string[]=body.recruiterUserIds!==undefined
+        ?body.recruiterUserIds
+        :(await tx<Array<{userId:string}>>`
+          SELECT user_id "userId" FROM object_assignments
+          WHERE object_id=${id}::uuid AND responsibility_type='recruiter'
+            AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
+        `).map(row=>row.userId);
       const nextRecruitingMode=body.recruitingMode??current.recruitingMode;
       const nextRecruiters=nextRecruitingMode==="object_team"?[...new Set(requestedRecruiters)]:[];
       if(nextRecruitingMode==="object_team"&&!nextRecruiters.length)throw new Error("Для закреплённой команды подбора выберите хотя бы одного сотрудника");
