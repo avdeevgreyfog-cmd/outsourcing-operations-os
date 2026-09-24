@@ -20,8 +20,8 @@ export type ObjectRiskReason = { code:string; label:string; detail:string };
 export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; legalEntityId?:string|null; legalEntity?:string|null; additionalManagers?:ObjectPersonRow[]; recruitingMode?:"company_rules"|"object_team"; recruitingTeam?:ObjectPersonRow[]; activeRecruiters?:ObjectPersonRow[]; unassignedNeedCount?:number; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; riskReasons?:ObjectRiskReason[]; attentionReasons?:string[]; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
-export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; rate:number|string|null; rateUnit?:string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
-export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; specialtyId:string; date:string; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string; workerIds:string[]; reserveWorkerIds:string[] };
+export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; phone?:string|null; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; todayTimeCode?:string|null; todayFactHours?:number|string|null; todayEntrySource?:string|null; todayShiftAssigned?:boolean|null; todayShiftConfirmed?:boolean|null; todayShiftReserve?:boolean|null; todayShiftTime?:string|null; todayAttendanceEvent?:string|null; rate:number|string|null; rateUnit?:string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
+export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; specialtyId:string; date:string; dateIso?:string|null; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string; workerIds:string[]; reserveWorkerIds:string[] };
 export type TimesheetCellValue = number|string|null;
 export type TimesheetWorkerRow = { workerId:string; name:string; days?:Record<string,TimesheetCellValue>; total:number|string; client?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; accrual?:number|string|null };
 export type ReconciliationIssue = { id?:string; difference:number|string; worker:string; date:string; reason:string; owner:string; status?:string };
@@ -287,13 +287,31 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
   if (actor.demo) {
     const rows = allowed(actor, "worker.read", demo.workers);
     const maySeeComp = !actor.access.denies.includes("worker.compensation.read") && actor.access.capabilities.includes("worker.compensation.read");
-    return rows.map((row) => maySeeComp ? row : { ...row, rate: null, accrued: null, paid: null, payable: null });
+    const today=new Date().toISOString().slice(0,10);
+    return rows.map((row,index) => {
+      const activeAbsence=row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today&&(!row.absenceTo||row.absenceTo>=today);
+      const absenceCode=({intershift:"INTERSHIFT",vacation:"VACATION",sick:"SICK",personal:"ABSENCE",other:"ABSENCE"} as Record<string,string>)[row.absenceType??""];
+      const simulatedCode=activeAbsence?absenceCode:index%13===7?"NO_SHOW":index%7===3?"DAY_OFF":"WORK";
+      const enriched={
+        ...row,
+        phone:(row as WorkerRow).phone??`+7 900 300-${String(index+1).padStart(2,"0")}-${String(11+(index%89)).padStart(2,"0")}`,
+        todayTimeCode:simulatedCode,
+        todayFactHours:simulatedCode==="WORK"?Number(row.paidHoursPerShift??11):0,
+        todayEntrySource:"timesheet",
+        todayShiftAssigned:!activeAbsence&&simulatedCode!=="DAY_OFF",
+        todayShiftConfirmed:!activeAbsence&&simulatedCode!=="DAY_OFF",
+        todayShiftReserve:false,
+        todayShiftTime:"08:00–20:00",
+        todayAttendanceEvent:simulatedCode==="WORK"?"arrival":simulatedCode==="NO_SHOW"?"no_show":null,
+      };
+      return maySeeComp ? enriched : { ...enriched, rate: null, accrued: null, paid: null, payable: null };
+    });
   }
   requireCapability(actor, "worker.read");
   const maySeeComp = !actor.access.denies.includes("worker.compensation.read") && actor.access.capabilities.includes("worker.compensation.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<WorkerRow[]>`
-      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.status,w.source,
+      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.phone,w.status,w.source,
              w.created_by_user_id "createdByUserId",woa.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",
              COALESCE(o.owner_user_id,woa.manager_user_id) "ownerUserId",
              ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
@@ -302,6 +320,8 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
              w.clothing_size "clothingSize",w.shoe_size "shoeSize",w.height_cm "heightCm",
              er.relation_type employment,rec.display_name "originalRecruiter",mgr.display_name "managerName",w.source origin,
              absence.absence_type "absenceType",absence.status "absenceStatus",absence.planned_from::text "absenceFrom",absence.planned_to::text "absenceTo",
+             today_entry.time_code "todayTimeCode",today_entry.fact_hours "todayFactHours",today_entry.source "todayEntrySource",
+             (today_shift.shift_id IS NOT NULL) "todayShiftAssigned",(today_shift.confirmation_status='confirmed') "todayShiftConfirmed",today_shift.is_reserve "todayShiftReserve",today_shift.shift_time "todayShiftTime",today_shift.attendance_event "todayAttendanceEvent",
              ${maySeeComp ? sql`wr.amount` : sql`NULL::numeric`} rate,${maySeeComp ? sql`wr.unit` : sql`NULL::text`} "rateUnit",
              ${maySeeComp ? sql`COALESCE(wa.total_amount,0)` : sql`NULL::numeric`} accrued,
              ${maySeeComp ? sql`COALESCE(pay.paid,0)+COALESCE(adv.advances,0)` : sql`NULL::numeric`} paid,
@@ -322,6 +342,19 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
         WHERE x.worker_id=w.id AND x.status IN ('tentative','confirmed') AND COALESCE(x.planned_to,'infinity'::date)>=current_date
         ORDER BY (x.planned_from<=current_date) DESC,(x.status='confirmed') DESC,x.planned_from LIMIT 1
       ) absence ON true
+      LEFT JOIN LATERAL (
+        SELECT te.time_code,te.fact_hours,te.source FROM time_entries te
+        WHERE te.worker_id=w.id AND te.object_id=woa.object_id AND te.work_date=current_date
+        ORDER BY te.updated_at DESC LIMIT 1
+      ) today_entry ON true
+      LEFT JOIN LATERAL (
+        SELECT sh.id shift_id,sa.confirmation_status,sa.is_reserve,
+          to_char(sh.starts_at,'HH24:MI')||'–'||to_char(sh.ends_at,'HH24:MI') shift_time,
+          (SELECT ae.event_type FROM attendance_events ae WHERE ae.shift_assignment_id=sa.id ORDER BY ae.event_at DESC LIMIT 1) attendance_event
+        FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
+        WHERE sa.worker_id=w.id AND sh.object_id=woa.object_id AND sh.shift_date=current_date AND sa.confirmation_status<>'cancelled'
+        ORDER BY sa.is_reserve,sh.starts_at LIMIT 1
+      ) today_shift ON true
       LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) wr ON true
       LEFT JOIN LATERAL (SELECT id,total_amount,period_start,period_end FROM worker_accruals x WHERE x.worker_id=w.id ORDER BY x.period_end DESC LIMIT 1) wa ON true
       LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric paid FROM worker_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.accrual_id=wa.id)) pay ON true
@@ -333,16 +366,46 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
 }
 
 export async function listShifts(actor: Actor): Promise<ShiftRow[]> {
-  if (actor.demo) return allowed(actor, "operations.shift.read", demo.shifts).map((row,index)=>({...row,specialtyId:`demo-specialty-${index+1}`,workerIds:[],reserveWorkerIds:[]}));
+  if (actor.demo) {
+    const visible=allowed(actor,"operations.shift.read",demo.shifts);
+    const today=new Date().toISOString().slice(0,10);
+    const tomorrowDate=new Date(today+"T00:00:00Z");tomorrowDate.setUTCDate(tomorrowDate.getUTCDate()+1);
+    const tomorrow=tomorrowDate.toISOString().slice(0,10);
+    const display=(value:string)=>new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"));
+    const statusFor=(worker:WorkerRow)=>{const activeAbsence=worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=today&&(!worker.absenceTo||worker.absenceTo>=today);const index=demo.workers.findIndex(item=>item.id===worker.id);return !activeAbsence&&index%7!==3};
+    const normalize=(row:(typeof demo.shifts)[number],index:number,dateIso:string):ShiftRow=>{
+      const candidates=demo.workers.filter(worker=>worker.objectId===row.objectId&&worker.specialty===row.specialty&&worker.status==="active"&&statusFor(worker));
+      const workerIds=candidates.slice(0,Math.min(row.demand,candidates.length)).map(worker=>worker.id);
+      const reserveWorkerIds=candidates.slice(workerIds.length,workerIds.length+Math.min(row.reserve,Math.max(candidates.length-workerIds.length,0))).map(worker=>worker.id);
+      const assigned=workerIds.length;
+      return {...row,date:display(dateIso),dateIso,specialtyId:candidates[0]?.specialtyId??`demo-specialty-${index+1}`,assigned,confirmed:Math.min(Number(row.confirmed??assigned),assigned),reserve:reserveWorkerIds.length,deficit:Math.max(row.demand-assigned,0),workerIds,reserveWorkerIds};
+    };
+    const normalized=visible.map((row,index)=>normalize(row,index,row.date==="21.09"?today:tomorrow));
+    const firstObject=demo.objects[0];
+    if(firstObject&&canReadRow(actor.access,"operations.shift.read",firstObject,actor)){
+      const todayRows=demo.needs.filter(need=>need.objectId===firstObject.id).map((need,index)=>{
+        const all=demo.workers.filter(worker=>worker.objectId===firstObject.id&&worker.specialty===need.specialty&&worker.status==="active");
+        const available=all.filter(statusFor);
+        const workerIds=available.map(worker=>worker.id);
+        const demand=Math.max(available.length,1);
+        return {id:`demo-today-${firstObject.id}-${index}`,organizationId:firstObject.organizationId,objectId:firstObject.id,object:firstObject.name,clientId:firstObject.clientId,regionId:firstObject.regionId,specialtyId:`demo-specialty-${index+1}`,date:display(today),dateIso:today,kind:"День",time:"08:00–20:00",specialty:need.specialty,demand,assigned:workerIds.length,reserve:0,confirmed:workerIds.length,deficit:Math.max(demand-workerIds.length,0),cost:0,status:"open",ownerUserId:firstObject.ownerUserId,createdByUserId:firstObject.ownerUserId,assigneeUserIds:firstObject.assigneeUserIds??[],workerIds,reserveWorkerIds:[]} satisfies ShiftRow;
+      });
+      normalized.push(...todayRows);
+    }
+    return normalized;
+  }
   requireCapability(actor, "operations.shift.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ShiftRow[]>`
       SELECT sh.id,sh.organization_id "organizationId",sh.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",
-             sh.specialty_id "specialtyId",to_char(sh.shift_date,'DD.MM') date, sh.shift_kind kind,
+             sh.specialty_id "specialtyId",to_char(sh.shift_date,'DD.MM') date,sh.shift_date::text "dateIso", sh.shift_kind kind,
              to_char(sh.starts_at,'HH24:MI')||'–'||to_char(sh.ends_at,'HH24:MI') time,
-             s.name specialty,sh.demand_count demand,sh.assigned_count assigned,sh.reserve_count reserve,
+             s.name specialty,sh.demand_count demand,
+             (SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled') assigned,
+             (SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled') reserve,
              (SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status='confirmed') confirmed,
-             GREATEST(sh.demand_count-sh.assigned_count,0) deficit,COALESCE(sh.planned_cost,0) cost,sh.status,o.owner_user_id "ownerUserId",sh.created_by_user_id "createdByUserId",
+             GREATEST(sh.demand_count-(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'),0) deficit,
+             COALESCE(sh.planned_cost,0) cost,sh.status,o.owner_user_id "ownerUserId",sh.created_by_user_id "createdByUserId",
              ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_to IS NULL) "assigneeUserIds",
              ARRAY(SELECT sa.worker_id::text FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled' ORDER BY sa.created_at) "workerIds",
              ARRAY(SELECT sa.worker_id::text FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled' ORDER BY sa.created_at) "reserveWorkerIds"

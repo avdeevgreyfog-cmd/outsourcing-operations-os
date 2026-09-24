@@ -34,7 +34,7 @@ export async function getObjectManagementOptions(actor:Actor,options:{includeCre
   const includeAssignments=options.includeAssignments!==false;
   if(actor.demo){
     const managers=includeAssignments?demoOrg.companyEmployees
-      .filter(item=>item.status==="active"&&((item.position??"").includes("Менеджер объекта")||(item.position??"").includes("Руководитель объектов")))
+      .filter(item=>item.status==="active"&&(item.position??"")==="Менеджер объекта")
       .map(item=>({id:item.userId,name:item.name})):[];
     const recruiters=includeAssignments?demoOrg.companyEmployees
       .filter(item=>item.status==="active"&&(item.position??"").toLocaleLowerCase("ru").includes("подбор"))
@@ -64,21 +64,16 @@ export async function getObjectManagementOptions(actor:Actor,options:{includeCre
         LEFT JOIN role_templates rt ON rt.id=m.role_template_id
         WHERE m.status='active'
           AND (
-            rt.code IN ('director','object_manager','regional_manager','operations_head')
-            OR EXISTS (
-              SELECT 1 FROM permission_grants pg
-              WHERE pg.role_template_id=m.role_template_id
-                AND pg.capability='operations.object.edit' AND pg.effect='allow'
-            )
+            rt.code='object_manager'
             OR EXISTS (
               SELECT 1
               FROM position_assignments pa
               JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
+              JOIN positions p ON p.id=sp.job_profile_id
               WHERE pa.membership_id=m.id
                 AND pa.status<>'ended'
                 AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND ppg.capability='operations.object.edit' AND ppg.effect='allow'
+                AND p.code IN ('object-manager','object_manager')
             )
           )
         ORDER BY name

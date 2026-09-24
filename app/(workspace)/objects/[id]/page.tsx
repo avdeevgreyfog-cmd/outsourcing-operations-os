@@ -2,15 +2,17 @@ import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
-import { listCandidates,listFinance,listIncidents,listLaunchTasks,listNeeds,listObjects,listShifts,listWorkers } from "@/lib/data/service";
+import { listCandidates,listFinance,listIncidents,listLaunchTasks,listObjects,listShifts,listWorkers } from "@/lib/data/service";
 import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
+import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
+import { ObjectShiftsWorkspace } from "@/components/ObjectShiftsWorkspace";
 import { pct,rub } from "@/lib/ui/format";
-import { employmentTypeLabel } from "@/lib/ui/labels";
+import { activeAbsence,absenceTypeLabel } from "@/lib/operations/workforce-status";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -30,7 +32,8 @@ const labels:Record<string,string>={
 const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history"};
 const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
-const stageLabels:Record<string,string>={new:"Новый",screening:"Первичный контакт",interview:"Интервью",documents:"Документы",clearance:"Проверка",preparation:"Подготовка",first_shift:"Первый выход",hired:"Вышел"};
+const stageLabels:Record<string,string>={new:"Новые",screening:"Первичный контакт",interview:"Интервью",documents:"Документы",clearance:"Проверка",preparation:"Подготовка",first_shift:"Первый выход",hired:"Вышли",rejected:"Отказы"};
+const stageOrder=["new","screening","documents","interview","clearance","preparation","first_shift","hired","rejected"] as const;
 
 
 export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}) {
@@ -123,7 +126,11 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
   }));
 
-  const candidateStages=Object.entries(objectCandidates.reduce<Record<string,number>>((acc,row)=>{acc[row.stage]=(acc[row.stage]??0)+1;return acc},{}));
+  const candidateStageCounts=objectCandidates.reduce<Record<string,number>>((acc,row)=>{acc[row.stage]=(acc[row.stage]??0)+1;return acc},{});
+  const candidateStages=stageOrder.map(stage=>[stage,candidateStageCounts[stage]??0] as const).filter(([,count])=>count>0);
+  const activeCandidateCount=objectCandidates.filter(row=>!["hired","rejected"].includes(row.stage)).length;
+  const candidatesBySpecialty=new Map<string,typeof objectCandidates>();
+  for(const candidate of objectCandidates){const key=candidate.need??"Без специальности";candidatesBySpecialty.set(key,[...(candidatesBySpecialty.get(key)??[]),candidate]);}
 
   return <>
     <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
@@ -139,7 +146,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
           <div><span>Риск</span><strong>{riskLabels[operationalRisk]??"Контроль"}</strong></div>
         </div>
       </div>
-      <div className="health"><strong>{required?Math.round(working/required*100):100}%</strong><span>укомплектованность</span></div>
+      <div className="health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>{required?"укомплектованность":"план не задан"}</span></div>
     </div>
     <EntityTabs items={tabs} active={visibleLabels[tab]}/>
 
@@ -226,30 +233,23 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {tab==="staffing"&&<>
       <div className="metrics-grid">
         <Metric label="План" value={required}/>
-        <Metric label="Работает" value={working}/>
-        <Metric label="Прогноз через 30 дней" value={projectedAvailable||working}/>
-        <Metric label="Прогнозный дефицит" value={projectedDeficit} tone={projectedDeficit?"warn":"good"}/>
+        <Metric label="На объекте" value={working}/>
+        <Metric label="Кандидатов в работе" value={activeCandidateCount}/>
+        <Metric label="Осталось закрыть" value={projectedDeficit} tone={projectedDeficit?"warn":"good"}/>
       </div>
-      <Section title="План по профессиям" note="Комплектация отвечает за план численности. Потребности и подбор — исполнительные контуры закрытия дефицита.">
-        <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Профессия</th><th>План</th><th>Работает</th><th>Готовятся</th><th>Подтв. отсутствия</th><th>Плановые выходы</th><th>Риск отсутствий</th><th>Прогноз</th><th>Дефицит</th></tr></thead><tbody>{objectForecast.map(row=><tr key={row.specialtyId}><td className="cell-title">{row.specialty}</td><td className="num">{row.required}</td><td className="num">{row.working}</td><td className="num">{row.preparing}</td><td className="num">{row.confirmedAbsences||"—"}</td><td className="num">{row.plannedExits||"—"}</td><td className="num">{row.tentativeAbsences||"—"}</td><td className="num">{row.projectedAvailable}</td><td className="num"><Status tone={row.projectedDeficit?"warn":"good"}>{row.projectedDeficit}</Status></td></tr>)}</tbody></table></div>
-        {!objectForecast.length&&<Empty title="План комплектации не сформирован" text="Для объекта нет активных потребностей по профессиям."/>}
+      <Section title="Комплектация по специальностям" note="План, фактическая численность и текущий подбор по каждой специальности.">
+        <div className="request-table-wrap"><table className="data-table object-staffing-table"><thead><tr><th>Специальность</th><th>План</th><th>На объекте</th><th>Доступны сейчас</th><th>Готовы к выходу</th><th>В подборе</th><th>Осталось закрыть</th></tr></thead><tbody>{objectForecast.map(row=>{const specialtyCandidates=candidatesBySpecialty.get(row.specialty)??[];const ready=specialtyCandidates.filter(candidate=>["preparation","first_shift"].includes(candidate.stage)).length;const recruiting=specialtyCandidates.filter(candidate=>!["hired","rejected"].includes(candidate.stage)).length;const currentAbsences=objectWorkers.filter(worker=>worker.specialty===row.specialty&&activeAbsence(worker,todayIso)).length;const available=Math.max(row.working-currentAbsences,0);return <tr key={row.specialtyId}><td><strong className="cell-title">{row.specialty}</strong>{recruiting>0&&<span className="cell-sub">Кандидатов в работе: {recruiting}</span>}</td><td className="num">{row.required}</td><td className="num">{row.working}</td><td className="num">{available}</td><td className="num">{ready||"—"}</td><td className="num">{recruiting||"—"}</td><td className="num"><Status tone={row.projectedDeficit?"warn":"good"}>{row.projectedDeficit}</Status></td></tr>})}</tbody></table></div>
+        {!objectForecast.length&&<Empty title="План комплектации не сформирован" text="Для объекта нет активных потребностей по специальностям."/>}
         <div className="section-actions"><Link className="button" href={"/needs?object="+id}>Потребности</Link><Link className="button" href={"/recruiting?object="+id}>Подбор по объекту</Link><Link className="button primary" href={"/staffing-plan?object="+id}>Открыть план комплектации</Link></div>
       </Section>
-      {candidateStages.length>0&&<Section title="Воронка подготовки" note="Сводно по кандидатам этого объекта, без дублирования самой воронки подбора."><div className="candidate-stage-strip">{candidateStages.map(([stage,count])=><div key={stage}><span>{stageLabels[stage]??stage}</span><strong>{count}</strong></div>)}</div></Section>}
+      {candidateStages.length>0&&<Section title="Подбор по объекту" note={`${activeCandidateCount} кандидатов сейчас находятся в активной работе по этому объекту.`}><div className="candidate-stage-strip object-candidate-funnel">{candidateStages.map(([stage,count])=><div key={stage}><span>{stageLabels[stage]}</span><strong>{count}</strong></div>)}</div><div className="section-actions"><Link className="button primary" href={"/recruiting?object="+id}>Открыть воронку</Link></div></Section>}
     </>}
 
-    {tab==="workforce"&&<>
-      <div className="metrics-grid"><Metric label="Сотрудники на объекте" value={objectWorkers.length}/><Metric label="Местные" value={objectWorkers.filter(row=>row.workMode!=="rotation").length}/><Metric label="Вахта" value={objectWorkers.filter(row=>row.workMode==="rotation").length}/><Metric label="Сейчас отсутствуют" value={objectWorkers.filter(row=>objectWorkerState(row)!=="Работает").length} tone={objectWorkers.some(row=>objectWorkerState(row)!=="Работает")?"warn":undefined}/></div>
-      <Section title="Сотрудники">
-        <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Ставка</th><th>Оформление</th></tr></thead><tbody>{objectWorkers.map(row=><tr key={row.id}><td><Link className="cell-title" href={"/workers/"+row.id}>{row.fullName}</Link></td><td>{row.specialty??"—"}</td><td>{row.workMode==="rotation"?"Вахта":"Местный"}</td><td><Status tone={objectWorkerState(row)==="Работает"?"good":"info"}>{objectWorkerState(row)}</Status></td><td>{objectWorkerAvailability(row)}</td><td className="num">{objectWorkerRate(row)}</td><td>{employmentTypeLabel(row.employment)}</td></tr>)}</tbody></table></div>
-        {!objectWorkers.length&&<Empty title="Назначений нет" text="На объект не назначены доступные вам сотрудники."/>}
-      </Section>
-      
-    </>}
+    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
 
-    {tab==="shifts"&&<Section title="Смены объекта"><ShiftTable rows={objectShifts}/>{!objectShifts.length&&<Empty title="Смен нет" text="На объекте пока нет запланированных смен."/>}<div className="section-actions"><Link className="button primary" href="/shifts">Открыть графики и смены</Link></div></Section>}
+    {tab==="shifts"&&<Section title="Смены объекта" note="Кто должен выйти, кто подтверждён и какой факт за выбранный день."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso}/></Section>}
 
-    {tab==="timesheets"&&<Section title="Табели объекта" note="Внутренний факт и клиентская версия используют один источник времени."><Empty title="Рабочее место табеля" text="Откройте табель сразу с фильтром по этому объекту." action={<Link className="button primary" href={"/timesheets?object="+id}>Открыть табель объекта</Link>}/></Section>}
+    {tab==="timesheets"&&<Section title="Табели объекта"><Empty title="Табель рабочего времени" text="Откройте табель объекта за нужный период." action={<Link className="button primary" href={"/timesheets?object="+id}>Открыть табель объекта</Link>}/></Section>}
 
     {tab==="supply"&&<>
       <div className="metrics-grid">
@@ -284,13 +284,8 @@ function ReadinessRow({label,value}:{label:string;value:number}){
   return <div className="readiness-row"><div><strong>{label}</strong><span>{value}%</span></div><div className="progress"><span style={{width:Math.max(0,Math.min(100,value))+"%"}}/></div></div>;
 }
 function ShiftTable({rows}:{rows:Awaited<ReturnType<typeof listShifts>>}){
-  return <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Смена</th><th>Позиция</th><th>Потребность</th><th>Назначено</th><th>Резерв</th><th>Дефицит</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td><strong>{row.date} · {row.kind}</strong><span className="cell-sub">{row.time}</span></td><td>{row.specialty}</td><td className="num">{row.demand}</td><td className="num">{row.assigned}</td><td className="num">{row.reserve}</td><td className="num"><Status tone={row.deficit?"warn":"good"}>{row.deficit}</Status></td></tr>)}</tbody></table></div>;
+  return <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Смена</th><th>Позиция</th><th>План</th><th>Назначено</th><th>Подтверждено</th><th>Резерв</th><th>Дефицит</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td><strong>{row.date} · {row.kind}</strong><span className="cell-sub">{row.time}</span></td><td>{row.specialty}</td><td className="num">{row.demand}</td><td className="num">{row.assigned}</td><td className="num">{row.confirmed??"—"}</td><td className="num">{row.reserve}</td><td className="num"><Status tone={row.deficit?"warn":"good"}>{row.deficit}</Status></td></tr>)}</tbody></table></div>;
 }
-
-function objectWorkerState(row:{status:string;absenceStatus?:string|null;absenceType?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){if(row.status==="dismissed")return"Работа завершена";const today=new Date().toISOString().slice(0,10);if(row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today&&(!row.absenceTo||row.absenceTo>=today))return({intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Личное отсутствие",other:"Отсутствие"} as Record<string,string>)[row.absenceType??""]??"Отсутствует";return"Работает"}
-function objectWorkerAvailability(row:{absenceStatus?:string|null;absenceType?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){if(!row.absenceFrom)return"—";const today=new Date().toISOString().slice(0,10);if(row.absenceStatus==="confirmed"&&row.absenceFrom<=today&&(!row.absenceTo||row.absenceTo>=today)){if(!row.absenceTo)return"Возврат не определён";const d=new Date(row.absenceTo+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+1);return"Возврат "+new Intl.DateTimeFormat("ru-RU").format(d)}return(({intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Отсутствие",other:"Отсутствие"} as Record<string,string>)[row.absenceType??""]??"Изменение")+" с "+new Intl.DateTimeFormat("ru-RU").format(new Date(row.absenceFrom+"T00:00:00"))}
-function objectWorkerRate(row:{rate:number|string|null;rateUnit?:string|null;paidHoursPerShift?:number|string|null}){if(row.rate==null)return"—";if(row.rateUnit==="shift"&&Number(row.paidHoursPerShift)>0)return rub(row.rate)+"/см · "+rub(Number(row.rate)/Number(row.paidHoursPerShift))+"/ч";return rub(row.rate)+(row.rateUnit==="shift"?"/см":row.rateUnit==="month"?"/мес":"/ч")}
-
 function objectOperationalRisk(base:string|null|undefined,projectedDeficit:number,noShows:number,openIncidents:number){
   const rank:Record<string,number>={normal:0,watch:1,high:2,critical:3};
   let value=rank[base??"normal"]==null?"normal":base??"normal";
@@ -299,7 +294,6 @@ function objectOperationalRisk(base:string|null|undefined,projectedDeficit:numbe
   return value;
 }
 function addDaysIso(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
-function absenceTypeLabel(type:string|null|undefined){return ({intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Личное отсутствие",other:"Отсутствие"} as Record<string,string>)[type??""]??"Отсутствие"}
 function absenceWindow(row:{absenceType?:string|null;absenceStatus?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){
   if(!row.absenceFrom)return absenceTypeLabel(row.absenceType);
   const from=new Intl.DateTimeFormat("ru-RU").format(new Date(row.absenceFrom+"T00:00:00"));

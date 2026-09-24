@@ -105,8 +105,14 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
     return demo.objects
       .filter(row=>canReadRow(actor.access,"operations.object.read",row,actor))
       .map(row=>{
-        const workers=demo.workers.filter(worker=>worker.objectId===row.id&&worker.status==="active").length;
-        const shifts=demo.shifts.filter(shift=>shift.objectId===row.id);
+        const today=new Date().toISOString().slice(0,10);
+        const objectWorkers=demo.workers.filter(worker=>worker.objectId===row.id&&worker.status==="active");
+        const activeAbsence=(worker:(typeof demo.workers)[number])=>worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=today&&(!worker.absenceTo||worker.absenceTo>=today);
+        const isDayOff=(worker:(typeof demo.workers)[number])=>{const index=demo.workers.findIndex(item=>item.id===worker.id);return !activeAbsence(worker)&&index%7===3};
+        const isNoShow=(worker:(typeof demo.workers)[number])=>{const index=demo.workers.findIndex(item=>item.id===worker.id);return !activeAbsence(worker)&&!isDayOff(worker)&&index%13===7};
+        const workers=objectWorkers.length;
+        const todayDemand=objectWorkers.filter(worker=>!activeAbsence(worker)&&!isDayOff(worker)).length;
+        const noShows=objectWorkers.filter(isNoShow).length;
         const incidents=demo.incidents.filter(item=>item.objectId===row.id&&item.status!=="resolved").length;
         const preparing=demo.candidates.filter(candidate=>candidate.objectId===row.id&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
         return {
@@ -123,9 +129,9 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
           working:workers,
           preparing,
           deficit:Math.max(Number(row.required??0)-workers,0),
-          todayDemand:shifts.reduce((sum,shift)=>sum+Number(shift.demand??0),0),
-          todayAssigned:shifts.reduce((sum,shift)=>sum+Number(shift.assigned??0),0),
-          noShows:0,
+          todayDemand,
+          todayAssigned:todayDemand,
+          noShows,
           monthHours:demo.timesheet.objectId===row.id?Number(demo.timesheet.internalHours??0):0,
           openIncidents:incidents,
         };
@@ -171,15 +177,29 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
           AND ca.actual_start_at IS NULL
       ) preparing ON true
       LEFT JOIN LATERAL (
-        SELECT COALESCE(sum(sh.demand_count),0)::int "demand",COALESCE(sum(sh.assigned_count),0)::int assigned
+        SELECT COALESCE(sum(sh.demand_count),0)::int "demand",
+          COALESCE(sum((SELECT count(*) FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled')),0)::int assigned
         FROM shifts sh WHERE sh.object_id=o.id AND sh.shift_date=current_date
       ) today ON true
       LEFT JOIN LATERAL (
-        SELECT count(*)::int count
-        FROM attendance_events ae
-        JOIN shift_assignments sa ON sa.id=ae.shift_assignment_id
-        JOIN shifts sh ON sh.id=sa.shift_id
-        WHERE sh.object_id=o.id AND sh.shift_date=current_date AND ae.event_type='no_show'
+        SELECT count(DISTINCT a.worker_id)::int count
+        FROM worker_object_assignments a
+        JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+        WHERE a.object_id=o.id AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+          AND NOT EXISTS (
+            SELECT 1 FROM worker_absence_plans ap
+            WHERE ap.worker_id=a.worker_id AND ap.object_id=o.id AND ap.status='confirmed'
+              AND ap.planned_from<=current_date AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
+          )
+          AND (
+            EXISTS (SELECT 1 FROM time_entries te WHERE te.worker_id=a.worker_id AND te.object_id=o.id AND te.work_date=current_date AND te.time_code='NO_SHOW')
+            OR EXISTS (
+              SELECT 1 FROM shift_assignments sa
+              JOIN shifts sh ON sh.id=sa.shift_id
+              WHERE sa.worker_id=a.worker_id AND sh.object_id=o.id AND sh.shift_date=current_date AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'
+                AND (SELECT ae.event_type FROM attendance_events ae WHERE ae.shift_assignment_id=sa.id ORDER BY ae.event_at DESC LIMIT 1)='no_show'
+            )
+          )
       ) no_shows ON true
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(te.fact_hours),0)::numeric total

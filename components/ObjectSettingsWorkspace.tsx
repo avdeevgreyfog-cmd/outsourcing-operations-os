@@ -19,7 +19,7 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   const [targetStartDate,setTargetStartDate]=useState(toInputDate(object.targetStart??null));
   const [status,setStatus]=useState(object.status);
   const [ownerUserId,setOwnerUserId]=useState(object.ownerUserId??"");
-  const [additionalManagers,setAdditionalManagers]=useState<string[]>(object.additionalManagers?.map(item=>item.userId)??[]);
+  const [additionalManagers,setAdditionalManagers]=useState<string[]>(()=>{const allowed=new Set(options.managers.map(item=>item.id));return (object.additionalManagers??[]).map(item=>item.userId).filter(id=>allowed.has(id));});
   const [recruitingMode,setRecruitingMode]=useState<"company_rules"|"object_team">(object.recruitingMode??"company_rules");
   const [recruiters,setRecruiters]=useState<string[]>(object.recruitingTeam?.map(item=>item.userId)??[]);
   const [busy,setBusy]=useState(false);
@@ -55,7 +55,7 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   }
 
   return <div className="object-settings-layout">
-    <Section title="Параметры объекта" note="Текущие операционные параметры. Исторические договоры и документы при изменении не переписываются.">
+    <Section title="Параметры объекта">
       <div className="object-settings-form">
         <label>Название объекта<input value={name} onChange={e=>setName(e.target.value)}/></label>
         <label>Наше юрлицо{canAssign?<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select>:<input value={object.legalEntity??"Не указано"} disabled/>}</label>
@@ -65,15 +65,15 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
       </div>
     </Section>
 
-    <Section title="Основание объекта" note="Источник создания сохраняется как связь, а не как текстовая пометка.">
+    <Section title="Основание объекта">
       <div className="object-source-links">
         {object.sourceRequestId&&<Link href={`/requests/${object.sourceRequestId}`}>Исходная заявка <span>→</span></Link>}
         {object.sourceProposalId&&<Link href={`/proposals/${object.sourceProposalId}`}>Согласованное КП <span>→</span></Link>}
-        {!object.sourceRequestId&&!object.sourceProposalId&&<div><strong>Добавлен вручную</strong><span>Объект не создан из коммерческой цепочки.</span></div>}
+        {!object.sourceRequestId&&!object.sourceProposalId&&<div><strong>Добавлен вручную</strong></div>}
       </div>
     </Section>
 
-    <Section title="Команда объекта" note="Один основной менеджер отвечает за объект; дополнительные менеджеры получают доступ и могут работать совместно.">
+    <Section title="Команда объекта">
       {canAssign?<div className="object-settings-form">
         <label>Основной менеджер<select value={ownerUserId} onChange={e=>{setOwnerUserId(e.target.value);setAdditionalManagers(current=>current.filter(id=>id!==e.target.value))}}><option value="">Выберите менеджера</option>{options.managers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <div className="wide object-assignment-picker"><span>Дополнительные менеджеры</span><div>{options.managers.filter(item=>item.id!==ownerUserId).map(item=><label key={item.id}><input type="checkbox" checked={visibleAdditional.includes(item.id)} onChange={()=>toggle(visibleAdditional,setAdditionalManagers,item.id)}/><span>{item.name}</span></label>)}</div></div>
@@ -81,7 +81,7 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
       </div>:<div className="object-settings-readonly"><div><span>Основной менеджер</span><strong>{object.ownerName??"Не назначен"}</strong></div><div><span>Дополнительные менеджеры</span><strong>{object.additionalManagers?.map(item=>item.name).join(", ")||"Нет"}</strong></div><small>Изменение команды доступно руководителю с правом назначения ответственных объекта.</small></div>}
     </Section>
 
-    <Section title="Маршрутизация подбора" note="Определяет, кому автоматически видны новые потребности. Конкретные объёмы по рекрутерам задаются внутри потребности.">
+    <Section title="Маршрутизация подбора">
       {canAssign?<div className="object-settings-form">
         <label className="wide">Новые потребности<select value={recruitingMode} onChange={e=>setRecruitingMode(e.target.value as "company_rules"|"object_team")}><option value="company_rules">По правилам компании</option><option value="object_team">Закреплённая команда объекта</option></select></label>
         {recruitingMode==="company_rules"
