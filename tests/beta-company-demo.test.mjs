@@ -65,9 +65,15 @@ test("beta company fixture covers all operating modules",()=>{
   const operationsHeadId="10000000-0000-4000-8000-000000000003";
   const objectManagers=["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000010"];
   assert.ok(demo.objects.every(row=>(row.assigneeUserIds??[]).includes(operationsHeadId)),"operations head must inherit subordinate managers' objects");
+  const additionalManagersByObject=new Map([
+    ["80000000-0000-4000-8000-000000000001",["10000000-0000-4000-8000-000000000010"]],
+    ["80000000-0000-4000-8000-000000000002",["10000000-0000-4000-8000-000000000004"]],
+  ]);
   for(const object of demo.objects){
     assert.ok((object.assigneeUserIds??[]).includes(object.ownerUserId),object.name+" owner must see own object");
-    assert.ok(objectManagers.filter(id=>id!==object.ownerUserId).every(id=>!(object.assigneeUserIds??[]).includes(id)),object.name+" must not leak to another object manager");
+    const expectedAdditional=additionalManagersByObject.get(object.id)??[];
+    assert.ok(expectedAdditional.every(id=>(object.assigneeUserIds??[]).includes(id)),object.name+" explicit additional managers must see the object");
+    assert.ok(objectManagers.filter(id=>id!==object.ownerUserId&&!expectedAdditional.includes(id)).every(id=>!(object.assigneeUserIds??[]).includes(id)),object.name+" must not leak to unassigned object managers");
   }
   assert.ok(demo.workers.some(row=>row.workMode==="rotation"),"beta workers must include rotation workers");
   assert.ok(demo.workers.some(row=>row.workMode==="local"),"beta workers must include local workers");

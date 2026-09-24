@@ -32,10 +32,10 @@ export async function getObjectManagementOptions(actor:Actor,options:{includeCre
   const includeAssignments=options.includeAssignments!==false;
   if(actor.demo){
     const managers=includeAssignments?demoOrg.companyEmployees
-      .filter(item=>item.status==="active"&&(item.position.includes("Менеджер объекта")||item.position.includes("Руководитель объектов")))
+      .filter(item=>item.status==="active"&&((item.position??"").includes("Менеджер объекта")||(item.position??"").includes("Руководитель объектов")))
       .map(item=>({id:item.userId,name:item.name})):[];
     const recruiters=includeAssignments?demoOrg.companyEmployees
-      .filter(item=>item.status==="active"&&item.position.toLocaleLowerCase("ru").includes("подбор"))
+      .filter(item=>item.status==="active"&&(item.position??"").toLocaleLowerCase("ru").includes("подбор"))
       .map(item=>({id:item.userId,name:item.name})):[];
     return {
       clients:includeCreation?demo.clients.map(item=>({id:item.id,name:item.name})):[],
