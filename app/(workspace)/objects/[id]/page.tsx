@@ -277,7 +277,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="documents"&&<Section title="Документы объекта"><Empty title="Документы объекта" text="Здесь останутся только объектовые документы и сроки; документы сотрудников ведутся в их карточках и контуре допусков."/></Section>}
     {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
-        {tab==="history"&&<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/ >}</Section>}
+        {tab==="history"&&<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>}
   </>;
 }
 
