@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listCandidates,listFinance,listIncidents,listLaunchTasks,listNeeds,listObjects,listShifts,listWorkers } from "@/lib/data/service";
 import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
-import { getObjectManagementOptions } from "@/lib/operations/object-management";
+import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
@@ -54,6 +54,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
   const canAssignObject=hasCapability(actor.access,"operations.object.assign");
   const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
+  const objectHistory=await listObjectHistory(actor,id,100);
 
   const [needs,workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
     canNeeds?listNeeds(actor):Promise.resolve([]),
@@ -276,7 +277,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="documents"&&<Section title="Документы объекта"><Empty title="Документы объекта" text="Здесь останутся только объектовые документы и сроки; документы сотрудников ведутся в их карточках и контуре допусков."/></Section>}
     {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
-        {tab==="history"&&<Section title="История объекта"><Empty title="Системная история" text="Изменения запуска, назначений, численности, обеспечения и других связанных процессов будут собираться здесь одной лентой."/></Section>}
+        {tab==="history"&&<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/ >}</Section>}
   </>;
 }
 
@@ -314,4 +315,15 @@ function objectContactChannel(contact:{preferredChannel:string|null;phone:string
   if(contact.preferredChannel==="max"&&contact.maxContact)return contact.maxContact;
   if(contact.preferredChannel==="email"&&contact.email)return contact.email;
   return contact.phone??contact.telegram??contact.whatsapp??contact.email??contact.maxContact??"—";
+}
+
+
+function objectHistoryLabel(verb:string,summary:string){
+  if(summary)return summary;
+  return ({
+    created_manual:"Объект добавлен вручную",
+    created_from_proposal:"Объект создан из согласованного КП",
+    manager_handover:"Передан основному менеджеру",
+    settings_updated:"Обновлены настройки объекта",
+  } as Record<string,string>)[verb]??"Изменён объект";
 }
