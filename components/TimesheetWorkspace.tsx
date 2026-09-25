@@ -67,7 +67,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   },{daysOff:0,sick:0,noShows:0}),[rows,days]);
   const totalHours=totals.dayHours+totals.nightHours;
   const attentionCount=useMemo(()=>rows.filter(row=>row.rowKind!=="candidate"&&rowNeedsAttention(row,days,data.month,todayIso)).length,[rows,days,data.month,todayIso]);
-  const visibleRows=useMemo(()=>attentionOnly?rows.filter(row=>row.rowKind==="candidate"||rowNeedsAttention(row,days,data.month,todayIso)):rows,[rows,attentionOnly,days,data.month,todayIso]);
+  const visibleRows=useMemo(()=>attentionOnly?rows.filter(row=>row.rowKind!=="candidate"&&rowNeedsAttention(row,days,data.month,todayIso)):rows,[rows,attentionOnly,days,data.month,todayIso]);
   const internal=data.internalSnapshot,client=data.clientSnapshot;
   const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";
   const canEditFact=canEdit&&view==="internal"&&!locked;
@@ -202,7 +202,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
 
     <div className="timesheet-mode-note">
       <Status tone={view==="client"?"info":"neutral"}>{view==="client"?"Для согласования":"Рабочий табель"}</Status>
-      <span>{view==="client"?"Внешний вид без внутренних ставок и расчётов.":"Факт, исторические ставки, начисления и выплаты собраны в одном рабочем виде."}</span>
+      <span>{view==="client"?"Внешний вид без внутренних ставок и расчётов.":"Факт и исторические ставки видны сразу; начисления и выплаты раскрываются через «Финансы»."}</span>
       <span>Состояние: <strong>{statusLabel(data.status)}</strong></span>
       {message&&<span><strong>{message}</strong></span>}
     </div>
