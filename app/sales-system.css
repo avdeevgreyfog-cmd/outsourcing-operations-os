@@ -1441,3 +1441,104 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .timesheet-summary-strip>div:nth-child(2){border-right:0}
   .sales-workspace.operations-workspace .timesheet-summary-strip>div:nth-child(-n+2){border-bottom:1px solid var(--border)}
 }
+
+
+/* Timesheet state blocks: one marker on first unavailable day, then locked fill. */
+.sales-workspace.operations-workspace .timesheet-absence-band{
+  color:var(--muted)!important;
+  overflow:hidden!important
+}
+.sales-workspace.operations-workspace .timesheet-absence-vacation{color:var(--info)!important}
+.sales-workspace.operations-workspace .timesheet-absence-band.range-start,
+.sales-workspace.operations-workspace .timesheet-absence-band.range-single{
+  font-weight:700
+}
+.sales-workspace.operations-workspace .timesheet-blocked-continuation{
+  color:transparent!important;
+  cursor:default
+}
+.sales-workspace.operations-workspace .timesheet-terminated.timesheet-blocked-continuation{
+  background:color-mix(in srgb,var(--bad) 6%,var(--panel))!important
+}
+.sales-workspace.operations-workspace .timesheet-absence-band-mark{display:none!important}
+
+/* Compact timesheet command bar. */
+.sales-workspace.operations-workspace .timesheet-controlbar{
+  margin:0 0 10px;
+  min-height:54px;
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+}
+.sales-workspace.operations-workspace .timesheet-control-group{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.sales-workspace.operations-workspace .timesheet-control-context{flex:0 1 auto}
+.sales-workspace.operations-workspace .timesheet-control-label{
+  flex:0 0 auto;
+  font-size:9px;
+  line-height:1;
+  font-weight:600;
+  color:var(--muted);
+}
+.sales-workspace.operations-workspace .timesheet-controlbar :is(input[type="month"],select){
+  height:34px;
+  min-height:34px;
+  padding:0 28px 0 9px;
+  border:1px solid var(--border-strong);
+  border-radius:6px;
+  background:var(--panel);
+  color:var(--text);
+  font-size:11px;
+}
+.sales-workspace.operations-workspace .timesheet-controlbar input[type="month"]{width:154px;padding-right:8px}
+.sales-workspace.operations-workspace .timesheet-controlbar .segmented{
+  padding:2px;
+  border-radius:7px
+}
+.sales-workspace.operations-workspace .timesheet-controlbar .segmented :is(button,a){
+  height:29px;
+  min-height:29px;
+  padding:5px 9px;
+  border-radius:5px;
+  font-size:10px
+}
+.sales-workspace.operations-workspace .timesheet-control-divider{
+  width:1px;
+  height:28px;
+  flex:0 0 1px;
+  background:var(--border)
+}
+.sales-workspace.operations-workspace .timesheet-control-spacer{flex:1 1 auto;min-width:8px}
+.sales-workspace.operations-workspace .timesheet-control-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto
+}
+.sales-workspace.operations-workspace .timesheet-control-actions .button{
+  min-height:34px;
+  height:34px;
+  padding:0 10px;
+  font-size:10.5px
+}
+.sales-workspace.operations-workspace .timesheet-control-view{flex:0 0 auto}
+
+@media(max-width:1280px){
+  .sales-workspace.operations-workspace .timesheet-controlbar{align-items:flex-start;flex-wrap:wrap}
+  .sales-workspace.operations-workspace .timesheet-control-spacer{display:none}
+  .sales-workspace.operations-workspace .timesheet-control-actions{margin-left:auto}
+}
+@media(max-width:900px){
+  .sales-workspace.operations-workspace .timesheet-controlbar{display:grid;grid-template-columns:1fr}
+  .sales-workspace.operations-workspace .timesheet-control-divider{display:none}
+  .sales-workspace.operations-workspace .timesheet-control-group,
+  .sales-workspace.operations-workspace .timesheet-control-actions{width:100%;margin-left:0;overflow-x:auto}
+}
