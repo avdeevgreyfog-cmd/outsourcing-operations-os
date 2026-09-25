@@ -250,7 +250,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
 
-    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace objectId={id} workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} demo={actor.demo} specialties={workforceOptions.specialties}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
+    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace objectId={id} workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
 
     {tab==="shifts"&&<Section title="Смены объекта" note="План выходов по сотрудникам: день, ночь и выходной. Факт фиксируется в табеле."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} demo={actor.demo}/></Section>}
 
