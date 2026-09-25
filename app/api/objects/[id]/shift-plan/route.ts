@@ -33,7 +33,10 @@ function dates(start:string,end:string){
 }
 function isFactEntry(entry:EntryState|undefined){
   if(!entry)return false;
-  return entry.source!=="schedule"||Number(entry.factHours)>0||["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode);
+  if(entry.source==="schedule")return Number(entry.factHours)>0||["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode);
+  if(entry.timeCode==="PLANNED")return false;
+  if(entry.timeCode==="WORK")return Number(entry.factHours)>0;
+  return true;
 }
 async function getScope(tx:Sql,id:string){
   const [scope]=await tx<Array<Scope>>`
@@ -94,7 +97,8 @@ async function upsertPlanEntry(tx:Sql,actor:{organizationId:string;userId:string
 async function clearPlanEntry(tx:Sql,objectId:string,workerId:string,date:string){
   await tx`DELETE FROM time_entries
     WHERE worker_id=${workerId}::uuid AND object_id=${objectId}::uuid AND work_date=${date}::date
-      AND shift_id IS NULL AND COALESCE(fact_hours,0)=0 AND source='schedule'`;
+      AND shift_id IS NULL AND COALESCE(fact_hours,0)=0
+      AND (source='schedule' OR time_code='PLANNED')`;
 }
 async function assignCell(tx:Sql,actor:{organizationId:string;userId:string},objectId:string,row:Assignment,date:string,kind:CellKind,{skipProtected=false}:{skipProtected?:boolean}={}){
   if(await dateLocked(tx,objectId,date))return skipProtected?"locked":Promise.reject(new Error("Табель за эту дату уже зафиксирован. План прошлого периода менять нельзя."));
@@ -260,7 +264,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           SELECT sh.id FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
           WHERE sh.object_id=${id}::uuid AND sh.shift_date=${date}::date AND sa.worker_id=${row.workerId}::uuid
             AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled' LIMIT 1`;
-        if(existingShift||entry?.source==="schedule"){skippedExisting++;continue}
+        if(existingShift||(entry&&!isFactEntry(entry)&&(entry.source==="schedule"||entry.timeCode==="PLANNED"))){skippedExisting++;continue}
         const work=cycleWork(date,row);
         if(work==null){skipped++;continue}
         const kind=work?(row.shiftKind==="night"?"night":"day"):"off";
