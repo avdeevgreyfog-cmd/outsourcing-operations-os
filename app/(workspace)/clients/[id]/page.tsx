@@ -1,10 +1,12 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listCalculations, listClientContacts, listClients, listFinance, listObjects, listRequests } from "@/lib/data/service";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { Empty, EntityTabs, KeyValue, PageHeader, Section, Status, SummaryStrip } from "@/components/UI";
+import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { modelLabel, pct, rub } from "@/lib/ui/format";
 
 const labels: Record<string, string> = {
@@ -52,7 +54,8 @@ export default async function ClientPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: rawTab } = isGithubPagesDemo() ? {} : await searchParams;
+  const staticDemo = isGithubPagesDemo();
+  const { tab: rawTab } = staticDemo ? {} : await searchParams;
   const actor = await requireActor();
   const canReadFinance = hasCapability(actor.access, "finance.pnl.read");
   const clients = await listClients(actor);
@@ -89,8 +92,12 @@ export default async function ClientPage({
       : key === "contacts" ? contacts.length
       : undefined,
   }));
+  const panel=(key:string,content:ReactNode)=>{
+    if(!visibleTabKeys.includes(key)||(!staticDemo&&tab!==key))return null;
+    return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
+  };
 
-  return <>
+  const workspace=<>
     <PageHeader
       eyebrow="Клиент"
       title={client.name}
@@ -99,7 +106,7 @@ export default async function ClientPage({
     />
     <EntityTabs items={tabs} active={labels[tab]}/>
 
-    {tab === "overview" && <>
+    {panel("overview",<>
       <SummaryStrip>
         <span>Статус <strong>{statusLabel(client.status)}</strong></span>
         <span>Контакты <strong>{client.contacts}</strong></span>
@@ -129,9 +136,9 @@ export default async function ClientPage({
           </Section>
         </div>
       </div>
-    </>}
+    </>)}
 
-    {tab === "requests" && <div className="request-entity-tab-content">
+    {panel("requests",<div className="request-entity-tab-content">
       <Section title="Заявки клиента" note={`${clientRequests.length} заявок`}>
         <div className="request-table-wrap"><table className="data-table request-registry-table"><thead><tr><th>Заявка</th><th>Позиции</th><th>Старт</th><th>Статус</th></tr></thead><tbody>{clientRequests.length ? clientRequests.map((item) => <tr key={item.id}>
           <td><Link className="cell-title" href={`/requests/${item.id}`}>{item.title}</Link><span className="cell-sub">{item.location || "Локация уточняется"}</span></td>
@@ -140,27 +147,27 @@ export default async function ClientPage({
           <td><Status tone={tone(item.status)}>{statusLabel(item.status)}</Status></td>
         </tr>) : <tr><td colSpan={4}><div className="empty-inline">Заявок пока нет</div></td></tr>}</tbody></table></div>
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "calculations" && <div className="request-entity-tab-content">
+    {panel("calculations",<div className="request-entity-tab-content">
       <Section title="Расчёты" note={`${clientCalculations.length} сценариев`}>
         <div className="request-table-wrap"><table className="data-table request-registry-table"><thead><tr><th>Сценарий</th><th>Роль</th><th>Модель</th><th>Ставка клиенту</th><th>Маржа</th><th>Статус</th></tr></thead><tbody>{clientCalculations.length ? clientCalculations.map((item) => <tr key={item.id}>
           <td><Link className="cell-title" href={`/calculations?request=${item.requestId}#scenario-${item.id}`}>{item.name}</Link></td>
           <td>{item.role}</td><td>{modelLabel(item.model)}</td><td className="num">{rub(item.clientRate)}</td><td className="num">{pct(item.marginPct)}</td><td><Status tone={tone(item.status)}>{statusLabel(item.status)}</Status></td>
         </tr>) : <tr><td colSpan={6}><div className="empty-inline">Расчётов пока нет</div></td></tr>}</tbody></table></div>
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "objects" && <div className="request-entity-tab-content">
+    {panel("objects",<div className="request-entity-tab-content">
       <Section title="Объекты" note={`${clientObjects.length} объектов`}>
         <div className="stack-list request-entity-stack">{clientObjects.length ? clientObjects.map((item) => <Link className="stack-item" href={`/objects/${item.id}`} key={item.id}>
           <div><strong>{item.name}</strong><small>{item.region} · {item.code}</small></div>
           <Status tone={item.risk === "critical" ? "bad" : item.risk === "high" ? "warn" : tone(item.status)}>{statusLabel(item.status)}</Status>
         </Link>) : <Empty title="Нет доступных объектов" text="Связанные с клиентом объекты появятся здесь, когда будут доступны в вашей зоне ответственности."/>}</div>
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "finance" && canReadFinance && <div className="request-entity-tab-content">
+    {canReadFinance&&panel("finance",<div className="request-entity-tab-content">
       <Section title="Финансы клиента">
         <div className="request-entity-side-body" style={{ maxWidth: 620 }}>
           <KeyValue label="Выручка" value={rub(revenue)} sensitive/>
@@ -168,9 +175,9 @@ export default async function ClientPage({
           <KeyValue label="Маржа" value={revenue ? pct(contribution / revenue * 100) : "—"} sensitive/>
         </div>
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "contacts" && <div className="request-entity-tab-content">
+    {panel("contacts",<div className="request-entity-tab-content">
       <Section title="Контакты клиента" note={contacts.length+" контактов"}>
         {contacts.length ? <div className="request-table-wrap"><table className="data-table request-registry-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th></tr></thead><tbody>{contacts.map(item => <tr key={item.id}>
           <td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position || "Должность не указана"}</span></td>
@@ -178,12 +185,11 @@ export default async function ClientPage({
           <td>{item.objectAssignments.length ? item.objectAssignments.map(link => <div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role => contactRoleLabels[role]??role).join(" · ")}</span></div>) : "Не привязан к объектам"}</td>
         </tr>)}</tbody></table></div> : <Empty title="Контактов пока нет" text="Контакты можно добавить при создании клиента или из карточки конкретного объекта."/>}
       </Section>
-    </div>}
+    </div>)}
 
-    {["proposals", "documents", "activity"].includes(tab) && <div className="request-entity-tab-content">
-      <Section title={labels[tab]}><Empty title="Записей нет" text="В доступном контуре клиента записи этого типа отсутствуют."/></Section>
-    </div>}
+    {["proposals","documents","activity"].map(key=>panel(key,<div className="request-entity-tab-content" key={key}><Section title={labels[key]}><Empty title="Записей нет" text="В доступном контуре клиента записи этого типа отсутствуют."/></Section></div>))}
   </>;
+  return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }
 
 const contactRoleLabels:Record<string,string>={
