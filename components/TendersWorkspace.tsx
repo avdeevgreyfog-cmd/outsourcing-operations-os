@@ -179,7 +179,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     ]}/>}
 
     <div className="sales-toolbar">
-      <SalesSegments<View> label="Вид тендеров" value={view} onChange={value=>{setView(value);router.replace(value==="analytics"?"/tenders?view=analytics":value==="board"?"/tenders?view=board":"/tenders",{scroll:false})}} items={[{value:"list",label:"Список",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>},{value:"analytics",label:"Аналитика",icon:<ChartNoAxesCombined size={15}/>}]}/>
+      <SalesSegments<View> label="Вид тендеров" value={view} variant="navigation" onChange={value=>{setView(value);router.replace(value==="analytics"?"/tenders?view=analytics":value==="board"?"/tenders?view=board":"/tenders",{scroll:false})}} items={[{value:"list",label:"Список",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>},{value:"analytics",label:"Аналитика",icon:<ChartNoAxesCombined size={15}/>}]}/>
       <div className="sales-toolbar-actions">
       <div className="toolbar-spacer"/>
       <button className="button" type="button" onClick={exportExcel}><Download size={14}/> Выгрузить Excel</button>
