@@ -2360,3 +2360,114 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div{min-width:0}
   .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip{overflow-x:auto}
 }
+
+
+/* Pilot typography correction: keep density through spacing, not microscopic type. */
+.sales-workspace.operations-workspace .object-workspace-pilot{
+  --pilot-font-body:13px;
+  --pilot-font-secondary:12px;
+  --pilot-font-control:13px;
+  --pilot-font-table:13px;
+  --pilot-font-table-head:12px;
+  --pilot-font-row-title:14px;
+}
+
+/* A/B switch and object header */
+.sales-workspace.operations-workspace .object-ui-compare strong{font-size:13px}
+.sales-workspace.operations-workspace .object-ui-compare span{font-size:12px}
+.sales-workspace.operations-workspace .object-ui-switch a{font-size:13px}
+.sales-workspace.operations-workspace .object-pilot-breadcrumbs{font-size:12px}
+.sales-workspace.operations-workspace .object-pilot-code{font-size:12px}
+.sales-workspace.operations-workspace .object-pilot-title h1{font-size:22px}
+.sales-workspace.operations-workspace .object-pilot-title p{font-size:13px}
+.sales-workspace.operations-workspace .object-pilot-health strong{font-size:22px}
+.sales-workspace.operations-workspace .object-pilot-health span,
+.sales-workspace.operations-workspace .object-pilot-health small{font-size:12px}
+.sales-workspace.operations-workspace .object-pilot-meta span{font-size:12px}
+.sales-workspace.operations-workspace .object-pilot-meta strong{font-size:13px}
+.sales-workspace.operations-workspace .object-pilot-header .object-primary-nav .entity-tabs a,
+.sales-workspace.operations-workspace .object-primary-nav .entity-tabs a{font-size:13px}
+.sales-workspace.operations-workspace .object-primary-nav .entity-tabs a span{font-size:12px}
+
+/* Module hierarchy */
+.sales-workspace.operations-workspace .object-workspace-pilot .object-module-head h2{font-size:16px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-module-head p{font-size:12px;line-height:1.35}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs button{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs button span{font-size:12px}
+
+/* Workforce */
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span b{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline small{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-commandbar .object-workforce-toolbar.compact :is(input,select){
+  font-size:13px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-view button{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-active-filters button{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-result{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head strong{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head small,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head b{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 th{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 td{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 .cell-title{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 .cell-sub{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-worker-doc-editor select{font-size:13px}
+
+/* Shifts */
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar .button{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar strong{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div strong{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div small{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-guidance>div:first-child strong{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-guidance>div:first-child span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint>span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint button,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint button b{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible summary,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible summary{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible>div,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible>div{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button strong{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button small{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-panel>div:first-child strong{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-panel>div:first-child span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-list>span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix th,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-specialty th{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix td,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-specialty td{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix .cell-title{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix .cell-sub{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-worker-alert{font-size:12px}
+
+/* Timesheet */
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-control-label{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-controlbar :is(input,select){font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .segmented button{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-control-actions .button{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div span{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div strong{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div small{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-mode-note{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-matrix-section>.section-head h2{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-matrix-section>.section-head p{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-table-actions .button{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational th{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational td{font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-worker-cell .cell-title,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-worker-cell strong{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-worker-cell .cell-sub{font-size:12px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-cell-input{font-size:13px}
+
+/* Give the larger type just enough vertical room without losing density. */
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 th,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix th,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-specialty th{height:36px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix td,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-specialty td{height:48px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational th{height:34px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational td{height:40px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-cell-input{height:30px;min-height:30px}
