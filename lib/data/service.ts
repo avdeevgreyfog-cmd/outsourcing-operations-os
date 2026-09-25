@@ -613,8 +613,8 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       FROM worker_profiles w WHERE w.id=ANY(${workerIds}::uuid[])
     `:[];
 
-    const codeLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"Н"};
-    const absenceLabels:Record<string,string>={intershift:"МВ",vacation:"О",sick:"Б",personal:"Н",other:"Н"};
+    const codeLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"НВ"};
+    const absenceLabels:Record<string,string>={intershift:"МВ",vacation:"О",sick:"Б",personal:"В",other:"В"};
     const ratesByWorker=new Map<string,TimesheetRatePeriod[]>();
     for(const rate of rateRows){
       const list=ratesByWorker.get(rate.workerId)??[];
