@@ -150,7 +150,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   }));
 
 
-  return <>
+  return <div className="object-workspace-pilot">
     <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
     <div className="object-hero">
       <div>
@@ -166,7 +166,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </div>
       <div className="health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>{required?"укомплектованность":"план не задан"}</span></div>
     </div>
-    <EntityTabs items={tabs} active={visibleLabels[tab]}/>
+    <div className="object-primary-nav"><EntityTabs items={tabs} active={visibleLabels[tab]}/></div>
 
     {tab==="overview"&&<>
       <div className="metrics-grid object-operations-metrics">
@@ -250,11 +250,21 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
 
-    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
+    {tab==="workforce"&&<div className="object-module-shell">
+      <div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div>
+      <ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties}/>
+      {!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}
+    </div>}
 
-    {tab==="shifts"&&<Section title="Смены объекта" note="План выходов по сотрудникам: день, ночь и выходной. Факт фиксируется в табеле."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo}/></Section>}
+    {tab==="shifts"&&<div className="object-module-shell">
+      <div className="object-module-head"><div><h2>Смены</h2><p>Планирование выходов, покрытие потребности и работа с отклонениями. Факт приходит из табеля.</p></div></div>
+      <ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo}/>
+    </div>}
 
-    {tab==="timesheets"&&(objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Section title="Табель объекта"><Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/></Section>)}
+    {tab==="timesheets"&&<div className="object-module-shell">
+      <div className="object-module-head"><div><h2>Табели</h2><p>Фактические выходы, часы, отклонения, начисления и маршрут согласования.</p></div></div>
+      {objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/>}
+    </div>}
 
     {tab==="supply"&&<>
       <div className="metrics-grid">
@@ -283,7 +293,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {tab==="documents"&&<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>}
     {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
         {tab==="history"&&<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>}
-  </>;
+  </div>;
 }
 
 function ReadinessRow({label,value}:{label:string;value:number}){
