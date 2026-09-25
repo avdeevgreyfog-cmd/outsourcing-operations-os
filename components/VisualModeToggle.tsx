@@ -7,29 +7,23 @@ type VisualMode="classic"|"new";
 const STORAGE_KEY="operis.visualMode";
 const COOKIE_KEY="oo_ui";
 
-export function VisualModeToggle(){
+export function VisualModeToggle({initialMode}:{initialMode:VisualMode}){
   const pathname=usePathname();
   const searchParams=useSearchParams();
   const router=useRouter();
-  const [mode,setMode]=useState<VisualMode>("new");
+  const [mode,setMode]=useState<VisualMode>(initialMode);
 
   useEffect(()=>{
-    let next:VisualMode="new";
-    try{
-      const saved=window.localStorage.getItem(STORAGE_KEY);
-      if(saved==="classic"||saved==="new")next=saved;
-    }catch{}
-    setMode(next);
-    document.documentElement.dataset.operisUi=next;
+    document.documentElement.dataset.operisUi=mode;
     if(/^\/objects\/[^/]+$/.test(pathname)){
-      const expected=next==="classic"?"classic":"pilot";
+      const expected=mode==="classic"?"classic":"pilot";
       if(searchParams.get("ui")!==expected){
         const params=new URLSearchParams(searchParams.toString());
         params.set("ui",expected);
         router.replace(`${pathname}?${params.toString()}`,{scroll:false});
       }
     }
-  },[pathname,router,searchParams]);
+  },[mode,pathname,router,searchParams]);
 
   function choose(next:VisualMode){
     setMode(next);
