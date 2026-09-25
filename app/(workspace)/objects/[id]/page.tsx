@@ -130,6 +130,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const launchProgress=objectLaunchTasks.length?Math.round(objectLaunchTasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/objectLaunchTasks.length):100;
   const currentDeficit=Math.max(required-working,0);
   const forecastAvailable=objectForecast.length?projectedAvailable:working;
+  const effectiveForecastCovered=Math.max(required-projectedDeficit,0);
+  const projectedSurplus=Math.max(forecastAvailable-effectiveForecastCovered,0);
   const plannedExitCount=objectForecast.reduce((sum,row)=>sum+row.plannedExits,0);
   const todayIso=new Date().toISOString().slice(0,10);
   const horizonEnd=addDaysIso(todayIso,30);
@@ -205,13 +207,13 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
         <Metric label="Дефицит сейчас" value={currentDeficit} tone={currentDeficit?"warn":"good"}/>
         <Metric label="Смена сегодня" value={todayAssigned+" / "+todayDemand} note={todayDemand?"назначено к плану":"смена не задана"} tone={todayDemand>todayAssigned?"warn":"good"}/>
         <Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/>
-        <Metric label="Через 30 дней" value={forecastAvailable+" / "+required} note={projectedDeficit?"прогнозный дефицит "+projectedDeficit:forecastAvailable>working?"ожидается +"+(forecastAvailable-working):"план покрыт"} tone={projectedDeficit?"warn":"good"}/>
+        <Metric label="Через 30 дней" value={effectiveForecastCovered+" / "+required} note={projectedDeficit?`дефицит по позициям ${projectedDeficit}${projectedSurplus?` · доступно ${forecastAvailable}`:""}`:forecastAvailable>working?`план покрыт · доступно ${forecastAvailable}`:"план покрыт"} tone={projectedDeficit?"warn":"good"}/>
       </div>
       <div className="workspace-grid object-overview-grid">
         <div>
           <Section title="Требует внимания" note="То, что влияет на выходы, численность и работу объекта">
             <div className="stack-list">
-              {projectedDeficit>0&&<div className="stack-item"><div><strong className="priority-critical">Прогнозный дефицит персонала</strong><small>{projectedDeficit} человек на горизонте 30 дней · прогноз {forecastAvailable} из {required}</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Комплектация</Link></div>}
+              {projectedDeficit>0&&<div className="stack-item"><div><strong className="priority-critical">Прогнозный дефицит персонала</strong><small>{projectedDeficit} человек на горизонте 30 дней · по позициям закрыто {effectiveForecastCovered} из {required}{projectedSurplus?` · всего доступно ${forecastAvailable}`:""}</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Комплектация</Link></div>}
               {upcomingAbsences.length>0&&<div className="stack-item"><div><strong>Ближайшие отсутствия сотрудников</strong><small>{upcomingAbsences.length} · ближайшее: {upcomingAbsences[0].fullName} · {absenceWindow(upcomingAbsences[0])}</small></div><Link className="button" href={"/objects/"+id+"?tab=workforce"}>Персонал</Link></div>}
               {plannedExitCount>0&&<div className="stack-item"><div><strong>Запланировано завершение работы</strong><small>{plannedExitCount} сотрудников на горизонте 30 дней</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Проверить план</Link></div>}
               {objectShifts.filter(row=>row.deficit>0).slice(0,3).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.specialty}</strong><small>На смену назначено {row.assigned} из {row.demand}</small></div><Status tone="warn">−{row.deficit}</Status></div>)}
