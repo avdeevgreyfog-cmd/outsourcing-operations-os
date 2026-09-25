@@ -162,7 +162,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   }
 
   return <div className={`timesheet-workspace ${pilot?"timesheet-pilot":"timesheet-classic"}`}>
-    {pilot&&<div className="object-local-tabs timesheet-local-tabs" role="tablist" aria-label="Режим табеля">{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий табель <span>{rows.filter(row=>row.rowKind!=="candidate").length}</span></button>}<button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Согласование <span>{statusLabel(data.status)}</span></button><button type="button" className={attentionOnly?"active":""} onClick={()=>setAttentionOnly(value=>!value)}>Требует внимания <span>{attentionCount}</span></button></div>}
+    <div className={`object-local-tabs timesheet-local-tabs ${pilot?"timesheet-local-tabs-forced":""}`} role="tablist" aria-label="Режим табеля">{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий табель <span>{rows.filter(row=>row.rowKind!=="candidate").length}</span></button>}<button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Согласование <span>{statusLabel(data.status)}</span></button><button type="button" className={attentionOnly?"active":""} onClick={()=>setAttentionOnly(value=>!value)}>Требует внимания <span>{attentionCount}</span></button></div>
     <div className="timesheet-controlbar">
       <div className="timesheet-control-group timesheet-control-context">
         <span className="timesheet-control-label">Период</span>
@@ -178,10 +178,10 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
         </div>
       </div>
       <div className="timesheet-control-spacer"/>
-      {!pilot&&<div className="timesheet-control-group timesheet-control-view">
+      <div className={`timesheet-control-group timesheet-control-view ${pilot?"timesheet-control-view-classic-hidden":""}`}>
         <span className="timesheet-control-label">Вид</span>
         <div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Согласование</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий</button>}</div>
-      </div>}
+      </div>
       <div className="timesheet-control-actions">
         <button className="button" onClick={()=>void exportExcel()}><Download size={14}/> Excel</button>
         {view==="client"&&<button className="button" onClick={()=>window.print()}><Printer size={14}/> Печать</button>}
@@ -189,7 +189,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       </div>
     </div>
 
-    {pilot?<details className="timesheet-legend timesheet-legend-top timesheet-legend-collapsible"><summary>Обозначения табеля</summary><div><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div></details>:<div className="timesheet-legend timesheet-legend-top"><strong>Обозначения</strong><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div>}
+    <details className={`timesheet-legend timesheet-legend-top timesheet-legend-collapsible ${pilot?"timesheet-legend-collapsible-forced":""}`}><summary>Обозначения табеля</summary><div><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div></details>
+    <div className={`timesheet-legend timesheet-legend-top timesheet-legend-classic ${pilot?"timesheet-legend-classic-hidden":""}`}><strong>Обозначения</strong><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div>
 
     <div className="timesheet-summary-strip">
       <div><span>Сотрудники</span><strong>{rows.filter(row=>row.rowKind!=="candidate").length}</strong></div>
