@@ -11,8 +11,8 @@ export function SalesSearch({ value, onChange, placeholder }: { value: string; o
   return <div className="sales-search"><Search size={16} aria-hidden="true"/><input type="search" aria-label={placeholder} placeholder={placeholder} value={value} onChange={event => onChange(event.target.value)}/>{value && <button type="button" aria-label="Очистить поиск" onClick={() => onChange("")}><X size={15}/></button>}</div>;
 }
 
-export function SalesSegments<T extends string>({ label, value, items, onChange }: { label: string; value: T; items: { value: T; label: string; icon?: ReactNode }[]; onChange: (value: T) => void }) {
-  return <div className="sales-segments" role="group" aria-label={label}>{items.map(item => <button type="button" key={item.value} aria-pressed={value === item.value} onClick={() => onChange(item.value)}>{item.icon}{item.label}</button>)}</div>;
+export function SalesSegments<T extends string>({ label, value, items, onChange, variant="control" }: { label: string; value: T; items: { value: T; label: string; icon?: ReactNode }[]; onChange: (value: T) => void; variant?:"control"|"navigation" }) {
+  return <div className={`sales-segments${variant==="navigation"?" workspace-tabs":""}`} role="group" aria-label={label}>{items.map(item => <button type="button" key={item.value} aria-pressed={value === item.value} onClick={() => onChange(item.value)}>{item.icon}{item.label}</button>)}</div>;
 }
 
 
