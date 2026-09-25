@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { requireCapability,AccessDeniedError } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
-import { canReadRow } from "@/lib/core/access.mjs";
+import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { normalizeRecruitingStage, recruitingStageLabels } from "@/lib/recruiting/model";
 import { validateStageChange, type WorkflowDetails } from "@/lib/recruiting/workflow";
 
@@ -39,10 +39,12 @@ const workflowSchema=z.object({
 
 const schema=z.object({
   applicationId:z.string().uuid().optional(),
+  sourceContext:z.enum(["recruiting","object_feedback"]).optional(),
   stage:z.enum(["new","interview","documents","clearance","preparation","first_shift","retention_7","retention_30","rejected","no_show","reserve"]),
   expectedStage:z.string().optional(),
   expectedUpdatedAt:z.string().optional(),
   plannedStartDate:z.iso.date().nullable().optional(),
+  plannedShiftKind:z.enum(["day","night","mixed"]).nullable().optional(),
   plannedArrivalAt:z.string().datetime().nullable().optional(),
   actualStartAt:z.string().datetime().nullable().optional(),
   workflow:workflowSchema.optional(),
@@ -58,7 +60,8 @@ type ScopeRow={
   id:string;candidateId:string;needId:string;organizationId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;
   workflow:WorkflowDetails;plannedStartDate:string|null;plannedArrivalAt:string|null;actualStartAt:string|null;updatedAt:string;
   clientId:string|null;regionId:string|null;assigneeUserIds:string[];stage:string;specialtyId:string;objectOwnerId:string|null;sourceRequestRoleId:string|null;
-  workMode:"local"|"rotation";paidHoursPerShift:number|string|null;fullName:string;
+  workMode:"local"|"rotation";paidHoursPerShift:number|string|null;fullName:string;plannedShiftKind:"day"|"night"|"mixed"|null;
+  defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed";ppeTaskEnabled:boolean;ppeTaskDueDays:number|null;
 };
 
 async function ensureActiveAssignee(tx:Sql,organizationId:string,userId:string|null|undefined){
@@ -107,7 +110,7 @@ async function syncPreparationTask(
   }
 }
 
-async function ensureBlockingDocumentsReady(tx:Sql,current:ScopeRow,targetStage:string){
+async function ensureBlockingDocumentsReady(tx:Sql,current:ScopeRow,targetStage:string,ignoreEmployment=false){
   const dueStages=
     targetStage==="preparation"?["documents","preparation"]:
     targetStage==="first_shift"?["documents","preparation","first_shift"]:
@@ -123,6 +126,7 @@ async function ensureBlockingDocumentsReady(tx:Sql,current:ScopeRow,targetStage:
     LEFT JOIN candidate_application_documents cad ON cad.application_id=${current.id}::uuid AND cad.document_type_id=dt.id
     WHERE ndr.need_id=${current.needId}::uuid
       AND ndr.required AND ndr.blocks_progress
+      AND (${ignoreEmployment}=false OR dt.group_type<>'employment')
       AND ndr.required_by_stage=ANY(${dueStages}::text[])
       AND CASE WHEN dt.group_type='employment'
         THEN COALESCE(cd.status,cad.status,'missing')
@@ -136,9 +140,12 @@ async function ensureBlockingDocumentsReady(tx:Sql,current:ScopeRow,targetStage:
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
-    requireCapability(actor,"recruiting.candidate.edit");
-    if(actor.demo)return NextResponse.json({error:"В демо-режиме этап сохраняется локально в браузере"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
+    const objectFeedback=body.sourceContext==="object_feedback";
+    const canRecruitEdit=hasCapability(actor.access,"recruiting.candidate.edit");
+    const canObjectFeedback=objectFeedback&&hasCapability(actor.access,"operations.object.edit");
+    if(!canRecruitEdit&&!canObjectFeedback)throw new AccessDeniedError(objectFeedback?"operations.object.edit":"recruiting.candidate.edit");
+    if(actor.demo)return NextResponse.json({error:"В демо-режиме действие отображается локально в браузере"},{status:409});
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [current]=await tx<Array<ScopeRow>>`
         SELECT ca.id,ca.candidate_id "candidateId",ca.need_id "needId",ca.organization_id "organizationId",ca.owner_user_id "ownerUserId",
@@ -146,8 +153,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           ARRAY[ca.owner_user_id::text,ca.manager_user_id::text]
             || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL)
             || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
-          ca.stage,ca.workflow_details workflow,ca.planned_start_date::text "plannedStartDate",ca.planned_arrival_at::text "plannedArrivalAt",
+          ca.stage,ca.workflow_details workflow,ca.planned_start_date::text "plannedStartDate",ca.planned_shift_kind "plannedShiftKind",ca.planned_arrival_at::text "plannedArrivalAt",
           ca.actual_start_at::text "actualStartAt",ca.updated_at::text "updatedAt",n.specialty_id "specialtyId",o.owner_user_id "objectOwnerId",
+          o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",
+          o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
+          o.ppe_task_enabled "ppeTaskEnabled",o.ppe_task_due_days "ppeTaskDueDays",
           n.source_request_role_id "sourceRequestRoleId",
           COALESCE(NULLIF(ca.conditions_snapshot->>'workMode',''),NULLIF(n.conditions_snapshot->>'workMode',''),'local') "workMode",
           COALESCE(NULLIF(ca.conditions_snapshot->>'paidHoursPerShift','')::numeric,NULLIF(n.conditions_snapshot->>'paidHoursPerShift','')::numeric) "paidHoursPerShift",
@@ -159,7 +169,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
            OR (${body.applicationId??null}::uuid IS NULL AND ca.candidate_id=${id}::uuid)) AND ca.candidate_id=${id}::uuid
         ORDER BY ca.updated_at DESC LIMIT 1 FOR UPDATE OF ca
       `;
-      if(!current||!canReadRow(actor.access,"recruiting.candidate.edit",current,actor))throw new AccessDeniedError("recruiting.candidate.edit");
+      if(!current)throw new AccessDeniedError(objectFeedback?"operations.object.edit":"recruiting.candidate.edit");
+      if(objectFeedback){
+        if(!current.objectId||!canReadRow(actor.access,"operations.object.edit",current,actor))throw new AccessDeniedError("operations.object.edit");
+        if(body.ownerUserId!==undefined)throw new WorkflowError("Из объекта нельзя менять ответственного рекрутера");
+        const currentStage=normalizeRecruitingStage(current.stage);
+        const allowedTarget=body.stage==="first_shift"||body.stage==="no_show"||body.stage===currentStage;
+        if(!allowedTarget||!["preparation","first_shift","no_show"].includes(currentStage))throw new WorkflowError("Из объекта можно только согласовать, перенести или подтвердить первый выход");
+      }else if(!canReadRow(actor.access,"recruiting.candidate.edit",current,actor))throw new AccessDeniedError("recruiting.candidate.edit");
       if(body.ownerUserId!==undefined)await ensureActiveAssignee(tx,actor.organizationId,body.ownerUserId);
       if((body.expectedStage && normalizeRecruitingStage(current.stage)!==body.expectedStage) || (body.expectedUpdatedAt && Date.parse(current.updatedAt)!==Date.parse(body.expectedUpdatedAt))) return {conflict:true};
       const workflow={...current.workflow,...body.workflow};
@@ -167,9 +184,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       const changed=normalizedCurrent!==body.stage;
       const actualStartValue=body.actualStartAt===undefined?current.actualStartAt:body.actualStartAt;
       const plannedArrivalValue=body.plannedArrivalAt===undefined?current.plannedArrivalAt:body.plannedArrivalAt;
+      const plannedShiftKindValue=body.plannedShiftKind===undefined?current.plannedShiftKind:body.plannedShiftKind;
+      if(objectFeedback&&body.stage==="first_shift"&&body.plannedStartDate&&body.workflow?.firstShiftOutcome===undefined)workflow.firstShiftOutcome="pending";
       const message=validateStageChange({...current,stage:normalizedCurrent,workflow:current.workflow}, {...body,workflow,plannedArrivalAt:plannedArrivalValue,actualStartAt:actualStartValue});
       if(message)throw new WorkflowError(message);
-      if(changed)await ensureBlockingDocumentsReady(tx,current,body.stage);
+      if(changed)await ensureBlockingDocumentsReady(tx,current,body.stage,objectFeedback&&body.stage==="first_shift");
 
       if(body.ownerUserId!==undefined&&body.ownerUserId!==null)await ensureActiveAssignee(tx,actor.organizationId,body.ownerUserId);
       if(workflow.managerInterviewUserId)await ensureActiveAssignee(tx,actor.organizationId,workflow.managerInterviewUserId);
@@ -195,6 +214,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           owner_user_id=${ownerUserId},
           workflow_details=${sql.json(workflow)},
           planned_start_date=${body.plannedStartDate===undefined?current.plannedStartDate:body.plannedStartDate}::date,
+          planned_shift_kind=${plannedShiftKindValue},
           planned_arrival_at=${plannedArrivalValue}::timestamptz,
           stage=${body.stage},
           next_action_at=${nextAction},
@@ -241,19 +261,28 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       let workerId:string|null=null;
       const confirmingFirstShift=workflow.firstShiftOutcome==="worked" && actualStartValue && !current.actualStartAt;
       if(confirmingFirstShift){
-        requireCapability(actor,"recruiting.candidate.convert");
+        if(!objectFeedback)requireCapability(actor,"recruiting.candidate.convert");
         if(!current.objectId)throw new Error("Перед фактическим выходом назначьте кандидату объект");
         const [candidate]=await tx<Array<{fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;notes:string|null;source:string|null;originalRecruiterUserId:string|null}>>`
           SELECT full_name "fullName",phone,email,city,birth_date::text "birthDate",notes,source,original_recruiter_user_id "originalRecruiterUserId"
           FROM candidates WHERE id=${current.candidateId}::uuid FOR UPDATE
         `;
         if(!candidate)throw new Error("Кандидат не найден");
+        const [employmentDocs]=await tx<Array<{required:number;ready:number}>>`
+          SELECT count(*)::int required,count(*) FILTER (WHERE COALESCE(cd.status,cad.status,'missing') IN ('received','verified','ready'))::int ready
+          FROM need_document_requirements ndr
+          JOIN recruiting_document_types dt ON dt.id=ndr.document_type_id AND dt.group_type='employment'
+          LEFT JOIN candidate_documents cd ON cd.candidate_id=${current.candidateId}::uuid AND cd.document_type_id=dt.id
+          LEFT JOIN candidate_application_documents cad ON cad.application_id=${current.id}::uuid AND cad.document_type_id=dt.id
+          WHERE ndr.need_id=${current.needId}::uuid AND ndr.required
+        `;
+        const documentStatus=employmentDocs&&employmentDocs.required>0&&employmentDocs.ready>=employmentDocs.required?"received":employmentDocs&&employmentDocs.ready>0?"collecting":"not_received";
         const [existingWorker]=await tx<Array<{id:string}>>`SELECT id FROM worker_profiles WHERE origin_candidate_id=${current.candidateId}::uuid FOR UPDATE`;
-        if(existingWorker)workerId=existingWorker.id;
+        if(existingWorker){workerId=existingWorker.id;await tx`UPDATE worker_profiles SET employment_documents_status=CASE WHEN employment_documents_status='completed' THEN employment_documents_status ELSE ${documentStatus} END,updated_at=now() WHERE id=${workerId}::uuid`;}
         else{
           const [worker]=await tx<Array<{id:string}>>`
-            INSERT INTO worker_profiles(organization_id,origin_candidate_id,full_name,phone,email,city,birth_date,notes,status,source,original_recruiter_user_id,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${current.candidateId}::uuid,${candidate.fullName},${candidate.phone},${candidate.email},${candidate.city},${candidate.birthDate}::date,${candidate.notes},'active',${candidate.source},${candidate.originalRecruiterUserId}::uuid,${actor.userId}::uuid)
+            INSERT INTO worker_profiles(organization_id,origin_candidate_id,full_name,phone,email,city,birth_date,notes,status,source,original_recruiter_user_id,employment_documents_status,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${current.candidateId}::uuid,${candidate.fullName},${candidate.phone},${candidate.email},${candidate.city},${candidate.birthDate}::date,${candidate.notes},'active',${candidate.source},${candidate.originalRecruiterUserId}::uuid,${documentStatus},${actor.userId}::uuid)
             RETURNING id
           `;
           workerId=worker.id;
@@ -263,8 +292,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         `;
         if(!assignment){
           await tx`
-            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,${actualStartValue}::timestamptz::date,${current.managerUserId??current.objectOwnerId}::uuid,${current.workMode},${current.paidHoursPerShift??null},${actor.userId}::uuid)
+            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,${actualStartValue}::timestamptz::date,${current.managerUserId??current.objectOwnerId}::uuid,${current.workMode},${current.paidHoursPerShift??null},
+              ${current.defaultTransitionDays},${current.defaultDailyPaymentShifts},${current.defaultScheduleWorkDays},${current.defaultScheduleRestDays},COALESCE(${plannedShiftKindValue},${current.defaultShiftKind}),${actualStartValue}::timestamptz::date,${actor.userId}::uuid)
           `;
         }
         const [activeRate]=await tx<Array<{id:string}>>`
@@ -291,6 +321,19 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
             `;
           }
         }
+        if(current.ppeTaskEnabled&&current.objectOwnerId){
+          const [existingPpeTask]=await tx<Array<{id:string}>>`
+            SELECT id FROM tasks WHERE entity_type='worker' AND entity_id=${workerId}::uuid AND checklist_json->>'kind'='ppe_issue' AND status NOT IN ('done','cancelled') ORDER BY created_at DESC LIMIT 1
+          `;
+          if(!existingPpeTask){
+            const ppeDueAt=current.ppeTaskDueDays==null?null:new Date(Date.parse(actualStartValue)+current.ppeTaskDueDays*86400000).toISOString();
+            await tx`
+              INSERT INTO tasks(organization_id,title,status,priority,assignee_user_id,due_at,entity_type,entity_id,checklist_json,created_by_user_id)
+              VALUES(${actor.organizationId}::uuid,${`Уточнить размеры и проконтролировать выдачу СИЗ: ${current.fullName}`},'open','normal',${current.objectOwnerId}::uuid,${ppeDueAt}::timestamptz,'worker',${workerId}::uuid,
+                ${tx.json({kind:"ppe_issue",objectId:current.objectId,workerId,candidateId:current.candidateId})},${actor.userId}::uuid)
+            `;
+          }
+        }
         await tx`UPDATE candidates SET status='worker',updated_at=now() WHERE id=${current.candidateId}::uuid`;
         await tx`
           UPDATE needs SET count_filled=LEAST(count_required,(
@@ -314,7 +357,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${current.candidateId}::uuid,'stage_changed',
           ${changed?`Этап кандидата: ${recruitingStageLabels[normalizedCurrent]} → ${recruitingStageLabels[body.stage]}`:"Обновлены рабочие действия по кандидату"},
-          ${sql.json({applicationId:current.id,needId:current.needId,workerId,actionCode:workflow.actionCode??null,outcomeCode:workflow.outcomeCode??null,reasonCode:body.reasonCode??null,ownerUserId:body.ownerUserId??current.ownerUserId})})
+          ${sql.json({applicationId:current.id,needId:current.needId,workerId,actionCode:workflow.actionCode??null,outcomeCode:workflow.outcomeCode??null,reasonCode:body.reasonCode??null,ownerUserId:body.ownerUserId??current.ownerUserId,sourceContext:body.sourceContext??"recruiting",plannedShiftKind:plannedShiftKindValue})})
       `;
       return {candidateId:current.candidateId,applicationId:current.id,stage:body.stage,workerId};
     }));

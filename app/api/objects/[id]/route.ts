@@ -17,17 +17,31 @@ const schema=z.object({
   recruitingMode:z.enum(["company_rules","object_team"]).optional(),
   recruiterUserIds:z.array(z.string().uuid()).max(50).optional(),
   keepPreviousManager:z.boolean().default(true),
+  defaultTransitionDays:z.number().int().min(0).max(90).optional(),
+  defaultDailyPaymentShifts:z.number().int().min(0).max(31).optional(),
+  defaultScheduleWorkDays:z.number().int().min(1).max(31).nullable().optional(),
+  defaultScheduleRestDays:z.number().int().min(0).max(31).nullable().optional(),
+  defaultShiftKind:z.enum(["day","night","mixed"]).optional(),
+  ppeTaskEnabled:z.boolean().optional(),
+  ppeTaskDueDays:z.number().int().min(0).max(90).nullable().optional(),
+}).superRefine((value,ctx)=>{
+  const work=value.defaultScheduleWorkDays;const rest=value.defaultScheduleRestDays;
+  if((work==null)!==(rest==null))ctx.addIssue({code:"custom",path:["defaultScheduleWorkDays"],message:"Рабочие и выходные дни графика задаются вместе"});
 });
 
 type ObjectScope={
   organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string;
   legalEntityId:string|null;recruitingMode:"company_rules"|"object_team";name:string;status:string;assigneeUserIds:string[];
+  defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed";ppeTaskEnabled:boolean;ppeTaskDueDays:number|null;
 };
 
 async function getScope(tx:Sql,organizationId:string,id:string):Promise<ObjectScope|null>{
   const [row]=await tx<Array<ObjectScope>>`
     SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
       o.client_company_id "clientId",o.legal_entity_id "legalEntityId",o.recruiting_routing_mode "recruitingMode",o.name,o.status,
+      o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",
+      o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
+      o.ppe_task_enabled "ppeTaskEnabled",o.ppe_task_due_days "ppeTaskDueDays",
       ARRAY(SELECT oa.user_id::text FROM object_assignments oa
         WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
     FROM objects o WHERE o.organization_id=${organizationId}::uuid AND o.id=${id}::uuid
@@ -115,18 +129,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         LEFT JOIN role_templates rt ON rt.id=m.role_template_id
         WHERE m.status='active' AND m.user_id=ANY(${managerIds}::uuid[])
           AND (
-            rt.code IN ('director','object_manager','regional_manager','operations_head')
-            OR EXISTS (
-              SELECT 1 FROM permission_grants pg
-              WHERE pg.role_template_id=m.role_template_id AND pg.capability='operations.object.edit' AND pg.effect='allow'
-            )
+            rt.code='object_manager'
             OR EXISTS (
               SELECT 1 FROM position_assignments pa
               JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
+              JOIN positions p ON p.id=sp.job_profile_id
               WHERE pa.membership_id=m.id AND pa.status<>'ended'
                 AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND ppg.capability='operations.object.edit' AND ppg.effect='allow'
+                AND p.code IN ('object-manager','object_manager')
             )
           )
       `;
@@ -158,6 +168,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           target_start_date=CASE WHEN ${body.targetStartDate===undefined} THEN target_start_date ELSE ${body.targetStartDate??null}::date END,
           status=COALESCE(${body.status??null},status),
           recruiting_routing_mode=${nextRecruitingMode},
+          default_transition_days=COALESCE(${body.defaultTransitionDays??null}::int,default_transition_days),
+          default_daily_payment_shifts=COALESCE(${body.defaultDailyPaymentShifts??null}::int,default_daily_payment_shifts),
+          default_schedule_work_days=CASE WHEN ${body.defaultScheduleWorkDays===undefined} THEN default_schedule_work_days ELSE ${body.defaultScheduleWorkDays??null}::int END,
+          default_schedule_rest_days=CASE WHEN ${body.defaultScheduleRestDays===undefined} THEN default_schedule_rest_days ELSE ${body.defaultScheduleRestDays??null}::int END,
+          default_shift_kind=COALESCE(${body.defaultShiftKind??null},default_shift_kind),
+          ppe_task_enabled=COALESCE(${body.ppeTaskEnabled??null}::boolean,ppe_task_enabled),
+          ppe_task_due_days=CASE WHEN ${body.ppeTaskDueDays===undefined} THEN ppe_task_due_days ELSE ${body.ppeTaskDueDays??null}::int END,
           owner_user_id=${nextOwner}::uuid,
           updated_at=now()
         WHERE id=${id}::uuid
@@ -175,6 +192,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         recruiterUserIds:nextRecruiters,
         legalEntityId:body.legalEntityId??current.legalEntityId,
         status:body.status??current.status,
+        defaultTransitionDays:body.defaultTransitionDays??current.defaultTransitionDays,
+        defaultDailyPaymentShifts:body.defaultDailyPaymentShifts??current.defaultDailyPaymentShifts,
+        defaultScheduleWorkDays:body.defaultScheduleWorkDays===undefined?current.defaultScheduleWorkDays:body.defaultScheduleWorkDays,
+        defaultScheduleRestDays:body.defaultScheduleRestDays===undefined?current.defaultScheduleRestDays:body.defaultScheduleRestDays,
+        defaultShiftKind:body.defaultShiftKind??current.defaultShiftKind,
+        ppeTaskEnabled:body.ppeTaskEnabled??current.ppeTaskEnabled,
+        ppeTaskDueDays:body.ppeTaskDueDays===undefined?current.ppeTaskDueDays:body.ppeTaskDueDays,
       };
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)

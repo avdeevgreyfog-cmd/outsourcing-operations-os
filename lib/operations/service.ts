@@ -562,7 +562,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
 }
 
 
-export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null};
+export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null;transitionDays:number;dailyPaymentShifts:number};
 export type WorkerAbsenceRow={id:string;absenceType:string;status:string;plannedFrom:string;plannedTo:string|null;actualFrom:string|null;actualTo:string|null;flexibleReturn:boolean;note:string|null};
 export type WorkerOperationsDetails={assignments:WorkerAssignmentHistoryRow[];absences:WorkerAbsenceRow[]};
 
@@ -573,7 +573,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
     if(!worker)return {assignments:[],absences:[]};
     const assignmentWorker=worker as typeof worker&{workMode?:string|null;paidHoursPerShift?:number|string|null;absenceType?:string|null;absenceStatus?:string|null;absenceFrom?:string|null;absenceTo?:string|null};
     return {
-      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift)}]:[],
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift),scheduleWorkDays:5,scheduleRestDays:2,scheduleShiftKind:(Number(worker.id.slice(-2))%3===1?"night":"day"),scheduleAnchorDate:worker.startDate??null,transitionDays:7,dailyPaymentShifts:Number(worker.id.slice(-2))<=4?3:0}]:[],
       absences:assignmentWorker.absenceType&&assignmentWorker.absenceFrom?[{
         id:"demo-absence-"+worker.id,absenceType:assignmentWorker.absenceType,status:assignmentWorker.absenceStatus??"tentative",
         plannedFrom:assignmentWorker.absenceFrom.split("-").reverse().join("."),plannedTo:assignmentWorker.absenceTo?assignmentWorker.absenceTo.split("-").reverse().join("."):null,
@@ -595,7 +595,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
       sql<WorkerAssignmentHistoryRow[]>`
         SELECT a.id,a.object_id "objectId",o.name object,a.specialty_id "specialtyId",s.name specialty,
           to_char(a.effective_from,'DD.MM.YYYY') "effectiveFrom",to_char(a.effective_to,'DD.MM.YYYY') "effectiveTo",u.display_name manager,
-          a.work_mode "workMode",a.paid_hours_per_shift::numeric "paidHoursPerShift"
+          a.work_mode "workMode",a.paid_hours_per_shift::numeric "paidHoursPerShift",a.schedule_work_days "scheduleWorkDays",a.schedule_rest_days "scheduleRestDays",a.schedule_shift_kind "scheduleShiftKind",a.schedule_anchor_date::text "scheduleAnchorDate",a.transition_days "transitionDays",a.daily_payment_shifts "dailyPaymentShifts"
         FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
         LEFT JOIN specialties s ON s.id=a.specialty_id LEFT JOIN app_users u ON u.id=a.manager_user_id
         WHERE a.worker_id=${workerId}::uuid ORDER BY a.effective_from DESC
@@ -735,7 +735,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
 }
 
 export type StaffingForecastRow={
-  organizationId:string;objectId:string;object:string;specialtyId:string;specialty:string;
+  organizationId:string;objectId:string;object:string;specialtyId:string;specialty:string;needIds:string[];editableNeedId:string|null;
   required:number;working:number;preparing:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;
   projectedAvailable:number;projectedDeficit:number;ownerUserId:string|null;assigneeUserIds:string[];regionId:string|null;
 };
@@ -756,20 +756,20 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       const confirmedAbsences=absences.filter(worker=>worker.absenceStatus==="confirmed").length;
       const tentativeAbsences=absences.filter(worker=>worker.absenceStatus==="tentative").length;
       const projectedAvailable=Math.max(working-confirmedAbsences+preparing,0);
-      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
+      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
       return row;
     }).filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<StaffingForecastRow[]>`
       WITH demand AS (
-        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required
+        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required,array_agg(n.id ORDER BY n.created_at) need_ids,count(*)::int need_count
         FROM needs n
         WHERE n.object_id IS NOT NULL AND n.status NOT IN ('cancelled','archived')
         GROUP BY n.object_id,n.specialty_id
       )
       SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
-        d.required,
+        d.need_ids::text[] "needIds",CASE WHEN d.need_count=1 THEN d.need_ids[1] ELSE NULL END "editableNeedId",d.required,
         COALESCE(workforce.working,0)::int working,
         COALESCE(incoming.preparing,0)::int preparing,
         COALESCE(absences.confirmed,0)::int "confirmedAbsences",

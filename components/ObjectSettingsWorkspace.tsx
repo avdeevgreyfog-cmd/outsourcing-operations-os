@@ -22,6 +22,13 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   const [additionalManagers,setAdditionalManagers]=useState<string[]>(()=>{const allowed=new Set(options.managers.map(item=>item.id));return (object.additionalManagers??[]).map(item=>item.userId).filter(id=>allowed.has(id));});
   const [recruitingMode,setRecruitingMode]=useState<"company_rules"|"object_team">(object.recruitingMode??"company_rules");
   const [recruiters,setRecruiters]=useState<string[]>(object.recruitingTeam?.map(item=>item.userId)??[]);
+  const [transitionDays,setTransitionDays]=useState(String(object.defaultTransitionDays??7));
+  const [dailyPaymentShifts,setDailyPaymentShifts]=useState(String(object.defaultDailyPaymentShifts??0));
+  const [scheduleWorkDays,setScheduleWorkDays]=useState(object.defaultScheduleWorkDays==null?"":String(object.defaultScheduleWorkDays));
+  const [scheduleRestDays,setScheduleRestDays]=useState(object.defaultScheduleRestDays==null?"":String(object.defaultScheduleRestDays));
+  const [defaultShiftKind,setDefaultShiftKind]=useState<"day"|"night"|"mixed">(object.defaultShiftKind??"mixed");
+  const [ppeTaskEnabled,setPpeTaskEnabled]=useState(object.ppeTaskEnabled!==false);
+  const [ppeTaskDueDays,setPpeTaskDueDays]=useState(object.ppeTaskDueDays==null?"":String(object.ppeTaskDueDays));
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [saved,setSaved]=useState("");
@@ -41,8 +48,14 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         setSaved("Изменения применены локально для демо. После обновления страницы исходные данные восстановятся.");
         return;
       }
+      if((scheduleWorkDays&&!scheduleRestDays)||(!scheduleWorkDays&&scheduleRestDays))throw new Error("Для графика укажите и рабочие, и выходные дни");
       const payload={
         name,address:address||null,targetStartDate:targetStartDate||null,status,
+        defaultTransitionDays:Number(transitionDays||7),
+        defaultDailyPaymentShifts:Number(dailyPaymentShifts||0),
+        defaultScheduleWorkDays:scheduleWorkDays?Number(scheduleWorkDays):null,
+        defaultScheduleRestDays:scheduleRestDays?Number(scheduleRestDays):null,
+        defaultShiftKind,ppeTaskEnabled,ppeTaskDueDays:ppeTaskDueDays?Number(ppeTaskDueDays):null,
         ...(canAssign?{legalEntityId,ownerUserId,additionalManagerUserIds:visibleAdditional,recruitingMode,recruiterUserIds:recruitingMode==="object_team"?recruiters:[],keepPreviousManager:true}:{}),
       };
       const response=await fetch(`/api/objects/${object.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
@@ -88,6 +101,19 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
           ?<div className="wide object-routing-note">Новая потребность попадёт ответственному, определённому правилами компании. Руководитель подбора сможет распределить её между рекрутерами и задать каждому план.</div>
           :<div className="wide object-assignment-picker"><span>Закреплённая команда подбора</span><div>{options.recruiters.map(item=><label key={item.id}><input type="checkbox" checked={recruiters.includes(item.id)} onChange={()=>toggle(recruiters,setRecruiters,item.id)}/><span>{item.name}</span></label>)}</div><small>Все новые потребности объекта будут сразу доступны выбранным сотрудникам. Квоты автоматически не распределяются.</small></div>}
       </div>:<div className="object-settings-readonly"><div><span>Маршрут</span><strong>{object.recruitingMode==="object_team"?"Закреплённая команда объекта":"По правилам компании"}</strong></div>{object.recruitingMode==="object_team"&&<div><span>Команда подбора</span><strong>{object.recruitingTeam?.map(item=>item.name).join(", ")||"Не назначена"}</strong></div>}<small>Маршрутизация новых потребностей изменяется руководителем объекта или направления.</small></div>}
+    </Section>
+
+    <Section title="Работа с персоналом">
+      <div className="object-settings-form">
+        <label>Период адаптации, дней<input type="number" min="0" max="90" value={transitionDays} onChange={e=>setTransitionDays(e.target.value)}/><small>По умолчанию 7 дней после первого подтверждённого выхода.</small></label>
+        <label>Ежедневная выплата, первых смен<input type="number" min="0" max="31" value={dailyPaymentShifts} onChange={e=>setDailyPaymentShifts(e.target.value)}/><small>0 — обычный график выплат. У сотрудника значение можно будет переопределить.</small></label>
+        <label>Рабочих дней в цикле<input type="number" min="1" max="31" value={scheduleWorkDays} onChange={e=>setScheduleWorkDays(e.target.value)} placeholder="Например, 5"/></label>
+        <label>Выходных дней в цикле<input type="number" min="0" max="31" value={scheduleRestDays} onChange={e=>setScheduleRestDays(e.target.value)} placeholder="Например, 2"/></label>
+        <label>Смена по умолчанию<select value={defaultShiftKind} onChange={e=>setDefaultShiftKind(e.target.value as "day"|"night"|"mixed")}><option value="day">День</option><option value="night">Ночь</option><option value="mixed">День / ночь</option></select></label>
+        <label className="operations-check object-settings-check"><input type="checkbox" checked={ppeTaskEnabled} onChange={e=>setPpeTaskEnabled(e.target.checked)}/> Создавать напоминание по СИЗ после первого выхода</label>
+        {ppeTaskEnabled&&<label>Срок напоминания по СИЗ, дней<input type="number" min="0" max="90" value={ppeTaskDueDays} onChange={e=>setPpeTaskDueDays(e.target.value)} placeholder="Без жёсткого срока"/><small>Можно оставить пустым: задача появится без обязательной даты.</small></label>}
+        <div className="wide object-routing-note">Изменение этих значений влияет только на новых назначенных сотрудников. Уже начавшим работу сохраняются их собственные настройки.</div>
+      </div>
     </Section>
 
     <div className="object-settings-actions"><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy?"Сохраняю…":"Сохранить настройки"}</button>{error&&<span className="form-error">{error}</span>}{saved&&<span className="object-settings-success">{saved}</span>}</div>

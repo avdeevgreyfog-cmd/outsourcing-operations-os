@@ -949,3 +949,52 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .object-shift-numbers{grid-template-columns:repeat(3,minmax(0,1fr))}
   .sales-workspace.operations-workspace .object-shift-people>div:not(.empty-inline){grid-template-columns:1fr;gap:2px}
 }
+
+/* Object workforce refinement: normal state is typography, exceptions carry emphasis. */
+.sales-workspace.operations-workspace .object-workforce-toolbar.compact{grid-template-columns:minmax(220px,1.7fr) repeat(3,minmax(145px,1fr)) auto}
+.sales-workspace.operations-workspace .object-workforce-table-v2{min-width:1180px}
+.sales-workspace.operations-workspace .object-workforce-table-v2 th,.sales-workspace.operations-workspace .object-workforce-table-v2 td{vertical-align:middle}
+.sales-workspace.operations-workspace .object-worker-plain{display:block;font-size:11.5px;font-weight:600}
+.sales-workspace.operations-workspace .object-worker-current{display:grid;gap:2px;justify-items:start}
+.sales-workspace.operations-workspace .object-worker-current strong{font-size:11.5px;font-weight:600;color:var(--text)}
+.sales-workspace.operations-workspace .object-worker-current small{font-size:9.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-worker-current.is-attention strong{color:var(--warn-text,#9a5b00)}
+.sales-workspace.operations-workspace .object-worker-adaptation{margin-top:3px;color:var(--accent)}
+.sales-workspace.operations-workspace .object-worker-rate{display:grid;gap:2px;justify-items:end;white-space:nowrap}
+.sales-workspace.operations-workspace .object-worker-rate strong{font-size:11.5px;font-weight:650}
+.sales-workspace.operations-workspace .object-worker-rate small{font-size:9.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-worker-docs{font-size:11px;color:var(--text)}
+.sales-workspace.operations-workspace .object-worker-docs.is-alert{color:var(--bad);font-weight:650}
+.sales-workspace.operations-workspace .object-worker-assets{display:grid;gap:2px;min-width:120px}
+.sales-workspace.operations-workspace .object-worker-assets strong{font-size:11px;font-weight:600}
+.sales-workspace.operations-workspace .object-worker-assets small{font-size:9.5px;color:var(--muted);white-space:nowrap}
+
+/* Object need + candidate workplace */
+.sales-workspace.operations-workspace .object-need-stepper{display:inline-grid;grid-template-columns:26px 34px 26px;align-items:center;border:1px solid var(--border);border-radius:7px;overflow:hidden;background:var(--panel)}
+.sales-workspace.operations-workspace .object-need-stepper button{height:28px;border:0;background:transparent;color:var(--muted);font-size:16px;cursor:pointer}
+.sales-workspace.operations-workspace .object-need-stepper button:hover:not(:disabled){background:var(--panel-2);color:var(--text)}
+.sales-workspace.operations-workspace .object-need-stepper button:disabled{opacity:.35;cursor:default}
+.sales-workspace.operations-workspace .object-need-stepper strong{text-align:center;font-size:11.5px}
+.sales-workspace.operations-workspace .object-candidate-section{overflow:visible}
+.sales-workspace.operations-workspace .object-staffing-message{padding:9px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);font-size:10.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-candidate-board{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));min-width:980px;border-top:1px solid var(--border)}
+.sales-workspace.operations-workspace .object-candidate-lane{min-width:0;border-right:1px solid var(--border);background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-candidate-lane:last-child{border-right:0}
+.sales-workspace.operations-workspace .object-candidate-lane-head{height:40px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-candidate-lane-head b{min-width:20px;text-align:center;color:var(--text)}
+.sales-workspace.operations-workspace .object-candidate-cards{padding:8px;display:grid;align-content:start;gap:7px;max-height:560px;overflow:auto}
+.sales-workspace.operations-workspace .object-candidate-card{padding:10px;display:grid;gap:5px;border:1px solid var(--border);border-radius:7px;background:var(--panel)}
+.sales-workspace.operations-workspace .object-candidate-card.needs-action{border-left:3px solid var(--accent)}
+.sales-workspace.operations-workspace .object-candidate-card>a{color:var(--text);font-size:11.5px;font-weight:650;text-decoration:none}
+.sales-workspace.operations-workspace .object-candidate-card>span,.sales-workspace.operations-workspace .object-candidate-card>small{color:var(--muted);font-size:9.5px}
+.sales-workspace.operations-workspace .object-candidate-card>strong{font-size:10.5px;font-weight:600}
+.sales-workspace.operations-workspace .object-candidate-action-label{color:var(--accent)!important}
+.sales-workspace.operations-workspace .object-candidate-controls{margin-top:3px;display:grid;gap:6px}
+.sales-workspace.operations-workspace .object-candidate-controls>div:first-child{display:grid;grid-template-columns:1fr 104px;gap:5px}
+.sales-workspace.operations-workspace .object-candidate-controls :is(input,select){width:100%;height:30px;padding:4px 7px;border:1px solid var(--border-strong);border-radius:6px;background:var(--panel);color:var(--text);font-size:9.5px}
+.sales-workspace.operations-workspace .object-candidate-controls .button{min-height:30px;height:30px;padding:0 8px;font-size:9.5px}
+.sales-workspace.operations-workspace .object-candidate-buttons{display:flex!important;grid-template-columns:none!important;flex-wrap:wrap;gap:5px!important}
+.sales-workspace.operations-workspace .object-candidate-lane-empty{padding:18px 6px;text-align:center;color:var(--soft);font-size:10px}
+
+/* Day/night lanes stay explicit on 24/7 objects. */
+.sales-workspace.operations-workspace .object-shift-lanes{display:grid;gap:10px;padding:10px;background:var(--panel-2)}

@@ -102,6 +102,7 @@ export type RecruitingApplicationRow = {
   stageEvents?: Array<{toStage:string;fromStage?:string|null;createdAt:string;reason?:string|null;reasonCode?:string|null}>;
   nextAction: string | null;
   plannedStartDate: string | null;
+  plannedShiftKind?: "day"|"night"|"mixed"|null;
   plannedArrivalAt: string | null;
   actualStartAt: string | null;
   rejectionReason: string | null;
@@ -474,7 +475,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
           || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=ca.object_id AND oa.effective_to IS NULL) "assigneeUserIds",
         ca.created_at::text "createdAt",ca.updated_at::text "updatedAt",ca.next_action_at::text "nextActionAt",ca.workflow_details workflow,
         (SELECT max(h.created_at)::text FROM candidate_stage_history h WHERE h.application_id=ca.id) "stageEnteredAt",
-        to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",
+        to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",ca.planned_shift_kind "plannedShiftKind",
         ca.planned_arrival_at::text "plannedArrivalAt",ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
         COALESCE((
           SELECT jsonb_agg(jsonb_build_object('id',x.id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)

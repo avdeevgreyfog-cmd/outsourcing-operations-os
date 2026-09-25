@@ -21,8 +21,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       `;
       if(!worker)throw new Error("Сотрудник не найден");
       if(worker.objectId&&!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:worker.objectId,ownerUserId:worker.ownerUserId,regionId:worker.regionId,assigneeUserIds:worker.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
-      const [target]=await tx<Array<{id:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
-        SELECT o.id,o.owner_user_id "ownerUserId",o.region_id "regionId",
+      const [target]=await tx<Array<{id:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed"}>>`
+        SELECT o.id,o.owner_user_id "ownerUserId",o.region_id "regionId",o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
         FROM objects o WHERE o.id=${body.objectId}::uuid
       `;
@@ -37,8 +37,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from>=${body.effectiveFrom}::date
       `;
       await tx`
-        INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.effectiveFrom}::date,${target.ownerUserId}::uuid,${body.workMode},${body.paidHoursPerShift??null},${actor.userId}::uuid)
+        INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.objectId}::uuid,${body.specialtyId}::uuid,${body.effectiveFrom}::date,${target.ownerUserId}::uuid,${body.workMode},${body.paidHoursPerShift??null},${target.defaultTransitionDays},${target.defaultDailyPaymentShifts},${target.defaultScheduleWorkDays},${target.defaultScheduleRestDays},${target.defaultShiftKind},${body.effectiveFrom}::date,${actor.userId}::uuid)
       `;
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)

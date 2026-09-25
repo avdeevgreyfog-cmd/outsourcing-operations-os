@@ -2,8 +2,8 @@ import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
-import { listCandidates,listFinance,listIncidents,listLaunchTasks,listObjects,listShifts,listWorkers } from "@/lib/data/service";
-import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
+import { getTimesheet,listFinance,listIncidents,listLaunchTasks,listObjects,listShifts,listWorkers } from "@/lib/data/service";
+import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperationsReferenceData,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
@@ -11,8 +11,11 @@ import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
 import { ObjectShiftsWorkspace } from "@/components/ObjectShiftsWorkspace";
+import { ObjectStaffingWorkspace } from "@/components/ObjectStaffingWorkspace";
+import { TimesheetWorkspace } from "@/components/TimesheetWorkspace";
+import { listRecruitingApplications } from "@/lib/recruiting/service";
 import { pct,rub } from "@/lib/ui/format";
-import { activeAbsence,absenceTypeLabel } from "@/lib/operations/workforce-status";
+import { absenceTypeLabel } from "@/lib/operations/workforce-status";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -32,13 +35,10 @@ const labels:Record<string,string>={
 const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history"};
 const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
-const stageLabels:Record<string,string>={new:"Новые",screening:"Первичный контакт",interview:"Интервью",documents:"Документы",clearance:"Проверка",preparation:"Подготовка",first_shift:"Первый выход",hired:"Вышли",rejected:"Отказы"};
-const stageOrder=["new","screening","documents","interview","clearance","preparation","first_shift","hired","rejected"] as const;
 
-
-export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}) {
+export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string}>}) {
   const {id}=await params;
-  const {tab:rawTab}=isGithubPagesDemo()?{}:await searchParams;
+  const {tab:rawTab,month}=isGithubPagesDemo()?{}:await searchParams;
   const requested=rawTab?(aliases[rawTab]??rawTab):"overview";
   const actor=await requireActor();
   const objects=await listObjects(actor);
@@ -46,6 +46,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   if(!object)notFound();
 
   const canNeeds=hasCapability(actor.access,"operations.need.read");
+  const canEditNeeds=hasCapability(actor.access,"operations.need.edit");
   const canWorkers=hasCapability(actor.access,"worker.read");
   const canShifts=hasCapability(actor.access,"operations.shift.read");
   const canFinance=hasCapability(actor.access,"finance.pnl.read");
@@ -59,11 +60,11 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
   const objectHistory=await listObjectHistory(actor,id,100);
 
-  const [workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts]=await Promise.all([
+  const [workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions]=await Promise.all([
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
     canFinance?listFinance(actor):Promise.resolve([]),
-    canRecruiting?listCandidates(actor):Promise.resolve([]),
+    canRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
     listLaunchTasks(actor),
     listIncidents(actor),
     listOperationsAnalytics(actor),
@@ -72,6 +73,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     canHousing?getHousingSnapshot(actor):Promise.resolve({sites:[],stays:[]}),
     canProcurement?listSupplyRequests(actor):Promise.resolve([]),
     getObjectContacts(actor,id),
+    canTimesheets?getTimesheet(actor,{objectId:id,month:month??null}):Promise.resolve(null),
+    canTimesheets?getOperationsReferenceData(actor,"time.timesheet.read",{includeWorkers:false,includeSpecialties:false}):Promise.resolve({objects:[],specialties:[],workers:[]}),
   ]);
 
   const objectWorkers=workers.filter(row=>row.objectId===id);
@@ -126,11 +129,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
   }));
 
-  const candidateStageCounts=objectCandidates.reduce<Record<string,number>>((acc,row)=>{acc[row.stage]=(acc[row.stage]??0)+1;return acc},{});
-  const candidateStages=stageOrder.map(stage=>[stage,candidateStageCounts[stage]??0] as const).filter(([,count])=>count>0);
-  const activeCandidateCount=objectCandidates.filter(row=>!["hired","rejected"].includes(row.stage)).length;
-  const candidatesBySpecialty=new Map<string,typeof objectCandidates>();
-  for(const candidate of objectCandidates){const key=candidate.need??"Без специальности";candidatesBySpecialty.set(key,[...(candidatesBySpecialty.get(key)??[]),candidate]);}
 
   return <>
     <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
@@ -230,26 +228,13 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </Section>
     </>}
 
-    {tab==="staffing"&&<>
-      <div className="metrics-grid">
-        <Metric label="План" value={required}/>
-        <Metric label="На объекте" value={working}/>
-        <Metric label="Кандидатов в работе" value={activeCandidateCount}/>
-        <Metric label="Осталось закрыть" value={projectedDeficit} tone={projectedDeficit?"warn":"good"}/>
-      </div>
-      <Section title="Комплектация по специальностям" note="План, фактическая численность и текущий подбор по каждой специальности.">
-        <div className="request-table-wrap"><table className="data-table object-staffing-table"><thead><tr><th>Специальность</th><th>План</th><th>На объекте</th><th>Доступны сейчас</th><th>Готовы к выходу</th><th>В подборе</th><th>Осталось закрыть</th></tr></thead><tbody>{objectForecast.map(row=>{const specialtyCandidates=candidatesBySpecialty.get(row.specialty)??[];const ready=specialtyCandidates.filter(candidate=>["preparation","first_shift"].includes(candidate.stage)).length;const recruiting=specialtyCandidates.filter(candidate=>!["hired","rejected"].includes(candidate.stage)).length;const currentAbsences=objectWorkers.filter(worker=>worker.specialty===row.specialty&&activeAbsence(worker,todayIso)).length;const available=Math.max(row.working-currentAbsences,0);return <tr key={row.specialtyId}><td><strong className="cell-title">{row.specialty}</strong>{recruiting>0&&<span className="cell-sub">Кандидатов в работе: {recruiting}</span>}</td><td className="num">{row.required}</td><td className="num">{row.working}</td><td className="num">{available}</td><td className="num">{ready||"—"}</td><td className="num">{recruiting||"—"}</td><td className="num"><Status tone={row.projectedDeficit?"warn":"good"}>{row.projectedDeficit}</Status></td></tr>})}</tbody></table></div>
-        {!objectForecast.length&&<Empty title="План комплектации не сформирован" text="Для объекта нет активных потребностей по специальностям."/>}
-        <div className="section-actions"><Link className="button" href={"/needs?object="+id}>Потребности</Link><Link className="button" href={"/recruiting?object="+id}>Подбор по объекту</Link><Link className="button primary" href={"/staffing-plan?object="+id}>Открыть план комплектации</Link></div>
-      </Section>
-      {candidateStages.length>0&&<Section title="Подбор по объекту" note={`${activeCandidateCount} кандидатов сейчас находятся в активной работе по этому объекту.`}><div className="candidate-stage-strip object-candidate-funnel">{candidateStages.map(([stage,count])=><div key={stage}><span>{stageLabels[stage]}</span><strong>{count}</strong></div>)}</div><div className="section-actions"><Link className="button primary" href={"/recruiting?object="+id}>Открыть воронку</Link></div></Section>}
-    </>}
+    {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
 
     {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
 
     {tab==="shifts"&&<Section title="Смены объекта" note="Кто должен выйти, кто подтверждён и какой факт за выбранный день."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso}/></Section>}
 
-    {tab==="timesheets"&&<Section title="Табели объекта"><Empty title="Табель рабочего времени" text="Откройте табель объекта за нужный период." action={<Link className="button primary" href={"/timesheets?object="+id}>Открыть табель объекта</Link>}/></Section>}
+    {tab==="timesheets"&&(objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Section title="Табель объекта"><Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/></Section>)}
 
     {tab==="supply"&&<>
       <div className="metrics-grid">
