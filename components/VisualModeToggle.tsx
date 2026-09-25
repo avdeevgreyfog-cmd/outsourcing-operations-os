@@ -4,7 +4,6 @@ import {useEffect,useState} from "react";
 import {usePathname,useRouter,useSearchParams} from "next/navigation";
 
 type VisualMode="classic"|"new";
-const STORAGE_KEY="operis.visualMode";
 const COOKIE_KEY="oo_ui";
 
 export function VisualModeToggle({initialMode}:{initialMode:VisualMode}){
@@ -28,7 +27,6 @@ export function VisualModeToggle({initialMode}:{initialMode:VisualMode}){
   function choose(next:VisualMode){
     setMode(next);
     document.documentElement.dataset.operisUi=next;
-    try{window.localStorage.setItem(STORAGE_KEY,next)}catch{}
     document.cookie=`${COOKIE_KEY}=${next}; path=/; max-age=31536000; samesite=lax`;
     if(/^\/objects\/[^/]+$/.test(pathname)){
       const params=new URLSearchParams(searchParams.toString());
