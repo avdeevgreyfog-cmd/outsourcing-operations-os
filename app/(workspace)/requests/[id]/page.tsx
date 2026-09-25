@@ -1,5 +1,6 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -15,6 +16,7 @@ import { RequestShareHeaderButton } from "@/components/RequestShareHeaderButton"
 import { RequestStageSelect } from "@/components/RequestStageSelect";
 import { CreateProposalButton } from "@/components/CommercialWorkflowActions";
 import { EntityTabs, KeyValue, PageHeader, Section, Status, SummaryStrip } from "@/components/UI";
+import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { rub, pct } from "@/lib/ui/format";
 
 const tabLabels: Record<string, string> = {
@@ -163,7 +165,8 @@ export default async function RequestPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const { id } = await params;
-  const { tab: rawTab } = isGithubPagesDemo() ? {} : await searchParams;
+  const staticDemo = isGithubPagesDemo();
+  const { tab: rawTab } = staticDemo ? {} : await searchParams;
   const requestedTab = rawTab && tabLabels[rawTab] ? rawTab : "overview";
   const actor = await requireActor();
   const canEdit = hasCapability(actor.access, "sales.request.edit");
@@ -200,10 +203,9 @@ export default async function RequestPage({
   const yandex = request.location ? `https://yandex.ru/maps/?text=${encodeURIComponent(request.location)}` : "";
   const lastActivity = workflow.timeline.length ? workflow.timeline[workflow.timeline.length - 1] : null;
 
-  const tabs = Object.entries(tabLabels)
-    .filter(([key]) => key !== "approval" || canEdit)
-    .map(([key, label]) => ({
-      label,
+  const visibleTabKeys = Object.keys(tabLabels).filter((key) => key !== "approval" || canEdit);
+  const tabs = visibleTabKeys.map((key) => ({
+      label: tabLabels[key],
       href: `/requests/${id}?tab=${key}`,
       count:
         key === "positions" ? request.roles.length
@@ -213,6 +215,10 @@ export default async function RequestPage({
         : key === "history" ? workflow.timeline.length
         : undefined,
     }));
+  const panel=(key:string,content:ReactNode)=>{
+    if(!visibleTabKeys.includes(key)||(!staticDemo&&tab!==key))return null;
+    return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
+  };
 
   const actions = <>
     {canEdit && !archived && !locked && <Link className="button" href={`/requests/${id}/edit`}>Редактировать</Link>}
@@ -236,7 +242,7 @@ export default async function RequestPage({
     </div>
   </Section>;
 
-  return <>
+  const workspace=<>
     <PageHeader
       eyebrow="Заявка"
       title={request.title}
@@ -247,7 +253,7 @@ export default async function RequestPage({
 
     <EntityTabs items={tabs} active={tabLabels[tab]}/>
 
-    {tab === "overview" && <>
+    {panel("overview",<>
       <SummaryStrip>
         <span>Старт <strong>{fmtDay(request.startDate)}</strong></span>
         <span>Потребность <strong>{total} чел.</strong></span>
@@ -342,9 +348,9 @@ export default async function RequestPage({
           </Section>
         </aside>
       </div>
-    </>}
+    </>)}
 
-    {tab === "positions" && <div className="request-entity-tab-content">
+    {panel("positions",<div className="request-entity-tab-content">
       <Section title="Позиции" note={`${total} человек · ${request.roles.length} позиций`}>
         <div className="request-position-list request-position-list-tab">{request.roles.map((role) => {
           const requirements = role.requirements ?? {};
@@ -365,9 +371,9 @@ export default async function RequestPage({
           </article>;
         })}</div>
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "calculations" && <div className="request-entity-tab-content">
+    {panel("calculations",<div className="request-entity-tab-content">
       <Section title="Расчёты" note="Согласованные сценарии не перезаписываются при изменении условий заявки.">
         <div className="stack-list request-entity-stack">{calculations.length ? calculations.map((item) => <Link className="stack-item" href={`/calculations?request=${id}#scenario-${item.id}`} key={item.id}>
           <div><strong>{item.name}</strong><small>{item.role} · {rub(item.clientRate)} без НДС · маржа {pct(item.marginPct)}</small></div>
@@ -375,9 +381,9 @@ export default async function RequestPage({
         </Link>) : <div className="empty-inline">Расчётов пока нет</div>}</div>
         {hasCapability(actor.access, "calculation.scenario.create") && !archived && !locked && <div className="request-entity-section-actions"><Link href={`/calculations?request=${id}`} className="button primary">Создать расчёт</Link></div>}
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "proposals" && <div className="request-entity-tab-content">
+    {panel("proposals",<div className="request-entity-tab-content">
       <Section title="Коммерческие предложения" note={boardRow?.proposalSentCount ? `Отправлено версий: ${boardRow.proposalSentCount}` : "Отправленные версии фиксируются и не перезаписываются."}>
         <div className="stack-list request-entity-stack">{proposals.length ? proposals.map((item) => <Link className="stack-item" href={`/proposals/${item.id}`} key={item.id}>
           <div><strong>КП №{item.version}</strong><small>{item.createdAt} · {item.createdBy}</small></div>
@@ -385,21 +391,22 @@ export default async function RequestPage({
         </Link>) : <div className="empty-inline">Версий КП пока нет</div>}</div>
         {readyForProposal && hasCapability(actor.access, "sales.proposal.create") && <div className="request-entity-section-actions"><CreateProposalButton requestId={id}/></div>}
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "approval" && canEdit && <div className="request-entity-tab-content request-entity-approval">
+    {canEdit&&panel("approval",<div className="request-entity-tab-content request-entity-approval">
       <Section title="Согласование и уточнения" note="Заказчик видит только внешнюю форму без внутренних ставок, истории расчётов и маржи.">
         <div className="request-entity-external"><RequestExternalWorkflow requestId={id} state={external} canEdit={!archived && !locked}/></div>
       </Section>
-    </div>}
+    </div>)}
 
-    {tab === "history" && <div className="request-entity-tab-content">
+    {panel("history",<div className="request-entity-tab-content">
       <Section title="История заявки" note={`${workflow.timeline.length} событий`}>
         <div className="request-timeline request-entity-timeline">{workflow.timeline.length ? workflow.timeline.slice().reverse().map((item) => <article key={item.id}>
           <i/>
           <div><header><strong>{timelineText(item.title)}</strong><span>{fmtDate(item.at)}</span></header><p>{timelineText(item.detail)}</p><small>{item.actor}</small></div>
         </article>) : <div className="empty-inline">История пока пуста</div>}</div>
       </Section>
-    </div>}
+    </div>)}
   </>;
+  return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }
