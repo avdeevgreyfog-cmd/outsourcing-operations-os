@@ -1641,3 +1641,49 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td.timesheet-terminated{
   background-color:color-mix(in srgb,var(--bad) 8%,var(--panel))!important
 }
+
+
+/* Final operational timesheet controls. */
+.sales-workspace.operations-workspace .timesheet-table-actions{gap:6px;flex-wrap:wrap}
+.sales-workspace.operations-workspace .timesheet-attention-toggle.active{
+  border-color:color-mix(in srgb,var(--warn) 48%,var(--border));
+  background:color-mix(in srgb,var(--warn) 8%,var(--panel));
+  color:var(--text)
+}
+.sales-workspace.operations-workspace .timesheet-finance-toggle.active,
+.sales-workspace.operations-workspace .timesheet-details-toggle.active{
+  border-color:var(--border-strong);
+  background:var(--panel-2);
+  color:var(--text)
+}
+.sales-workspace.operations-workspace .timesheet-filter-empty{
+  height:54px!important;
+  padding:14px!important;
+  text-align:center!important;
+  color:var(--muted)!important;
+  background:var(--panel-2)!important;
+  font-size:10px!important
+}
+
+/* Today is a locator, not another fill state. */
+.sales-workspace.operations-workspace .timesheet-two-line :is(th,td).today{
+  box-shadow:inset 1px 0 0 color-mix(in srgb,var(--accent) 58%,transparent),
+             inset -1px 0 0 color-mix(in srgb,var(--accent) 32%,transparent)
+}
+.sales-workspace.operations-workspace .timesheet-two-line thead th.today{
+  color:var(--accent);
+  font-weight:650
+}
+
+/* Staffing deficit only changes the number, preserving weekend/today backgrounds. */
+.sales-workspace.operations-workspace .timesheet-daily-summary td.timesheet-staffing-deficit{
+  color:var(--bad)!important;
+  font-weight:700
+}
+
+/* Keyboard data entry: clear focus without changing table density. */
+.sales-workspace.operations-workspace .timesheet-cell-input:focus{
+  outline:1px solid color-mix(in srgb,var(--accent) 58%,var(--border));
+  outline-offset:-1px;
+  background:color-mix(in srgb,var(--accent-soft) 48%,transparent)
+}
