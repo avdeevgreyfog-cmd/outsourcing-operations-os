@@ -1,5 +1,6 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { listShifts, listWorkers } from "@/lib/data/service";
@@ -8,6 +9,7 @@ import { getOperationsReferenceData, getWorkerOffboardingContext, getWorkerOpera
 import { WorkerAbsencesWorkspace, WorkerAssignmentsWorkspace } from "@/components/WorkerOperationsWorkspace";
 import { WorkerEmploymentWorkspace } from "@/components/WorkerEmploymentWorkspace";
 import { Empty, EntityTabs, KeyValue, Metric, PageHeader, Section, Status } from "@/components/UI";
+import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { rub } from "@/lib/ui/format";
 import { employmentTypeLabel } from "@/lib/ui/labels";
 
@@ -29,7 +31,8 @@ const labels:Record<string,string>={
 
 export default async function WorkerPage({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string}>}){
   const {id}=await params;
-  const {tab:raw}=isGithubPagesDemo()?{}:await searchParams;
+  const staticDemo=isGithubPagesDemo();
+  const {tab:raw}=staticDemo?{}:await searchParams;
   const requestedTab=raw&&labels[raw]?raw:"overview";
   const actor=await requireActor();
   const workers=await listWorkers(actor);
@@ -49,19 +52,22 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     getOperationsReferenceData(actor),
     hasCapability(actor.access,"operations.shift.read")?listShifts(actor).then(rows=>rows.filter(row=>row.objectId===worker.objectId)):Promise.resolve([]),
   ]);
-  const tabs=Object.entries(labels)
-    .filter(([key])=>{
-      if(key==="assets")return canViewAssets;
-      if(key==="housing")return canViewHousing;
-      return !["accruals","payments"].includes(key)||sensitive&&(!key.includes("payments")||payments);
-    })
-    .map(([key,label])=>({label,href:"/workers/"+id+"?tab="+key}));
+  const visibleTabKeys=Object.keys(labels).filter((key)=>{
+    if(key==="assets")return canViewAssets;
+    if(key==="housing")return canViewHousing;
+    return !["accruals","payments"].includes(key)||sensitive&&(!key.includes("payments")||payments);
+  });
+  const tabs=visibleTabKeys.map(key=>({label:labels[key],href:"/workers/"+id+"?tab="+key}));
+  const panel=(key:string,content:ReactNode)=>{
+    if(!visibleTabKeys.includes(key)||(!staticDemo&&tab!==key))return null;
+    return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
+  };
 
-  return <>
+  const workspace=<>
     <PageHeader eyebrow="Сотрудник" title={worker.fullName} subtitle={(worker.employment?employmentTypeLabel(worker.employment):"Оформление не указано")+" · "+(worker.object??"Без назначения")} breadcrumbs={[{label:"Операции"},{label:"Сотрудники",href:"/workers"},{label:worker.fullName}]}/>
     <EntityTabs items={tabs} active={labels[tab]}/>
 
-    {tab==="overview"&&<>
+    {panel("overview",<>
       <div className="metrics-grid">
         <Metric label="Статус" value={worker.status==="active"?"Работает":worker.status==="dismissed"?"Работа завершена":worker.status} tone="good"/>
         <Metric label="Часов в периоде" value={(worker as typeof worker&{monthHours?:number}).monthHours??"—"}/>
@@ -87,20 +93,21 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
           {!shifts.length&&<Empty title="Смен нет" text="В доступном периоде смены не найдены."/>}
         </Section>
       </div>
-    </>}
+    </>)}
 
-    {tab==="employment"&&<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} canAccessAssets={canViewAssets} demo={actor.demo}/>}
-    {tab==="assignments"&&<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} demo={actor.demo} employmentDocumentsStatus={worker.employmentDocumentsStatus}/>}
-    {tab==="schedule"&&<>
+    {panel("employment",<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} canAccessAssets={canViewAssets} demo={actor.demo}/>)}
+    {panel("assignments",<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} demo={actor.demo} employmentDocumentsStatus={worker.employmentDocumentsStatus}/>)}
+    {panel("schedule",<>
       <Section title="Ближайшие смены"><div className="stack-list">{shifts.map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.time}</strong><small>{row.specialty} · {row.object}</small></div><Status tone="info">{row.kind}</Status></div>)}</div>{!shifts.length&&<Empty title="Смен нет" text="Для текущего назначения смены не найдены."/>}</Section>
       <div style={{marginTop:16}}><WorkerAbsencesWorkspace workerId={id} details={details} canEdit={canEdit} demo={actor.demo}/></div>
-    </>}
-    {tab==="accruals"&&<Section title="Начисления"><div style={{padding:16,maxWidth:560}}><KeyValue label="Начислено за доступный период" value={worker.accrued==null?"—":rub(worker.accrued)} sensitive/><KeyValue label="Ставка" value={worker.rate==null?"—":rub(worker.rate)} sensitive/></div></Section>}
-    {tab==="payments"&&<Section title="Выплаты"><div style={{padding:16,maxWidth:560}}><KeyValue label="Выплачено" value={worker.paid==null?"—":rub(worker.paid)} sensitive/><KeyValue label="К выплате" value={worker.payable==null?"—":rub(worker.payable)} sensitive/></div></Section>}
-    {tab==="housing"&&<Section title="Проживание" note="Текущие размещения сотрудника и быстрый переход к общему реестру жилья.">{worker.workMode!=="rotation"?<Empty title="Жильё не требуется" text="Текущее назначение сотрудника — местный формат работы."/>:offboarding.housing.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Жильё</th><th>Заезд</th><th>Выезд</th><th>Статус</th></tr></thead><tbody>{offboarding.housing.map(row=><tr key={row.id}><td className="cell-title">{row.site}</td><td>{row.checkIn}</td><td>{row.checkOut??"—"}</td><td><Status tone={row.status==="active"?"good":"info"}>{row.status==="active"?"Проживает":"Запланировано"}</Status></td></tr>)}</tbody></table></div>:<Empty title="Активного проживания нет" text="Для сотрудника нет текущего или планового заселения."/>}<div style={{padding:12}}><Link className="button" href={"/supply/housing?worker="+worker.id}>Открыть жильё</Link></div></Section>}
-    {tab==="assets"&&<Section title="Имущество и СИЗ" note="Размерный профиль и возвратное имущество сотрудника."><div style={{padding:"6px 15px 14px"}}><KeyValue label="Размер одежды" value={worker.clothingSize??"—"}/><KeyValue label="Размер обуви" value={worker.shoeSize??"—"}/><KeyValue label="Рост" value={worker.heightCm?worker.heightCm+" см":"—"}/></div>{offboarding.outstandingAssets.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Позиция</th><th>Вариант / размер</th><th>Количество</th></tr></thead><tbody>{offboarding.outstandingAssets.map(row=><tr key={row.itemId+":"+row.variant}><td className="cell-title">{row.item}</td><td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td></tr>)}</tbody></table></div>:<Empty title="Имущество не числится" text="Возвратных позиций на сотруднике нет."/>}<div style={{padding:12}}><Link className="button" href={"/assets?worker="+worker.id+"&action="+(offboarding.outstandingAssets.length?"return":"issue")}>Выдать / вернуть / списать</Link></div></Section>}
-    {["timesheets","documents","incidents","history"].includes(tab)&&<Section title={labels[tab]}><Empty title="Записей нет" text="В доступном контуре сотрудника записи этого типа отсутствуют."/></Section>}
+    </>)}
+    {panel("accruals",<Section title="Начисления"><div style={{padding:16,maxWidth:560}}><KeyValue label="Начислено за доступный период" value={worker.accrued==null?"—":rub(worker.accrued)} sensitive/><KeyValue label="Ставка" value={worker.rate==null?"—":rub(worker.rate)} sensitive/></div></Section>)}
+    {panel("payments",<Section title="Выплаты"><div style={{padding:16,maxWidth:560}}><KeyValue label="Выплачено" value={worker.paid==null?"—":rub(worker.paid)} sensitive/><KeyValue label="К выплате" value={worker.payable==null?"—":rub(worker.payable)} sensitive/></div></Section>)}
+    {panel("housing",<Section title="Проживание" note="Текущие размещения сотрудника и быстрый переход к общему реестру жилья.">{worker.workMode!=="rotation"?<Empty title="Жильё не требуется" text="Текущее назначение сотрудника — местный формат работы."/>:offboarding.housing.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Жильё</th><th>Заезд</th><th>Выезд</th><th>Статус</th></tr></thead><tbody>{offboarding.housing.map(row=><tr key={row.id}><td className="cell-title">{row.site}</td><td>{row.checkIn}</td><td>{row.checkOut??"—"}</td><td><Status tone={row.status==="active"?"good":"info"}>{row.status==="active"?"Проживает":"Запланировано"}</Status></td></tr>)}</tbody></table></div>:<Empty title="Активного проживания нет" text="Для сотрудника нет текущего или планового заселения."/>}<div style={{padding:12}}><Link className="button" href={"/supply/housing?worker="+worker.id}>Открыть жильё</Link></div></Section>)}
+    {panel("assets",<Section title="Имущество и СИЗ" note="Размерный профиль и возвратное имущество сотрудника."><div style={{padding:"6px 15px 14px"}}><KeyValue label="Размер одежды" value={worker.clothingSize??"—"}/><KeyValue label="Размер обуви" value={worker.shoeSize??"—"}/><KeyValue label="Рост" value={worker.heightCm?worker.heightCm+" см":"—"}/></div>{offboarding.outstandingAssets.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Позиция</th><th>Вариант / размер</th><th>Количество</th></tr></thead><tbody>{offboarding.outstandingAssets.map(row=><tr key={row.itemId+":"+row.variant}><td className="cell-title">{row.item}</td><td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td></tr>)}</tbody></table></div>:<Empty title="Имущество не числится" text="Возвратных позиций на сотруднике нет."/>}<div style={{padding:12}}><Link className="button" href={"/assets?worker="+worker.id+"&action="+(offboarding.outstandingAssets.length?"return":"issue")}>Выдать / вернуть / списать</Link></div></Section>)}
+    {["timesheets","documents","incidents","history"].map(key=>panel(key,<Section key={key} title={labels[key]}><Empty title="Записей нет" text="В доступном контуре сотрудника записи этого типа отсутствуют."/></Section>))}
   </>;
+  return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }
 
 function workerOperationalState(worker:{status:string;absenceStatus?:string|null;absenceType?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){if(worker.status==="dismissed")return"Работа завершена";const today=new Date().toISOString().slice(0,10);const current=worker.absenceStatus==="confirmed"&&Boolean(worker.absenceFrom&&worker.absenceFrom<=today&&(!worker.absenceTo||worker.absenceTo>=today));if(!current)return"Работает";return ({intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Личное отсутствие",other:"Отсутствие"} as Record<string,string>)[worker.absenceType??""]??"Отсутствует"}
