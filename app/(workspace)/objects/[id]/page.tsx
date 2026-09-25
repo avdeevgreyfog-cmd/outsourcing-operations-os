@@ -8,6 +8,7 @@ import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperations
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,Metric,PageHeader,Section,Status } from "@/components/UI";
+import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
@@ -153,9 +154,13 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     href:`/objects/${id}?tab=${key}&ui=${uiMode}${month?`&month=${encodeURIComponent(month)}`:""}`,
     count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
   }));
+  const panel=(key:string,content:React.ReactNode)=>{
+    if(!staticDemo&&tab!==key)return null;
+    return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
+  };
 
 
-  return <div className={`object-workspace-compare object-workspace-${uiMode}`}>
+  return <StaticDemoQueryTabsController enabled={staticDemo} defaultTab="overview" className={`object-workspace-compare object-workspace-${uiMode}`}>
     {uiMode==="classic"?<>
       <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
       <div className="object-hero">
@@ -192,7 +197,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </div>
     </>}
 
-    {tab==="overview"&&<>
+    {panel("overview",<>
       <div className="metrics-grid object-operations-metrics">
         <Metric label="Работает / требуется" value={working+" / "+required}/>
         <Metric label="Дефицит сейчас" value={currentDeficit} tone={currentDeficit?"warn":"good"}/>
@@ -243,9 +248,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
           </Section>
         </div>
       </div>
-    </>}
+    </>)}
 
-    {tab==="launch"&&<>
+    {panel("launch",<>
       <div className="metrics-grid">
         <Metric label="Готовность плана" value={launchProgress+"%"}/>
         <Metric label="Задачи" value={objectLaunchTasks.length}/>
@@ -270,26 +275,26 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
         <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Задача</th><th>Ответственный</th><th>План</th><th>Прогресс</th><th>Статус</th><th>Риск</th></tr></thead><tbody>{objectLaunchTasks.slice(0,12).map(row=><tr key={row.id}><td className="cell-title">{row.title}</td><td>{row.owner}</td><td>{row.start+"–"+row.end}</td><td className="num">{row.progress}%</td><td><Status tone={row.status==="done"?"good":row.status==="blocked"?"bad":"info"}>{row.status==="done"?"Готово":row.status==="blocked"?"Заблокировано":"В работе"}</Status></td><td><Status tone={row.risk==="critical"?"bad":row.risk==="high"?"warn":"neutral"}>{riskLabels[row.risk]??"Норма"}</Status></td></tr>)}</tbody></table></div>
         <div className="section-actions"><Link className="button primary" href={"/launches?object="+id}>Открыть полный план запуска</Link></div>
       </Section>
-    </>}
+    </>)}
 
-    {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
+    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>)}
 
-    {tab==="workforce"&&(uiMode==="classic"
+    {panel("workforce",uiMode==="classic"
       ?<Section title="Персонал объекта"><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot={false}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>
       :<div className="object-module-shell"><div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</div>
     )}
 
-    {tab==="shifts"&&(uiMode==="classic"
+    {panel("shifts",uiMode==="classic"
       ?<Section title="Смены объекта" note="План выходов по сотрудникам: день, ночь и выходной. Факт фиксируется в табеле."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo} pilot={false}/></Section>
       :<div className="object-module-shell"><div className="object-module-head"><div><h2>Смены</h2><p>Планирование выходов, покрытие потребности и работа с отклонениями. Факт приходит из табеля.</p></div></div><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo} pilot/></div>
     )}
 
-    {tab==="timesheets"&&(uiMode==="classic"
+    {panel("timesheets",uiMode==="classic"
       ?(objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded pilot={false}/>:<Section title="Табель объекта"><Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/></Section>)
       :<div className="object-module-shell"><div className="object-module-head"><div><h2>Табели</h2><p>Фактические выходы, часы, отклонения, начисления и маршрут согласования.</p></div></div>{objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded pilot/>:<Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/>}</div>
     )}
 
-    {tab==="supply"&&<>
+    {panel("supply",<>
       <div className="metrics-grid">
         <Metric label="Мест проживания" value={objectHousing.reduce((sum,row)=>sum+row.capacity,0)}/>
         <Metric label="Занято" value={objectHousing.reduce((sum,row)=>sum+row.occupied,0)}/>
@@ -302,21 +307,21 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </div>
       {canAssets&&<Section title="Комплекты СИЗ" note="Состав комплекта задаётся по специальности. Факт выдачи остаётся в карточке сотрудника и движениях имущества."><ObjectPpeTemplatesWorkspace objectId={id} templates={ppeTemplates} inventoryItems={inventory.items} specialties={workforceOptions.specialties} canManage={canManageAssets} demo={actor.demo}/></Section>}
       {canProcurement&&<Section title="Заявки на обеспечение"><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Заявка</th><th>Тип</th><th>Количество</th><th>Сумма</th><th>Статус</th></tr></thead><tbody>{objectSupplyRequests.slice(0,10).map(row=><tr key={row.id}><td className="cell-title">{row.title}</td><td>{row.requestType==="purchase"?"Закупка":row.requestType==="payment"?"Оплата":row.requestType==="compensation"?"Компенсация":"Услуга"}</td><td className="num">{row.quantity==null?"—":row.quantity+" "+(row.unit??"")}</td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td><Status tone={row.status==="closed"?"good":row.status==="rejected"?"bad":"info"}>{row.status==="submitted"?"Подана":row.status==="approved"?"Согласована":row.status==="in_progress"?"В работе":row.status==="received"?"Исполнено":row.status==="closed"?"Закрыта":row.status==="rejected"?"Отклонена":row.status}</Status></td></tr>)}</tbody></table></div><div className="section-actions"><Link className="button primary" href={"/procurement?object="+id}>Заявки на обеспечение</Link></div></Section>}
-    </>}
+    </>)}
 
-    {tab==="quality"&&<>
+    {panel("quality",<>
       <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
       <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
-    </>}
+    </>)}
 
-    {tab==="contacts"&&<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>}
+    {panel("contacts",<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>)}
 
-    {tab==="finance"&&<Section title="Финансы объекта" note="Начисления, выплаты и первые ежедневные выплаты сотрудников собраны в одном рабочем месте."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>}
+    {panel("finance",<Section title="Финансы объекта" note="Начисления, выплаты и первые ежедневные выплаты сотрудников собраны в одном рабочем месте."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>)}
 
-    {tab==="documents"&&<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>}
-    {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
-        {tab==="history"&&<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>}
-  </div>;
+    {panel("documents",<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
+    {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
+        {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
+  </StaticDemoQueryTabsController>;
 }
 
 function ReadinessRow({label,value}:{label:string;value:number}){
