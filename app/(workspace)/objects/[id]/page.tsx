@@ -1,6 +1,7 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { getTimesheet,listAccruals,listFinance,listIncidents,listLaunchTasks,listObjects,listPayments,listShifts,listWorkers } from "@/lib/data/service";
@@ -154,13 +155,14 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     href:`/objects/${id}?tab=${key}&ui=${uiMode}${month?`&month=${encodeURIComponent(month)}`:""}`,
     count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
   }));
-  const panel=(key:string,content:React.ReactNode)=>{
+  const panel=(key:string,content:ReactNode)=>{
     if(!staticDemo&&tab!==key)return null;
     return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
   };
 
 
-  return <StaticDemoQueryTabsController enabled={staticDemo} defaultTab="overview" className={`object-workspace-compare object-workspace-${uiMode}`}>
+  const workspaceClass=`object-workspace-compare object-workspace-${uiMode}`;
+  const workspaceContent=<>
     {uiMode==="classic"?<>
       <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
       <div className="object-hero">
@@ -321,7 +323,10 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {panel("documents",<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
     {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
         {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
-  </StaticDemoQueryTabsController>;
+  </>;
+  return staticDemo
+    ?<StaticDemoQueryTabsController enabled defaultTab="overview" className={workspaceClass}>{workspaceContent}</StaticDemoQueryTabsController>
+    :<div className={workspaceClass}>{workspaceContent}</div>;
 }
 
 function ReadinessRow({label,value}:{label:string;value:number}){
