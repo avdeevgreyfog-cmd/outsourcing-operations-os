@@ -105,8 +105,8 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
     setSelected(current=>current.size===workers.length?new Set():new Set(workers.map(worker=>worker.id)));
   }
   function applyDate(date:string){
-    const ids=selected.size?[...selected]:workers.map(worker=>worker.id);
-    const cells=ids.map(workerId=>({workerId,date,kind:paint}));
+    if(!selected.size){setMessage("Для массового изменения сначала выберите сотрудников");return;}
+    const cells=[...selected].map(workerId=>({workerId,date,kind:paint}));
     void persistCells(cells);
   }
 
@@ -136,7 +136,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
     <div className="object-shift-legend">
       <span><b>Д</b> дневная</span><span><b>Н</b> ночная</span><span><b>В</b> выходной / плановое отсутствие</span>
       <span>План автоматически появляется в табеле как <b>П</b>.</span>
-      {canEdit&&<span>{selected.size?`Выбрано: ${selected.size}. Нажмите дату, чтобы применить режим ко всем выбранным.`:"Без выбора дата применяется ко всем сотрудникам."}</span>}
+      {canEdit&&<span>{selected.size?`Выбрано: ${selected.size}. Нажмите дату, чтобы применить режим ко всем выбранным.`:"Для массового изменения выберите сотрудников слева."}</span>}
     </div>
     {message&&<div className="object-staffing-message">{message}</div>}
 
