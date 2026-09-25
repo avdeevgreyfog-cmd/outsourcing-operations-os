@@ -1542,3 +1542,55 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .timesheet-control-group,
   .sales-workspace.operations-workspace .timesheet-control-actions{width:100%;margin-left:0;overflow-x:auto}
 }
+
+
+/* Timesheet polish: consistent state codes, softer employee grouping, clearer weekends. */
+.sales-workspace.operations-workspace .timesheet-operational tbody .timesheet-worker-start>td{
+  border-top:1px solid color-mix(in srgb,var(--border-strong) 72%,var(--border))
+}
+.sales-workspace.operations-workspace .timesheet-operational tbody .timesheet-worker-end>td{
+  border-bottom:1px solid var(--border)
+}
+.sales-workspace.operations-workspace .timesheet-operational tbody .timesheet-worker-start:first-child>td{
+  border-top-color:var(--border)
+}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-night-row:not(.timesheet-worker-start)>td{
+  border-top:1px solid color-mix(in srgb,var(--border) 76%,transparent)
+}
+.sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td:not(.timesheet-absence-band):not(.timesheet-terminated){
+  background-color:color-mix(in srgb,var(--panel-2) 58%,var(--panel))
+}
+
+/* Weekend columns remain visible as columns, not as strong bands. */
+.sales-workspace.operations-workspace .timesheet-two-line :is(th,td).weekend{
+  background:color-mix(in srgb,var(--panel-2) 62%,var(--panel))
+}
+.sales-workspace.operations-workspace .timesheet-two-line thead th.weekend{
+  background:color-mix(in srgb,var(--panel-2) 78%,var(--panel))
+}
+.sales-workspace.operations-workspace .timesheet-two-line tbody td.weekend .timesheet-cell-input{
+  background:transparent
+}
+.sales-workspace.operations-workspace .timesheet-daily-summary td.weekend{
+  background:color-mix(in srgb,var(--panel-2) 74%,var(--panel))!important
+}
+
+/* MВ / О / УВ use the same visual weight as ordinary timetable codes. */
+.sales-workspace.operations-workspace .timesheet-intershift,
+.sales-workspace.operations-workspace .timesheet-vacation,
+.sales-workspace.operations-workspace .timesheet-ended-marker,
+.sales-workspace.operations-workspace .timesheet-absence-band.range-start,
+.sales-workspace.operations-workspace .timesheet-absence-band.range-single{
+  color:var(--text)!important;
+  font-weight:500!important
+}
+.sales-workspace.operations-workspace .timesheet-absence-intershift,
+.sales-workspace.operations-workspace .timesheet-absence-vacation{
+  background:color-mix(in srgb,var(--panel-2) 72%,var(--panel))!important
+}
+.sales-workspace.operations-workspace .timesheet-terminated{
+  background:color-mix(in srgb,var(--bad) 4%,var(--panel))!important
+}
+.sales-workspace.operations-workspace .timesheet-ended-marker{
+  background:color-mix(in srgb,var(--bad) 6%,var(--panel))!important
+}
