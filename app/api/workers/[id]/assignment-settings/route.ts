@@ -39,6 +39,21 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const today=new Date().toISOString().slice(0,10);
       const assignmentDate=body.specialtyEffectiveFrom??today;
+      if(body.specialtyId||body.dayRate!==undefined||body.nightRate!==undefined){
+        const changeDate=body.specialtyEffectiveFrom??today;
+        const [locked]=await tx<Array<{id:string;status:string}>>`
+          SELECT id,status FROM timesheet_snapshots
+          WHERE object_id IN (
+            SELECT object_id FROM worker_object_assignments
+            WHERE worker_id=${id}::uuid AND effective_from<=${changeDate}::date AND (effective_to IS NULL OR effective_to>=${changeDate}::date)
+          )
+            AND period_start<=${changeDate}::date AND period_end>=${changeDate}::date
+            AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+          ORDER BY created_at DESC LIMIT 1
+        `;
+        if(locked)throw new Error("За выбранную дату табель уже зафиксирован. Сначала верните период на корректировку.");
+      }
+
       const [scope]=await tx<AssignmentScope[]>`
         SELECT a.id "assignmentId",w.organization_id "organizationId",a.object_id "objectId",a.specialty_id "specialtyId",
           o.owner_user_id "ownerUserId",o.region_id "regionId",
