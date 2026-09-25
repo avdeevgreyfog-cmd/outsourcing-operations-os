@@ -144,20 +144,26 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   }
 
   return <>
-    <div className="scheduler-controls timesheet-toolbar">
-      <div className="page-actions">
+    <div className="timesheet-controlbar">
+      <div className="timesheet-control-group timesheet-control-context">
+        <span className="timesheet-control-label">Период</span>
         {!embedded&&<select value={data.objectId} onChange={event=>changeContext(event.target.value,data.month)}>{options.objects.map(object=><option key={object.id} value={object.id}>{object.name}</option>)}</select>}
         <input type="month" value={data.month} onChange={event=>changeContext(data.objectId,event.target.value)}/>
         <div className="segmented">{(["first","second","month"] as Mode[]).map(value=><button type="button" key={value} className={mode===value?"active":""} onClick={()=>setMode(value)}>{value==="first"?"1–15":value==="second"?"16–конец":"Весь месяц"}</button>)}</div>
-        <div className="timesheet-row-mode">
-          <span>Строки</span>
-          <div className="segmented">
-            {(["auto","day","night","all"] as RowMode[]).map(value=><button type="button" key={value} className={rowMode===value?"active":""} onClick={()=>setRowMode(value)}>{value==="auto"?"Авто":value==="day"?"День":value==="night"?"Ночь":"Все"}</button>)}
-          </div>
+      </div>
+      <div className="timesheet-control-divider"/>
+      <div className="timesheet-control-group">
+        <span className="timesheet-control-label">Строки</span>
+        <div className="segmented">
+          {(["auto","day","night","all"] as RowMode[]).map(value=><button type="button" key={value} className={rowMode===value?"active":""} onClick={()=>setRowMode(value)}>{value==="auto"?"Авто":value==="day"?"День":value==="night"?"Ночь":"Все"}</button>)}
         </div>
       </div>
-      <div className="page-actions">
-        <div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Для согласования</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий</button>}</div>
+      <div className="timesheet-control-spacer"/>
+      <div className="timesheet-control-group timesheet-control-view">
+        <span className="timesheet-control-label">Вид</span>
+        <div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Согласование</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий</button>}</div>
+      </div>
+      <div className="timesheet-control-actions">
         <button className="button" onClick={()=>void exportExcel()}><Download size={14}/> Excel</button>
         {view==="client"&&<button className="button" onClick={()=>window.print()}><Printer size={14}/> Печать</button>}
         {view==="internal"&&currentDay&&canEditFact&&<><button className="button" disabled={bulkBusy} onClick={()=>void bulkToday("confirm")}>Подтвердить П</button><button className="button" disabled={bulkBusy} onClick={()=>void bulkToday("hours")}>Заполнить часы</button></>}
@@ -222,7 +228,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                 segments.length===1?"timesheet-worker-single":"",
                 segment==="night"?"timesheet-night-row":"",
               ].filter(Boolean).join(" ")}>
-                {first&&<td className="cell-title sticky-col timesheet-worker-cell" rowSpan={segments.length}><EmployeeIdentity row={row} month={data.month} days={days}/></td>}
+                {first&&<td className="cell-title sticky-col timesheet-worker-cell" rowSpan={segments.length}><EmployeeIdentity row={row}/></td>}
                 <td className="timesheet-shift-col timesheet-sticky-shift"><b>{segment==="day"?"День":"Ночь"}</b></td>
                 {view==="internal"&&sensitive&&<td className="timesheet-rate-col timesheet-sticky-rate"><RateHistory row={row} segment={segment} month={data.month}/></td>}
                 {days.map(day=>{
@@ -230,19 +236,21 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   const absence=absenceRangeAt(row,date);
                   const band=absence&&(absence.type==="intershift"||absence.type==="vacation")?absence:null;
                   const bandPosition=band?absenceBandPosition(band,day,days,data.month):null;
-                  const raw=cells?.[String(day)],value=firstEnded?"УВ":ended?"—":band?null:raw;
+                  const absenceStart=Boolean(band&&date===band.from);
+                  const stateCode=firstEnded?(first?"УВ":null):absenceStart?(first?absenceCode(band!):null):null;
+                  const raw=cells?.[String(day)];
+                  const value=ended||band?stateCode:raw;
                   const key=`${row.workerId}:${day}:${segment}`;
                   const editable=canEditFact&&row.rowKind!=="candidate"&&!ended&&!band;
                   const classes=[
                     timesheetCellClass(value,ended,isWeekend(data.month,day)),
                     band?`timesheet-absence-band timesheet-absence-${band.type} range-${bandPosition}`:"",
+                    (ended||band)&&!stateCode?"timesheet-blocked-continuation":"",
                   ].filter(Boolean).join(" ");
                   return <td key={day} className={classes}>
-                    {band
-                      ?<span className="timesheet-absence-band-mark" aria-label={absenceBandLabel(band)}></span>
-                      :editable
-                        ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
-                        :value==null||value===""?"—":value}
+                    {editable
+                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
+                      :stateCode??""}
                   </td>;
                 })}
                 <td className="num">{shiftCount||"—"}</td><td className="num">{shiftHours||"—"}</td>
@@ -303,14 +311,12 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   </>;
 }
 
-function EmployeeIdentity({row,month,days}:{row:TimesheetWorkerRow;month:string;days:number[]}){
+function EmployeeIdentity({row}:{row:TimesheetWorkerRow}){
   const history=(row.specialtyHistory??[]).slice().sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
   const current=history.at(-1);
-  const absences=(row.absenceRanges??[]).filter(item=>["intershift","vacation"].includes(item.type)&&days.some(day=>{const date=dateString(month,day);return item.from<=date&&(!item.to||item.to>=date)}));
   return <div className="timesheet-worker-identity">
     <strong>{row.name}</strong>
     <span>{current?.specialty??row.specialty??(row.rowKind==="candidate"?"Кандидат":"Без специальности")}</span>
-    {absences.map(item=><em key={item.type+item.from} className={`timesheet-worker-absence is-${item.type}`}>{absenceBandLabel(item)}</em>)}
     {history.length>1&&history.slice(0,-1).map(item=><small key={item.effectiveFrom+`${item.specialty}`}>{item.specialty??"Без специальности"} · до {item.effectiveTo?shortDate(item.effectiveTo):"—"}</small>)}
     {row.rowKind==="candidate"&&<small>Кандидат · план первого выхода</small>}
   </div>;
@@ -363,6 +369,7 @@ function absenceBandLabel(range:TimesheetAbsenceRange){
   const label=range.type==="intershift"?"Межвахта":"Отпуск";
   return range.returnDate?`${label} · до ${shortDate(range.returnDate)}`:label;
 }
+function absenceCode(range:TimesheetAbsenceRange){return range.type==="intershift"?"МВ":"О"}
 function countWorkerCode(row:TimesheetWorkerRow,code:string,days:number[]){return days.filter(day=>row.dayCells?.[String(day)]===code||row.nightCells?.[String(day)]===code).length}
 function countWorkerNoShows(row:TimesheetWorkerRow,days:number[]){return days.filter(day=>["НВ","Н"].includes(String(row.dayCells?.[String(day)]??""))||["НВ","Н"].includes(String(row.nightCells?.[String(day)]??""))).length}
 function calculateSegmentAccrued(row:TimesheetWorkerRow,segment:Segment,days:number[],month:string){
@@ -403,7 +410,14 @@ function ratePeriodLabel(rate:TimesheetRatePeriod,month:string){
 }
 function rateTextForExport(row:TimesheetWorkerRow,segment:Segment,month:string){return relevantRates(row,segment,month).map(rate=>`${formatRate(rate,row.plannedHours)} ${ratePeriodLabel(rate,month)}`.trim()).join(" / ")||rateText(segment==="day"?row.dayRate??row.rate:row.nightRate??row.rate)}
 function specialtyText(row:TimesheetWorkerRow){return (row.specialtyHistory??[]).map(item=>`${item.specialty??"Без специальности"}${item.effectiveTo?` до ${shortDate(item.effectiveTo)}`:""}`).join(" / ")||row.specialty||""}
-function cellDisplay(row:TimesheetWorkerRow,day:number,segment:Segment,month:string){const date=dateString(month,day);if(isFirstAfterEnd(row,date))return"УВ";if(isAfterEnd(row,date))return"—";return (segment==="day"?row.dayCells:row.nightCells)?.[String(day)]??""}
+function cellDisplay(row:TimesheetWorkerRow,day:number,segment:Segment,month:string){
+  const date=dateString(month,day);
+  if(isFirstAfterEnd(row,date))return"УВ";
+  if(isAfterEnd(row,date))return"";
+  const absence=absenceRangeAt(row,date);
+  if(absence&&(absence.type==="intershift"||absence.type==="vacation"))return date===absence.from?absenceCode(absence):"";
+  return (segment==="day"?row.dayCells:row.nightCells)?.[String(day)]??"";
+}
 function timesheetCellClass(value:TimesheetCellValue|undefined,ended:boolean,weekend:boolean){
   const code=String(value??"");const classes=["day"];if(weekend)classes.push("weekend");if(ended)classes.push("timesheet-terminated");
   if(code==="П")classes.push("day-planned");if(code==="В")classes.push("timesheet-day-off");if(code==="МВ")classes.push("timesheet-intershift");if(code==="О")classes.push("timesheet-vacation");if(code==="Б")classes.push("timesheet-sick");if(code==="НВ")classes.push("timesheet-no-show");if(code==="УВ")classes.push("timesheet-ended-marker");
