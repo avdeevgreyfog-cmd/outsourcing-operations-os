@@ -882,3 +882,97 @@ export async function getObjectContacts(actor:Actor,objectId:string):Promise<{as
     return {assigned,contacts};
   });
 }
+
+export type ObjectDocumentRow={
+  id:string;organizationId:string;objectId:string;name:string;category:string;documentNumber:string|null;sourceUrl:string|null;status:string;
+  validFrom:string|null;expiresAt:string|null;notes:string|null;updatedAt:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
+};
+export async function listObjectDocuments(actor:Actor,objectId:string):Promise<ObjectDocumentRow[]>{
+  requireCapability(actor,"operations.object.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"operations.object.read",row,actor));
+    if(!object)return[];
+    const base={organizationId:object.organizationId,objectId,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[],documentNumber:null,validFrom:null,expiresAt:null,updatedAt:"25.09.2026"};
+    return [
+      {...base,id:`doc-${objectId}-1`,name:"Инструкция по пропускному режиму",category:"access",sourceUrl:null,status:"active",notes:"Рабочая инструкция заказчика"},
+      {...base,id:`doc-${objectId}-2`,name:"Требования к СИЗ",category:"ppe",sourceUrl:null,status:"active",notes:"Комплект и требования по объекту"},
+      {...base,id:`doc-${objectId}-3`,name:"Инструкция по охране труда",category:"safety",sourceUrl:null,status:"needs_update",notes:"Проверить актуальность версии"},
+    ];
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const rows=await sql<ObjectDocumentRow[]>`
+      SELECT d.id,d.organization_id "organizationId",d.object_id "objectId",d.name,d.category,d.document_number "documentNumber",d.source_url "sourceUrl",d.status,
+        d.valid_from::text "validFrom",d.expires_at::text "expiresAt",d.notes,to_char(d.updated_at,'DD.MM.YYYY') "updatedAt",
+        o.owner_user_id "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM object_documents d JOIN objects o ON o.id=d.object_id
+      WHERE d.object_id=${objectId}::uuid
+      ORDER BY d.status='archived',d.expires_at NULLS LAST,d.name
+    `;
+    return rows.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor));
+  });
+}
+
+export type DailyPaymentShift={workDate:string;hours:number;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|null;paymentDate:string|null;suggestedAmount:number};
+export type DailyPaymentProgressRow={
+  organizationId:string;objectId:string;workerId:string;worker:string;specialty:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
+  shiftLimit:number;assignmentStart:string;workedCount:number;remaining:number;rate:number|null;rateUnit:string|null;paidHoursPerShift:number|null;shifts:DailyPaymentShift[];
+};
+export async function listDailyPaymentProgress(actor:Actor,objectId:string):Promise<DailyPaymentProgressRow[]>{
+  requireCapability(actor,"finance.payments.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"finance.payments.read",row,actor));
+    if(!object)return[];
+    const workers=demo.workers.filter(row=>row.objectId===objectId&&row.status==="active");
+    const today=new Date();
+    return workers.flatMap((worker,index)=>{
+      const shiftLimit=index<4?3:0;if(!shiftLimit)return[];
+      const paidHours=Number((worker as {paidHoursPerShift?:number|string|null}).paidHoursPerShift??11);
+      const rate=Number(worker.rate??0);const rateUnit=(worker as {rateUnit?:string|null}).rateUnit??"hour";
+      const suggested=rateUnit==="shift"?rate:rate*paidHours;
+      const shifts:DailyPaymentShift[]=Array.from({length:Math.min(shiftLimit,Math.max(1,3-index%2))},(_,i)=>{const d=new Date(today);d.setUTCDate(d.getUTCDate()-(3-i));const workDate=d.toISOString().slice(0,10);const paid=i<1+index%2;return {workDate,hours:paidHours,paymentId:paid?`demo-daily-${index}-${i}`:null,paymentStatus:paid?"paid":null,paymentAmount:paid?suggested:null,paymentDate:paid?workDate:null,suggestedAmount:suggested};});
+      return [{organizationId:object.organizationId,objectId,workerId:worker.id,worker:worker.fullName,specialty:worker.specialty??null,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[],shiftLimit,assignmentStart:worker.startDate??today.toISOString().slice(0,10),workedCount:shifts.length,remaining:Math.max(shiftLimit-shifts.length,0),rate,rateUnit,paidHoursPerShift:paidHours,shifts}];
+    });
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const [scope]=await sql<Array<{organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+      SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+      FROM objects o WHERE o.id=${objectId}::uuid
+    `;
+    if(!scope||!canReadRow(actor.access,"finance.payments.read",scope,actor))return[];
+    const rows=await sql<Array<{
+      workerId:string;worker:string;specialty:string|null;shiftLimit:number;assignmentStart:string;rate:number|string|null;rateUnit:string|null;paidHoursPerShift:number|string|null;
+      shifts:Array<{workDate:string;hours:number|string;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|string|null;paymentDate:string|null}>;
+    }>>`
+      SELECT w.id "workerId",w.full_name worker,s.name specialty,a.daily_payment_shifts "shiftLimit",a.effective_from::text "assignmentStart",
+        wr.amount rate,wr.unit "rateUnit",a.paid_hours_per_shift "paidHoursPerShift",
+        COALESCE((
+          SELECT jsonb_agg(jsonb_build_object(
+            'workDate',x.work_date::text,'hours',x.hours,'paymentId',ap.id,'paymentStatus',ap.status,'paymentAmount',ap.amount,'paymentDate',ap.payment_date::text
+          ) ORDER BY x.work_date)
+          FROM (
+            SELECT te.work_date,sum(te.fact_hours)::numeric hours
+            FROM time_entries te
+            WHERE te.worker_id=w.id AND te.object_id=a.object_id AND te.work_date>=a.effective_from AND te.fact_hours>0
+            GROUP BY te.work_date ORDER BY te.work_date LIMIT a.daily_payment_shifts
+          ) x
+          LEFT JOIN advance_payments ap ON ap.worker_id=w.id AND ap.object_id=a.object_id AND ap.payment_purpose='daily_shift' AND ap.work_date=x.work_date
+        ),'[]'::jsonb) shifts
+      FROM worker_object_assignments a
+      JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+      LEFT JOIN specialties s ON s.id=a.specialty_id
+      LEFT JOIN LATERAL (
+        SELECT amount,unit FROM worker_rates r WHERE r.worker_id=w.id AND r.effective_from<=current_date AND (r.effective_to IS NULL OR r.effective_to>=current_date)
+        ORDER BY r.effective_from DESC LIMIT 1
+      ) wr ON true
+      WHERE a.object_id=${objectId}::uuid AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) AND a.daily_payment_shifts>0
+      ORDER BY w.full_name
+    `;
+    return rows.map(row=>{
+      const rate=row.rate==null?null:Number(row.rate);const paidHours=row.paidHoursPerShift==null?null:Number(row.paidHoursPerShift);
+      const shifts=(row.shifts??[]).map(item=>{const hours=Number(item.hours??0);const suggested=rate==null?0:row.rateUnit==="shift"?rate:rate*Number(paidHours??hours);return {workDate:item.workDate,hours,paymentId:item.paymentId,paymentStatus:item.paymentStatus,paymentAmount:item.paymentAmount==null?null:Number(item.paymentAmount),paymentDate:item.paymentDate,suggestedAmount:suggested};});
+      return {...scope,workerId:row.workerId,worker:row.worker,specialty:row.specialty,shiftLimit:Number(row.shiftLimit),assignmentStart:row.assignmentStart,workedCount:shifts.length,remaining:Math.max(Number(row.shiftLimit)-shifts.length,0),rate,rateUnit:row.rateUnit,paidHoursPerShift:paidHours,shifts};
+    });
+  });
+}

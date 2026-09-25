@@ -2,16 +2,19 @@ import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
-import { getTimesheet,listFinance,listIncidents,listLaunchTasks,listObjects,listShifts,listWorkers } from "@/lib/data/service";
-import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperationsReferenceData,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
+import { getTimesheet,listAccruals,listFinance,listIncidents,listLaunchTasks,listObjects,listPayments,listShifts,listWorkers } from "@/lib/data/service";
+import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperationsReferenceData,listDailyPaymentProgress,listObjectDocuments,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
-import { Empty,EntityTabs,KeyValue,Metric,PageHeader,Section,Status } from "@/components/UI";
+import { Empty,EntityTabs,Metric,PageHeader,Section,Status } from "@/components/UI";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
 import { ObjectShiftsWorkspace } from "@/components/ObjectShiftsWorkspace";
 import { ObjectStaffingWorkspace } from "@/components/ObjectStaffingWorkspace";
+import { ObjectFinanceWorkspace } from "@/components/ObjectFinanceWorkspace";
+import { ObjectDocumentsWorkspace } from "@/components/ObjectDocumentsWorkspace";
+import { ObjectQualityWorkspace } from "@/components/ObjectQualityWorkspace";
 import { TimesheetWorkspace } from "@/components/TimesheetWorkspace";
 import { listRecruitingApplications } from "@/lib/recruiting/service";
 import { pct,rub } from "@/lib/ui/format";
@@ -49,7 +52,11 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canEditNeeds=hasCapability(actor.access,"operations.need.edit");
   const canWorkers=hasCapability(actor.access,"worker.read");
   const canShifts=hasCapability(actor.access,"operations.shift.read");
-  const canFinance=hasCapability(actor.access,"finance.pnl.read");
+  const canPnl=hasCapability(actor.access,"finance.pnl.read");
+  const canAccruals=hasCapability(actor.access,"finance.worker_accrual.read");
+  const canPayments=hasCapability(actor.access,"finance.payments.read");
+  const canConfirmDaily=hasCapability(actor.access,"finance.daily_payment.confirm");
+  const canFinance=canPnl||canAccruals||canPayments;
   const canRecruiting=hasCapability(actor.access,"recruiting.candidate.read");
   const canTimesheets=hasCapability(actor.access,"time.timesheet.read");
   const canAssets=hasCapability(actor.access,"assets.read");
@@ -60,10 +67,14 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
   const objectHistory=await listObjectHistory(actor,id,100);
 
-  const [workers,shifts,finance,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions]=await Promise.all([
+  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions]=await Promise.all([
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
-    canFinance?listFinance(actor):Promise.resolve([]),
+    canPnl?listFinance(actor):Promise.resolve([]),
+    canAccruals?listAccruals(actor):Promise.resolve([]),
+    canPayments?listPayments(actor):Promise.resolve([]),
+    canPayments?listDailyPaymentProgress(actor,id):Promise.resolve([]),
+    listObjectDocuments(actor,id),
     canRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
     listLaunchTasks(actor),
     listIncidents(actor),
@@ -87,7 +98,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectHousing=housing.sites.filter(row=>row.objectId===id);
   const objectSupplyRequests=supplyRequests.filter(row=>row.objectId===id);
   const objectAnalytics=analytics.find(row=>row.objectId===id);
-  const objFinance=finance.find(row=>row.objectId===id);
+  const objFinance=finance.find(row=>row.objectId===id)??null;
+  const objectAccruals=accruals.filter(row=>row.objectId===id);
+  const objectPayments=payments.filter(row=>row.objectId===id);
 
   const projectedAvailable=objectForecast.reduce((sum,row)=>sum+row.projectedAvailable,0);
   const projectedDeficit=objectForecast.reduce((sum,row)=>sum+row.projectedDeficit,0);
@@ -96,7 +109,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const todayAssigned=objectAnalytics?.todayAssigned??0;
   const todayDemand=objectAnalytics?.todayDemand??0;
   const noShows=objectAnalytics?.noShows??0;
-  const openIncidents=objectIncidents.filter(row=>row.status!=="resolved").length;
+  const openIncidents=objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)).length;
   const lowStock=objectBalances.filter(row=>row.minQuantity>0&&row.quantity<=row.minQuantity);
   const openSupply=objectSupplyRequests.filter(row=>!["closed","rejected"].includes(row.status));
   const launchBlockers=objectLaunchTasks.filter(row=>row.status!=="done"&&(row.status==="blocked"||row.critical||["high","critical"].includes(row.risk)));
@@ -251,15 +264,15 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     </>}
 
     {tab==="quality"&&<>
-      <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>row.status!=="resolved"&&row.severity==="critical").length} tone="bad"/><Metric label="Всего записей" value={objectIncidents.length}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
-      <Section title="Инциденты и качество"><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Инцидент</th><th>Дата</th><th>Сотрудник</th><th>Ответственный</th><th>Критичность</th><th>Статус</th></tr></thead><tbody>{objectIncidents.map(row=><tr key={row.id}><td><strong className="cell-title">{row.title}</strong><span className="cell-sub">{row.description}</span></td><td>{row.occurredAt}</td><td>{row.worker??"—"}</td><td>{row.responsible??"—"}</td><td><Status tone={row.severity==="critical"?"bad":row.severity==="high"?"warn":"neutral"}>{row.severity==="critical"?"Критическая":row.severity==="high"?"Высокая":"Обычная"}</Status></td><td>{row.status==="resolved"?"Закрыт":"Открыт"}</td></tr>)}</tbody></table></div>{!objectIncidents.length&&<Empty title="Инцидентов нет" text="По объекту не зафиксировано инцидентов."/>}<div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Открыть все инциденты</Link></div></Section>
+      <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
+      <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
     </>}
 
     {tab==="contacts"&&<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>}
 
-    {tab==="finance"&&objFinance&&<><div className="metrics-grid"><Metric label="Выручка" value={rub(objFinance.revenue)}/><Metric label="Персонал" value={rub(objFinance.workerCost)}/><Metric label="Прямые расходы" value={rub(objFinance.expenses)}/><Metric label="Маржа" value={pct(objFinance.marginPct)} tone={Number(objFinance.marginPct)<15?"warn":"good"}/></div><Section title="Финансовый факт"><div className="object-finance-facts"><KeyValue label="Выручка" value={rub(objFinance.revenue)} sensitive/><KeyValue label="Затраты на персонал" value={rub(objFinance.workerCost)} sensitive/><KeyValue label="Прямые расходы" value={rub(objFinance.expenses)} sensitive/><KeyValue label="Вклад в прибыль" value={rub(objFinance.contribution)} sensitive/><KeyValue label="Маржа" value={pct(objFinance.marginPct)} sensitive/></div></Section></>}
+    {tab==="finance"&&<Section title="Финансы объекта" note="Начисления, выплаты и первые ежедневные выплаты сотрудников собраны в одном рабочем месте."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} canConfirmDaily={canConfirmDaily}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>}
 
-    {tab==="documents"&&<Section title="Документы объекта"><Empty title="Документы объекта" text="Здесь останутся только объектовые документы и сроки; документы сотрудников ведутся в их карточках и контуре допусков."/></Section>}
+    {tab==="documents"&&<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>}
     {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
         {tab==="history"&&<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>}
   </>;
