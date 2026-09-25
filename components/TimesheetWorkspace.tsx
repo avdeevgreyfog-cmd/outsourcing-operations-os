@@ -294,6 +294,12 @@ function visibleSegments(row:TimesheetWorkerRow,mode:RowMode,days:number[]):Segm
   const day=active("day"),night=active("night");
   if(day&&night)return["day","night"];
   if(night)return["night"];
+  if(day)return["day"];
+  const monthKinds=Object.values(row.plannedShiftKinds??{});
+  const monthHasDay=monthKinds.some(kind=>kind==="day"||kind==="mixed");
+  const monthHasNight=monthKinds.some(kind=>kind==="night"||kind==="mixed");
+  if(monthHasNight&&!monthHasDay)return["night"];
+  if(monthHasDay&&monthHasNight)return["day","night"];
   return["day"];
 }
 function absenceRangeAt(row:TimesheetWorkerRow,date:string){return(row.absenceRanges??[]).find(item=>item.from<=date&&(!item.to||item.to>=date))??null}
