@@ -1687,3 +1687,44 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   outline-offset:-1px;
   background:color-mix(in srgb,var(--accent-soft) 48%,transparent)
 }
+
+
+/* Stable timesheet geometry for every period / detail / finance filter combination. */
+.sales-workspace.operations-workspace .timesheet-operational{
+  table-layout:fixed!important;
+  width:max-content!important;
+  min-width:max-content!important;
+  max-width:none!important
+}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-worker{width:210px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-shift{width:52px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-rate{width:104px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-day{width:46px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-shifts,
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-hours{width:64px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-detail{width:72px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-finance{width:88px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-correction{width:72px}
+.sales-workspace.operations-workspace .timesheet-operational col.timesheet-col-payment{width:94px}
+
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-worker-col,
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-worker-cell{
+  width:210px!important;min-width:210px!important;max-width:210px!important
+}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-shift-col,
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-sticky-shift{
+  width:52px!important;min-width:52px!important;max-width:52px!important
+}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-sticky-shift{left:210px}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-rate-col,
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-sticky-rate{
+  width:104px!important;min-width:104px!important;max-width:104px!important
+}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-sticky-rate{left:262px}
+.sales-workspace.operations-workspace .timesheet-operational th.day,
+.sales-workspace.operations-workspace .timesheet-operational td.day{
+  width:46px!important;min-width:46px!important;max-width:46px!important
+}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-detail-col{
+  width:72px!important;min-width:72px!important;max-width:72px!important
+}
