@@ -260,14 +260,14 @@ function countCode(row:TimesheetWorkerRow,code:string,days:number[]){return days
 function overlapsDays(from:string,to:string|null,days:number[],month:string){return days.some(day=>{const date=dateString(month,day);return from<=date&&(!to||to>=date)})}
 function calculateSegmentAccrued(row:TimesheetWorkerRow,segment:Segment,days:number[],month:string){
   if(row.rowKind==="candidate")return 0;
-  let total=0;let hasWorked=false;
+  let total=0;
   for(const day of days){
     const hours=numericCell((segment==="day"?row.dayCells:row.nightCells)?.[String(day)]);if(hours<=0)continue;
-    hasWorked=true;const rate=rateAt(row,dateString(month,day),segment);if(!rate)continue;
+    const rate=rateAt(row,dateString(month,day),segment);if(!rate)continue;
     if(rate.unit==="hour")total+=hours*Number(rate.amount);
     else if(rate.unit==="shift"){const planned=Number(row.plannedHours??0);total+=planned>0?hours*(Number(rate.amount)/planned):Number(rate.amount)}
   }
-  if(segment==="day"&&hasWorked){
+  if(segment==="day"){
     const dates=days.filter(day=>numericCell(row.dayCells?.[String(day)])>0||numericCell(row.nightCells?.[String(day)])>0).map(day=>dateString(month,day));
     const monthly=(row.rateHistory??[]).filter(rate=>rate.kind==="any"&&rate.unit==="month"&&dates.some(date=>rate.effectiveFrom<=date&&(!rate.effectiveTo||rate.effectiveTo>=date))).reduce((max,rate)=>Math.max(max,Number(rate.amount)),0);
     total+=monthly;
