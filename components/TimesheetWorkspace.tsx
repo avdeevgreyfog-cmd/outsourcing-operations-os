@@ -180,8 +180,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
 
     <div className="timesheet-summary-strip">
       <div><span>Сотрудники</span><strong>{rows.filter(row=>row.rowKind!=="candidate").length}</strong></div>
-      <div><span>Дневные</span><strong>{totals.dayShifts} см</strong><small>{totals.dayHours} ч</small></div>
-      <div><span>Ночные</span><strong>{totals.nightShifts} см</strong><small>{totals.nightHours} ч</small></div>
+      <div><span>Дневные</span><strong>{totals.dayShifts} смен</strong><small>{totals.dayHours} ч</small></div>
+      <div><span>Ночные</span><strong>{totals.nightShifts} смен</strong><small>{totals.nightHours} ч</small></div>
       <div className={totals.noShows?"is-attention":""}><span>Прогулы</span><strong>{totals.noShows}</strong><small>{totals.noShows?"требуют проверки":"нет"}</small></div>
     </div>
 
