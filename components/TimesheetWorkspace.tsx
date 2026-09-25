@@ -5,27 +5,314 @@ import {useRouter} from "next/navigation";
 import {CheckCircle2,Download,Printer,RotateCcw,Send,ShieldCheck,WalletCards} from "lucide-react";
 import {Metric,Status} from "@/components/UI";
 import {rub} from "@/lib/ui/format";
-import type {TimesheetCellValue,TimesheetData,TimesheetWorkerRow} from "@/lib/data/service";
+import type {TimesheetCellValue,TimesheetData,TimesheetRatePeriod,TimesheetWorkerRow} from "@/lib/data/service";
 import type {OperationsReferenceData} from "@/lib/operations/service";
 
-type Mode="first"|"second"|"month";type View="client"|"internal";type Segment="day"|"night";
+type Mode="first"|"second"|"month";
+type View="client"|"internal";
+type Segment="day"|"night";
+
 export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canApproveClient,canClose,embedded=false}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApproveClient:boolean;canClose:boolean;embedded?:boolean}){
-  const router=useRouter();const [mode,setMode]=useState<Mode>("month");const [view,setView]=useState<View>(sensitive?"internal":"client");const [rows,setRows]=useState<TimesheetWorkerRow[]>(data.rows);const [saving,setSaving]=useState("");const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");const [comment,setComment]=useState("");const [bulkBusy,setBulkBusy]=useState(false);
-  const todayIso=new Date().toISOString().slice(0,10);const currentDay=data.month===todayIso.slice(0,7)?Number(todayIso.slice(8,10)):null;const lastDay=Number(data.periodEnd.slice(8,10));const allDays=useMemo(()=>range(1,lastDay),[lastDay]);const days=mode==="first"?allDays.filter(day=>day<=15):mode==="second"?allDays.filter(day=>day>=16):allDays;
-  const totals=useMemo(()=>rows.reduce((acc,row)=>{for(const day of days){acc.dayHours+=numericCell(row.dayCells?.[String(day)]);acc.nightHours+=numericCell(row.nightCells?.[String(day)]);if(numericCell(row.dayCells?.[String(day)])>0)acc.dayShifts++;if(numericCell(row.nightCells?.[String(day)])>0)acc.nightShifts++;if(row.dayCells?.[String(day)]==="НВ"||row.nightCells?.[String(day)]==="НВ")acc.noShows++;}return acc},{dayHours:0,nightHours:0,dayShifts:0,nightShifts:0,noShows:0}),[rows,days]);
-  const totalHours=totals.dayHours+totals.nightHours,totalOvertime=rows.reduce((sum,row)=>sum+Number(row.overtime??0),0);const internal=data.internalSnapshot,client=data.clientSnapshot;const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";const canEditFact=canEdit&&view==="internal"&&!locked;
-  function changeContext(objectId:string,month:string){const params=new URLSearchParams();if(!embedded&&objectId)params.set("object",objectId);if(month)params.set("month",month);router.push(embedded?`/objects/${data.objectId}?tab=timesheets&${params.toString()}`:"/timesheets?"+params.toString())}
-  async function persistCell(workerId:string,day:number,value:string,segment:Segment,quiet=false){const row=rows.find(item=>item.workerId===workerId);const date=dateString(data.month,day);if(!canEditFact||!row||row.rowKind==="candidate"||isAfterEnd(row,date))return false;const key=`${workerId}:${day}:${segment}`;if(!quiet){setSaving(key);setMessage("")}try{const response=await fetch("/api/timesheets/entries",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workerId,objectId:data.objectId,workDate:date,value,segment})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить");const normalized=normalizeCell(value);setRows(current=>current.map(item=>item.workerId!==workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalized}}));if(!quiet)setMessage("Изменение сохранено");return true}catch(e){if(!quiet)setMessage(e instanceof Error?e.message:"Не удалось сохранить");return false}finally{if(!quiet)setSaving("")}}
-  async function bulkToday(action:"confirm"|"hours"){if(!currentDay||!canEditFact)return;setBulkBusy(true);setMessage("");try{let done=0;for(const row of rows){if(row.rowKind==="candidate")continue;for(const segment of ["day","night"] as Segment[]){const cell=(segment==="day"?row.dayCells:row.nightCells)?.[String(currentDay)];const plannedKind=row.plannedShiftKinds?.[String(currentDay)];if(action==="confirm"&&cell==="П"){if(await persistCell(row.workerId,currentDay,"?",segment,true))done++}else if(action==="hours"&&cell==="?"&&Number(row.plannedHours??0)>0&&(plannedKind===segment||plannedKind==="mixed")){if(await persistCell(row.workerId,currentDay,String(row.plannedHours),segment,true))done++}}}setMessage(action==="confirm"?`Подтверждено выходов: ${done}`:`Нормативные часы заполнены: ${done}`)}finally{setBulkBusy(false)}}
-  async function workflow(action:"submit_internal"|"review_internal"|"return_internal"|"send_client"|"client_approve"|"client_return"|"close"){setBusy(true);setMessage("");try{const response=await fetch("/api/timesheets/workflow",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,objectId:data.objectId,periodStart:data.periodStart,periodEnd:data.periodEnd,comment:comment||null})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось выполнить действие");const labels:Record<string,string>={submit_internal:"Табель передан на внутреннюю проверку",review_internal:"Внутренний табель проверен",return_internal:"Табель возвращён менеджеру",send_client:"Клиентская версия зафиксирована и отправлена",client_approve:"Подтверждение клиента зафиксировано",client_return:"Возврат клиента зафиксирован",close:"Период закрыт: начисления сформированы"};setMessage(labels[action]??"Готово");setComment("");router.refresh()}catch(e){setMessage(e instanceof Error?e.message:"Не удалось выполнить действие")}finally{setBusy(false)}}
-  async function exportExcel(){const header=["Сотрудник","Специальность","Смена",...days.map(day=>String(day).padStart(2,"0")+"."+data.month.slice(5,7)),"Часы",...(view==="internal"&&sensitive?["Ставка"]:[])];const body=rows.flatMap(row=>(["day","night"] as Segment[]).map(segment=>[row.name,row.specialty??"",segment==="day"?"День":"Ночь",...days.map(day=>(segment==="day"?row.dayCells:row.nightCells)?.[String(day)]??""),days.reduce((sum,day)=>sum+numericCell((segment==="day"?row.dayCells:row.nightCells)?.[String(day)]),0),...(view==="internal"&&sensitive?[segment==="day"?row.dayRate??row.rate??"":row.nightRate??row.rate??""]:[])]));const XLSX=await import("xlsx");const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet([header,...body]);XLSX.utils.book_append_sheet(wb,ws,"Табель");XLSX.writeFile(wb,`Табель_${data.object}_${data.month}_${view==="client"?"согласование":"полный"}.xlsx`)}
+  const router=useRouter();
+  const [mode,setMode]=useState<Mode>("month");
+  const [view,setView]=useState<View>(sensitive?"internal":"client");
+  const [rows,setRows]=useState<TimesheetWorkerRow[]>(data.rows);
+  const [saving,setSaving]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [message,setMessage]=useState("");
+  const [comment,setComment]=useState("");
+  const [bulkBusy,setBulkBusy]=useState(false);
+
+  const todayIso=new Date().toISOString().slice(0,10);
+  const currentDay=data.month===todayIso.slice(0,7)?Number(todayIso.slice(8,10)):null;
+  const lastDay=Number(data.periodEnd.slice(8,10));
+  const allDays=useMemo(()=>range(1,lastDay),[lastDay]);
+  const days=mode==="first"?allDays.filter(day=>day<=15):mode==="second"?allDays.filter(day=>day>=16):allDays;
+  const totals=useMemo(()=>rows.reduce((acc,row)=>{
+    if(row.rowKind==="candidate")return acc;
+    for(const day of days){
+      const dayValue=row.dayCells?.[String(day)],nightValue=row.nightCells?.[String(day)];
+      acc.dayHours+=numericCell(dayValue);acc.nightHours+=numericCell(nightValue);
+      if(numericCell(dayValue)>0)acc.dayShifts++;if(numericCell(nightValue)>0)acc.nightShifts++;
+      if(dayValue==="НВ"||nightValue==="НВ")acc.noShows++;
+    }
+    return acc;
+  },{dayHours:0,nightHours:0,dayShifts:0,nightShifts:0,noShows:0}),[rows,days]);
+
+  const totalHours=totals.dayHours+totals.nightHours;
+  const internal=data.internalSnapshot,client=data.clientSnapshot;
+  const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";
+  const canEditFact=canEdit&&view==="internal"&&!locked;
+
+  function changeContext(objectId:string,month:string){
+    const params=new URLSearchParams();if(!embedded&&objectId)params.set("object",objectId);if(month)params.set("month",month);
+    router.push(embedded?`/objects/${data.objectId}?tab=timesheets&${params.toString()}`:"/timesheets?"+params.toString());
+  }
+
+  async function persistCell(workerId:string,day:number,value:string,segment:Segment,quiet=false){
+    const row=rows.find(item=>item.workerId===workerId);
+    const date=dateString(data.month,day);
+    if(!canEditFact||!row||row.rowKind==="candidate"||isAfterEnd(row,date))return false;
+    const key=`${workerId}:${day}:${segment}`;
+    if(!quiet){setSaving(key);setMessage("")}
+    try{
+      const response=await fetch("/api/timesheets/entries",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({workerId,objectId:data.objectId,workDate:date,value,segment})});
+      const json=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(json.error??"Не удалось сохранить");
+      const normalized=normalizeCell(value);
+      setRows(current=>current.map(item=>item.workerId!==workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalized}}));
+      if(!quiet)setMessage("Изменение сохранено");
+      return true;
+    }catch(error){
+      if(!quiet)setMessage(error instanceof Error?error.message:"Не удалось сохранить");
+      return false;
+    }finally{if(!quiet)setSaving("")}
+  }
+
+  async function bulkToday(action:"confirm"|"hours"){
+    if(!currentDay||!canEditFact)return;
+    setBulkBusy(true);setMessage("");
+    try{
+      let done=0;
+      for(const row of rows){
+        if(row.rowKind==="candidate")continue;
+        for(const segment of ["day","night"] as Segment[]){
+          const cell=(segment==="day"?row.dayCells:row.nightCells)?.[String(currentDay)];
+          const plannedKind=row.plannedShiftKinds?.[String(currentDay)];
+          if(action==="confirm"&&cell==="П"){
+            if(await persistCell(row.workerId,currentDay,"?",segment,true))done++;
+          }else if(action==="hours"&&cell==="?"&&Number(row.plannedHours??0)>0&&(plannedKind===segment||plannedKind==="mixed")){
+            if(await persistCell(row.workerId,currentDay,String(row.plannedHours),segment,true))done++;
+          }
+        }
+      }
+      setMessage(action==="confirm"?`Подтверждено выходов: ${done}`:`Нормативные часы заполнены: ${done}`);
+    }finally{setBulkBusy(false)}
+  }
+
+  async function workflow(action:"submit_internal"|"review_internal"|"return_internal"|"send_client"|"client_approve"|"client_return"|"close"){
+    setBusy(true);setMessage("");
+    try{
+      const response=await fetch("/api/timesheets/workflow",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,objectId:data.objectId,periodStart:data.periodStart,periodEnd:data.periodEnd,comment:comment||null})});
+      const json=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(json.error??"Не удалось выполнить действие");
+      const labels:Record<string,string>={submit_internal:"Табель передан на внутреннюю проверку",review_internal:"Внутренний табель проверен",return_internal:"Табель возвращён менеджеру",send_client:"Клиентская версия зафиксирована и отправлена",client_approve:"Подтверждение клиента зафиксировано",client_return:"Возврат клиента зафиксирован",close:"Период закрыт: начисления сформированы"};
+      setMessage(labels[action]??"Готово");setComment("");router.refresh();
+    }catch(error){setMessage(error instanceof Error?error.message:"Не удалось выполнить действие")}
+    finally{setBusy(false)}
+  }
+
+  async function exportExcel(){
+    const finance=view==="internal"&&sensitive;
+    const header=["Сотрудник","Специальность","Смена",...(finance?["Ставка"]:[]),...days.map(day=>String(day).padStart(2,"0")+"."+data.month.slice(5,7)),"Смен","Часов",...(finance?["Начислено","Начислено всего","Корректировки","Выплачено","К выплате"]:[]),"Плановые отсутствия","Отклонения"];
+    const body=rows.flatMap(row=>(["day","night"] as Segment[]).map((segment,index)=>{
+      const cells=segment==="day"?row.dayCells:row.nightCells;
+      const shiftHours=days.reduce((sum,day)=>sum+numericCell(cells?.[String(day)]),0);
+      const shiftCount=days.filter(day=>numericCell(cells?.[String(day)])>0).length;
+      const segmentAccrued=calculateSegmentAccrued(row,segment,days,data.month);
+      const earned=mode==="month"?(row.accrualTotal??row.calculatedAccrual??0):calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month);
+      const correction=mode==="month"?Number(row.premium??0)+Number(row.adjustment??0):"";
+      return [index===0?row.name:"",index===0?specialtyText(row):"",segment==="day"?"День":"Ночь",...(finance?[rateTextForExport(row,segment,data.month)]:[]),...days.map(day=>cellDisplay(row,day,segment,data.month)),shiftCount,shiftHours,...(finance?[segmentAccrued,index===0?earned:"",index===0?correction:"",index===0&&mode==="month"?row.paidAmount??0:"",index===0&&mode==="month"?row.payableAmount??earned:""]:[]),index===0?plannedSummary(row,days,data.month):"",index===0?deviationSummary(row,days):""];
+    }));
+    const XLSX=await import("xlsx");
+    const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet([header,...body]);XLSX.utils.book_append_sheet(wb,ws,"Табель");
+    XLSX.writeFile(wb,`Табель_${data.object}_${data.month}_${view==="client"?"согласование":"рабочий"}.xlsx`);
+  }
+
   return <>
-    <div className="scheduler-controls"><div className="page-actions">{!embedded&&<select value={data.objectId} onChange={e=>changeContext(e.target.value,data.month)}>{options.objects.map(object=><option key={object.id} value={object.id}>{object.name}</option>)}</select>}<input type="month" value={data.month} onChange={e=>changeContext(data.objectId,e.target.value)}/><div className="segmented">{(["first","second","month"] as Mode[]).map(value=><button type="button" key={value} className={mode===value?"active":""} onClick={()=>setMode(value)}>{value==="first"?"1–15":value==="second"?"16–конец":"Весь месяц"}</button>)}</div></div><div className="page-actions"><div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Для согласования</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий</button>}</div><button className="button" onClick={()=>void exportExcel()}><Download size={14}/> Excel</button>{view==="client"&&<button className="button" onClick={()=>window.print()}><Printer size={14}/> Печать</button>}{view==="internal"&&currentDay&&canEditFact&&<><button className="button" disabled={bulkBusy} onClick={()=>void bulkToday("confirm")}>Подтвердить П</button><button className="button" disabled={bulkBusy} onClick={()=>void bulkToday("hours")}>Заполнить часы</button></>}</div></div>
-    <div className="timesheet-legend timesheet-legend-top"><strong>Обозначения</strong><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>Б</b> больничный</span><span><b>НВ</b> невыход</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>УВ</b> работа завершена</span><span><b>11</b> фактические часы</span></div>
-    <div className="timesheet-summary"><Metric label="Сотрудники" value={rows.length}/><Metric label="Дневные" value={`${totals.dayShifts} см · ${totals.dayHours} ч`}/><Metric label="Ночные" value={`${totals.nightShifts} см · ${totals.nightHours} ч`}/><Metric label="Невыходы" value={totals.noShows} tone={totals.noShows?"warn":undefined}/></div>
-    <div className="timesheet-mode-note"><Status tone={view==="client"?"info":"neutral"}>{view==="client"?"Для согласования":"Рабочий табель"}</Status><span>{view==="client"?"Внешний вид без внутренних ставок и начислений.":"День и ночь ведутся отдельно; один факт дня остаётся единым источником начисления."}</span><span>Состояние: <strong>{statusLabel(data.status)}</strong></span>{message&&<span><strong>{message}</strong></span>}</div>
-    <section className="section timesheet-matrix-section"><div className="section-head"><div><h2>{data.object} · {data.period}</h2><p>Сотрудник занимает две строки: дневная и ночная смена.</p></div>{view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}</div><div className="timesheet-wrap compact-timesheet"><table className="data-table timesheet timesheet-two-line"><thead><tr><th className="sticky-col">Сотрудник / ставка</th><th className="timesheet-shift-col">Смена</th>{days.map(day=><th className={`day ${isWeekend(data.month,day)?"weekend":""}`} key={day}><span>{weekday(data.month,day)}</span>{day}</th>)}<th>Смен</th><th>Часы</th><th>НВ</th></tr></thead><tbody>{rows.flatMap(row=>(["day","night"] as Segment[]).map((segment,index)=>{const cells=segment==="day"?row.dayCells:row.nightCells;const shiftHours=days.reduce((sum,day)=>sum+numericCell(cells?.[String(day)]),0);const shiftCount=days.filter(day=>numericCell(cells?.[String(day)])>0).length;const noShows=days.filter(day=>cells?.[String(day)]==="НВ").length;return <tr key={`${row.workerId}:${segment}`} className={`${row.rowKind==="candidate"?"timesheet-candidate-row ":""}${index===1?"timesheet-night-row":""}`}>{index===0?<td className="cell-title sticky-col" rowSpan={2}><strong>{row.name}</strong><span className="cell-sub">{row.specialty??(row.rowKind==="candidate"?"Кандидат":"—")}</span>{view==="internal"&&sensitive&&row.rowKind!=="candidate"&&<span className="timesheet-worker-rates">Д {rateText(row.dayRate??row.rate)} · Н {rateText(row.nightRate??row.rate)}</span>}</td>:null}<td className="timesheet-shift-col"><b>{segment==="day"?"День":"Ночь"}</b></td>{days.map(day=>{const date=dateString(data.month,day),ended=isAfterEnd(row,date),firstEnded=isFirstAfterEnd(row,date);const value=firstEnded?"УВ":ended?"":cells?.[String(day)];const key=`${row.workerId}:${day}:${segment}`;const editable=canEditFact&&row.rowKind!=="candidate"&&!ended;return <td key={day} className={`day ${isWeekend(data.month,day)?"weekend ":""}${ended?"timesheet-locked ":""}${value==="П"?"day-planned ":""}`}>{editable?<input className="timesheet-cell-input" value={value==null?"":String(value)} disabled={saving===key} onChange={e=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(e.target.value)}}))} onBlur={e=>void persistCell(row.workerId,day,e.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>:value==null||value===""?"—":value}</td>})}<td className="num">{shiftCount}</td><td className="num">{shiftHours}</td><td className="num">{noShows||"—"}</td></tr>}))}</tbody><tfoot><tr><td className="sticky-col" colSpan={2}>Итого</td>{days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{rows.reduce((sum,row)=>sum+numericCell(row.dayCells?.[String(day)])+numericCell(row.nightCells?.[String(day)]),0)||"—"}</td>)}<td className="num">{totals.dayShifts+totals.nightShifts}</td><td className="num">{totalHours}</td><td className="num">{totals.noShows||"—"}</td></tr></tfoot></table></div></section>
-    <section className="section"><div className="section-head"><div><h2>Маршрут табеля</h2><p>Отправленная версия не перезаписывается.</p></div><Status tone="neutral">{statusLabel(data.status)}</Status></div><div className="timesheet-workflow-panel"><input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Комментарий к передаче или возврату"/><div className="page-actions">{canSubmit&&(!internal||["draft","returned"].includes(internal.status))&&<button className="button primary" disabled={busy} onClick={()=>void workflow("submit_internal")}><Send size={14}/> На проверку</button>}{canReview&&internal?.status==="internal_submitted"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("review_internal")}><CheckCircle2 size={14}/> Проверено</button><button className="button" disabled={busy} onClick={()=>void workflow("return_internal")}><RotateCcw size={14}/> Вернуть</button></>}{canSubmit&&internal?.status==="internal_checked"&&(!client||client.status==="returned")&&<button className="button primary" disabled={busy} onClick={()=>void workflow("send_client")}><Send size={14}/> Отправить клиенту</button>}{canApproveClient&&client?.status==="client_sent"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("client_approve")}><CheckCircle2 size={14}/> Клиент согласовал</button><button className="button" disabled={busy} onClick={()=>void workflow("client_return")}><RotateCcw size={14}/> Вернул</button></>}{canClose&&client?.status==="client_approved"&&<button className="button primary" disabled={busy} onClick={()=>void workflow("close")}><WalletCards size={14}/> Закрыть период</button>}</div></div></section>
-  </>
+    <div className="scheduler-controls">
+      <div className="page-actions">
+        {!embedded&&<select value={data.objectId} onChange={event=>changeContext(event.target.value,data.month)}>{options.objects.map(object=><option key={object.id} value={object.id}>{object.name}</option>)}</select>}
+        <input type="month" value={data.month} onChange={event=>changeContext(data.objectId,event.target.value)}/>
+        <div className="segmented">{(["first","second","month"] as Mode[]).map(value=><button type="button" key={value} className={mode===value?"active":""} onClick={()=>setMode(value)}>{value==="first"?"1–15":value==="second"?"16–конец":"Весь месяц"}</button>)}</div>
+      </div>
+      <div className="page-actions">
+        <div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Для согласования</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий</button>}</div>
+        <button className="button" onClick={()=>void exportExcel()}><Download size={14}/> Excel</button>
+        {view==="client"&&<button className="button" onClick={()=>window.print()}><Printer size={14}/> Печать</button>}
+        {view==="internal"&&currentDay&&canEditFact&&<><button className="button" disabled={bulkBusy} onClick={()=>void bulkToday("confirm")}>Подтвердить П</button><button className="button" disabled={bulkBusy} onClick={()=>void bulkToday("hours")}>Заполнить часы</button></>}
+      </div>
+    </div>
+
+    <div className="timesheet-legend timesheet-legend-top">
+      <strong>Обозначения</strong>
+      <span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span>
+      <span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span>
+      <span><b>НВ</b> невыход</span><span><b>УВ</b> работа завершена</span>
+      {view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}
+    </div>
+
+    <div className="timesheet-summary">
+      <Metric label="Сотрудники" value={rows.filter(row=>row.rowKind!=="candidate").length}/>
+      <Metric label="Дневные" value={`${totals.dayShifts} см · ${totals.dayHours} ч`}/>
+      <Metric label="Ночные" value={`${totals.nightShifts} см · ${totals.nightHours} ч`}/>
+      <Metric label="Невыходы" value={totals.noShows} tone={totals.noShows?"warn":undefined}/>
+    </div>
+
+    <div className="timesheet-mode-note">
+      <Status tone={view==="client"?"info":"neutral"}>{view==="client"?"Для согласования":"Рабочий табель"}</Status>
+      <span>{view==="client"?"Внешний вид без внутренних ставок и расчётов.":"Факт, исторические ставки, начисления и выплаты собраны в одном рабочем виде."}</span>
+      <span>Состояние: <strong>{statusLabel(data.status)}</strong></span>
+      {message&&<span><strong>{message}</strong></span>}
+    </div>
+
+    <section className="section timesheet-matrix-section">
+      <div className="section-head"><div><h2>{data.object} · {data.period}</h2><p>День и ночь ведутся отдельными строками; состояния и финансовый итог относятся к сотруднику целиком.</p></div>{view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}</div>
+      <div className="timesheet-wrap compact-timesheet">
+        <table className="data-table timesheet timesheet-two-line timesheet-operational">
+          <thead><tr>
+            <th className="sticky-col">Сотрудник</th><th className="timesheet-specialty-col">Специальность</th><th className="timesheet-shift-col">Смена</th>
+            {view==="internal"&&sensitive&&<th className="timesheet-rate-col">Ставка</th>}
+            {days.map(day=><th className={`day ${isWeekend(data.month,day)?"weekend":""}`} key={day}><span>{weekday(data.month,day)}</span>{day}</th>)}
+            <th>Смен</th><th>Часов</th>
+            {view==="internal"&&sensitive&&<><th>Начислено</th><th>Всего</th><th>Корр.</th><th>Выплачено</th><th>К выплате</th></>}
+            <th className="timesheet-state-col">Плановые</th><th className="timesheet-state-col">Отклонения</th>
+          </tr></thead>
+          <tbody>{rows.flatMap(row=>(["day","night"] as Segment[]).map((segment,index)=>{
+            const cells=segment==="day"?row.dayCells:row.nightCells;
+            const shiftHours=days.reduce((sum,day)=>sum+numericCell(cells?.[String(day)]),0);
+            const shiftCount=days.filter(day=>numericCell(cells?.[String(day)])>0).length;
+            const segmentAccrued=calculateSegmentAccrued(row,segment,days,data.month);
+            const calculatedSelected=calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month);
+            const earned=mode==="month"?(row.accrualTotal??row.calculatedAccrual??calculatedSelected):calculatedSelected;
+            const correction=Number(row.premium??0)+Number(row.adjustment??0);
+            return <tr key={`${row.workerId}:${segment}`} className={`${row.rowKind==="candidate"?"timesheet-candidate-row ":""}${index===1?"timesheet-night-row":""}`}>
+              {index===0&&<td className="cell-title sticky-col" rowSpan={2}><strong>{row.name}</strong>{row.rowKind==="candidate"&&<span className="cell-sub">Кандидат · план первого выхода</span>}</td>}
+              {index===0&&<td className="timesheet-specialty-col" rowSpan={2}><SpecialtyHistory row={row}/></td>}
+              <td className="timesheet-shift-col"><b>{segment==="day"?"День":"Ночь"}</b></td>
+              {view==="internal"&&sensitive&&<td className="timesheet-rate-col"><RateHistory row={row} segment={segment} month={data.month}/></td>}
+              {days.map(day=>{
+                const date=dateString(data.month,day),ended=isAfterEnd(row,date),firstEnded=isFirstAfterEnd(row,date);
+                const raw=cells?.[String(day)],value=firstEnded?"УВ":ended?"—":raw;
+                const key=`${row.workerId}:${day}:${segment}`;
+                const editable=canEditFact&&row.rowKind!=="candidate"&&!ended;
+                const classes=timesheetCellClass(value,ended,isWeekend(data.month,day));
+                return <td key={day} className={classes}>{editable?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>:value==null||value===""?"—":value}</td>;
+              })}
+              <td className="num">{shiftCount||"—"}</td><td className="num">{shiftHours||"—"}</td>
+              {view==="internal"&&sensitive&&<><td className="num timesheet-money">{row.rowKind==="candidate"?"—":money(segmentAccrued)}</td>{index===0&&<>
+                <td className="num timesheet-money timesheet-money-total" rowSpan={2}>{row.rowKind==="candidate"?"—":money(earned)}</td>
+                <td className="num timesheet-money" rowSpan={2}>{row.rowKind==="candidate"?"—":mode==="month"?signedMoney(correction):"—"}</td>
+                <td className="num timesheet-money" rowSpan={2}>{row.rowKind==="candidate"?"—":mode==="month"?money(row.paidAmount??0):"—"}</td>
+                <td className="num timesheet-money timesheet-payable" rowSpan={2}>{row.rowKind==="candidate"?"—":mode==="month"?money(row.payableAmount??earned):"—"}</td>
+              </>}</>}
+              {index===0&&<><td className="timesheet-state-col" rowSpan={2}><StateSummary text={plannedSummary(row,days,data.month)}/></td><td className="timesheet-state-col" rowSpan={2}><StateSummary text={deviationSummary(row,days)}/></td></>}
+            </tr>;
+          }))}</tbody>
+          <tfoot><tr>
+            <td className="sticky-col" colSpan={view==="internal"&&sensitive?4:3}>Итого</td>
+            {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{rows.reduce((sum,row)=>sum+numericCell(row.dayCells?.[String(day)])+numericCell(row.nightCells?.[String(day)]),0)||"—"}</td>)}
+            <td className="num">{totals.dayShifts+totals.nightShifts}</td><td className="num">{totalHours}</td>
+            {view==="internal"&&sensitive&&<><td className="num timesheet-money">{money(rows.reduce((sum,row)=>sum+calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month),0))}</td><td colSpan={4}></td></>}
+            <td colSpan={2}></td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <section className="section">
+      <div className="section-head"><div><h2>Маршрут табеля</h2><p>Отправленная версия не перезаписывается.</p></div><Status tone="neutral">{statusLabel(data.status)}</Status></div>
+      <div className="timesheet-workflow-panel">
+        <input value={comment} onChange={event=>setComment(event.target.value)} placeholder="Комментарий к передаче или возврату"/>
+        <div className="page-actions">
+          {canSubmit&&(!internal||["draft","returned"].includes(internal.status))&&<button className="button primary" disabled={busy} onClick={()=>void workflow("submit_internal")}><Send size={14}/> На проверку</button>}
+          {canReview&&internal?.status==="internal_submitted"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("review_internal")}><CheckCircle2 size={14}/> Проверено</button><button className="button" disabled={busy} onClick={()=>void workflow("return_internal")}><RotateCcw size={14}/> Вернуть</button></>}
+          {canSubmit&&internal?.status==="internal_checked"&&(!client||client.status==="returned")&&<button className="button primary" disabled={busy} onClick={()=>void workflow("send_client")}><Send size={14}/> Отправить клиенту</button>}
+          {canApproveClient&&client?.status==="client_sent"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("client_approve")}><CheckCircle2 size={14}/> Клиент согласовал</button><button className="button" disabled={busy} onClick={()=>void workflow("client_return")}><RotateCcw size={14}/> Вернул</button></>}
+          {canClose&&client?.status==="client_approved"&&<button className="button primary" disabled={busy} onClick={()=>void workflow("close")}><WalletCards size={14}/> Закрыть период</button>}
+        </div>
+      </div>
+    </section>
+  </>;
 }
-function range(start:number,end:number){return Array.from({length:end-start+1},(_,index)=>start+index)}function dateFor(month:string,day:number){const[y,m]=month.split("-").map(Number);return new Date(Date.UTC(y,m-1,day))}function dateString(month:string,day:number){return `${month}-${String(day).padStart(2,"0")}`}function isWeekend(month:string,day:number){const value=dateFor(month,day).getUTCDay();return value===0||value===6}function weekday(month:string,day:number){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(dateFor(month,day)).replace(".","")}function numericCell(value:unknown){return typeof value==="number"?value:typeof value==="string"&&/^\d+(?:[.,]\d+)?$/.test(value)?Number(value.replace(",",".")):0}function normalizeCell(value:string):TimesheetCellValue{const v=value.trim().toUpperCase();if(v==="")return null;if(/^\d+(?:[.,]\d+)?$/.test(v))return Number(v.replace(",","."));return v}function statusLabel(value:string){const labels:Record<string,string>={draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"};return labels[value]??value}function isAfterEnd(row:TimesheetWorkerRow,date:string){return Boolean(row.effectiveTo&&date>row.effectiveTo)}function isFirstAfterEnd(row:TimesheetWorkerRow,date:string){if(!row.effectiveTo)return false;const d=new Date(row.effectiveTo+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+1);return date===d.toISOString().slice(0,10)}function rateText(value:number|string|null|undefined){return value==null?"—":`${rub(value)}/ч`}
+
+function SpecialtyHistory({row}:{row:TimesheetWorkerRow}){
+  const history=(row.specialtyHistory??[]).slice().sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const current=history.at(-1);
+  return <div className="timesheet-specialty-history"><strong>{current?.specialty??row.specialty??(row.rowKind==="candidate"?"Кандидат":"—")}</strong>{history.length>1&&history.slice(0,-1).map(item=><small key={item.effectiveFrom+`${item.specialty}`}>{item.specialty??"Без специальности"} · до {item.effectiveTo?shortDate(item.effectiveTo):"—"}</small>)}</div>;
+}
+function RateHistory({row,segment,month}:{row:TimesheetWorkerRow;segment:Segment;month:string}){
+  if(row.rowKind==="candidate")return <>—</>;
+  const rates=relevantRates(row,segment,month);
+  if(!rates.length){
+    const fallback=segment==="day"?row.dayRate??row.rate:row.nightRate??row.rate;
+    return <span>{fallback==null?"—":rateText(fallback)}</span>;
+  }
+  return <div className="timesheet-rate-history">{rates.map((rate,index)=>{
+    const last=index===rates.length-1;
+    return <span key={rate.kind+rate.effectiveFrom} className={last?"current":"previous"}><b>{formatRate(rate,row.plannedHours)}</b><small>{ratePeriodLabel(rate,month)}</small></span>;
+  })}</div>;
+}
+function StateSummary({text}:{text:string}){return text?<div className="timesheet-state-summary">{text.split(" · ").map((part,index)=><span key={index}>{part}</span>)}</div>:<>—</>}
+function plannedSummary(row:TimesheetWorkerRow,days:number[],month:string){
+  const parts:string[]=[];
+  const v=countCode(row,"В",days);if(v)parts.push(`В ${v}`);
+  const mv=countCode(row,"МВ",days);if(mv){const range=(row.absenceRanges??[]).find(item=>item.type==="intershift"&&overlapsDays(item.from,item.to,days,month));parts.push(`МВ ${mv}${range?.returnDate?` до ${shortDate(range.returnDate)}`:""}`)}
+  const vacation=countCode(row,"О",days);if(vacation){const range=(row.absenceRanges??[]).find(item=>item.type==="vacation"&&overlapsDays(item.from,item.to,days,month));parts.push(`О ${vacation}${range?.returnDate?` до ${shortDate(range.returnDate)}`:""}`)}
+  return parts.join(" · ");
+}
+function deviationSummary(row:TimesheetWorkerRow,days:number[]){
+  const parts:string[]=[];const sick=countCode(row,"Б",days),noShow=countCode(row,"НВ",days),absence=countCode(row,"Н",days);
+  if(sick)parts.push(`Б ${sick}`);if(noShow)parts.push(`НВ ${noShow}`);if(absence)parts.push(`Н ${absence}`);
+  return parts.join(" · ");
+}
+function countCode(row:TimesheetWorkerRow,code:string,days:number[]){return days.filter(day=>row.dayCells?.[String(day)]===code||row.nightCells?.[String(day)]===code).length}
+function overlapsDays(from:string,to:string|null,days:number[],month:string){return days.some(day=>{const date=dateString(month,day);return from<=date&&(!to||to>=date)})}
+function calculateSegmentAccrued(row:TimesheetWorkerRow,segment:Segment,days:number[],month:string){
+  if(row.rowKind==="candidate")return 0;
+  let total=0;let hasWorked=false;
+  for(const day of days){
+    const hours=numericCell((segment==="day"?row.dayCells:row.nightCells)?.[String(day)]);if(hours<=0)continue;
+    hasWorked=true;const rate=rateAt(row,dateString(month,day),segment);if(!rate)continue;
+    if(rate.unit==="hour")total+=hours*Number(rate.amount);
+    else if(rate.unit==="shift"){const planned=Number(row.plannedHours??0);total+=planned>0?hours*(Number(rate.amount)/planned):Number(rate.amount)}
+  }
+  if(segment==="day"&&hasWorked){
+    const dates=days.filter(day=>numericCell(row.dayCells?.[String(day)])>0||numericCell(row.nightCells?.[String(day)])>0).map(day=>dateString(month,day));
+    const monthly=(row.rateHistory??[]).filter(rate=>rate.kind==="any"&&rate.unit==="month"&&dates.some(date=>rate.effectiveFrom<=date&&(!rate.effectiveTo||rate.effectiveTo>=date))).reduce((max,rate)=>Math.max(max,Number(rate.amount)),0);
+    total+=monthly;
+  }
+  return total;
+}
+function rateAt(row:TimesheetWorkerRow,date:string,segment:Segment){
+  const active=(row.rateHistory??[]).filter(rate=>rate.effectiveFrom<=date&&(!rate.effectiveTo||rate.effectiveTo>=date));
+  return active.filter(rate=>rate.kind===segment).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]??active.filter(rate=>rate.kind==="any").sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]??null;
+}
+function relevantRates(row:TimesheetWorkerRow,segment:Segment,month:string){
+  const start=month+"-01",end=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+  const all=(row.rateHistory??[]).filter(rate=>(rate.kind===segment||rate.kind==="any")&&rate.effectiveFrom<=end&&(!rate.effectiveTo||rate.effectiveTo>=start)).sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const effective:TimesheetRatePeriod[]=[];
+  for(const rate of all){if(!effective.some(item=>item.kind===rate.kind&&item.effectiveFrom===rate.effectiveFrom&&Number(item.amount)===Number(rate.amount)))effective.push(rate)}
+  return effective;
+}
+function formatRate(rate:TimesheetRatePeriod,plannedHours:number|null|undefined){
+  if(rate.unit==="shift"){const hours=Number(plannedHours??0);return hours>0?`${rub(Number(rate.amount)/hours)}/ч`:`${rub(rate.amount)}/смена`}
+  return rate.unit==="month"?`${rub(rate.amount)}/мес`:`${rub(rate.amount)}/ч`;
+}
+function ratePeriodLabel(rate:TimesheetRatePeriod,month:string){
+  const start=rate.effectiveFrom>month+"-01"?`с ${shortDate(rate.effectiveFrom)}`:"";
+  const end=rate.effectiveTo&&rate.effectiveTo.slice(0,7)===month?`до ${shortDate(rate.effectiveTo)}`:"";
+  return [start,end].filter(Boolean).join(" · ");
+}
+function rateTextForExport(row:TimesheetWorkerRow,segment:Segment,month:string){return relevantRates(row,segment,month).map(rate=>`${formatRate(rate,row.plannedHours)} ${ratePeriodLabel(rate,month)}`.trim()).join(" / ")||rateText(segment==="day"?row.dayRate??row.rate:row.nightRate??row.rate)}
+function specialtyText(row:TimesheetWorkerRow){return (row.specialtyHistory??[]).map(item=>`${item.specialty??"Без специальности"}${item.effectiveTo?` до ${shortDate(item.effectiveTo)}`:""}`).join(" / ")||row.specialty??""}
+function cellDisplay(row:TimesheetWorkerRow,day:number,segment:Segment,month:string){const date=dateString(month,day);if(isFirstAfterEnd(row,date))return"УВ";if(isAfterEnd(row,date))return"—";return (segment==="day"?row.dayCells:row.nightCells)?.[String(day)]??""}
+function timesheetCellClass(value:TimesheetCellValue,ended:boolean,weekend:boolean){
+  const code=String(value??"");const classes=["day"];if(weekend)classes.push("weekend");if(ended)classes.push("timesheet-terminated");
+  if(code==="П")classes.push("day-planned");if(code==="В")classes.push("timesheet-day-off");if(code==="МВ")classes.push("timesheet-intershift");if(code==="О")classes.push("timesheet-vacation");if(code==="Б")classes.push("timesheet-sick");if(code==="НВ")classes.push("timesheet-no-show");if(code==="УВ")classes.push("timesheet-ended-marker");
+  return classes.join(" ");
+}
+function range(start:number,end:number){return Array.from({length:end-start+1},(_,index)=>start+index)}
+function dateFor(month:string,day:number){const[year,number]=month.split("-").map(Number);return new Date(Date.UTC(year,number-1,day))}
+function dateString(month:string,day:number){return `${month}-${String(day).padStart(2,"0")}`}
+function isWeekend(month:string,day:number){const value=dateFor(month,day).getUTCDay();return value===0||value===6}
+function weekday(month:string,day:number){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(dateFor(month,day)).replace(".","")}
+function numericCell(value:unknown){return typeof value==="number"?value:typeof value==="string"&&/^\d+(?:[.,]\d+)?$/.test(value)?Number(value.replace(",",".")):0}
+function normalizeCell(value:string):TimesheetCellValue{const normalized=value.trim().toUpperCase();if(normalized==="")return null;if(/^\d+(?:[.,]\d+)?$/.test(normalized))return Number(normalized.replace(",","."));return normalized}
+function statusLabel(value:string){const labels:Record<string,string>={draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"};return labels[value]??value}
+function isAfterEnd(row:TimesheetWorkerRow,date:string){return Boolean(row.effectiveTo&&date>row.effectiveTo)}
+function isFirstAfterEnd(row:TimesheetWorkerRow,date:string){if(!row.effectiveTo)return false;const day=new Date(row.effectiveTo+"T00:00:00Z");day.setUTCDate(day.getUTCDate()+1);return date===day.toISOString().slice(0,10)}
+function shortDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
+function money(value:number|string){return rub(Math.round(Number(value)||0))}
+function signedMoney(value:number){if(!value)return"—";return `${value>0?"+":""}${money(value)}`}
+function rateText(value:number|string|null|undefined){return value==null?"—":`${rub(value)}/ч`}
