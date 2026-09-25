@@ -4,13 +4,14 @@ import Link from "next/link";
 import {useMemo,useState} from "react";
 import type {ShiftRow,WorkerRow} from "@/lib/data/service";
 
-type Kind="day"|"night"|"off"|"";
+type Kind="day"|"night"|"off"|"intershift"|"vacation"|"";
 type PaintKind="day"|"night"|"off"|"clear";
+type AbsenceKind="intershift"|"vacation"|"personal";
 type Mode="workers"|"specialties";
 
 const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",clear:"Очистить"};
 
-export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;demo:boolean}){
+export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPlanAbsence,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;canPlanAbsence:boolean;demo:boolean}){
   const [start,setStart]=useState(today);
   const [mode,setMode]=useState<Mode>("workers");
   const [busy,setBusy]=useState("");
@@ -18,6 +19,12 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
   const [paint,setPaint]=useState<PaintKind>("day");
   const [selected,setSelected]=useState<Set<string>>(()=>new Set());
   const [overrides,setOverrides]=useState<Record<string,Kind>>({});
+  const [absenceOpen,setAbsenceOpen]=useState(false);
+  const [absenceType,setAbsenceType]=useState<AbsenceKind>("intershift");
+  const [absenceFrom,setAbsenceFrom]=useState(today);
+  const [absenceTo,setAbsenceTo]=useState(addDays(today,7));
+  const [absenceNote,setAbsenceNote]=useState("");
+  const [absenceOverrides,setAbsenceOverrides]=useState<Record<string,{type:AbsenceKind;from:string;to:string}>>({});
   const dates=useMemo(()=>Array.from({length:7},(_,i)=>addDays(start,i)),[start]);
 
   const map=useMemo(()=>{
@@ -30,12 +37,21 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
     return out;
   },[rows]);
 
+  function absenceFor(worker:WorkerRow,date:string):AbsenceKind|null{
+    const local=absenceOverrides[worker.id];
+    if(local&&local.from<=date&&local.to>=date)return local.type;
+    if(worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=date&&(!worker.absenceTo||worker.absenceTo>=date)){
+      if(worker.absenceType==="intershift"||worker.absenceType==="vacation"||worker.absenceType==="personal")return worker.absenceType;
+    }
+    return null;
+  }
   function planned(worker:WorkerRow,date:string):Kind{
     const key=`${worker.id}:${date}`;
     if(overrides[key]!==undefined)return overrides[key];
+    const absence=absenceFor(worker,date);
+    if(absence)return absence==="personal"?"off":absence;
     const actual=map.get(key);
     if(actual)return actual;
-    if(worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=date&&(!worker.absenceTo||worker.absenceTo>=date))return "off";
     if(worker.scheduleWorkDays==null||worker.scheduleRestDays==null||!worker.startDate)return "";
     const anchor=worker.scheduleAnchorDate??worker.startDate;
     const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;
@@ -110,6 +126,35 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
     void persistCells(cells);
   }
 
+  async function planAbsence(){
+    if(!canPlanAbsence)return;
+    if(!selected.size){setMessage("Выберите сотрудников, которым нужно запланировать отсутствие");return;}
+    if(!absenceFrom||!absenceTo||absenceTo<absenceFrom){setMessage("Проверьте даты отсутствия");return;}
+    const selectedIds=[...selected];
+    setBusy("absence");setMessage("");
+    try{
+      if(!demo){
+        for(const workerId of selectedIds){
+          const response=await fetch(`/api/workers/${workerId}/absences`,{
+            method:"POST",headers:{"content-type":"application/json"},
+            body:JSON.stringify({absenceType,status:"confirmed",plannedFrom:absenceFrom,plannedTo:absenceTo,flexibleReturn:absenceType==="intershift",note:absenceNote||null}),
+          });
+          const json=await response.json().catch(()=>({}));
+          if(!response.ok)throw new Error(json.error??"Не удалось сохранить отсутствие");
+        }
+      }
+      setAbsenceOverrides(current=>{
+        const next={...current};
+        for(const workerId of selectedIds)next[workerId]={type:absenceType,from:absenceFrom,to:absenceTo};
+        return next;
+      });
+      setMessage(`${absenceType==="intershift"?"Межвахта":absenceType==="vacation"?"Отпуск":"Выходной"}: запланировано для ${selectedIds.length} чел. с ${shortDate(absenceFrom)} по ${shortDate(absenceTo)}`);
+      setAbsenceOpen(false);
+      if(!demo)window.location.reload();
+    }catch(error){setMessage(error instanceof Error?error.message:"Не удалось запланировать отсутствие")}
+    finally{setBusy("")}
+  }
+
   const specialties=[...new Set(workers.map(worker=>worker.specialty??"Без специальности"))].sort((a,b)=>a.localeCompare(b,"ru"));
 
   return <div className="object-shift-planner">
@@ -122,6 +167,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
       </div>
       <div className="page-actions">
         <div className="segmented"><button className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>По сотрудникам</button><button className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям</button></div>
+        {canPlanAbsence&&<button className="button" type="button" onClick={()=>{if(!selected.size){setMessage("Сначала выберите сотрудников слева");return}setAbsenceOpen(value=>!value)}}>Плановое отсутствие</button>}
         {canEdit&&<button className="button primary" disabled={busy==="generate"} onClick={()=>void generate()}>Заполнить по графикам</button>}
       </div>
     </div>
@@ -133,8 +179,16 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
         {(["day","night","off","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{kind==="day"?"Д":kind==="night"?"Н":kind==="off"?"В":"×"}</b>{paintLabels[kind]}</button>)}
       </div>}
     </div>
+    {absenceOpen&&<div className="object-shift-absence-panel">
+      <div><strong>Плановое отсутствие</strong><span>Выбрано сотрудников: {selected.size}. После сохранения период автоматически исключается из плана смен и отображается в табеле.</span></div>
+      <label>Тип<select value={absenceType} onChange={event=>setAbsenceType(event.target.value as AbsenceKind)}><option value="intershift">Межвахта</option><option value="vacation">Отпуск</option><option value="personal">Согласованный выходной</option></select></label>
+      <label>С<input type="date" min={today} value={absenceFrom} onChange={event=>{setAbsenceFrom(event.target.value);if(absenceTo<event.target.value)setAbsenceTo(event.target.value)}}/></label>
+      <label>По<input type="date" min={absenceFrom} value={absenceTo} onChange={event=>setAbsenceTo(event.target.value)}/></label>
+      <label className="note">Комментарий<input value={absenceNote} onChange={event=>setAbsenceNote(event.target.value)} placeholder="Необязательно"/></label>
+      <div className="page-actions"><button className="button" type="button" onClick={()=>setAbsenceOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="absence"} onClick={()=>void planAbsence()}>{busy==="absence"?"Сохраняем…":"Запланировать"}</button></div>
+    </div>}
     <div className="object-shift-legend">
-      <span><b>Д</b> дневная</span><span><b>Н</b> ночная</span><span><b>В</b> выходной / плановое отсутствие</span>
+      <span><b>Д</b> дневная</span><span><b>Н</b> ночная</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span>
       <span>План автоматически появляется в табеле как <b>П</b>.</span>
       {canEdit&&<span>{selected.size?`Выбрано: ${selected.size}. Нажмите дату, чтобы применить режим ко всем выбранным.`:"Для массового изменения выберите сотрудников слева."}</span>}
     </div>
@@ -179,7 +233,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}
   </div>;
 }
 function normalizeKind(value:string):Kind{if(value==="day"||value==="День")return"day";if(value==="night"||value==="Ночь")return"night";if(value==="off"||value==="Выходной")return"off";return""}
-function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":"—"}
+function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":value==="intershift"?"МВ":value==="vacation"?"О":"—"}
 function addDays(value:string,n:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+n);return date.toISOString().slice(0,10)}
 function shortDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
 function weekday(value:string){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z")).replace(".","")}
