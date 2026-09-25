@@ -68,7 +68,7 @@ export default async function OperationsAnalytics({searchParams}:{searchParams:P
     <PageHeader eyebrow="Операции → Управление объектами" title="Аналитика объектов" subtitle="Результаты и тенденции по доступному операционному контуру: комплектация, запуски, невыходы, табели, качество и экономика." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Аналитика объектов"}]}/>
 
     <div className="analytics-context-bar">
-      <div className="segmented">{tabs.map(item=><Link key={item.key} className={view===item.key?"active":""} href={"/operations/analytics?view="+item.key+(objectFilter?"&object="+objectFilter:"")}>{item.label}</Link>)}</div>
+      <div className="segmented workspace-tabs">{tabs.map(item=><Link key={item.key} className={view===item.key?"active":""} href={"/operations/analytics?view="+item.key+(objectFilter?"&object="+objectFilter:"")}>{item.label}</Link>)}</div>
       <div className="page-actions">{objectFilter?<><span className="cell-sub">Фильтр: {allRows.find(row=>row.objectId===objectFilter)?.object}</span><Link className="button" href={"/operations/analytics?view="+view}>Все объекты</Link></>:<span className="cell-sub">Весь доступный контур · {rows.length} объектов</span>}</div>
     </div>
 
