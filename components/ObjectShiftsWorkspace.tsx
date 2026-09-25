@@ -174,6 +174,21 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   function toggleWorker(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
   function toggleAll(){setSelected(current=>current.size===visibleWorkers.length?new Set():new Set(visibleWorkers.map(worker=>worker.id)))}
   function applyDate(date:string){setFocusDate(date);if(!selected.size)return;void persistCells([...selected].map(workerId=>({workerId,date,kind:paint})))}
+  function applySelectedRange(scope:"workweek"|"week"){
+    if(!selected.size){setMessage("Сначала выберите сотрудников");return}
+    const targetDates=dates.filter(date=>date>=today&&(scope==="week"||![0,6].includes(new Date(date+"T00:00:00Z").getUTCDay())));
+    const cells=targetDates.flatMap(date=>[...selected].filter(workerId=>{
+      const worker=workers.find(item=>item.id===workerId);return worker?cellState(worker,date).editable:false;
+    }).map(workerId=>({workerId,date,kind:paint})));
+    if(!cells.length){setMessage("В выбранном диапазоне нет доступных для планирования ячеек");return}
+    void persistCells(cells);
+  }
+  function closeGapBySchedule(specialty:string,date:string,gap:number){
+    const candidates=workers.filter(worker=>(worker.specialty??"Без специальности")===specialty).map(worker=>({worker,state:cellState(worker,date)}))
+      .filter(item=>item.state.source==="suggested"&&(item.state.kind==="day"||item.state.kind==="night")&&item.state.editable).slice(0,gap);
+    if(!candidates.length){setMessage("Нет доступных сотрудников по графику для закрытия дефицита");return}
+    void persistCells(candidates.map(item=>({workerId:item.worker.id,date,kind:item.state.kind as "day"|"night"})));
+  }
 
   async function planAbsence(){
     if(!canPlanAbsence)return;if(!selected.size){setMessage("Выберите сотрудников, которым нужно запланировать отсутствие");return}
@@ -217,6 +232,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       <div className="object-shift-paint">
         {(["day","night","off","reserve_day","reserve_night","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{paintCode(kind)}</b>{paintLabels[kind]}</button>)}
       </div>
+      <div className="page-actions object-shift-range-actions"><button className="button" type="button" onClick={()=>applySelectedRange("workweek")}>На Пн–Пт</button><button className="button" type="button" onClick={()=>applySelectedRange("week")}>На неделю</button></div>
       {canPlanAbsence&&<button className="button" type="button" onClick={()=>setAbsenceOpen(value=>!value)}>Межвахта / отпуск</button>}
       <button className="button" type="button" onClick={()=>setSelected(new Set())}>Снять выбор</button>
     </div>}
@@ -242,7 +258,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     <div className="object-shift-deficit-panel">
       <div><strong>{weekday(focusDate)} · {shortDate(focusDate)}</strong><span>Потребность и покрытие по специальностям</span></div>
-      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.required||"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}</span>):<span>Нет активной потребности на эту дату</span>}</div>
+      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.required||"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
       <div className="page-actions"><Link className="button" href={`/needs?object=${objectId}`}>Потребности</Link><Link className="button" href={`/recruiting?object=${objectId}`}>Подбор</Link></div>
     </div>
 
