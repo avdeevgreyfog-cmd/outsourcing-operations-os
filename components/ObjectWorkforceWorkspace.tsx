@@ -7,6 +7,7 @@ import {workerObjectState,workerTodayStatus} from "@/lib/operations/workforce-st
 import {rub} from "@/lib/ui/format";
 
 type View="grouped"|"list";
+type Scope="all"|"shift"|"absence"|"attention";
 type SpecialtyOption={id:string;name:string};
 const documentLabels:Record<string,string>={not_received:"Не получены",collecting:"Собираются",received:"Получены мастером",submitted:"Переданы на оформление",processing:"На оформлении",completed:"Готово",problem:"Есть проблема"};
 const shiftLabels:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь"};
@@ -22,6 +23,7 @@ export function ObjectWorkforceWorkspace({
   specialties:SpecialtyOption[];
 }){
   const [query,setQuery]=useState("");
+  const [scope,setScope]=useState<Scope>("all");
   const [specialty,setSpecialty]=useState("");
   const [schedule,setSchedule]=useState("");
   const [todayState,setTodayState]=useState("");
@@ -38,16 +40,24 @@ export function ObjectWorkforceWorkspace({
   const todayStates=useMemo(()=>uniqueStatuses(workers.map(row=>workerTodayStatus(row,today))),[workers,today]);
   const filtered=useMemo(()=>workers.filter(row=>{
     const day=workerTodayStatus(row,today);
+    const objectState=workerObjectState(row,today);
+    const attention=day.key==="no_show"||row.employmentDocumentsStatus==="problem"||["sick","absence"].includes(objectState.key);
+    const inScope=scope==="all"
+      ||(scope==="shift"&&day.key==="on_shift")
+      ||(scope==="absence"&&!["working_period","ended"].includes(objectState.key))
+      ||(scope==="attention"&&attention);
     const hay=`${row.fullName} ${row.phone??""} ${row.specialty??""}`.toLocaleLowerCase("ru");
-    return(!query.trim()||hay.includes(query.trim().toLocaleLowerCase("ru")))
+    return inScope
+      &&(!query.trim()||hay.includes(query.trim().toLocaleLowerCase("ru")))
       &&(!specialty||(row.specialty??"Без специальности")===specialty)
       &&(!schedule||row.scheduleShiftKind===schedule)
       &&(!todayState||day.key===todayState);
-  }).sort((a,b)=>a.fullName.localeCompare(b.fullName,"ru")),[workers,query,specialty,schedule,todayState,today]);
+  }).sort((a,b)=>a.fullName.localeCompare(b.fullName,"ru")),[workers,scope,query,specialty,schedule,todayState,today]);
   const groups=useMemo(()=>specialtyNames.map(name=>({name,rows:filtered.filter(row=>(row.specialty??"Без специальности")===name)})).filter(group=>group.rows.length),[filtered,specialtyNames]);
   const activeAbsences=workers.filter(row=>!["working_period","ended"].includes(workerObjectState(row,today).key)).length;
   const onShift=workers.filter(row=>workerTodayStatus(row,today).key==="on_shift").length;
   const noShows=workers.filter(row=>workerTodayStatus(row,today).key==="no_show").length;
+  const attentionCount=workers.filter(row=>{const day=workerTodayStatus(row,today),state=workerObjectState(row,today);return day.key==="no_show"||row.employmentDocumentsStatus==="problem"||["sick","absence"].includes(state.key)}).length;
   const transferWorker=workers.find(row=>row.id===transferWorkerId)??null;
 
   function toggleGroup(name:string){
@@ -97,18 +107,33 @@ export function ObjectWorkforceWorkspace({
   }
 
   return <>
+    <div className="object-local-tabs" role="tablist" aria-label="Представления персонала">
+      <button type="button" className={scope==="all"?"active":""} onClick={()=>setScope("all")}>Все <span>{workers.length}</span></button>
+      <button type="button" className={scope==="shift"?"active":""} onClick={()=>setScope("shift")}>На смене <span>{onShift}</span></button>
+      <button type="button" className={scope==="absence"?"active":""} onClick={()=>setScope("absence")}>Отсутствуют <span>{activeAbsences}</span></button>
+      <button type="button" className={scope==="attention"?"active":""} onClick={()=>setScope("attention")}>Требует внимания <span>{attentionCount}</span></button>
+    </div>
     <div className="metrics-grid object-workforce-metrics">
       <div className="metric"><span>Сотрудники на объекте</span><strong>{workers.length}</strong></div>
       <div className="metric"><span>Сегодня вышли</span><strong>{onShift}</strong></div>
       <div className="metric"><span>Планово отсутствуют</span><strong>{activeAbsences}</strong></div>
       <div className="metric"><span>Невыходы сегодня</span><strong>{noShows}</strong></div>
     </div>
-    <div className="object-workforce-toolbar compact">
+    <div className="object-workforce-commandbar">
+      <div className="object-workforce-toolbar compact">
       <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="ФИО или телефон"/>
       <select value={specialty} onChange={event=>setSpecialty(event.target.value)}><option value="">Все специальности</option>{specialtyNames.map(value=><option key={value}>{value}</option>)}</select>
       <select value={schedule} onChange={event=>setSchedule(event.target.value)}><option value="">Все смены</option><option value="day">День</option><option value="night">Ночь</option><option value="mixed">День / ночь</option></select>
       <select value={todayState} onChange={event=>setTodayState(event.target.value)}><option value="">Сегодня: все</option>{todayStates.map(item=><option key={item.key} value={item.key}>{item.label}</option>)}</select>
       <div className="object-workforce-view"><button type="button" className={view==="grouped"?"active":""} onClick={()=>setView("grouped")}>По специальностям</button><button type="button" className={view==="list"?"active":""} onClick={()=>setView("list")}>Списком</button></div>
+      </div>
+      {(query||specialty||schedule||todayState)&&<div className="object-active-filters">
+        {query&&<button type="button" onClick={()=>setQuery("")}>Поиск: {query} ×</button>}
+        {specialty&&<button type="button" onClick={()=>setSpecialty("")}>{specialty} ×</button>}
+        {schedule&&<button type="button" onClick={()=>setSchedule("")}>{schedule==="day"?"День":schedule==="night"?"Ночь":"День / ночь"} ×</button>}
+        {todayState&&<button type="button" onClick={()=>setTodayState("")}>{todayStates.find(item=>item.key===todayState)?.label??todayState} ×</button>}
+        <button type="button" className="clear" onClick={()=>{setQuery("");setSpecialty("");setSchedule("");setTodayState("")}}>Сбросить всё</button>
+      </div>}
     </div>
     {transferWorker&&<div className="object-worker-transfer">
       <div><strong>Перевод внутри объекта</strong><span>{transferWorker.fullName} · сейчас {transferWorker.specialty??"без специальности"}</span></div>
