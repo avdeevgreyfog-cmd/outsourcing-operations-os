@@ -2079,3 +2079,284 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   }
   .sales-workspace.operations-workspace .object-pilot-meta{grid-template-columns:1fr 1fr;border-top:0}
 }
+
+
+/* Object workspace visual pilot v2: table-first operations UI inspired by SelSup/WB/MoySklad. */
+.sales-workspace.operations-workspace .object-workspace-pilot{
+  --object-pilot-row:48px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-module-shell{
+  border-radius:7px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-module-head{
+  min-height:46px;padding:9px 12px;background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-module-head h2{font-size:14px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-module-head p{
+  margin-top:2px;font-size:8.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs{
+  min-height:40px;padding:0 12px;gap:20px;background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs button{
+  min-height:40px;font-size:10px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs button span{
+  background:transparent;padding:0;min-width:auto;font-size:8px
+}
+
+/* Workforce: one context line, one filter line, then data. */
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline{
+  min-height:36px;padding:7px 12px;display:flex;align-items:center;gap:0;overflow-x:auto;
+  border-bottom:1px solid var(--border);background:var(--panel-2);white-space:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span{
+  padding:0 12px;border-right:1px solid var(--border);font-size:9px;color:var(--muted)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span:first-child{padding-left:0}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span b{
+  margin-right:3px;color:var(--text);font-size:11px;font-weight:680;font-variant-numeric:tabular-nums
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span.is-attention,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline>span.is-attention b{color:var(--warn)}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline small{
+  margin-left:auto;padding-left:12px;font-size:8px;color:var(--muted)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-commandbar{
+  background:var(--panel);border-bottom:1px solid var(--border)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-commandbar .object-workforce-toolbar.compact{
+  min-height:45px;padding:6px 12px;grid-template-columns:minmax(190px,1.35fr) repeat(3,minmax(120px,.85fr)) auto;gap:6px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-commandbar .object-workforce-toolbar.compact :is(input,select){
+  height:32px;min-height:32px;border-radius:6px;font-size:9.5px;background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-view{border-radius:6px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-view button{min-height:26px;font-size:8.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-active-filters{padding:0 12px 7px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-active-filters button{
+  min-height:22px;padding:2px 6px;border-radius:5px;font-size:8px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-result{
+  min-height:28px;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel);font-size:8.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group{
+  margin:0;border:0;border-bottom:1px solid var(--border);background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group:last-child{border-bottom:0}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head{
+  min-height:34px;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head strong{font-size:9.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head small,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-group-head b{font-size:8px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2{min-width:1120px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 th{
+  height:34px;padding:7px 10px;font-size:9px;background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 td{
+  height:var(--object-pilot-row);padding:8px 10px;font-size:10.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-table-v2 .cell-title{font-size:11px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-worker-doc-editor select{
+  height:28px;min-height:28px;font-size:9.5px
+}
+
+/* Shifts: tabs -> command bar -> compact health strip -> week rail -> matrix. */
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar{
+  min-height:45px;padding:6px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  border-bottom:1px solid var(--border);background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar .page-actions{
+  gap:5px;flex-wrap:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar .button{
+  min-height:31px;height:31px;padding:0 8px;font-size:8.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar strong{
+  padding-left:5px;font-size:9.5px;white-space:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary{
+  min-height:38px;display:flex;align-items:stretch;overflow-x:auto;border-bottom:1px solid var(--border);background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div{
+  min-height:38px;min-width:155px;padding:6px 12px;display:flex;align-items:center;gap:5px;border-right:1px solid var(--border)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div span{
+  font-size:8px;white-space:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div strong{
+  margin:0;font-size:12px;line-height:1
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div small{
+  margin-left:1px;font-size:7.5px;white-space:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-guidance{
+  min-height:40px;padding:5px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-guidance>div:first-child{
+  min-width:80px;display:grid;gap:1px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-guidance>div:first-child strong{font-size:8.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-guidance>div:first-child span{
+  max-width:285px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:7.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint{
+  display:flex;align-items:center;gap:4px;overflow-x:auto
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint>span{
+  margin-right:2px;font-size:8px;white-space:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint button{
+  min-height:28px;padding:3px 6px;border-radius:5px;font-size:8px;white-space:nowrap
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-paint button b{font-size:8px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-bulkbar{
+  min-height:42px;padding:5px 12px;background:color-mix(in srgb,var(--accent-soft) 35%,var(--panel))
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible{
+  margin:0;border:0;border-bottom:1px solid var(--border);background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible summary,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible summary{
+  min-height:30px;padding:6px 12px;display:flex;align-items:center;cursor:pointer;font-size:8.5px;font-weight:600;color:var(--muted);list-style:none
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible summary::-webkit-details-marker,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible summary::-webkit-details-marker{display:none}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible summary::after,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible summary::after{
+  content:"▾";margin-left:6px;color:var(--muted)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible[open] summary::after,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible[open] summary::after{transform:rotate(180deg)}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-legend-collapsible>div,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-legend-collapsible>div{
+  padding:0 12px 8px;display:flex;align-items:center;gap:7px 12px;flex-wrap:wrap;font-size:8px;color:var(--muted)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage{
+  display:grid;grid-template-columns:repeat(7,minmax(110px,1fr));gap:0;overflow-x:auto;border-bottom:1px solid var(--border);background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button{
+  min-width:110px;min-height:62px;padding:7px 9px;border:0;border-right:1px solid var(--border);border-radius:0;background:var(--panel);box-shadow:none;text-align:left
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button:last-child{border-right:0}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button.active{
+  background:color-mix(in srgb,var(--accent-soft) 40%,var(--panel));box-shadow:inset 0 -2px 0 var(--accent)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button.has-deficit{
+  background:color-mix(in srgb,var(--warn) 5%,var(--panel))
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button span{font-size:8px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button strong{margin-top:3px;font-size:10.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-coverage button small{margin-top:2px;font-size:7.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-panel{
+  min-height:42px;padding:5px 12px;grid-template-columns:135px minmax(0,1fr) auto;gap:8px;background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-panel>div:first-child strong{font-size:9px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-panel>div:first-child span{font-size:7.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-list{gap:4px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-list>span{
+  padding:2px 5px;border-radius:4px;font-size:7.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .request-table-wrap{
+  margin:0;border:0;border-radius:0
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix th,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-specialty th{
+  height:34px;padding:6px 8px;font-size:8.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix td,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-specialty td{
+  height:46px;padding:6px 8px;font-size:9.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-matrix .cell-title{font-size:10.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot>.section-actions{
+  min-height:42px;margin:0;padding:6px 12px;border-top:1px solid var(--border);background:var(--panel-2)
+}
+
+/* Timesheet: local modes -> compact command line -> status strip -> matrix. */
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-controlbar{
+  margin:0;min-height:46px;padding:6px 12px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-control-label{
+  font-size:7.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-controlbar :is(input,select){
+  min-height:30px;height:30px;font-size:9px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .segmented{
+  padding:2px;border-radius:6px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .segmented button{
+  min-height:26px;padding:4px 7px;border-radius:4px;font-size:8px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-control-actions .button{
+  min-height:30px;height:30px;padding:0 8px;font-size:8.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip{
+  margin:0;min-height:38px;padding:0;display:flex;align-items:stretch;gap:0;border:0;border-bottom:1px solid var(--border);border-radius:0;background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div{
+  min-width:140px;padding:6px 12px;display:flex;align-items:center;gap:5px;border-right:1px solid var(--border)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div span{font-size:8px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div strong{margin:0;font-size:11px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip>div small{font-size:7.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-mode-note{
+  min-height:34px;margin:0;padding:5px 12px;gap:8px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:var(--panel);font-size:8px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-matrix-section{
+  margin:0;border:0;border-radius:0;background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-matrix-section>.section-head{
+  min-height:42px;padding:6px 12px;background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-matrix-section>.section-head h2{font-size:10px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-matrix-section>.section-head p{
+  margin-top:1px;max-width:620px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:7.5px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-table-actions .button{
+  min-height:29px;height:29px;padding:0 7px;font-size:8px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-wrap{
+  border:0;border-top:1px solid var(--border);border-radius:0
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational th{
+  height:32px;padding-top:5px;padding-bottom:5px;font-size:8px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational td{
+  height:36px;padding-top:4px;padding-bottom:4px;font-size:9px
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-worker-cell .cell-title,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-worker-cell strong{font-size:9.5px}
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-cell-input{
+  height:26px;min-height:26px;font-size:9px
+}
+
+/* Pilot tables share one denser visual system. */
+.sales-workspace.operations-workspace .object-workspace-pilot .data-table tbody tr:hover td{
+  background:color-mix(in srgb,var(--panel-2) 74%,var(--panel))
+}
+.sales-workspace.operations-workspace .object-workspace-pilot .request-table-wrap,
+.sales-workspace.operations-workspace .object-workspace-pilot .timesheet-wrap{
+  scrollbar-width:thin
+}
+
+@media(max-width:1180px){
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-commandbar .object-workforce-toolbar.compact{
+    grid-template-columns:1fr 1fr
+  }
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-planner-toolbar{
+    align-items:flex-start;flex-wrap:wrap
+  }
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-deficit-panel{grid-template-columns:1fr}
+  .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-controlbar{align-items:flex-start;flex-wrap:wrap}
+}
+@media(max-width:760px){
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-kpis-inline small{display:none}
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-workforce-commandbar .object-workforce-toolbar.compact{grid-template-columns:1fr}
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary{display:grid;grid-template-columns:1fr 1fr}
+  .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-pilot .object-shift-week-summary>div{min-width:0}
+  .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-summary-strip{overflow-x:auto}
+}
