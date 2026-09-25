@@ -13,7 +13,7 @@ const documentLabels:Record<string,string>={not_received:"Не получены"
 const shiftLabels:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь"};
 
 export function ObjectWorkforceWorkspace({
-  workers,today,canEdit,canManageAssets,demo,specialties,
+  workers,today,canEdit,canManageAssets,demo,specialties,pilot=true,
 }:{
   workers:WorkerRow[];
   today:string;
@@ -21,6 +21,7 @@ export function ObjectWorkforceWorkspace({
   canManageAssets:boolean;
   demo:boolean;
   specialties:SpecialtyOption[];
+  pilot?:boolean;
 }){
   const [query,setQuery]=useState("");
   const [scope,setScope]=useState<Scope>("all");
@@ -106,13 +107,13 @@ export function ObjectWorkforceWorkspace({
     finally{setBusy("")}
   }
 
-  return <>
-    <div className="object-local-tabs" role="tablist" aria-label="Представления персонала">
+  return <div className={pilot?"object-workforce-pilot":"object-workforce-classic"}>
+    {pilot&&<div className="object-local-tabs" role="tablist" aria-label="Представления персонала">
       <button type="button" className={scope==="all"?"active":""} onClick={()=>setScope("all")}>Все <span>{workers.length}</span></button>
       <button type="button" className={scope==="shift"?"active":""} onClick={()=>setScope("shift")}>На смене <span>{onShift}</span></button>
       <button type="button" className={scope==="absence"?"active":""} onClick={()=>setScope("absence")}>Отсутствуют <span>{activeAbsences}</span></button>
       <button type="button" className={scope==="attention"?"active":""} onClick={()=>setScope("attention")}>Требует внимания <span>{attentionCount}</span></button>
-    </div>
+    </div>}
     <div className="metrics-grid object-workforce-metrics">
       <div className="metric"><span>Сотрудники на объекте</span><strong>{workers.length}</strong></div>
       <div className="metric"><span>Сегодня вышли</span><strong>{onShift}</strong></div>
@@ -149,7 +150,7 @@ export function ObjectWorkforceWorkspace({
       ?<WorkerTable rows={filtered} today={today} showSpecialty canEdit={canEdit} canManageAssets={canManageAssets} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>
       :<div className="object-workforce-groups">{groups.map(group=><section key={group.name} className="object-workforce-group"><button type="button" className="object-workforce-group-head" onClick={()=>toggleGroup(group.name)} aria-expanded={shouldOpen(group.name)}><span><strong>{group.name}</strong><small>{group.rows.length} чел.</small></span><b>{shouldOpen(group.name)?"Свернуть":"Развернуть"}</b></button>{shouldOpen(group.name)&&<WorkerTable rows={group.rows} today={today} canEdit={canEdit} canManageAssets={canManageAssets} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>}</section>)}</div>}
     {!filtered.length&&<div className="empty-inline">По выбранным фильтрам сотрудников нет</div>}
-  </>;
+  </div>;
 }
 
 function WorkerTable({
