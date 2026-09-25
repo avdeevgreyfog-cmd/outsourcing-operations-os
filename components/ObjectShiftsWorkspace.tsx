@@ -54,46 +54,88 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
   const map=useMemo(()=>{
     const out=new Map<string,Kind>();
-    for(const shift of rows){
-      if(!shift.dateIso)continue;
-      const kind=normalizeKind(shift.kind);
-      for(const id of shift.workerIds)out.set(`${id}:${shift.dateIso}`,kind);
+    if(planner){
+      for(const row of planner.assignments){
+        if(row.reserve)continue;
+        out.set(`${row.workerId}:${row.date}`,row.kind==="night"?"night":"day");
+      }
+    }else{
+      for(const shift of rows){
+        if(!shift.dateIso)continue;
+        const kind=normalizeKind(shift.kind);
+        for(const id of shift.workerIds)out.set(`${id}:${shift.dateIso}`,kind);
+      }
     }
     return out;
-  },[rows]);
+  },[planner,rows]);
+  const reserveMap=useMemo(()=>{
+    const out=new Map<string,Kind>();
+    if(planner){for(const row of planner.assignments)if(row.reserve)out.set(`${row.workerId}:${row.date}`,row.kind==="night"?"reserve_night":"reserve_day")}
+    else for(const shift of rows)if(shift.dateIso)for(const id of shift.reserveWorkerIds)out.set(`${id}:${shift.dateIso}`,normalizeKind(shift.kind)==="night"?"reserve_night":"reserve_day");
+    return out;
+  },[planner,rows]);
+  const entryMap=useMemo(()=>{const out=new Map<string,PlannerEntry>();for(const row of planner?.entries??[])out.set(`${row.workerId}:${row.date}`,row);return out},[planner]);
+  const demandRows=planner?.demand??[];
 
-  function absenceFor(worker:WorkerRow,date:string):AbsenceKind|null{
+  function absenceFor(worker:WorkerRow,date:string):PlannerAbsence|null{
     const local=absenceOverrides[worker.id];
-    if(local&&local.from<=date&&local.to>=date)return local.type;
-    if(worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=date&&(!worker.absenceTo||worker.absenceTo>=date)){
-      if(worker.absenceType==="intershift"||worker.absenceType==="vacation"||worker.absenceType==="personal")return worker.absenceType;
-    }
+    if(local&&local.from<=date&&local.to>=date)return {workerId:worker.id,type:local.type,from:local.from,to:local.to,status:"confirmed"};
+    const api=(planner?.absences??[]).find(item=>item.workerId===worker.id&&item.from<=date&&(!item.to||item.to>=date));
+    if(api)return api;
+    if(worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=date&&(!worker.absenceTo||worker.absenceTo>=date))return {workerId:worker.id,type:worker.absenceType??"other",from:worker.absenceFrom,to:worker.absenceTo??null,status:"confirmed"};
     return null;
   }
-  function planned(worker:WorkerRow,date:string):Kind{
-    const key=`${worker.id}:${date}`;
-    const absence=absenceFor(worker,date);
-    if(absence)return absence==="personal"?"off":absence;
-    if(overrides[key]!==undefined)return overrides[key];
-    const actual=map.get(key);
-    if(actual)return actual;
-    if(worker.scheduleWorkDays==null||worker.scheduleRestDays==null||!worker.startDate)return "";
-    const anchor=worker.scheduleAnchorDate??worker.startDate;
-    const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;
+  function scheduleKind(worker:WorkerRow,date:string):Kind{
+    if(worker.scheduleWorkDays==null||worker.scheduleRestDays==null||!worker.startDate||worker.scheduleWorkDays<1||date<worker.startDate)return "";
+    const anchor=worker.scheduleAnchorDate??worker.startDate;const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;
     const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);
-    const offset=((diff%cycle)+cycle)%cycle;
-    if(offset>=worker.scheduleWorkDays)return "off";
+    const offset=((diff%cycle)+cycle)%cycle;if(offset>=worker.scheduleWorkDays)return "off";
     return worker.scheduleShiftKind==="night"?"night":"day";
   }
-
-  function demandFor(date:string,kind:"day"|"night",specialty?:string){
-    return rows.filter(row=>row.dateIso===date&&normalizeKind(row.kind)===kind&&(!specialty||row.specialty===specialty))
-      .reduce((sum,row)=>sum+Number(row.demand??0),0);
+  function planned(worker:WorkerRow,date:string):Kind{
+    const key=`${worker.id}:${date}`;const absence=absenceFor(worker,date);
+    if(absence)return absence.type==="intershift"?"intershift":absence.type==="vacation"?"vacation":"off";
+    if(overrides[key]!==undefined)return overrides[key] as Kind;
+    const actual=map.get(key);if(actual)return actual;
+    const reserve=reserveMap.get(key);if(reserve)return reserve;
+    const entry=entryMap.get(key);
+    if(entry&&!isFactual(entry)&&entry.source==="schedule"){if(entry.timeCode==="DAY_OFF")return "off";if(entry.plannedShiftKind==="night")return "night";if(entry.plannedShiftKind)return "day"}
+    if(date<today)return "";
+    return scheduleKind(worker,date);
   }
-  function plannedFor(date:string,kind:"day"|"night",specialty?:string){
-    return workers.filter(worker=>(!specialty||(worker.specialty??"Без специальности")===specialty)&&planned(worker,date)===kind).length;
-  }
 
+  function demandTotal(date:string,specialty?:string){
+    if(planner)return demandRows.filter(row=>row.date===date&&(!specialty||row.specialty===specialty)).reduce((sum,row)=>sum+Number(row.required),0);
+    const filtered=rows.filter(row=>row.dateIso===date&&(!specialty||row.specialty===specialty));const bySpecialty=new Map<string,number>();
+    for(const row of filtered)bySpecialty.set(row.specialty,Math.max(bySpecialty.get(row.specialty)??0,Number(row.demand??0)));
+    return [...bySpecialty.values()].reduce((sum,value)=>sum+value,0);
+  }
+  function countsFor(date:string,specialty?:string){
+    let plan=0,reserve=0,suggested=0,fact=0;
+    for(const worker of workers){
+      if(specialty&&(worker.specialty??"Без специальности")!==specialty)continue;
+      const key=`${worker.id}:${date}`,entry=entryMap.get(key),value=planned(worker,date);
+      if(entry&&isFactual(entry)&&(Number(entry.factHours)>0||entry.timeCode==="WORK_PENDING"))fact++;
+      if(map.has(key))plan++;else if(reserveMap.has(key))reserve++;else if(date>=today&&(value==="day"||value==="night"))suggested++;
+    }
+    return {plan,reserve,suggested,fact};
+  }
+  function dateLocked(date:string){return Boolean(planner?.lockedRanges.some(range=>range.from<=date&&range.to>=date))}
+  function cellState(worker:WorkerRow,date:string):CellState{
+    const key=`${worker.id}:${date}`,entry=entryMap.get(key),fact=isFactual(entry),absence=absenceFor(worker,date),plan=map.get(key)??reserveMap.get(key)??"";
+    if(fact&&entry){
+      const label=entry.timeCode==="WORK"?(Number(entry.factHours)>0?formatHours(entry.factHours):"—"):(factLabels[entry.timeCode]??entry.timeCode);
+      const factKind=Number(entry.nightHours)>0&&Number(entry.dayHours)<=0?"night":Number(entry.dayHours)>0?"day":entry.plannedShiftKind==="night"?"night":entry.plannedShiftKind==="day"?"day":"";
+      const mismatch=Boolean(plan&&["day","night"].includes(plan)&&factKind&&plan!==factKind);const attention=["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode)||mismatch;
+      return {kind:factKind as Kind,label,source:"fact",editable:false,attention,factWithoutPlan:!plan,title:`Факт из табеля: ${label}. План: ${plan?shortKind(plan):"не было"}`};
+    }
+    if(absence){const kind:Kind=absence.type==="intershift"?"intershift":absence.type==="vacation"?"vacation":"off";return {kind,label:shortKind(kind),source:"absence",editable:false,attention:Boolean(plan),factWithoutPlan:false,title:absence.type==="intershift"?"Межвахта":absence.type==="vacation"?"Отпуск":"Согласованный выходной"};}
+    if(plan){const attention=date<today;return {kind:plan,label:shortKind(plan),source:"plan",editable:canEdit&&!dateLocked(date),attention,factWithoutPlan:false,title:attention?"План за прошедшую дату не закрыт в табеле":plan.startsWith("reserve")?"Резерв":"Зафиксированный план"};}
+    const suggested=date>=today?scheduleKind(worker,date):"";
+    if(suggested)return {kind:suggested,label:shortKind(suggested),source:"suggested",editable:canEdit&&!dateLocked(date),attention:false,factWithoutPlan:false,title:"Рассчитано по графику, ещё не зафиксировано"};
+    const attention=date>=today&&worker.scheduleWorkDays==null;return {kind:"",label:"—",source:"none",editable:canEdit&&!dateLocked(date),attention,factWithoutPlan:false,title:attention?"Не задан график сотрудника":"Плана нет"};
+  }
+  function workerNeedsAttention(worker:WorkerRow){return dates.some(date=>cellState(worker,date).attention)}
   async function persistCells(cells:Array<{workerId:string;date:string;kind:PaintKind}>){
     if(!canEdit||!cells.length)return;
     const key=cells.length===1?`${cells[0].workerId}:${cells[0].date}`:"bulk";
