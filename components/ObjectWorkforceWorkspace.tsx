@@ -12,9 +12,8 @@ const documentLabels:Record<string,string>={not_received:"Не получены"
 const shiftLabels:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь"};
 
 export function ObjectWorkforceWorkspace({
-  objectId,workers,today,canEdit,canManageAssets,demo,specialties,
+  workers,today,canEdit,canManageAssets,demo,specialties,
 }:{
-  objectId:string;
   workers:WorkerRow[];
   today:string;
   canEdit:boolean;
@@ -90,8 +89,6 @@ export function ObjectWorkforceWorkspace({
         if(!response.ok)throw new Error(json.error??"Не удалось перевести сотрудника");
         window.location.reload();
       }else{
-        const next=specialties.find(item=>item.id===transferSpecialtyId);
-        transferWorker.specialtyId=transferSpecialtyId;transferWorker.specialty=next?.name??transferWorker.specialty;
         setMessage(`${transferWorker.fullName}: перевод запланирован с ${shortDate(transferDate)}`);
         setTransferWorkerId("");
       }
