@@ -13,7 +13,7 @@ type View="client"|"internal";
 type Segment="day"|"night";
 type RowMode="auto"|"all"|"day"|"night";
 
-export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canApproveClient,canClose,embedded=false}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApproveClient:boolean;canClose:boolean;embedded?:boolean}){
+export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canApproveClient,canClose,embedded=false,pilot=false}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApproveClient:boolean;canClose:boolean;embedded?:boolean;pilot?:boolean}){
   const router=useRouter();
   const tableWrapRef=useRef<HTMLDivElement>(null);
   const [mode,setMode]=useState<Mode>("month");
@@ -76,6 +76,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
 
   function changeContext(objectId:string,month:string){
     const params=new URLSearchParams();if(!embedded&&objectId)params.set("object",objectId);if(month)params.set("month",month);
+    if(embedded)params.set("ui",pilot?"pilot":"classic");
     router.push(embedded?`/objects/${data.objectId}?tab=timesheets&${params.toString()}`:"/timesheets?"+params.toString());
   }
 
@@ -160,7 +161,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
     XLSX.writeFile(wb,`Табель_${data.object}_${data.month}_${view==="client"?"согласование":"рабочий"}.xlsx`);
   }
 
-  return <>
+  return <div className={`timesheet-workspace ${pilot?"timesheet-pilot":"timesheet-classic"}`}>
+    {pilot&&<div className="object-local-tabs timesheet-local-tabs" role="tablist" aria-label="Режим табеля">{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий табель <span>{rows.filter(row=>row.rowKind!=="candidate").length}</span></button>}<button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Согласование <span>{statusLabel(data.status)}</span></button><button type="button" className={attentionOnly?"active":""} onClick={()=>setAttentionOnly(value=>!value)}>Требует внимания <span>{attentionCount}</span></button></div>}
     <div className="timesheet-controlbar">
       <div className="timesheet-control-group timesheet-control-context">
         <span className="timesheet-control-label">Период</span>
@@ -176,10 +178,10 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
         </div>
       </div>
       <div className="timesheet-control-spacer"/>
-      <div className="timesheet-control-group timesheet-control-view">
+      {!pilot&&<div className="timesheet-control-group timesheet-control-view">
         <span className="timesheet-control-label">Вид</span>
         <div className="segmented"><button type="button" className={view==="client"?"active":""} onClick={()=>setView("client")}>Согласование</button>{sensitive&&<button type="button" className={view==="internal"?"active":""} onClick={()=>setView("internal")}>Рабочий</button>}</div>
-      </div>
+      </div>}
       <div className="timesheet-control-actions">
         <button className="button" onClick={()=>void exportExcel()}><Download size={14}/> Excel</button>
         {view==="client"&&<button className="button" onClick={()=>window.print()}><Printer size={14}/> Печать</button>}
@@ -187,13 +189,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       </div>
     </div>
 
-    <div className="timesheet-legend timesheet-legend-top">
-      <strong>Обозначения</strong>
-      <span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span>
-      <span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span>
-      <span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>
-      {view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}
-    </div>
+    {pilot?<details className="timesheet-legend timesheet-legend-top timesheet-legend-collapsible"><summary>Обозначения табеля</summary><div><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div></details>:<div className="timesheet-legend timesheet-legend-top"><strong>Обозначения</strong><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div>}
 
     <div className="timesheet-summary-strip">
       <div><span>Сотрудники</span><strong>{rows.filter(row=>row.rowKind!=="candidate").length}</strong></div>
@@ -338,7 +334,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
         </div>
       </div>
     </section>
-  </>;
+  </div>;
 }
 
 function EmployeeIdentity({row}:{row:TimesheetWorkerRow}){
