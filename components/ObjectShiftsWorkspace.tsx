@@ -34,23 +34,19 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   const [absenceNote,setAbsenceNote]=useState("");
   const [absenceOverrides,setAbsenceOverrides]=useState<Record<string,{type:AbsenceKind;from:string;to:string}>>({});
   const [planner,setPlanner]=useState<PlannerData|null>(null);
-  const [plannerLoading,setPlannerLoading]=useState(false);
   const [revision,setRevision]=useState(0);
   const [focusDate,setFocusDate]=useState(today);
   const dates=useMemo(()=>Array.from({length:7},(_,i)=>addDays(start,i)),[start]);
   const end=dates.at(-1)!;
 
   useEffect(()=>{
-    if(demo){setPlanner(null);return}
-    const controller=new AbortController();setPlannerLoading(true);
+    if(demo)return;
+    const controller=new AbortController();
     fetch(`/api/objects/${objectId}/shift-plan?start=${start}&end=${end}`,{signal:controller.signal})
       .then(async response=>{const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось загрузить план смен");setPlanner(json as PlannerData)})
-      .catch(error=>{if(error instanceof DOMException&&error.name==="AbortError")return;setMessage(error instanceof Error?error.message:"Не удалось загрузить план смен")})
-      .finally(()=>setPlannerLoading(false));
+      .catch(error=>{if(error instanceof DOMException&&error.name==="AbortError")return;setMessage(error instanceof Error?error.message:"Не удалось загрузить план смен")});
     return()=>controller.abort();
   },[objectId,start,end,demo,revision]);
-
-  useEffect(()=>{if(!dates.includes(focusDate))setFocusDate(start)},[dates,focusDate,start]);
 
   const map=useMemo(()=>{
     const out=new Map<string,Kind>();
@@ -115,14 +111,17 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     for(const worker of workers){
       if(specialty&&(worker.specialty??"Без специальности")!==specialty)continue;
       const key=`${worker.id}:${date}`,entry=entryMap.get(key),value=planned(worker,date);
+      const scheduleEntryPlan=Boolean(entry&&!isFactual(entry)&&entry.source==="schedule"&&entry.timeCode==="PLANNED"&&entry.plannedShiftKind);
       if(entry&&isFactual(entry)&&(Number(entry.factHours)>0||entry.timeCode==="WORK_PENDING"))fact++;
-      if(map.has(key))plan++;else if(reserveMap.has(key))reserve++;else if(date>=today&&(value==="day"||value==="night"))suggested++;
+      if(map.has(key)||scheduleEntryPlan)plan++;else if(reserveMap.has(key))reserve++;else if(date>=today&&(value==="day"||value==="night"))suggested++;
     }
     return {plan,reserve,suggested,fact};
   }
   function dateLocked(date:string){return Boolean(planner?.lockedRanges.some(range=>range.from<=date&&range.to>=date))}
   function cellState(worker:WorkerRow,date:string):CellState{
-    const key=`${worker.id}:${date}`,entry=entryMap.get(key),fact=isFactual(entry),absence=absenceFor(worker,date),plan=map.get(key)??reserveMap.get(key)??"";
+    const key=`${worker.id}:${date}`,entry=entryMap.get(key),fact=isFactual(entry),absence=absenceFor(worker,date);
+    const scheduleEntryPlan:Kind=!fact&&entry?.source==="schedule"?(entry.timeCode==="DAY_OFF"?"off":entry.plannedShiftKind==="night"?"night":entry.plannedShiftKind?"day":""):"";
+    const plan=map.get(key)??reserveMap.get(key)??scheduleEntryPlan;
     if(fact&&entry){
       const label=entry.timeCode==="WORK"?(Number(entry.factHours)>0?formatHours(entry.factHours):"—"):(factLabels[entry.timeCode]??entry.timeCode);
       const factKind=Number(entry.nightHours)>0&&Number(entry.dayHours)<=0?"night":Number(entry.dayHours)>0?"day":entry.plannedShiftKind==="night"?"night":entry.plannedShiftKind==="day"?"day":"";
@@ -190,9 +189,9 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   return <div className="object-shift-planner object-shift-workbench">
     <div className="object-shift-planner-toolbar">
       <div className="page-actions">
-        <button className="button" onClick={()=>setStart(addDays(start,-7))}>← Неделя</button>
-        <button className="button" onClick={()=>setStart(today)}>Сегодня</button>
-        <button className="button" onClick={()=>setStart(addDays(start,7))}>Неделя →</button>
+        <button className="button" onClick={()=>{const next=addDays(start,-7);setStart(next);setFocusDate(next)}}>← Неделя</button>
+        <button className="button" onClick={()=>{setStart(today);setFocusDate(today)}}>Сегодня</button>
+        <button className="button" onClick={()=>{const next=addDays(start,7);setStart(next);setFocusDate(next)}}>Неделя →</button>
         <strong>{formatRange(start,end)}</strong>
       </div>
       <div className="page-actions">
@@ -211,7 +210,6 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     <div className="object-shift-guidance">
       <div><strong>План → факт</strong><span>Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику; «Сформировать с сегодня» фиксирует их как план.</span></div>
       {canEdit&&!selected.size&&<div className="object-shift-paint"><span>Клик по ячейке:</span>{(["day","night","off","reserve_day","reserve_night","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{paintCode(kind)}</b>{paintLabels[kind]}</button>)}</div>}
-      {plannerLoading&&<span className="cell-sub">Обновляем данные…</span>}
     </div>
 
     {selected.size>0&&<div className="object-shift-bulkbar">
