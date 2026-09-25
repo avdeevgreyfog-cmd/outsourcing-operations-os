@@ -3,7 +3,7 @@
 import {useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
 import {CheckCircle2,Download,Printer,RotateCcw,Send,ShieldCheck,WalletCards} from "lucide-react";
-import {Metric,Status} from "@/components/UI";
+import {Status} from "@/components/UI";
 import {rub} from "@/lib/ui/format";
 import type {TimesheetAbsenceRange,TimesheetCellValue,TimesheetData,TimesheetRatePeriod,TimesheetWorkerRow} from "@/lib/data/service";
 import type {OperationsReferenceData} from "@/lib/operations/service";
@@ -43,18 +43,19 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   },{dayHours:0,nightHours:0,dayShifts:0,nightShifts:0,noShows:0}),[rows,days]);
 
   const daySummary=useMemo(()=>Object.fromEntries(days.map(day=>{
-    let planned=0,worked=0,hours=0;
+    const date=dateString(data.month,day);
+    const planned=Number(data.planByDay?.[date]??0);
+    let worked=0,hours=0;
     for(const row of rows){
       if(row.rowKind==="candidate")continue;
       const key=String(day);
-      if(row.plannedShiftKinds?.[key])planned++;
       const dayValue=row.dayCells?.[key],nightValue=row.nightCells?.[key];
       const fact=numericCell(dayValue)+numericCell(nightValue);
       if(fact>0||dayValue==="?"||nightValue==="?")worked++;
       hours+=fact;
     }
     return [day,{planned,worked,hours}];
-  })),[rows,days]);
+  })),[rows,days,data.month,data.planByDay]);
   const detailTotals=useMemo(()=>rows.reduce((acc,row)=>{
     if(row.rowKind==="candidate")return acc;
     acc.daysOff+=countWorkerCode(row,"В",days);
@@ -171,11 +172,11 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       {view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}
     </div>
 
-    <div className="timesheet-summary">
-      <Metric label="Сотрудники" value={rows.filter(row=>row.rowKind!=="candidate").length}/>
-      <Metric label="Дневные" value={`${totals.dayShifts} см · ${totals.dayHours} ч`}/>
-      <Metric label="Ночные" value={`${totals.nightShifts} см · ${totals.nightHours} ч`}/>
-      <Metric label="Прогулы" value={totals.noShows} tone={totals.noShows?"warn":undefined}/>
+    <div className="timesheet-summary-strip">
+      <div><span>Сотрудники</span><strong>{rows.filter(row=>row.rowKind!=="candidate").length}</strong></div>
+      <div><span>Дневные</span><strong>{totals.dayShifts} см</strong><small>{totals.dayHours} ч</small></div>
+      <div><span>Ночные</span><strong>{totals.nightShifts} см</strong><small>{totals.nightHours} ч</small></div>
+      <div className={totals.noShows?"is-attention":""}><span>Прогулы</span><strong>{totals.noShows}</strong><small>{totals.noShows?"требуют проверки":"нет"}</small></div>
     </div>
 
     <div className="timesheet-mode-note">
@@ -187,7 +188,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
 
     <section className="section timesheet-matrix-section">
       <div className="section-head">
-        <div><h2>{data.object} · {data.period}</h2><p>В режиме «Авто» пустая дневная или ночная строка скрывается. Межвахта и отпуск остаются визуальными периодами и в счётчики не входят.</p></div>
+        <div><h2>{data.object} · {data.period}</h2><p>План по дням берётся из действующей потребности объекта. Межвахта и отпуск остаются визуальными периодами и в счётчики не входят.</p></div>
         <div className="page-actions">
           <button type="button" className={`button timesheet-details-toggle ${detailsOpen?"active":""}`} onClick={()=>setDetailsOpen(value=>!value)}>{detailsOpen?"Скрыть показатели":"Показатели"}</button>
           {view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}
@@ -221,7 +222,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                 segments.length===1?"timesheet-worker-single":"",
                 segment==="night"?"timesheet-night-row":"",
               ].filter(Boolean).join(" ")}>
-                {first&&<td className="cell-title sticky-col timesheet-worker-cell" rowSpan={segments.length}><EmployeeIdentity row={row}/></td>}
+                {first&&<td className="cell-title sticky-col timesheet-worker-cell" rowSpan={segments.length}><EmployeeIdentity row={row} month={data.month} days={days}/></td>}
                 <td className="timesheet-shift-col timesheet-sticky-shift"><b>{segment==="day"?"День":"Ночь"}</b></td>
                 {view==="internal"&&sensitive&&<td className="timesheet-rate-col timesheet-sticky-rate"><RateHistory row={row} segment={segment} month={data.month}/></td>}
                 {days.map(day=>{
@@ -229,7 +230,6 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   const absence=absenceRangeAt(row,date);
                   const band=absence&&(absence.type==="intershift"||absence.type==="vacation")?absence:null;
                   const bandPosition=band?absenceBandPosition(band,day,days,data.month):null;
-                  const showBandLabel=Boolean(band&&first&&bandPosition&&(bandPosition==="start"||bandPosition==="single"));
                   const raw=cells?.[String(day)],value=firstEnded?"УВ":ended?"—":band?null:raw;
                   const key=`${row.workerId}:${day}:${segment}`;
                   const editable=canEditFact&&row.rowKind!=="candidate"&&!ended&&!band;
@@ -239,7 +239,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   ].filter(Boolean).join(" ");
                   return <td key={day} className={classes}>
                     {band
-                      ?showBandLabel&&<span className="timesheet-absence-label">{absenceBandLabel(band)}</span>
+                      ?<span className="timesheet-absence-band-mark" aria-label={absenceBandLabel(band)}></span>
                       :editable
                         ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
                         :value==null||value===""?"—":value}
@@ -303,12 +303,14 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   </>;
 }
 
-function EmployeeIdentity({row}:{row:TimesheetWorkerRow}){
+function EmployeeIdentity({row,month,days}:{row:TimesheetWorkerRow;month:string;days:number[]}){
   const history=(row.specialtyHistory??[]).slice().sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
   const current=history.at(-1);
+  const absences=(row.absenceRanges??[]).filter(item=>["intershift","vacation"].includes(item.type)&&days.some(day=>{const date=dateString(month,day);return item.from<=date&&(!item.to||item.to>=date)}));
   return <div className="timesheet-worker-identity">
     <strong>{row.name}</strong>
     <span>{current?.specialty??row.specialty??(row.rowKind==="candidate"?"Кандидат":"Без специальности")}</span>
+    {absences.map(item=><em key={item.type+item.from} className={`timesheet-worker-absence is-${item.type}`}>{absenceBandLabel(item)}</em>)}
     {history.length>1&&history.slice(0,-1).map(item=><small key={item.effectiveFrom+`${item.specialty}`}>{item.specialty??"Без специальности"} · до {item.effectiveTo?shortDate(item.effectiveTo):"—"}</small>)}
     {row.rowKind==="candidate"&&<small>Кандидат · план первого выхода</small>}
   </div>;
