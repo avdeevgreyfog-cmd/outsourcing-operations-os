@@ -546,6 +546,56 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       ORDER BY work_date
     `:[];
 
+    const rateRows=workerIds.length&&maySeeComp?await sql<Array<{workerId:string;kind:"any"|"day"|"night";amount:number|string;unit:"hour"|"shift"|"month";effectiveFrom:string;effectiveTo:string|null}>>`
+      SELECT worker_id "workerId",day_night kind,amount,unit,effective_from::text "effectiveFrom",effective_to::text "effectiveTo"
+      FROM worker_rates
+      WHERE object_id=${meta.objectId}::uuid AND worker_id=ANY(${workerIds}::uuid[])
+        AND day_night=ANY(ARRAY['any','day','night']::text[])
+        AND effective_from<=${periodEnd}::date AND (effective_to IS NULL OR effective_to>=${periodStart}::date)
+      ORDER BY worker_id,effective_from,day_night
+    `:[];
+
+    const absenceRows=workerIds.length?await sql<Array<{workerId:string;type:"intershift"|"vacation"|"sick"|"personal"|"other";from:string;to:string|null}>>`
+      SELECT worker_id "workerId",absence_type type,planned_from::text "from",planned_to::text "to"
+      FROM worker_absence_plans
+      WHERE worker_id=ANY(${workerIds}::uuid[]) AND status='confirmed'
+        AND (object_id IS NULL OR object_id=${meta.objectId}::uuid)
+        AND planned_from<=${periodEnd}::date AND (planned_to IS NULL OR planned_to>=${periodStart}::date)
+      ORDER BY worker_id,planned_from
+    `:[];
+
+    const financeRows=workerIds.length&&maySeeComp?await sql<Array<{workerId:string;base:number|string;premium:number|string;adjustment:number|string;total:number|string;paid:number|string}>>`
+      SELECT w.id "workerId",
+        COALESCE((SELECT sum(a.base_amount) FROM worker_accruals a
+          WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
+            AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date),0)::numeric base,
+        COALESCE((SELECT sum(a.premium_amount) FROM worker_accruals a
+          WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
+            AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date),0)::numeric premium,
+        COALESCE((SELECT sum(a.adjustment_amount) FROM worker_accruals a
+          WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
+            AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date),0)::numeric adjustment,
+        COALESCE((SELECT sum(a.total_amount) FROM worker_accruals a
+          WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
+            AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date),0)::numeric total,
+        (
+          COALESCE((SELECT sum(p.amount) FROM worker_payments p
+            WHERE p.worker_id=w.id AND p.object_id=${meta.objectId}::uuid AND p.status='paid'
+              AND (
+                p.accrual_id IN (
+                  SELECT a.id FROM worker_accruals a
+                  WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
+                    AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date
+                )
+                OR (p.accrual_id IS NULL AND p.payment_date BETWEEN ${periodStart}::date AND ${periodEnd}::date)
+              )),0)
+          + COALESCE((SELECT sum(ap.amount) FROM advance_payments ap
+            WHERE ap.worker_id=w.id AND ap.object_id=${meta.objectId}::uuid AND ap.status='paid'
+              AND COALESCE(ap.work_date,ap.payment_date) BETWEEN ${periodStart}::date AND ${periodEnd}::date),0)
+        )::numeric paid
+      FROM worker_profiles w WHERE w.id=ANY(${workerIds}::uuid[])
+    `:[];
+
     const codeLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"Н"};
     const byWorker=new Map<string,TimesheetWorkerRow>();
     for(const worker of workers){
