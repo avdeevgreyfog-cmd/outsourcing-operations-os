@@ -310,7 +310,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
         todayShiftTime:"08:00–20:00",
         todayAttendanceEvent:simulatedCode==="WORK"?"arrival":simulatedCode==="NO_SHOW"?"no_show":null,
         employmentDocumentsStatus:["completed","submitted","processing","collecting"][index%4],
-        scheduleWorkDays:5,scheduleRestDays:2,scheduleShiftKind:index%3===1?"night":"day",scheduleAnchorDate:row.startDate??today,
+        scheduleWorkDays:5,scheduleRestDays:2,scheduleShiftKind:(index%3===1?"night":"day") as "day"|"night",scheduleAnchorDate:row.startDate??today,
         transitionDays:7,dailyPaymentShifts:index<4?3:0,
         issuedAssetCount:index%4===0?0:2+(index%3),
         issuedAssetNames:index%4===0?[]:["Куртка","Брюки",...(index%3===0?["Ботинки"]:[])],
@@ -466,7 +466,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
         const cycle=(day+index)%7;const planned=cycle<5;
         if(date>today)days[String(day)]=planned?"П":"В";else if(planned)days[String(day)]=index%13===7&&date===today?"НВ":hours;else days[String(day)]="В";
       }
-      const total=Object.values(days).reduce((sum,value)=>sum+(typeof value==="number"?value:0),0);
+      const total=Object.values(days).reduce<number>((sum,value)=>sum+(typeof value==="number"?value:0),0);
       return {workerId:worker.id,name:worker.fullName,rowKind:"worker",specialty:worker.specialty??null,days,plannedHours:hours,total,night:index%3===1?total:0,overtime:0,rate:worker.rate,accrual:worker.accrued};
     });
     const plannedCandidate=demo.candidates.find(candidate=>candidate.objectId===object.id&&candidate.stage==="first_shift");
