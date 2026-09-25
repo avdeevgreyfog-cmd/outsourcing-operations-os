@@ -187,81 +187,86 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     }catch(error){setMessage(error instanceof Error?error.message:"Не удалось запланировать отсутствие")}
     finally{setBusy("")}
   }
-  return <div className="object-shift-planner">
+  return <div className="object-shift-planner object-shift-workbench">
     <div className="object-shift-planner-toolbar">
       <div className="page-actions">
         <button className="button" onClick={()=>setStart(addDays(start,-7))}>← Неделя</button>
         <button className="button" onClick={()=>setStart(today)}>Сегодня</button>
         <button className="button" onClick={()=>setStart(addDays(start,7))}>Неделя →</button>
-        <strong>{formatRange(start,dates.at(-1)!)}</strong>
+        <strong>{formatRange(start,end)}</strong>
       </div>
       <div className="page-actions">
-        <div className="segmented"><button className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>По сотрудникам</button><button className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям</button></div>
-        {canPlanAbsence&&<button className="button" type="button" onClick={()=>{if(!selected.size){setMessage("Сначала выберите сотрудников слева");return}setAbsenceOpen(value=>!value)}}>Плановое отсутствие</button>}
-        {canEdit&&<button className="button primary" disabled={busy==="generate"} onClick={()=>void generate()}>Заполнить по графикам</button>}
+        <div className="segmented"><button className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>По сотрудникам</button><button className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям</button><button className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания{attentionCount?` · ${attentionCount}`:""}</button></div>
+        {canEdit&&<button className="button primary" disabled={busy==="generate"} onClick={()=>void generate()}>{selected.size?"По графику выбранных":"Сформировать с сегодня"}</button>}
       </div>
     </div>
 
-    <div className="object-shift-guidance">
-      <div><strong>План выходов</strong><span>Сначала заполните неделю по графикам, затем меняйте только исключения.</span></div>
-      {canEdit&&<div className="object-shift-paint">
-        <span>Режим:</span>
-        {(["day","night","off","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{kind==="day"?"Д":kind==="night"?"Н":kind==="off"?"В":"×"}</b>{paintLabels[kind]}</button>)}
-      </div>}
+    <div className="object-shift-week-summary">
+      <div><span>Потребность</span><strong>{weekSummary.required}</strong><small>человеко-выходов</small></div>
+      <div><span>Зафиксировано</span><strong>{weekSummary.plan}</strong><small>{weekSummary.suggested?`ещё ${weekSummary.suggested} рассчитано`:"план смен"}</small></div>
+      <div className={weekSummary.deficit?"is-attention":""}><span>Дефицит</span><strong>{weekSummary.deficit}</strong><small>{weekSummary.deficit?"нужно закрыть":"план закрыт"}</small></div>
+      <div><span>Резерв</span><strong>{weekSummary.reserve}</strong><small>не передаётся в табель как план</small></div>
     </div>
+
+    <div className="object-shift-guidance">
+      <div><strong>План → факт</strong><span>Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику; «Сформировать с сегодня» фиксирует их как план.</span></div>
+      {plannerLoading&&<span className="cell-sub">Обновляем данные…</span>}
+    </div>
+
+    {selected.size>0&&<div className="object-shift-bulkbar">
+      <div><strong>Выбрано: {selected.size}</strong><span>Выберите действие и нажмите нужную дату.</span></div>
+      <div className="object-shift-paint">
+        {(["day","night","off","reserve_day","reserve_night","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{paintCode(kind)}</b>{paintLabels[kind]}</button>)}
+      </div>
+      {canPlanAbsence&&<button className="button" type="button" onClick={()=>setAbsenceOpen(value=>!value)}>Межвахта / отпуск</button>}
+      <button className="button" type="button" onClick={()=>setSelected(new Set())}>Снять выбор</button>
+    </div>}
+
     {absenceOpen&&<div className="object-shift-absence-panel">
-      <div><strong>Плановое отсутствие</strong><span>Выбрано сотрудников: {selected.size}. После сохранения период автоматически исключается из плана смен и отображается в табеле.</span></div>
+      <div><strong>Плановое отсутствие</strong><span>Сотрудник исключается из плановых смен, период автоматически отображается в табеле.</span></div>
       <label>Тип<select value={absenceType} onChange={event=>setAbsenceType(event.target.value as AbsenceKind)}><option value="intershift">Межвахта</option><option value="vacation">Отпуск</option><option value="personal">Согласованный выходной</option></select></label>
       <label>С<input type="date" min={today} value={absenceFrom} onChange={event=>{setAbsenceFrom(event.target.value);if(absenceTo<event.target.value)setAbsenceTo(event.target.value)}}/></label>
       <label>По<input type="date" min={absenceFrom} value={absenceTo} onChange={event=>setAbsenceTo(event.target.value)}/></label>
       <label className="note">Комментарий<input value={absenceNote} onChange={event=>setAbsenceNote(event.target.value)} placeholder="Необязательно"/></label>
       <div className="page-actions"><button className="button" type="button" onClick={()=>setAbsenceOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="absence"} onClick={()=>void planAbsence()}>{busy==="absence"?"Сохраняем…":"Запланировать"}</button></div>
     </div>}
+
     <div className="object-shift-legend">
-      <span><b>Д</b> дневная</span><span><b>Н</b> ночная</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span>
-      <span>План автоматически появляется в табеле как <b>П</b>.</span>
-      {canEdit&&<span>{selected.size?`Выбрано: ${selected.size}. Нажмите дату, чтобы применить режим ко всем выбранным.`:"Для массового изменения выберите сотрудников слева."}</span>}
+      <span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span>
+      <span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span>
     </div>
     {message&&<div className="object-staffing-message">{message}</div>}
 
     <div className="object-shift-coverage">
-      {dates.map(date=>{
-        const dp=plannedFor(date,"day"),dd=demandFor(date,"day"),np=plannedFor(date,"night"),nd=demandFor(date,"night");
-        const deficit=Math.max(dd-dp,0)+Math.max(nd-np,0);
-        return <button type="button" key={date} disabled={!canEdit||busy==="bulk"} onClick={()=>applyDate(date)} className={deficit?"has-deficit":""}>
-          <span>{weekday(date)} · {shortDate(date)}</span>
-          <strong>Д {dp}/{dd||"—"} · Н {np}/{nd||"—"}</strong>
-          <small>{deficit?`Не хватает: ${deficit}`:"План закрыт"}</small>
-        </button>;
-      })}
+      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{required||"—"}</strong><small>{past?(deficit?`Не хватило: ${deficit}`:"Факт закрыт"):(deficit?`Дефицит: ${deficit}`:"План закрыт")}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
     </div>
 
-    {mode==="workers"?<div className="request-table-wrap"><table className="data-table object-shift-matrix">
+    <div className="object-shift-deficit-panel">
+      <div><strong>{weekday(focusDate)} · {shortDate(focusDate)}</strong><span>Потребность и покрытие по специальностям</span></div>
+      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.required||"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}</span>):<span>Нет активной потребности на эту дату</span>}</div>
+      <div className="page-actions"><Link className="button" href={`/needs?object=${objectId}`}>Потребности</Link><Link className="button" href={`/recruiting?object=${objectId}`}>Подбор</Link></div>
+    </div>
+
+    {mode!=="specialties"?<div className="request-table-wrap"><table className="data-table object-shift-matrix">
       <thead><tr>
-        {(canEdit||canPlanAbsence)&&<th className="object-shift-select"><input type="checkbox" aria-label="Выбрать всех" checked={workers.length>0&&selected.size===workers.length} onChange={toggleAll}/></th>}
+        {(canEdit||canPlanAbsence)&&<th className="object-shift-select"><input type="checkbox" aria-label="Выбрать всех" checked={visibleWorkers.length>0&&selected.size===visibleWorkers.length} onChange={toggleAll}/></th>}
         <th className="sticky-col">Сотрудник</th><th>График</th>
-        {dates.map(date=><th key={date}><button type="button" className="object-shift-date-button" disabled={!canEdit||busy==="bulk"} onClick={()=>applyDate(date)}><span>{weekday(date)}</span>{shortDate(date)}</button></th>)}
+        {dates.map(date=><th key={date} className={focusDate===date?"is-focus":""}><button type="button" className="object-shift-date-button" onClick={()=>applyDate(date)}><span>{weekday(date)}</span>{shortDate(date)}</button></th>)}
       </tr></thead>
-      <tbody>{workers.map(worker=><tr key={worker.id}>
+      <tbody>{visibleWorkers.map(worker=><tr key={worker.id} className={workerNeedsAttention(worker)?"has-attention":""}>
         {(canEdit||canPlanAbsence)&&<td className="object-shift-select"><input type="checkbox" aria-label={`Выбрать ${worker.fullName}`} checked={selected.has(worker.id)} onChange={()=>toggleWorker(worker.id)}/></td>}
-        <td className="sticky-col"><Link className="cell-title" href={`/workers/${worker.id}`}>{worker.fullName}</Link><span className="cell-sub">{worker.specialty??"—"}{worker.phone&&<> · <a href={`tel:${worker.phone.replace(/[^+\d]/g,"")}`}>{worker.phone}</a></>}</span></td>
-        <td><strong>{worker.scheduleWorkDays!=null&&worker.scheduleRestDays!=null?`${worker.scheduleWorkDays}/${worker.scheduleRestDays}`:"Инд."}</strong><span className="cell-sub">{worker.scheduleShiftKind==="night"?"Ночь":worker.scheduleShiftKind==="day"?"День":"Д/Н"}</span></td>
-        {dates.map(date=>{const value=planned(worker,date);const key=`${worker.id}:${date}`;return <td key={date} className={`object-shift-cell is-${value||"empty"}`}>
-          {canEdit?<button type="button" className="object-shift-cell-button" disabled={busy===key||busy==="bulk"} onClick={()=>void persistCells([{workerId:worker.id,date,kind:paint}])} aria-label={`${worker.fullName} ${date}: ${paintLabels[paint]}`}>{shortKind(value)}</button>:<b>{shortKind(value)}</b>}
-        </td>})}
+        <td className="sticky-col"><Link className="cell-title" href={`/workers/${worker.id}`}>{worker.fullName}</Link><span className="cell-sub">{worker.specialty??"—"}{worker.phone&&<> · <a href={`tel:${worker.phone.replace(/[^+\d]/g,"")}`}>{worker.phone}</a></>}</span>{workerNeedsAttention(worker)&&<small className="object-shift-worker-alert">Есть незакрытые исключения</small>}</td>
+        <td><strong>{worker.scheduleWorkDays!=null&&worker.scheduleRestDays!=null?`${worker.scheduleWorkDays}/${worker.scheduleRestDays}`:"Не задан"}</strong><span className="cell-sub">{worker.scheduleShiftKind==="night"?"Ночь":worker.scheduleShiftKind==="day"?"День":worker.scheduleShiftKind==="mixed"?"Д/Н":"—"}</span></td>
+        {dates.map(date=>{const state=cellState(worker,date),key=`${worker.id}:${date}`;return <td key={date} className={`object-shift-cell is-${state.kind||"empty"} source-${state.source} ${state.attention?"has-attention":""} ${state.factWithoutPlan?"fact-without-plan":""} ${focusDate===date?"is-focus":""}`} title={state.title}>{canEdit?<button type="button" className="object-shift-cell-button" disabled={!state.editable||busy===key||busy==="bulk"} onClick={()=>void persistCells([{workerId:worker.id,date,kind:paint}])}>{state.label}</button>:<b>{state.label}</b>}{state.attention&&<i className="object-shift-attention-dot" aria-hidden="true"/>}</td>})}
       </tr>)}</tbody>
-    </table></div>:<div className="request-table-wrap"><table className="data-table object-shift-specialty">
-      <thead><tr><th>Специальность</th>{dates.map(date=><th key={date}>{shortDate(date)}</th>)}</tr></thead>
-      <tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{
-        const day=plannedFor(date,"day",name),night=plannedFor(date,"night",name),dayDemand=demandFor(date,"day",name),nightDemand=demandFor(date,"night",name);
-        const deficit=Math.max(dayDemand-day,0)+Math.max(nightDemand-night,0);
-        return <td key={date} className={deficit?"object-shift-deficit":""}><strong>Д {day}/{dayDemand||"—"}</strong><span className="cell-sub">Н {night}/{nightDemand||"—"}</span>{deficit>0&&<small>−{deficit}</small>}</td>;
-      })}</tr>)}</tbody>
+    </table>{mode==="attention"&&!visibleWorkers.length&&<div className="sales-empty object-shift-empty">На этой неделе нет сотрудников, требующих внимания.</div>}</div>
+    :<div className="request-table-wrap"><table className="data-table object-shift-specialty">
+      <thead><tr><th>Специальность</th>{dates.map(date=><th key={date} className={focusDate===date?"is-focus":""}>{shortDate(date)}</th>)}</tr></thead>
+      <tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{const required=demandTotal(date,name),counts=countsFor(date,name),coverage=date<today?counts.fact:counts.plan,gap=Math.max(required-coverage,0);return <td key={date} className={`${gap?"object-shift-deficit":""} ${focusDate===date?"is-focus":""}`}><strong>{date<today?"Факт":"План"} {coverage}/{required||"—"}</strong><span className="cell-sub">резерв {counts.reserve||"—"}{counts.suggested?` · расчёт +${counts.suggested}`:""}</span>{gap>0&&<small>−{gap}</small>}</td>})}</tr>)}</tbody>
     </table></div>}
 
-    <div className="section-actions"><Link className="button" href={`/timesheets?object=${objectId}`}>Открыть табель</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный план смен</Link></div>
-  </div>;
-}
+    <div className="section-actions"><Link className="button primary" href={`/objects/${objectId}?tab=timesheets`}>Перейти к факту в табеле</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный список смен</Link></div>
+  </div>;}
 function normalizeKind(value:string):Kind{if(value==="day"||value==="День")return"day";if(value==="night"||value==="Ночь")return"night";if(value==="off"||value==="Выходной")return"off";return""}
 function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":value==="intershift"?"МВ":value==="vacation"?"О":"—"}
 function addDays(value:string,n:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+n);return date.toISOString().slice(0,10)}
