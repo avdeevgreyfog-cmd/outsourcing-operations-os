@@ -1,4 +1,5 @@
 import "../recruiting-workspace.css";
+import "../visual-mode-new.css";
 import { requireActor } from "@/lib/auth/server";
 import { AppShell } from "@/components/AppShell";
 
