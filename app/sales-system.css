@@ -1314,3 +1314,36 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .timesheet-row-mode>span{display:none}
   .sales-workspace.operations-workspace .timesheet-row-mode .segmented button{padding-inline:6px}
 }
+
+
+/* Timesheet grouped indicators and frozen work context. */
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-worker-col,
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-worker-cell{
+  width:210px;min-width:210px;max-width:210px
+}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-sticky-shift{
+  position:sticky;left:210px;z-index:5;width:44px;min-width:44px;max-width:44px;background:var(--panel)
+}
+.sales-workspace.operations-workspace .timesheet-operational thead .timesheet-sticky-shift{z-index:8}
+.sales-workspace.operations-workspace .timesheet-operational .timesheet-sticky-rate{
+  position:sticky;left:254px;z-index:5;width:104px;min-width:104px;max-width:104px;background:var(--panel);
+  box-shadow:5px 0 8px -8px color-mix(in srgb,var(--text) 45%,transparent)
+}
+.sales-workspace.operations-workspace .timesheet-operational thead .timesheet-sticky-rate{z-index:8}
+.sales-workspace.operations-workspace .timesheet-operational .weekend.timesheet-sticky-shift,
+.sales-workspace.operations-workspace .timesheet-operational .weekend.timesheet-sticky-rate{background:var(--panel)}
+.sales-workspace.operations-workspace .timesheet-details-toggle.active{border-color:var(--border-strong);background:var(--panel-2)}
+.sales-workspace.operations-workspace .timesheet-detail-col{min-width:66px;max-width:76px;text-align:center}
+.sales-workspace.operations-workspace .timesheet-detail-alert{color:var(--bad);font-weight:700}
+
+.sales-workspace.operations-workspace .timesheet-daily-summary td{
+  height:28px!important;padding-top:3px!important;padding-bottom:3px!important;font-size:9px!important;
+  background:var(--panel-2);font-variant-numeric:tabular-nums
+}
+.sales-workspace.operations-workspace .timesheet-daily-summary .timesheet-summary-label{
+  left:0;z-index:7;text-align:left;font-weight:600;color:var(--muted);background:var(--panel-2)
+}
+.sales-workspace.operations-workspace .timesheet-daily-summary .timesheet-summary-hours td{
+  border-top:1px solid var(--border-strong);font-weight:700;color:var(--text)
+}
+.sales-workspace.operations-workspace .timesheet-daily-summary .weekend{background:color-mix(in srgb,var(--panel-2) 82%,var(--canvas))}
