@@ -168,7 +168,7 @@ export function CandidatesWorkspace({
 
  return <div className="recruiting-workspace candidate-directory candidate-directory-v2">
   <div className="candidate-directory-viewbar">
-   <SalesSegments label="Состояние кандидатов" value={bucket} onChange={value=>{setBucket(value);setStage('all')}} items={[
+   <SalesSegments label="Состояние кандидатов" value={bucket} variant="navigation" onChange={value=>{setBucket(value);setStage('all')}} items={[
     {value:'new',label:`Новые · ${counts.new}`},
     {value:'recruiting',label:`В подборе · ${counts.recruiting}`},
     {value:'post_exit',label:`После выхода · ${counts.post_exit}`},
