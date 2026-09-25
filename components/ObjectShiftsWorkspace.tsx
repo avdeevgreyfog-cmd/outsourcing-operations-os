@@ -111,7 +111,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     for(const worker of workers){
       if(specialty&&(worker.specialty??"Без специальности")!==specialty)continue;
       const key=`${worker.id}:${date}`,entry=entryMap.get(key),value=planned(worker,date);
-      const scheduleEntryPlan=Boolean(entry&&!isFactual(entry)&&entry.source==="schedule"&&entry.timeCode==="PLANNED"&&entry.plannedShiftKind);
+      const scheduleEntryPlan=Boolean(entry&&!isFactual(entry)&&entry.timeCode==="PLANNED"&&entry.plannedShiftKind);
       if(entry&&isFactual(entry)&&(Number(entry.factHours)>0||entry.timeCode==="WORK_PENDING"))fact++;
       if(map.has(key)||scheduleEntryPlan)plan++;else if(reserveMap.has(key))reserve++;else if(date>=today&&(value==="day"||value==="night"))suggested++;
     }
@@ -120,7 +120,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   function dateLocked(date:string){return Boolean(planner?.lockedRanges.some(range=>range.from<=date&&range.to>=date))}
   function cellState(worker:WorkerRow,date:string):CellState{
     const key=`${worker.id}:${date}`,entry=entryMap.get(key),fact=isFactual(entry),absence=absenceFor(worker,date);
-    const scheduleEntryPlan:Kind=!fact&&entry?.source==="schedule"?(entry.timeCode==="DAY_OFF"?"off":entry.plannedShiftKind==="night"?"night":entry.plannedShiftKind?"day":""):"";
+    const scheduleEntryPlan:Kind=!fact&&entry?(entry.source==="schedule"&&entry.timeCode==="DAY_OFF"?"off":entry.timeCode==="PLANNED"?(entry.plannedShiftKind==="night"?"night":entry.plannedShiftKind?"day":""):""):"";
     const plan=map.get(key)??reserveMap.get(key)??scheduleEntryPlan;
     if(fact&&entry){
       const label=entry.timeCode==="WORK"?(Number(entry.factHours)>0?formatHours(entry.factHours):"—"):(factLabels[entry.timeCode]??entry.timeCode);
@@ -266,7 +266,13 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     <div className="section-actions"><Link className="button primary" href={`/objects/${objectId}?tab=timesheets`}>Перейти к факту в табеле</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный список смен</Link></div>
   </div>;}
-function isFactual(entry:PlannerEntry|undefined){return Boolean(entry&&(entry.source!=="schedule"||Number(entry.factHours)>0||["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode)))}
+function isFactual(entry:PlannerEntry|undefined){
+  if(!entry)return false;
+  if(entry.source==="schedule")return Number(entry.factHours)>0||["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode);
+  if(entry.timeCode==="PLANNED")return false;
+  if(entry.timeCode==="WORK")return Number(entry.factHours)>0;
+  return true;
+}
 function normalizeKind(value:string):Kind{if(value==="day"||value==="День")return"day";if(value==="night"||value==="Ночь")return"night";if(value==="off"||value==="Выходной")return"off";return""}
 function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":value==="reserve_day"?"РД":value==="reserve_night"?"РН":value==="intershift"?"МВ":value==="vacation"?"О":"—"}
 function paintCode(value:PaintKind){return value==="clear"?"×":shortKind(value)}
