@@ -1,15 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import {useMemo,useState} from "react";
+import {useEffect,useMemo,useState} from "react";
 import type {ShiftRow,WorkerRow} from "@/lib/data/service";
 
-type Kind="day"|"night"|"off"|"intershift"|"vacation"|"";
-type PaintKind="day"|"night"|"off"|"clear";
+type Kind="day"|"night"|"off"|"reserve_day"|"reserve_night"|"intershift"|"vacation"|"";
+type PaintKind="day"|"night"|"off"|"reserve_day"|"reserve_night"|"clear";
 type AbsenceKind="intershift"|"vacation"|"personal";
-type Mode="workers"|"specialties";
+type Mode="workers"|"specialties"|"attention";
+type PlannerAssignment={workerId:string;date:string;kind:"day"|"night"|"mixed";reserve:boolean;status:string};
+type PlannerEntry={workerId:string;date:string;timeCode:string;factHours:number|string;dayHours:number|string;nightHours:number|string;source:string;plannedShiftKind:"day"|"night"|"mixed"|null};
+type PlannerAbsence={workerId:string;type:string;from:string;to:string|null;status:string};
+type PlannerDemand={date:string;specialtyId:string;specialty:string;required:number};
+type LockedRange={from:string;to:string;status:string};
+type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];demo?:boolean};
+type CellState={kind:Kind;label:string;source:"fact"|"plan"|"suggested"|"absence"|"none";editable:boolean;attention:boolean;factWithoutPlan:boolean;title:string};
 
-const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",clear:"Очистить"};
+const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",reserve_day:"Резерв день",reserve_night:"Резерв ночь",clear:"Очистить"};
+const factLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"НВ"};
 
 export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPlanAbsence,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;canPlanAbsence:boolean;demo:boolean}){
   const [start,setStart]=useState(today);
@@ -25,7 +33,24 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   const [absenceTo,setAbsenceTo]=useState(addDays(today,7));
   const [absenceNote,setAbsenceNote]=useState("");
   const [absenceOverrides,setAbsenceOverrides]=useState<Record<string,{type:AbsenceKind;from:string;to:string}>>({});
+  const [planner,setPlanner]=useState<PlannerData|null>(null);
+  const [plannerLoading,setPlannerLoading]=useState(false);
+  const [revision,setRevision]=useState(0);
+  const [focusDate,setFocusDate]=useState(today);
   const dates=useMemo(()=>Array.from({length:7},(_,i)=>addDays(start,i)),[start]);
+  const end=dates.at(-1)!;
+
+  useEffect(()=>{
+    if(demo){setPlanner(null);return}
+    const controller=new AbortController();setPlannerLoading(true);
+    fetch(`/api/objects/${objectId}/shift-plan?start=${start}&end=${end}`,{signal:controller.signal})
+      .then(async response=>{const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось загрузить план смен");setPlanner(json as PlannerData)})
+      .catch(error=>{if(error instanceof DOMException&&error.name==="AbortError")return;setMessage(error instanceof Error?error.message:"Не удалось загрузить план смен")})
+      .finally(()=>setPlannerLoading(false));
+    return()=>controller.abort();
+  },[objectId,start,end,demo,revision]);
+
+  useEffect(()=>{if(!dates.includes(focusDate))setFocusDate(start)},[dates,focusDate,start]);
 
   const map=useMemo(()=>{
     const out=new Map<string,Kind>();
