@@ -365,10 +365,6 @@ function absenceBandPosition(range:TimesheetAbsenceRange,day:number,days:number[
   if(covered.at(-1)===day)return"end";
   return"middle";
 }
-function absenceBandLabel(range:TimesheetAbsenceRange){
-  const label=range.type==="intershift"?"Межвахта":"Отпуск";
-  return range.returnDate?`${label} · до ${shortDate(range.returnDate)}`:label;
-}
 function absenceCode(range:TimesheetAbsenceRange){return range.type==="intershift"?"МВ":"О"}
 function countWorkerCode(row:TimesheetWorkerRow,code:string,days:number[]){return days.filter(day=>row.dayCells?.[String(day)]===code||row.nightCells?.[String(day)]===code).length}
 function countWorkerNoShows(row:TimesheetWorkerRow,days:number[]){return days.filter(day=>["НВ","Н"].includes(String(row.dayCells?.[String(day)]??""))||["НВ","Н"].includes(String(row.nightCells?.[String(day)]??""))).length}
