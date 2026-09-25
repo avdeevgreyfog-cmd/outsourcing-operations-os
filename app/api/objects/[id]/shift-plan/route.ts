@@ -11,7 +11,7 @@ const cellSchema=z.object({workerId:z.string().uuid(),date:z.string().date(),kin
 const schema=z.discriminatedUnion("action",[
   z.object({action:z.literal("generate"),startDate:z.string().date(),endDate:z.string().date(),workerIds:z.array(z.string().uuid()).max(200).optional()}),
   z.object({action:z.literal("set_cell"),workerId:z.string().uuid(),date:z.string().date(),kind:cellKind}),
-  z.object({action:z.literal("set_cells"),cells:z.array(cellSchema).min(1).max(300)}),
+  z.object({action:z.literal("set_cells"),cells:z.array(cellSchema).min(1).max(500)}),
 ]);
 
 type CellKind=z.infer<typeof cellKind>;
