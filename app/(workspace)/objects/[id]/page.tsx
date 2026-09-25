@@ -1,4 +1,5 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -42,8 +43,11 @@ const riskLabels:Record<string,string>={normal:"Норма",watch:"Контро�
 
 export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string;ui?:string}>}) {
   const {id}=await params;
-  const {tab:rawTab,month,ui}=isGithubPagesDemo()?{}:await searchParams;
-  const uiMode=ui==="classic"?"classic":"pilot";
+  const staticDemo=isGithubPagesDemo();
+  const {tab:rawTab,month,ui}=staticDemo?{}:await searchParams;
+  const cookieStore=staticDemo?null:await cookies();
+  const savedUi=cookieStore?.get("oo_ui")?.value==="classic"?"classic":"pilot";
+  const uiMode=ui==="classic"?"classic":ui==="pilot"?"pilot":savedUi;
   const requested=rawTab?(aliases[rawTab]??rawTab):"overview";
   const actor=await requireActor();
   const objects=await listObjects(actor);
