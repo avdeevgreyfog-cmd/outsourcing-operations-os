@@ -47,9 +47,9 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   }
   function planned(worker:WorkerRow,date:string):Kind{
     const key=`${worker.id}:${date}`;
-    if(overrides[key]!==undefined)return overrides[key];
     const absence=absenceFor(worker,date);
     if(absence)return absence==="personal"?"off":absence;
+    if(overrides[key]!==undefined)return overrides[key];
     const actual=map.get(key);
     if(actual)return actual;
     if(worker.scheduleWorkDays==null||worker.scheduleRestDays==null||!worker.startDate)return "";
@@ -208,12 +208,12 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     {mode==="workers"?<div className="request-table-wrap"><table className="data-table object-shift-matrix">
       <thead><tr>
-        {canEdit&&<th className="object-shift-select"><input type="checkbox" aria-label="Выбрать всех" checked={workers.length>0&&selected.size===workers.length} onChange={toggleAll}/></th>}
+        {(canEdit||canPlanAbsence)&&<th className="object-shift-select"><input type="checkbox" aria-label="Выбрать всех" checked={workers.length>0&&selected.size===workers.length} onChange={toggleAll}/></th>}
         <th className="sticky-col">Сотрудник</th><th>График</th>
         {dates.map(date=><th key={date}><button type="button" className="object-shift-date-button" disabled={!canEdit||busy==="bulk"} onClick={()=>applyDate(date)}><span>{weekday(date)}</span>{shortDate(date)}</button></th>)}
       </tr></thead>
       <tbody>{workers.map(worker=><tr key={worker.id}>
-        {canEdit&&<td className="object-shift-select"><input type="checkbox" aria-label={`Выбрать ${worker.fullName}`} checked={selected.has(worker.id)} onChange={()=>toggleWorker(worker.id)}/></td>}
+        {(canEdit||canPlanAbsence)&&<td className="object-shift-select"><input type="checkbox" aria-label={`Выбрать ${worker.fullName}`} checked={selected.has(worker.id)} onChange={()=>toggleWorker(worker.id)}/></td>}
         <td className="sticky-col"><Link className="cell-title" href={`/workers/${worker.id}`}>{worker.fullName}</Link><span className="cell-sub">{worker.specialty??"—"}{worker.phone&&<> · <a href={`tel:${worker.phone.replace(/[^+\d]/g,"")}`}>{worker.phone}</a></>}</span></td>
         <td><strong>{worker.scheduleWorkDays!=null&&worker.scheduleRestDays!=null?`${worker.scheduleWorkDays}/${worker.scheduleRestDays}`:"Инд."}</strong><span className="cell-sub">{worker.scheduleShiftKind==="night"?"Ночь":worker.scheduleShiftKind==="day"?"День":"Д/Н"}</span></td>
         {dates.map(date=>{const value=planned(worker,date);const key=`${worker.id}:${date}`;return <td key={date} className={`object-shift-cell is-${value||"empty"}`}>
