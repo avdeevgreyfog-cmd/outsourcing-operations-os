@@ -24,6 +24,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   const [comment,setComment]=useState("");
   const [bulkBusy,setBulkBusy]=useState(false);
   const [rowMode,setRowMode]=useState<RowMode>("auto");
+  const [detailsOpen,setDetailsOpen]=useState(false);
 
   const todayIso=new Date().toISOString().slice(0,10);
   const currentDay=data.month===todayIso.slice(0,7)?Number(todayIso.slice(8,10)):null;
@@ -36,11 +37,30 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       const dayValue=row.dayCells?.[String(day)],nightValue=row.nightCells?.[String(day)];
       acc.dayHours+=numericCell(dayValue);acc.nightHours+=numericCell(nightValue);
       if(numericCell(dayValue)>0)acc.dayShifts++;if(numericCell(nightValue)>0)acc.nightShifts++;
-      if(dayValue==="НВ"||nightValue==="НВ")acc.noShows++;
+      if(["НВ","Н"].includes(String(dayValue??""))||["НВ","Н"].includes(String(nightValue??"")))acc.noShows++;
     }
     return acc;
   },{dayHours:0,nightHours:0,dayShifts:0,nightShifts:0,noShows:0}),[rows,days]);
 
+  const daySummary=useMemo(()=>Object.fromEntries(days.map(day=>{
+    let planned=0,worked=0,hours=0;
+    for(const row of rows){
+      if(row.rowKind==="candidate")continue;
+      const key=String(day);
+      if(row.plannedShiftKinds?.[key])planned++;
+      const fact=numericCell(row.dayCells?.[key])+numericCell(row.nightCells?.[key]);
+      if(fact>0)worked++;
+      hours+=fact;
+    }
+    return [day,{planned,worked,hours}];
+  })),[rows,days]);
+  const detailTotals=useMemo(()=>rows.reduce((acc,row)=>{
+    if(row.rowKind==="candidate")return acc;
+    acc.daysOff+=countWorkerCode(row,"В",days);
+    acc.sick+=countWorkerCode(row,"Б",days);
+    acc.noShows+=countWorkerNoShows(row,days);
+    return acc;
+  },{daysOff:0,sick:0,noShows:0}),[rows,days]);
   const totalHours=totals.dayHours+totals.nightHours;
   const internal=data.internalSnapshot,client=data.clientSnapshot;
   const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";
@@ -106,7 +126,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
 
   async function exportExcel(){
     const finance=view==="internal"&&sensitive;
-    const header=["Сотрудник","Специальность","Смена",...(finance?["Ставка"]:[]),...days.map(day=>String(day).padStart(2,"0")+"."+data.month.slice(5,7)),"Смен","Часов",...(finance?["Начислено","Начислено всего","Корректировки","Выплачено","К выплате"]:[]),"Плановые отсутствия","Отклонения"];
+    const header=["Сотрудник","Специальность","Смена",...(finance?["Ставка"]:[]),...days.map(day=>String(day).padStart(2,"0")+"."+data.month.slice(5,7)),"Смен","Часов","Выходные","Больничные","Прогулы",...(finance?["Начислено","Начислено всего","Корректировки","Выплачено","К выплате"]:[])];
     const body=rows.flatMap(row=>(["day","night"] as Segment[]).map((segment,index)=>{
       const cells=segment==="day"?row.dayCells:row.nightCells;
       const shiftHours=days.reduce((sum,day)=>sum+numericCell(cells?.[String(day)]),0);
@@ -114,7 +134,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       const segmentAccrued=calculateSegmentAccrued(row,segment,days,data.month);
       const earned=mode==="month"?(row.accrualTotal??row.calculatedAccrual??0):calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month);
       const correction=mode==="month"?Number(row.premium??0)+Number(row.adjustment??0):"";
-      return [index===0?row.name:"",index===0?specialtyText(row):"",segment==="day"?"День":"Ночь",...(finance?[rateTextForExport(row,segment,data.month)]:[]),...days.map(day=>cellDisplay(row,day,segment,data.month)),shiftCount,shiftHours,...(finance?[segmentAccrued,index===0?earned:"",index===0?correction:"",index===0&&mode==="month"?row.paidAmount??0:"",index===0&&mode==="month"?row.payableAmount??earned:""]:[]),index===0?plannedSummary(row,days,data.month):"",index===0?deviationSummary(row,days):""];
+      return [index===0?row.name:"",index===0?specialtyText(row):"",segment==="day"?"День":"Ночь",...(finance?[rateTextForExport(row,segment,data.month)]:[]),...days.map(day=>cellDisplay(row,day,segment,data.month)),shiftCount,shiftHours,index===0?countWorkerCode(row,"В",days):"",index===0?countWorkerCode(row,"Б",days):"",index===0?countWorkerNoShows(row,days):"",...(finance?[segmentAccrued,index===0?earned:"",index===0?correction:"",index===0&&mode==="month"?row.paidAmount??0:"",index===0&&mode==="month"?row.payableAmount??earned:""]:[])];
     }));
     const XLSX=await import("xlsx");
     const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet([header,...body]);XLSX.utils.book_append_sheet(wb,ws,"Табель");
@@ -146,7 +166,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       <strong>Обозначения</strong>
       <span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span>
       <span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span>
-      <span><b>НВ</b> невыход</span><span><b>УВ</b> работа завершена</span>
+      <span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>
       {view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}
     </div>
 
@@ -154,7 +174,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       <Metric label="Сотрудники" value={rows.filter(row=>row.rowKind!=="candidate").length}/>
       <Metric label="Дневные" value={`${totals.dayShifts} см · ${totals.dayHours} ч`}/>
       <Metric label="Ночные" value={`${totals.nightShifts} см · ${totals.nightHours} ч`}/>
-      <Metric label="Невыходы" value={totals.noShows} tone={totals.noShows?"warn":undefined}/>
+      <Metric label="Прогулы" value={totals.noShows} tone={totals.noShows?"warn":undefined}/>
     </div>
 
     <div className="timesheet-mode-note">
@@ -165,16 +185,22 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
     </div>
 
     <section className="section timesheet-matrix-section">
-      <div className="section-head"><div><h2>{data.object} · {data.period}</h2><p>В режиме «Авто» пустая дневная или ночная строка скрывается. Плановые отсутствия показываются единым диапазоном.</p></div>{view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}</div>
+      <div className="section-head">
+        <div><h2>{data.object} · {data.period}</h2><p>В режиме «Авто» пустая дневная или ночная строка скрывается. Межвахта и отпуск остаются визуальными периодами и в счётчики не входят.</p></div>
+        <div className="page-actions">
+          <button type="button" className={`button timesheet-details-toggle ${detailsOpen?"active":""}`} onClick={()=>setDetailsOpen(value=>!value)}>{detailsOpen?"Скрыть показатели":"Показатели"}</button>
+          {view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}
+        </div>
+      </div>
       <div className="timesheet-wrap compact-timesheet">
         <table className="data-table timesheet timesheet-two-line timesheet-operational">
           <thead><tr>
-            <th className="sticky-col timesheet-worker-col">Сотрудник</th><th className="timesheet-shift-col">Смена</th>
-            {view==="internal"&&sensitive&&<th className="timesheet-rate-col">Ставка</th>}
+            <th className="sticky-col timesheet-worker-col">Сотрудник</th><th className="timesheet-shift-col timesheet-sticky-shift">Смена</th>
+            {view==="internal"&&sensitive&&<th className="timesheet-rate-col timesheet-sticky-rate">Ставка</th>}
             {days.map(day=><th className={`day ${isWeekend(data.month,day)?"weekend":""}`} key={day}><span>{weekday(data.month,day)}</span>{day}</th>)}
             <th>Смен</th><th>Часов</th>
+            {detailsOpen&&<><th className="timesheet-detail-col">Выходные</th><th className="timesheet-detail-col">Больничные</th><th className="timesheet-detail-col">Прогулы</th></>}
             {view==="internal"&&sensitive&&<><th>Начислено</th><th>Всего</th><th>Корр.</th><th>Выплачено</th><th>К выплате</th></>}
-            <th className="timesheet-state-col">Плановые</th><th className="timesheet-state-col">Отклонения</th>
           </tr></thead>
           <tbody>{rows.flatMap(row=>{
             const segments=visibleSegments(row,rowMode,days);
@@ -195,8 +221,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                 segment==="night"?"timesheet-night-row":"",
               ].filter(Boolean).join(" ")}>
                 {first&&<td className="cell-title sticky-col timesheet-worker-cell" rowSpan={segments.length}><EmployeeIdentity row={row}/></td>}
-                <td className="timesheet-shift-col"><b>{segment==="day"?"День":"Ночь"}</b></td>
-                {view==="internal"&&sensitive&&<td className="timesheet-rate-col"><RateHistory row={row} segment={segment} month={data.month}/></td>}
+                <td className="timesheet-shift-col timesheet-sticky-shift"><b>{segment==="day"?"День":"Ночь"}</b></td>
+                {view==="internal"&&sensitive&&<td className="timesheet-rate-col timesheet-sticky-rate"><RateHistory row={row} segment={segment} month={data.month}/></td>}
                 {days.map(day=>{
                   const date=dateString(data.month,day),ended=isAfterEnd(row,date),firstEnded=isFirstAfterEnd(row,date);
                   const absence=absenceRangeAt(row,date);
@@ -219,23 +245,43 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   </td>;
                 })}
                 <td className="num">{shiftCount||"—"}</td><td className="num">{shiftHours||"—"}</td>
+                {detailsOpen&&first&&<>
+                  <td className="num timesheet-detail-col" rowSpan={segments.length}>{countWorkerCode(row,"В",days)||"—"}</td>
+                  <td className="num timesheet-detail-col" rowSpan={segments.length}>{countWorkerCode(row,"Б",days)||"—"}</td>
+                  <td className="num timesheet-detail-col timesheet-detail-alert" rowSpan={segments.length}>{countWorkerNoShows(row,days)||"—"}</td>
+                </>}
                 {view==="internal"&&sensitive&&<><td className="num timesheet-money">{row.rowKind==="candidate"?"—":money(segmentAccrued)}</td>{first&&<>
                   <td className="num timesheet-money timesheet-money-total" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":money(earned)}</td>
                   <td className="num timesheet-money" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":mode==="month"?signedMoney(correction):"—"}</td>
                   <td className="num timesheet-money" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":mode==="month"?money(row.paidAmount??0):"—"}</td>
                   <td className="num timesheet-money timesheet-payable" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":mode==="month"?money(row.payableAmount??earned):"—"}</td>
                 </>}</>}
-                {first&&<><td className="timesheet-state-col" rowSpan={segments.length}><StateSummary text={plannedSummary(row,days,data.month)}/></td><td className="timesheet-state-col" rowSpan={segments.length}><StateSummary text={deviationSummary(row,days)}/></td></>}
               </tr>;
             });
           })}</tbody>
-          <tfoot><tr>
-            <td className="sticky-col" colSpan={view==="internal"&&sensitive?3:2}>Итого</td>
-            {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{rows.reduce((sum,row)=>sum+numericCell(row.dayCells?.[String(day)])+numericCell(row.nightCells?.[String(day)]),0)||"—"}</td>)}
-            <td className="num">{totals.dayShifts+totals.nightShifts}</td><td className="num">{totalHours}</td>
-            {view==="internal"&&sensitive&&<><td className="num timesheet-money">{money(rows.reduce((sum,row)=>sum+calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month),0))}</td><td colSpan={4}></td></>}
-            <td colSpan={2}></td>
-          </tr></tfoot>
+          <tfoot className="timesheet-daily-summary">
+            <tr>
+              <td className="sticky-col timesheet-summary-label" colSpan={view==="internal"&&sensitive?3:2}>План, чел.</td>
+              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{daySummary[day]?.planned||"—"}</td>)}
+              <td className="num">{days.reduce((sum,day)=>sum+(daySummary[day]?.planned??0),0)||"—"}</td><td>—</td>
+              {detailsOpen&&<td colSpan={3}></td>}
+              {view==="internal"&&sensitive&&<td colSpan={5}></td>}
+            </tr>
+            <tr>
+              <td className="sticky-col timesheet-summary-label" colSpan={view==="internal"&&sensitive?3:2}>Вышло, чел.</td>
+              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{daySummary[day]?.worked||"—"}</td>)}
+              <td className="num">{days.reduce((sum,day)=>sum+(daySummary[day]?.worked??0),0)||"—"}</td><td>—</td>
+              {detailsOpen&&<td colSpan={3}></td>}
+              {view==="internal"&&sensitive&&<td colSpan={5}></td>}
+            </tr>
+            <tr className="timesheet-summary-hours">
+              <td className="sticky-col timesheet-summary-label" colSpan={view==="internal"&&sensitive?3:2}>Отработано, ч.</td>
+              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{daySummary[day]?.hours||"—"}</td>)}
+              <td className="num">{totals.dayShifts+totals.nightShifts}</td><td className="num">{totalHours}</td>
+              {detailsOpen&&<><td className="num">{detailTotals.daysOff||"—"}</td><td className="num">{detailTotals.sick||"—"}</td><td className="num">{detailTotals.noShows||"—"}</td></>}
+              {view==="internal"&&sensitive&&<><td className="num timesheet-money">{money(rows.reduce((sum,row)=>sum+calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month),0))}</td><td colSpan={4}></td></>}
+            </tr>
+          </tfoot>
         </table>
       </div>
     </section>
@@ -278,7 +324,6 @@ function RateHistory({row,segment,month}:{row:TimesheetWorkerRow;segment:Segment
     return <span key={rate.kind+rate.effectiveFrom} className={last?"current":"previous"}><b>{formatRate(rate,row.plannedHours)}</b><small>{ratePeriodLabel(rate,month)}</small></span>;
   })}</div>;
 }
-function StateSummary({text}:{text:string}){return text?<div className="timesheet-state-summary">{text.split(" · ").map((part,index)=><span key={index}>{part}</span>)}</div>:<>—</>}
 function visibleSegments(row:TimesheetWorkerRow,mode:RowMode,days:number[]):Segment[]{
   if(mode==="all")return["day","night"];
   if(mode==="day"||mode==="night")return[mode];
@@ -315,20 +360,8 @@ function absenceBandLabel(range:TimesheetAbsenceRange){
   const label=range.type==="intershift"?"Межвахта":"Отпуск";
   return range.returnDate?`${label} · до ${shortDate(range.returnDate)}`:label;
 }
-function plannedSummary(row:TimesheetWorkerRow,days:number[],month:string){
-  const parts:string[]=[];
-  const v=countCode(row,"В",days);if(v)parts.push(`В ${v}`);
-  const mv=countCode(row,"МВ",days);if(mv){const range=(row.absenceRanges??[]).find(item=>item.type==="intershift"&&overlapsDays(item.from,item.to,days,month));parts.push(`МВ ${mv}${range?.returnDate?` до ${shortDate(range.returnDate)}`:""}`)}
-  const vacation=countCode(row,"О",days);if(vacation){const range=(row.absenceRanges??[]).find(item=>item.type==="vacation"&&overlapsDays(item.from,item.to,days,month));parts.push(`О ${vacation}${range?.returnDate?` до ${shortDate(range.returnDate)}`:""}`)}
-  return parts.join(" · ");
-}
-function deviationSummary(row:TimesheetWorkerRow,days:number[]){
-  const parts:string[]=[];const sick=countCode(row,"Б",days),noShow=countCode(row,"НВ",days),absence=countCode(row,"Н",days);
-  if(sick)parts.push(`Б ${sick}`);if(noShow)parts.push(`НВ ${noShow}`);if(absence)parts.push(`Н ${absence}`);
-  return parts.join(" · ");
-}
-function countCode(row:TimesheetWorkerRow,code:string,days:number[]){return days.filter(day=>row.dayCells?.[String(day)]===code||row.nightCells?.[String(day)]===code).length}
-function overlapsDays(from:string,to:string|null,days:number[],month:string){return days.some(day=>{const date=dateString(month,day);return from<=date&&(!to||to>=date)})}
+function countWorkerCode(row:TimesheetWorkerRow,code:string,days:number[]){return days.filter(day=>row.dayCells?.[String(day)]===code||row.nightCells?.[String(day)]===code).length}
+function countWorkerNoShows(row:TimesheetWorkerRow,days:number[]){return days.filter(day=>["НВ","Н"].includes(String(row.dayCells?.[String(day)]??""))||["НВ","Н"].includes(String(row.nightCells?.[String(day)]??""))).length}
 function calculateSegmentAccrued(row:TimesheetWorkerRow,segment:Segment,days:number[],month:string){
   if(row.rowKind==="candidate")return 0;
   let total=0;
