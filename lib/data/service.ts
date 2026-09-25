@@ -493,7 +493,19 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
         if(date>today)days[String(day)]=planned?"П":"В";else if(planned)days[String(day)]=index%13===7&&date===today?"НВ":hours;else days[String(day)]="В";
       }
       const total=Object.values(days).reduce<number>((sum,value)=>sum+(typeof value==="number"?value:0),0);
-      const dayCells:Record<string,TimesheetCellValue>={},nightCells:Record<string,TimesheetCellValue>={};for(const [d,v] of Object.entries(days)){if(index%3===1)nightCells[d]=v;else dayCells[d]=v;}return {workerId:worker.id,name:worker.fullName,rowKind:"worker",specialty:worker.specialty??null,effectiveFrom:start,effectiveTo:null,days,dayCells,nightCells,plannedHours:hours,total,dayHours:index%3===1?0:total,night:index%3===1?total:0,overtime:0,rate:worker.rate,dayRate:worker.rate,nightRate:index%3===1?Number(worker.rate??0)+50:worker.rate,accrual:worker.accrued};
+      const dayCells:Record<string,TimesheetCellValue>={},nightCells:Record<string,TimesheetCellValue>={};
+      for(const [d,v] of Object.entries(days)){if(index%3===1)nightCells[d]=v;else dayCells[d]=v;}
+      const baseRate=worker.rate==null?null:(worker.rateUnit==="shift"&&hours>0?Number(worker.rate)/hours:Number(worker.rate));
+      const dayRate=baseRate,nightRate=index%3===1&&baseRate!=null?baseRate+50:baseRate;
+      const dayHours=index%3===1?0:total,nightHours=index%3===1?total:0;
+      const calculated=(dayRate??0)*dayHours+(nightRate??0)*nightHours;
+      const absenceRanges:TimesheetAbsenceRange[]=worker.absenceStatus==="confirmed"&&worker.absenceFrom?[{type:(worker.absenceType==="intershift"||worker.absenceType==="vacation"||worker.absenceType==="sick"||worker.absenceType==="personal"?worker.absenceType:"other"),from:worker.absenceFrom,to:worker.absenceTo??null,returnDate:worker.absenceTo?addIsoDays(worker.absenceTo,1):null}]:[];
+      return {workerId:worker.id,name:worker.fullName,rowKind:"worker",specialty:worker.specialty??null,effectiveFrom:start,effectiveTo:null,
+        specialtyHistory:[{specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:start,effectiveTo:null}],
+        rateHistory:baseRate==null?[]:[{kind:"day",amount:baseRate,unit:"hour",effectiveFrom:start,effectiveTo:null},{kind:"night",amount:nightRate??baseRate,unit:"hour",effectiveFrom:start,effectiveTo:null}],
+        absenceRanges,days,dayCells,nightCells,plannedHours:hours,total,dayHours,night:nightHours,overtime:0,rate:baseRate,dayRate,nightRate,
+        accrual:worker.accrued,dayAccrued:(dayRate??0)*dayHours,nightAccrued:(nightRate??0)*nightHours,calculatedAccrual:calculated,
+        premium:0,adjustment:0,accrualTotal:Number(worker.accrued??calculated),paidAmount:Number(worker.paid??0),payableAmount:Number(worker.payable??Math.max(calculated-Number(worker.paid??0),0))};
     });
     const plannedCandidate=demo.candidates.find(candidate=>candidate.objectId===object.id&&candidate.stage==="first_shift");
     if(plannedCandidate){const planDate=today>=periodStart&&today<=periodEnd?today:periodStart;rows.push({workerId:`candidate:${plannedCandidate.id}`,name:plannedCandidate.fullName,rowKind:"candidate",candidateId:plannedCandidate.id,specialty:plannedCandidate.need??null,days:{[String(Number(planDate.slice(8,10)))]:"П"},dayCells:{[String(Number(planDate.slice(8,10)))]:"П"},nightCells:{},plannedShiftKinds:{[String(Number(planDate.slice(8,10)))]:"day"},total:0,dayHours:0,night:0,overtime:0,rate:null,dayRate:null,nightRate:null,accrual:null});}
