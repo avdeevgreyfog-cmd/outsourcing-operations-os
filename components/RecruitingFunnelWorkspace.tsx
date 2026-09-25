@@ -256,7 +256,7 @@ export function RecruitingFunnelWorkspace({
     {hasContext&&<div className="recruiting-filter-context"><div><strong>Фильтр из потребности</strong><span>{needFilter!=="all"?(needById.get(needFilter)?.title??"Потребность"):objectFilter!=="all"?(objectOptions.find(([id])=>id===objectFilter)?.[1]??"Объект"):"Выбранный контур"}</span></div><Link className="button" href="/needs">← Потребности</Link></div>}
 
     <div className="recruiting-funnel-viewbar">
-      <SalesSegments<WorkQueue> label="Рабочая очередь" value={queue} onChange={setQueue} items={[{value:"active",label:"В работе"},{value:"attention",label:"Требуют действия"},{value:"today",label:"На сегодня"},{value:"missing",label:"Без действия"}]}/>
+      <SalesSegments<WorkQueue> label="Рабочая очередь" value={queue} variant="navigation" onChange={setQueue} items={[{value:"active",label:"В работе"},{value:"attention",label:"Требуют действия"},{value:"today",label:"На сегодня"},{value:"missing",label:"Без действия"}]}/>
       <div className="recruiting-funnel-actions"><Link className="button" href="/needs?view=analytics">Аналитика</Link><Link className="button" href="/candidates">Кандидаты</Link>{canConfigurePipeline&&<button className="button" onClick={()=>setShowStageSettings(true)}><Settings2 size={14}/> Настроить воронку</button>}{canCreate&&<button className="button primary" onClick={()=>setShowCreate(true)}>+ Добавить кандидата</button>}</div>
     </div>
 
