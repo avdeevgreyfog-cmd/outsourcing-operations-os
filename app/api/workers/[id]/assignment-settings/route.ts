@@ -98,6 +98,28 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       `;
       if(body.employmentDocumentsStatus!==undefined)await tx`UPDATE worker_profiles SET employment_documents_status=${body.employmentDocumentsStatus},updated_at=now() WHERE id=${id}::uuid`;
 
+      if(transferred&&body.dayRate===undefined&&body.nightRate===undefined){
+        const activeRates=await tx<Array<{id:string;amount:number|string;unit:"hour"|"shift"|"month";dayNight:"any"|"day"|"night";effectiveFrom:string;effectiveTo:string|null}>>`
+          SELECT id,amount,unit,day_night "dayNight",effective_from::text "effectiveFrom",effective_to::text "effectiveTo"
+          FROM worker_rates
+          WHERE worker_id=${id}::uuid AND object_id=${scope.objectId}::uuid
+            AND day_night=ANY(ARRAY['any','day','night']::text[])
+            AND effective_from<=${assignmentDate}::date AND (effective_to IS NULL OR effective_to>=${assignmentDate}::date)
+          ORDER BY effective_from,day_night
+        `;
+        for(const rate of activeRates){
+          if(rate.effectiveFrom===assignmentDate){
+            await tx`UPDATE worker_rates SET specialty_id=${specialtyId}::uuid WHERE id=${rate.id}::uuid`;
+          }else{
+            await tx`UPDATE worker_rates SET effective_to=(${assignmentDate}::date-interval '1 day')::date WHERE id=${rate.id}::uuid`;
+            if(specialtyId)await tx`
+              INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,effective_to,created_by_user_id)
+              VALUES(${actor.organizationId}::uuid,${id}::uuid,${specialtyId}::uuid,${scope.objectId}::uuid,${rate.amount},${rate.unit},${rate.dayNight},${assignmentDate}::date,${rate.effectiveTo}::date,${actor.userId}::uuid)
+            `;
+          }
+        }
+      }
+
       if(body.dayRate!==undefined||body.nightRate!==undefined){
         const rateDate=body.specialtyEffectiveFrom??today;
         const existing=await tx<Array<{dayNight:"any"|"day"|"night";amount:number|string;unit:"hour"|"shift"|"month"}>>`
