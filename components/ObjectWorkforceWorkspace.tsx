@@ -114,12 +114,18 @@ export function ObjectWorkforceWorkspace({
       <button type="button" className={scope==="absence"?"active":""} onClick={()=>setScope("absence")}>Отсутствуют <span>{activeAbsences}</span></button>
       <button type="button" className={scope==="attention"?"active":""} onClick={()=>setScope("attention")}>Требует внимания <span>{attentionCount}</span></button>
     </div>}
-    <div className="metrics-grid object-workforce-metrics">
+    {pilot?<div className="object-workforce-kpis-inline">
+      <span><b>{workers.length}</b> сотрудников</span>
+      <span><b>{onShift}</b> на смене</span>
+      <span><b>{activeAbsences}</b> отсутствуют</span>
+      <span className={noShows?"is-attention":""}><b>{noShows}</b> невыходов сегодня</span>
+      <small>{formatDate(today)}</small>
+    </div>:<div className="metrics-grid object-workforce-metrics">
       <div className="metric"><span>Сотрудники на объекте</span><strong>{workers.length}</strong></div>
       <div className="metric"><span>Сегодня вышли</span><strong>{onShift}</strong></div>
       <div className="metric"><span>Планово отсутствуют</span><strong>{activeAbsences}</strong></div>
       <div className="metric"><span>Невыходы сегодня</span><strong>{noShows}</strong></div>
-    </div>
+    </div>}
     <div className="object-workforce-commandbar">
       <div className="object-workforce-toolbar compact">
       <input value={query} onChange={event=>setQuery(event.target.value)} placeholder="ФИО или телефон"/>
@@ -145,7 +151,7 @@ export function ObjectWorkforceWorkspace({
       <small>Старое назначение закроется предыдущим днём. Табели, ставки и история за прошлый период сохранятся.</small>
     </div>}
     {message&&<div className="object-staffing-message">{message}</div>}
-    <div className="object-workforce-result">Показано {filtered.length} из {workers.length} · {formatDate(today)}</div>
+    <div className="object-workforce-result"><span>Показано {filtered.length} из {workers.length}</span>{pilot&&<span>Представление: {scope==="all"?"Все сотрудники":scope==="shift"?"На смене":scope==="absence"?"Отсутствуют":"Требует внимания"}</span>}</div>
     {view==="list"
       ?<WorkerTable rows={filtered} today={today} showSpecialty canEdit={canEdit} canManageAssets={canManageAssets} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>
       :<div className="object-workforce-groups">{groups.map(group=><section key={group.name} className="object-workforce-group"><button type="button" className="object-workforce-group-head" onClick={()=>toggleGroup(group.name)} aria-expanded={shouldOpen(group.name)}><span><strong>{group.name}</strong><small>{group.rows.length} чел.</small></span><b>{shouldOpen(group.name)?"Свернуть":"Развернуть"}</b></button>{shouldOpen(group.name)&&<WorkerTable rows={group.rows} today={today} canEdit={canEdit} canManageAssets={canManageAssets} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>}</section>)}</div>}
