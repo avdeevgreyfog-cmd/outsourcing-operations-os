@@ -10,6 +10,7 @@ import { Empty,EntityTabs,Metric,PageHeader,Section,Status } from "@/components/
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
+import { ObjectPpeTemplatesWorkspace } from "@/components/ObjectPpeTemplatesWorkspace";
 import { ObjectShiftsWorkspace } from "@/components/ObjectShiftsWorkspace";
 import { ObjectStaffingWorkspace } from "@/components/ObjectStaffingWorkspace";
 import { ObjectFinanceWorkspace } from "@/components/ObjectFinanceWorkspace";
@@ -71,7 +72,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
   const objectHistory=await listObjectHistory(actor,id,100);
 
-  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,ppeTemplates,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions]=await Promise.all([
+  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,ppeTemplates,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions,workforceOptions]=await Promise.all([
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
     canPnl?listFinance(actor):Promise.resolve([]),
@@ -91,6 +92,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     getObjectContacts(actor,id),
     canTimesheets?getTimesheet(actor,{objectId:id,month:month??null}):Promise.resolve(null),
     canTimesheets?getOperationsReferenceData(actor,"time.timesheet.read",{includeWorkers:false,includeSpecialties:false}):Promise.resolve({objects:[],specialties:[],workers:[]}),
+    (canWorkers||canAssets)?getOperationsReferenceData(actor,canWorkers?"worker.read":"assets.read",{includeWorkers:false,includeSpecialties:true}):Promise.resolve({objects:[],specialties:[],workers:[]}),
   ]);
 
   const objectWorkers=workers.filter(row=>row.objectId===id);
@@ -248,7 +250,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
 
-    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace objectId={id} workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} templates={ppeTemplates} inventoryItems={inventory.items}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
+    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace objectId={id} workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} demo={actor.demo} specialties={workforceOptions.specialties}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
 
     {tab==="shifts"&&<Section title="Смены объекта" note="План выходов по сотрудникам: день, ночь и выходной. Факт фиксируется в табеле."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} demo={actor.demo}/></Section>}
 
@@ -265,6 +267,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
         {canHousing&&<Section title="Жильё"><div className="stack-list">{objectHousing.map(row=><div className="stack-item" key={row.id}><div><strong>{row.name}</strong><small>{row.occupied} занято · {row.available} свободно · {rub(row.monthlyForecast)}/мес</small></div><Status tone={row.available>0?"good":"warn"}>{row.capacity} мест</Status></div>)}</div>{!objectHousing.length&&<div className="empty-inline">Жильё к объекту не привязано</div>}<div className="section-actions"><Link className="button" href={"/supply/housing?object="+id}>Открыть жильё</Link></div></Section>}
         {canAssets&&<Section title="Запасы на объекте"><div className="stack-list">{objectBalances.filter(row=>row.minQuantity>0).slice(0,8).map(row=><div className="stack-item" key={row.locationId+row.itemId+row.variant}><div><strong>{row.item}{row.variant?" · "+row.variant:""}</strong><small>{row.location} · минимум {row.minQuantity}</small></div><Status tone={row.quantity<=row.minQuantity?"warn":"good"}>{row.quantity} {row.unit}</Status></div>)}</div>{!objectBalances.length&&<div className="empty-inline">Остатки на объекте не заведены</div>}<div className="section-actions"><Link className="button" href={"/assets?object="+id}>Открыть запасы</Link></div></Section>}
       </div>
+      {canAssets&&<Section title="Комплекты СИЗ" note="Состав комплекта задаётся по специальности. Факт выдачи остаётся в карточке сотрудника и движениях имущества."><ObjectPpeTemplatesWorkspace objectId={id} templates={ppeTemplates} inventoryItems={inventory.items} specialties={workforceOptions.specialties} canManage={canManageAssets} demo={actor.demo}/></Section>}
       {canProcurement&&<Section title="Заявки на обеспечение"><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Заявка</th><th>Тип</th><th>Количество</th><th>Сумма</th><th>Статус</th></tr></thead><tbody>{objectSupplyRequests.slice(0,10).map(row=><tr key={row.id}><td className="cell-title">{row.title}</td><td>{row.requestType==="purchase"?"Закупка":row.requestType==="payment"?"Оплата":row.requestType==="compensation"?"Компенсация":"Услуга"}</td><td className="num">{row.quantity==null?"—":row.quantity+" "+(row.unit??"")}</td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td><Status tone={row.status==="closed"?"good":row.status==="rejected"?"bad":"info"}>{row.status==="submitted"?"Подана":row.status==="approved"?"Согласована":row.status==="in_progress"?"В работе":row.status==="received"?"Исполнено":row.status==="closed"?"Закрыта":row.status==="rejected"?"Отклонена":row.status}</Status></td></tr>)}</tbody></table></div><div className="section-actions"><Link className="button primary" href={"/procurement?object="+id}>Заявки на обеспечение</Link></div></Section>}
     </>}
 
