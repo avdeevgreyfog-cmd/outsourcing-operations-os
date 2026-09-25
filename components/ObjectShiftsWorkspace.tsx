@@ -19,7 +19,7 @@ type CellState={kind:Kind;label:string;source:"fact"|"plan"|"suggested"|"absence
 const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",reserve_day:"Резерв день",reserve_night:"Резерв ночь",clear:"Очистить"};
 const factLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"НВ"};
 
-export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPlanAbsence,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;canPlanAbsence:boolean;demo:boolean}){
+export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPlanAbsence,demo,pilot=false}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;canPlanAbsence:boolean;demo:boolean;pilot?:boolean}){
   const [start,setStart]=useState(today);
   const [mode,setMode]=useState<Mode>("workers");
   const [busy,setBusy]=useState("");
@@ -201,7 +201,8 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     }catch(error){setMessage(error instanceof Error?error.message:"Не удалось запланировать отсутствие")}
     finally{setBusy("")}
   }
-  return <div className="object-shift-planner object-shift-workbench">
+  return <div className={`object-shift-planner object-shift-workbench ${pilot?"object-shift-pilot":"object-shift-classic"}`}>
+    {pilot&&<div className="object-local-tabs object-shift-local-tabs" role="tablist" aria-label="Представления смен"><button type="button" className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>План по сотрудникам <span>{workers.length}</span></button><button type="button" className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям <span>{specialties.length}</span></button><button type="button" className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания <span>{attentionCount}</span></button></div>}
     <div className="object-shift-planner-toolbar">
       <div className="page-actions">
         <button className="button" onClick={()=>{const next=addDays(start,-7);setStart(next);setFocusDate(next)}}>← Неделя</button>
@@ -210,7 +211,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
         <strong>{formatRange(start,end)}</strong>
       </div>
       <div className="page-actions">
-        <div className="segmented"><button className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>По сотрудникам</button><button className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям</button><button className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания{attentionCount?` · ${attentionCount}`:""}</button></div>
+        {!pilot&&<div className="segmented"><button className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>По сотрудникам</button><button className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям</button><button className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания{attentionCount?` · ${attentionCount}`:""}</button></div>}
         {canEdit&&<button className="button primary" disabled={busy==="generate"} onClick={()=>void generate()}>{selected.size?"По графику выбранных":"Сформировать с сегодня"}</button>}
       </div>
     </div>
@@ -246,10 +247,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       <div className="page-actions"><button className="button" type="button" onClick={()=>setAbsenceOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="absence"} onClick={()=>void planAbsence()}>{busy==="absence"?"Сохраняем…":"Запланировать"}</button></div>
     </div>}
 
-    <div className="object-shift-legend">
-      <span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span>
-      <span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span>
-    </div>
+    {pilot?<details className="object-shift-legend object-shift-legend-collapsible"><summary>Обозначения и логика плана</summary><div><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div></details>:<div className="object-shift-legend"><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div>}
     {message&&<div className="object-staffing-message">{message}</div>}
 
     <div className="object-shift-coverage">
