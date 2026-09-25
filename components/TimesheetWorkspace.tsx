@@ -295,9 +295,9 @@ function ratePeriodLabel(rate:TimesheetRatePeriod,month:string){
   return [start,end].filter(Boolean).join(" · ");
 }
 function rateTextForExport(row:TimesheetWorkerRow,segment:Segment,month:string){return relevantRates(row,segment,month).map(rate=>`${formatRate(rate,row.plannedHours)} ${ratePeriodLabel(rate,month)}`.trim()).join(" / ")||rateText(segment==="day"?row.dayRate??row.rate:row.nightRate??row.rate)}
-function specialtyText(row:TimesheetWorkerRow){return (row.specialtyHistory??[]).map(item=>`${item.specialty??"Без специальности"}${item.effectiveTo?` до ${shortDate(item.effectiveTo)}`:""}`).join(" / ")||row.specialty??""}
+function specialtyText(row:TimesheetWorkerRow){return (row.specialtyHistory??[]).map(item=>`${item.specialty??"Без специальности"}${item.effectiveTo?` до ${shortDate(item.effectiveTo)}`:""}`).join(" / ")||row.specialty||""}
 function cellDisplay(row:TimesheetWorkerRow,day:number,segment:Segment,month:string){const date=dateString(month,day);if(isFirstAfterEnd(row,date))return"УВ";if(isAfterEnd(row,date))return"—";return (segment==="day"?row.dayCells:row.nightCells)?.[String(day)]??""}
-function timesheetCellClass(value:TimesheetCellValue,ended:boolean,weekend:boolean){
+function timesheetCellClass(value:TimesheetCellValue|undefined,ended:boolean,weekend:boolean){
   const code=String(value??"");const classes=["day"];if(weekend)classes.push("weekend");if(ended)classes.push("timesheet-terminated");
   if(code==="П")classes.push("day-planned");if(code==="В")classes.push("timesheet-day-off");if(code==="МВ")classes.push("timesheet-intershift");if(code==="О")classes.push("timesheet-vacation");if(code==="Б")classes.push("timesheet-sick");if(code==="НВ")classes.push("timesheet-no-show");if(code==="УВ")classes.push("timesheet-ended-marker");
   return classes.join(" ");
