@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 type Props = {
   enabled: boolean;
   defaultTab: string;
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export function StaticDemoQueryTabsController({ enabled, defaultTab, className, children }: Props) {
