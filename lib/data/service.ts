@@ -512,8 +512,8 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     const meta=options?.objectId?visible.find(row=>row.objectId===options.objectId):visible[0];
     if(!meta)return null;
 
-    const workers=await sql<Array<TimesheetWorkerRow & {organizationId:string;effectiveFrom:string;effectiveTo:string|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null}>>`
-      SELECT DISTINCT w.id "workerId",w.full_name name,s.name specialty,0::numeric total,0::numeric night,0::numeric overtime,
+    const workers=await sql<Array<TimesheetWorkerRow & {organizationId:string;specialtyId:string|null;effectiveFrom:string;effectiveTo:string|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null}>>`
+      SELECT DISTINCT w.id "workerId",w.full_name name,a.specialty_id "specialtyId",s.name specialty,0::numeric total,0::numeric night,0::numeric overtime,
         a.effective_from::text "effectiveFrom",a.effective_to::text "effectiveTo",a.schedule_work_days "scheduleWorkDays",a.schedule_rest_days "scheduleRestDays",a.schedule_shift_kind "scheduleShiftKind",a.schedule_anchor_date::text "scheduleAnchorDate",a.paid_hours_per_shift::numeric "plannedHours",
         ${maySeeComp?sql`COALESCE(CASE WHEN day_rate.unit='shift' AND a.paid_hours_per_shift>0 THEN day_rate.amount/a.paid_hours_per_shift ELSE day_rate.amount END,CASE WHEN any_rate.unit='shift' AND a.paid_hours_per_shift>0 THEN any_rate.amount/a.paid_hours_per_shift ELSE any_rate.amount END)`:sql`NULL::numeric`} rate,
         ${maySeeComp?sql`COALESCE(CASE WHEN day_rate.unit='shift' AND a.paid_hours_per_shift>0 THEN day_rate.amount/a.paid_hours_per_shift ELSE day_rate.amount END,CASE WHEN any_rate.unit='shift' AND a.paid_hours_per_shift>0 THEN any_rate.amount/a.paid_hours_per_shift ELSE any_rate.amount END)`:sql`NULL::numeric`} "dayRate",
@@ -535,9 +535,9 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       WHERE a.object_id=${meta.objectId}::uuid
         AND a.effective_from<=${periodEnd}::date
         AND (a.effective_to IS NULL OR a.effective_to>=${periodStart}::date)
-      ORDER BY w.full_name
+      ORDER BY w.full_name,a.effective_from
     `;
-    const workerIds=workers.map(row=>row.workerId);
+    const workerIds=[...new Set(workers.map(row=>row.workerId))];
     const entries=workerIds.length?await sql<Array<{workerId:string;workDate:string;timeCode:string;factHours:number|string;dayHours:number|string;nightHours:number|string;overtimeHours:number|string;plannedShiftKind:"day"|"night"|"mixed"|null}>>`
       SELECT worker_id "workerId",work_date::text "workDate",time_code "timeCode",fact_hours "factHours",day_hours "dayHours",night_hours "nightHours",overtime_hours "overtimeHours",planned_shift_kind "plannedShiftKind"
       FROM time_entries
