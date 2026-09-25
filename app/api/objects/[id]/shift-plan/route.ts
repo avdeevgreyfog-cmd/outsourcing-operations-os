@@ -19,7 +19,7 @@ function cycleWork(date:string,row:Assignment){
   const cycle=row.workDays+row.restDays;const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(row.anchorDate+"T00:00:00Z"))/86400000);const offset=((diff%cycle)+cycle)%cycle;
   return offset<row.workDays;
 }
-function dates(start:string,end:string){const out:string[]=[];let d=new Date(start+"T00:00:00Z"),finish=new Date(end+"T00:00:00Z");while(d<=finish){out.push(d.toISOString().slice(0,10));d=new Date(d.getTime()+86400000)}return out}
+function dates(start:string,end:string){const out:string[]=[];let d=new Date(start+"T00:00:00Z");const finish=new Date(end+"T00:00:00Z");while(d<=finish){out.push(d.toISOString().slice(0,10));d=new Date(d.getTime()+86400000)}return out}
 async function syncCounts(tx:Sql,shiftIds:string[]){if(!shiftIds.length)return;await tx`UPDATE shifts sh SET assigned_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'),reserve_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled') WHERE sh.id=ANY(${shiftIds}::uuid[])`;}
 async function upsertPlanEntry(tx:Sql,actor:{organizationId:string;userId:string},objectId:string,workerId:string,date:string,kind:"day"|"night"|"off"){
   const [existing]=await tx<Array<{id:string;factHours:number|string}>>`SELECT id,fact_hours "factHours" FROM time_entries WHERE worker_id=${workerId}::uuid AND object_id=${objectId}::uuid AND work_date=${date}::date AND shift_id IS NULL ORDER BY updated_at DESC LIMIT 1 FOR UPDATE`;
