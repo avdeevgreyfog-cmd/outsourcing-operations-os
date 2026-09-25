@@ -151,16 +151,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   }));
 
 
-  const compareQuery=(mode:"classic"|"pilot")=>`/objects/${id}?tab=${tab}&ui=${mode}${month?`&month=${encodeURIComponent(month)}`:""}`;
   return <div className={`object-workspace-compare object-workspace-${uiMode}`}>
-    <div className="object-ui-compare">
-      <div><strong>Сравнение интерфейса</strong><span>Одни и те же данные и функции, разная организация рабочего пространства.</span></div>
-      <div className="object-ui-switch">
-        <Link href={compareQuery("classic")} className={uiMode==="classic"?"active":""}>Классический</Link>
-        <Link href={compareQuery("pilot")} className={uiMode==="pilot"?"active":""}>Новый</Link>
-      </div>
-    </div>
-
     {uiMode==="classic"?<>
       <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
       <div className="object-hero">
