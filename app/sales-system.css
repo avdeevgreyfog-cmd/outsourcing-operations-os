@@ -1811,3 +1811,13 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .object-shift-bulkbar{align-items:stretch;flex-wrap:wrap}
   .sales-workspace.operations-workspace .object-shift-deficit-panel{grid-template-columns:1fr}
 }
+
+
+.sales-workspace.operations-workspace .object-shift-range-actions{gap:5px;flex:0 0 auto}
+.sales-workspace.operations-workspace .object-shift-range-actions .button{height:31px;min-height:31px;padding:0 8px;font-size:9px}
+.sales-workspace.operations-workspace .object-shift-deficit-list>span{display:flex;align-items:center;gap:4px}
+.sales-workspace.operations-workspace .object-shift-deficit-list>span button{
+  margin-left:2px;padding:1px 5px;border:0;border-left:1px solid var(--border);background:transparent;
+  color:var(--accent);font:inherit;font-weight:600;cursor:pointer
+}
+.sales-workspace.operations-workspace .object-shift-deficit-list>span button:hover{text-decoration:underline}
