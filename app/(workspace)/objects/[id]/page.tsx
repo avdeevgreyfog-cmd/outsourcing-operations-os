@@ -156,7 +156,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
   }));
   const panel=(key:string,content:ReactNode)=>{
-    if(!staticDemo&&tab!==key)return null;
+    if(!visibleLabels[key]||(!staticDemo&&tab!==key))return null;
     return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
   };
 
