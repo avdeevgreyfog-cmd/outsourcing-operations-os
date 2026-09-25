@@ -255,7 +255,7 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
     <SalesMetrics label="Сводка базы ставок" items={metrics}/>
     {demo&&<div className="rates-demo-note"><strong>Демо-контур.</strong><span>Импортированные и ручные ориентиры сохраняются в этом браузере.</span></div>}
     <div className="rates-toolbar-primary">
-      <SalesSegments label="Представление" value={view} onChange={setView} items={[{value:"summary",label:"Сводка"},{value:"history",label:"История наблюдений"}]}/>
+      <SalesSegments label="Представление" value={view} variant="navigation" onChange={setView} items={[{value:"summary",label:"Сводка"},{value:"history",label:"История наблюдений"}]}/>
       <div className="rates-actions">
         <button className="button" type="button" onClick={downloadTemplate}><Download size={15}/> Шаблон импорта</button>
         {canManage&&<><input ref={fileRef} className="rates-file-input" type="file" accept=".xlsx,.xls,.csv" onChange={event=>{const file=event.target.files?.[0];if(file)void readImport(file);}}/><button className="button" type="button" onClick={()=>fileRef.current?.click()}><Upload size={15}/> Импорт</button><button className="button primary" type="button" onClick={()=>setAddOpen(true)}><Plus size={15}/> Добавить ориентир</button></>}
