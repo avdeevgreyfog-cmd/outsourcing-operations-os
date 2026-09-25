@@ -286,27 +286,28 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
               </tr>;
             });
           })}</tbody>
+          {attentionOnly&&visibleRows.filter(row=>row.rowKind!=="candidate").length===0&&<tbody><tr><td className="timesheet-filter-empty" colSpan={days.length+(view==="internal"&&sensitive?3:2)+2+(detailsOpen?3:0)+(view==="internal"&&sensitive&&financeOpen?5:0)}>Нет сотрудников, требующих внимания за выбранный период.</td></tr></tbody>}
           <tfoot className="timesheet-daily-summary">
             <tr>
               <td className="sticky-col timesheet-summary-label" colSpan={view==="internal"&&sensitive?3:2}>План, чел.</td>
-              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{daySummary[day]?.planned||"—"}</td>)}
-              <td className="num">{days.reduce((sum,day)=>sum+(daySummary[day]?.planned??0),0)||"—"}</td><td>—</td>
+              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""} ${currentDay===day?"today":""}`} key={day}>{daySummary[day]?.planned||"—"}</td>)}
+              <td className="num" title="Плановых человеко-выходов за выбранный период">{days.reduce((sum,day)=>sum+(daySummary[day]?.planned??0),0)||"—"}</td><td>—</td>
               {detailsOpen&&<td colSpan={3}></td>}
-              {view==="internal"&&sensitive&&<td colSpan={5}></td>}
+              {view==="internal"&&sensitive&&financeOpen&&<td colSpan={5}></td>}
             </tr>
             <tr>
               <td className="sticky-col timesheet-summary-label" colSpan={view==="internal"&&sensitive?3:2}>Вышло, чел.</td>
-              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{daySummary[day]?.worked||"—"}</td>)}
-              <td className="num">{days.reduce((sum,day)=>sum+(daySummary[day]?.worked??0),0)||"—"}</td><td>—</td>
+              {days.map(day=>{const summary=daySummary[day];const date=dateString(data.month,day);const deficit=date<=todayIso&&Number(summary?.planned??0)>Number(summary?.worked??0);return <td className={`day num ${isWeekend(data.month,day)?"weekend":""} ${currentDay===day?"today":""} ${deficit?"timesheet-staffing-deficit":""}`} key={day} title={deficit?`План: ${summary?.planned??0}, вышло: ${summary?.worked??0}`:undefined}>{summary?.worked||"—"}</td>})}
+              <td className="num" title="Фактических человеко-выходов за выбранный период">{days.reduce((sum,day)=>sum+(daySummary[day]?.worked??0),0)||"—"}</td><td>—</td>
               {detailsOpen&&<td colSpan={3}></td>}
-              {view==="internal"&&sensitive&&<td colSpan={5}></td>}
+              {view==="internal"&&sensitive&&financeOpen&&<td colSpan={5}></td>}
             </tr>
             <tr className="timesheet-summary-hours">
               <td className="sticky-col timesheet-summary-label" colSpan={view==="internal"&&sensitive?3:2}>Отработано, ч.</td>
-              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""}`} key={day}>{daySummary[day]?.hours||"—"}</td>)}
+              {days.map(day=><td className={`day num ${isWeekend(data.month,day)?"weekend":""} ${currentDay===day?"today":""}`} key={day}>{daySummary[day]?.hours||"—"}</td>)}
               <td className="num">{totals.dayShifts+totals.nightShifts}</td><td className="num">{totalHours}</td>
               {detailsOpen&&<><td className="num">{detailTotals.daysOff||"—"}</td><td className="num">{detailTotals.sick||"—"}</td><td className="num">{detailTotals.noShows||"—"}</td></>}
-              {view==="internal"&&sensitive&&<><td className="num timesheet-money">{money(rows.reduce((sum,row)=>sum+calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month),0))}</td><td colSpan={4}></td></>}
+              {view==="internal"&&sensitive&&financeOpen&&<><td className="num timesheet-money">{money(rows.reduce((sum,row)=>sum+calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month),0))}</td><td colSpan={4}></td></>}
             </tr>
           </tfoot>
         </table>
@@ -350,6 +351,13 @@ function RateHistory({row,segment,month}:{row:TimesheetWorkerRow;segment:Segment
     const last=index===rates.length-1;
     return <span key={rate.kind+rate.effectiveFrom} className={last?"current":"previous"}><b>{formatRate(rate,row.plannedHours)}</b><small>{ratePeriodLabel(rate,month)}</small></span>;
   })}</div>;
+}
+function rowNeedsAttention(row:TimesheetWorkerRow,days:number[],month:string,todayIso:string){
+  return days.some(day=>{
+    const date=dateString(month,day);if(date>todayIso)return false;
+    const dayValue=String(row.dayCells?.[String(day)]??""),nightValue=String(row.nightCells?.[String(day)]??"");
+    return [dayValue,nightValue].some(value=>["?","НВ","Н","Б","П"].includes(value));
+  });
 }
 function visibleSegments(row:TimesheetWorkerRow,mode:RowMode,days:number[]):Segment[]{
   if(mode==="all")return["day","night"];
