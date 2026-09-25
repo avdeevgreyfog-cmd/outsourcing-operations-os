@@ -1594,3 +1594,41 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .timesheet-ended-marker{
   background:color-mix(in srgb,var(--bad) 6%,var(--panel))!important
 }
+
+
+/* FINAL timesheet state treatment.
+   State codes use the same typography as regular timetable codes.
+   Intershift/vacation share one neutral fill; termination uses a soft red fill. */
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-intershift,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-vacation,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-ended-marker,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-absence-band.range-start,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-absence-band.range-single{
+  font:inherit!important;
+  font-size:inherit!important;
+  font-weight:400!important;
+  line-height:inherit!important;
+  letter-spacing:normal!important;
+  text-transform:none!important;
+  color:var(--text)!important
+}
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-absence-band,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-absence-intershift,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-absence-vacation,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-absence-band.weekend{
+  background:color-mix(in srgb,var(--info) 8%,var(--panel))!important
+}
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-terminated,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-ended-marker,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-terminated.weekend,
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-terminated.timesheet-blocked-continuation{
+  background:color-mix(in srgb,var(--bad) 8%,var(--panel))!important
+}
+.sales-workspace.operations-workspace .timesheet-operational td.timesheet-blocked-continuation{
+  color:transparent!important;
+  pointer-events:none
+}
+.sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td.timesheet-absence-band,
+.sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td.timesheet-terminated{
+  background-color:inherit!important
+}
