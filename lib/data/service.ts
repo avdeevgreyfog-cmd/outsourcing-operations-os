@@ -600,30 +600,125 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     `:[];
 
     const codeLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"Н"};
+    const absenceLabels:Record<string,string>={intershift:"МВ",vacation:"О",sick:"Б",personal:"Н",other:"Н"};
+    const ratesByWorker=new Map<string,TimesheetRatePeriod[]>();
+    for(const rate of rateRows){
+      const list=ratesByWorker.get(rate.workerId)??[];
+      list.push({kind:rate.kind,amount:rate.amount,unit:rate.unit,effectiveFrom:rate.effectiveFrom,effectiveTo:rate.effectiveTo});
+      ratesByWorker.set(rate.workerId,list);
+    }
     const byWorker=new Map<string,TimesheetWorkerRow>();
     for(const worker of workers){
-      const row:TimesheetWorkerRow={workerId:worker.workerId,name:worker.name,rowKind:"worker",specialty:worker.specialty??null,effectiveFrom:worker.effectiveFrom,effectiveTo:worker.effectiveTo,days:{},dayCells:{},nightCells:{},plannedShiftKinds:{},plannedHours:worker.plannedHours==null?null:Number(worker.plannedHours),total:0,dayHours:0,night:0,overtime:0,rate:worker.rate,dayRate:worker.dayRate,nightRate:worker.nightRate,accrual:worker.accrual};
+      let row=byWorker.get(worker.workerId);
+      if(!row){
+        row={
+          workerId:worker.workerId,name:worker.name,rowKind:"worker",specialty:worker.specialty??null,
+          effectiveFrom:worker.effectiveFrom,effectiveTo:worker.effectiveTo,
+          specialtyHistory:[],rateHistory:ratesByWorker.get(worker.workerId)??[],absenceRanges:[],
+          days:{},dayCells:{},nightCells:{},plannedShiftKinds:{},
+          plannedHours:worker.plannedHours==null?null:Number(worker.plannedHours),
+          total:0,dayHours:0,night:0,overtime:0,rate:worker.rate,dayRate:worker.dayRate,nightRate:worker.nightRate,accrual:worker.accrual,
+          dayAccrued:0,nightAccrued:0,calculatedAccrual:0,premium:null,adjustment:null,accrualTotal:null,paidAmount:0,payableAmount:0,
+        };
+        byWorker.set(worker.workerId,row);
+      }
+      row.specialty=worker.specialty??row.specialty??null;
+      row.effectiveFrom=!row.effectiveFrom||worker.effectiveFrom<row.effectiveFrom?worker.effectiveFrom:row.effectiveFrom;
+      row.effectiveTo=worker.effectiveTo;
+      row.plannedHours=worker.plannedHours==null?row.plannedHours:Number(worker.plannedHours);
+      row.rate=worker.rate??row.rate;row.dayRate=worker.dayRate??row.dayRate;row.nightRate=worker.nightRate??row.nightRate;row.accrual=worker.accrual??row.accrual;
+      row.specialtyHistory!.push({specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.effectiveFrom,effectiveTo:worker.effectiveTo});
       if(worker.scheduleWorkDays!=null&&worker.scheduleRestDays!=null&&worker.scheduleWorkDays>0){
-        const anchor=worker.scheduleAnchorDate??worker.effectiveFrom;const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;
+        const anchor=worker.scheduleAnchorDate??worker.effectiveFrom;
+        const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;
         for(let day=1;day<=Number(periodEnd.slice(8,10));day++){
-          const date=`${requestedMonth}-${String(day).padStart(2,"0")}`;if(date<worker.effectiveFrom||(worker.effectiveTo&&date>worker.effectiveTo))continue;
+          const date=`${requestedMonth}-${String(day).padStart(2,"0")}`;
+          if(date<worker.effectiveFrom||(worker.effectiveTo&&date>worker.effectiveTo))continue;
           const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);
-          const offset=((diff%cycle)+cycle)%cycle;const cell=offset<worker.scheduleWorkDays?"П":"В";row.days![String(day)]=cell;
-          if(offset<worker.scheduleWorkDays){row.plannedShiftKinds![String(day)]=worker.scheduleShiftKind;if(worker.scheduleShiftKind==="night")row.nightCells![String(day)]="П";else row.dayCells![String(day)]="П";}else{row.dayCells![String(day)]="В";row.nightCells![String(day)]="В";}
+          const offset=((diff%cycle)+cycle)%cycle;
+          const work=offset<worker.scheduleWorkDays;
+          row.days![String(day)]=work?"П":"В";
+          if(work){
+            row.plannedShiftKinds![String(day)]=worker.scheduleShiftKind;
+            if(worker.scheduleShiftKind==="night"){row.nightCells![String(day)]="П";delete row.dayCells![String(day)];}
+            else{row.dayCells![String(day)]="П";delete row.nightCells![String(day)];}
+          }else{
+            row.dayCells![String(day)]="В";delete row.nightCells![String(day)];
+          }
         }
       }
-      byWorker.set(worker.workerId,row);
     }
+
+    const nextDate=(value:string|null)=>{if(!value)return null;const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+1);return date.toISOString().slice(0,10)};
+    for(const absence of absenceRows){
+      const row=byWorker.get(absence.workerId);if(!row)continue;
+      row.absenceRanges??=[];
+      row.absenceRanges.push({type:absence.type,from:absence.from,to:absence.to,returnDate:nextDate(absence.to)});
+      const from=absence.from>periodStart?absence.from:periodStart;
+      const to=!absence.to||absence.to>periodEnd?periodEnd:absence.to;
+      for(const date of dateRange(from,to)){
+        if(row.effectiveFrom&&date<row.effectiveFrom)continue;
+        if(row.effectiveTo&&date>row.effectiveTo)continue;
+        const day=String(Number(date.slice(8,10)));const code=absenceLabels[absence.type]??"Н";
+        row.days![day]=code;row.dayCells![day]=code;delete row.nightCells![day];delete row.plannedShiftKinds![day];
+      }
+    }
+
+    const assignmentAt=(workerId:string,date:string)=>workers.find(worker=>worker.workerId===workerId&&worker.effectiveFrom<=date&&(!worker.effectiveTo||worker.effectiveTo>=date));
+    const rateAt=(row:TimesheetWorkerRow,date:string,kind:"day"|"night")=>{
+      const active=(row.rateHistory??[]).filter(rate=>rate.effectiveFrom<=date&&(!rate.effectiveTo||rate.effectiveTo>=date));
+      return active.filter(rate=>rate.kind===kind).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+        ??active.filter(rate=>rate.kind==="any").sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+        ??null;
+    };
+    const ratedAmount=(rate:TimesheetRatePeriod|null,hours:number,plannedHours:number)=>{
+      if(!rate||hours<=0||rate.unit==="month")return 0;
+      const amount=Number(rate.amount);
+      return rate.unit==="shift"?(plannedHours>0?hours*(amount/plannedHours):amount):hours*amount;
+    };
+    const workedDates=new Map<string,string[]>();
     for(const entry of entries){
       const row=byWorker.get(entry.workerId);if(!row)continue;
       const day=String(Number(entry.workDate.slice(8,10)));
-      row.days??={};row.dayCells??={};row.nightCells??={};
-      const code=entry.timeCode==="WORK"?null:codeLabels[entry.timeCode]??"Н";const dayHours=Number(entry.dayHours??0);const nightHours=Number(entry.nightHours??0);
-      row.days[day]=code??Number(entry.factHours);
-      if(code){const kind=entry.plannedShiftKind??row.plannedShiftKinds?.[day]??"day";if(kind==="night")row.nightCells[day]=code;else row.dayCells[day]=code;}else{if(dayHours>0)row.dayCells[day]=dayHours;if(nightHours>0)row.nightCells[day]=nightHours;}
-      if(entry.plannedShiftKind)row.plannedShiftKinds![day]=entry.plannedShiftKind;
-      row.total=Number(row.total)+Number(entry.factHours);row.dayHours=Number(row.dayHours??0)+dayHours;
+      row.days??={};row.dayCells??={};row.nightCells??={};row.plannedShiftKinds??={};
+      const code=entry.timeCode==="WORK"?null:codeLabels[entry.timeCode]??"Н";
+      const dayHours=Number(entry.dayHours??0),nightHours=Number(entry.nightHours??0),factHours=Number(entry.factHours??0);
+      row.days[day]=code??factHours;
+      if(code){
+        const wholeDay=["В","О","МВ","Б","Н"].includes(code);
+        const kind=entry.plannedShiftKind??row.plannedShiftKinds?.[day]??"day";
+        if(wholeDay||kind!=="night"){row.dayCells[day]=code;delete row.nightCells[day];}
+        else{row.nightCells[day]=code;delete row.dayCells[day];}
+      }else{
+        delete row.dayCells[day];delete row.nightCells[day];
+        if(dayHours>0)row.dayCells[day]=dayHours;
+        if(nightHours>0)row.nightCells[day]=nightHours;
+      }
+      if(entry.plannedShiftKind)row.plannedShiftKinds[day]=entry.plannedShiftKind;
+      row.total=Number(row.total)+factHours;row.dayHours=Number(row.dayHours??0)+dayHours;
       row.night=Number(row.night??0)+nightHours;row.overtime=Number(row.overtime??0)+Number(entry.overtimeHours);
+      if(factHours>0){
+        const dates=workedDates.get(entry.workerId)??[];dates.push(entry.workDate);workedDates.set(entry.workerId,dates);
+        const assignment=assignmentAt(entry.workerId,entry.workDate);
+        const plannedHours=Number(assignment?.plannedHours??row.plannedHours??0);
+        row.dayAccrued=Number(row.dayAccrued??0)+ratedAmount(rateAt(row,entry.workDate,"day"),dayHours,plannedHours);
+        row.nightAccrued=Number(row.nightAccrued??0)+ratedAmount(rateAt(row,entry.workDate,"night"),nightHours,plannedHours);
+      }
+    }
+    for(const row of byWorker.values()){
+      const worked=workedDates.get(row.workerId)??[];
+      const monthly=(row.rateHistory??[]).filter(rate=>rate.kind==="any"&&rate.unit==="month"&&worked.some(date=>rate.effectiveFrom<=date&&(!rate.effectiveTo||rate.effectiveTo>=date))).reduce((max,rate)=>Math.max(max,Number(rate.amount)),0);
+      row.calculatedAccrual=Number(row.dayAccrued??0)+Number(row.nightAccrued??0)+monthly;
+      const finance=financeRows.find(item=>item.workerId===row.workerId);
+      if(finance){
+        row.premium=finance.accrualCount?Number(finance.premium):null;
+        row.adjustment=finance.accrualCount?Number(finance.adjustment):null;
+        row.accrualTotal=finance.accrualCount?Number(finance.total):null;
+        row.paidAmount=Number(finance.paid??0);
+      }
+      const earned=row.accrualTotal??row.calculatedAccrual??0;
+      row.payableAmount=earned-Number(row.paidAmount??0);
+      row.accrual=earned;
     }
     const plannedCandidates=await sql<Array<{applicationId:string;candidateId:string;name:string;specialty:string;plannedStartDate:string;plannedShiftKind:"day"|"night"|"mixed"|null}>>`
       SELECT ca.id "applicationId",c.id "candidateId",c.full_name name,s.name specialty,ca.planned_start_date::text "plannedStartDate",ca.planned_shift_kind "plannedShiftKind"
