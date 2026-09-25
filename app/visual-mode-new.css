@@ -1238,7 +1238,7 @@
 /* True controls remain controls. This normalizes old segmented variants without
    making filters look like page navigation. */
 :root[data-operis-ui="new"] :is(
-  .segmented,
+  .segmented:not(.workspace-tabs),
   .sales-segments:not(.workspace-tabs),
   .segmented-control,
   .request-mini-segments,
@@ -1258,7 +1258,7 @@
   overflow-x:auto
 }
 :root[data-operis-ui="new"] :is(
-  .segmented,
+  .segmented:not(.workspace-tabs),
   .sales-segments:not(.workspace-tabs),
   .segmented-control,
   .request-mini-segments,
@@ -1284,7 +1284,7 @@
   cursor:pointer
 }
 :root[data-operis-ui="new"] :is(
-  .segmented,
+  .segmented:not(.workspace-tabs),
   .sales-segments:not(.workspace-tabs),
   .segmented-control,
   .request-mini-segments,
@@ -1294,7 +1294,7 @@
   color:var(--text)
 }
 :root[data-operis-ui="new"] :is(
-  .segmented,
+  .segmented:not(.workspace-tabs),
   .sales-segments:not(.workspace-tabs),
   .segmented-control,
   .request-mini-segments,
