@@ -29,7 +29,7 @@ export type TimesheetAbsenceRange={type:"intershift"|"vacation"|"sick"|"personal
 export type TimesheetWorkerRow = { workerId:string; name:string; rowKind?:"worker"|"candidate"; candidateId?:string|null; applicationId?:string|null; specialty?:string|null; effectiveFrom?:string|null; effectiveTo?:string|null; specialtyHistory?:TimesheetAssignmentPeriod[]; rateHistory?:TimesheetRatePeriod[]; absenceRanges?:TimesheetAbsenceRange[]; days?:Record<string,TimesheetCellValue>; dayCells?:Record<string,TimesheetCellValue>; nightCells?:Record<string,TimesheetCellValue>; plannedShiftKinds?:Record<string,"day"|"night"|"mixed">; plannedHours?:number|null; total:number|string; dayHours?:number|string|null; night?:number|string|null; overtime?:number|string|null; rate?:number|string|null; dayRate?:number|string|null; nightRate?:number|string|null; accrual?:number|string|null; dayAccrued?:number; nightAccrued?:number; calculatedAccrual?:number; premium?:number|null; adjustment?:number|null; accrualTotal?:number|null; paidAmount?:number|null; payableAmount?:number|null };
 export type ReconciliationIssue = { id?:string; difference:number|string; worker:string; date:string; reason:string; owner:string; status?:string };
 export type TimesheetSnapshotMeta = { id:string; status:string; version:number; hours:number; comment:string|null; createdAt:string };
-export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; month:string; periodStart:string; periodEnd:string; clientHours:number; internalHours:number; discrepancy:number; status:string; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null; internalSnapshot:TimesheetSnapshotMeta|null; clientSnapshot:TimesheetSnapshotMeta|null };
+export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; month:string; periodStart:string; periodEnd:string; clientHours:number; internalHours:number; discrepancy:number; status:string; planByDay:Record<string,number>; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null; internalSnapshot:TimesheetSnapshotMeta|null; clientSnapshot:TimesheetSnapshotMeta|null };
 export type FinanceRow = ScopedRow & { id:string; objectId:string; object:string; revenue:number|string; workerCost:number|string; expenses:number|string; contribution:number|string; marginPct:number|string; planMarginPct?:number|string|null; periodStart?:string|null; periodEnd?:string|null };
 export type TaskRow = ScopedRow & { id:string; title:string; status:string; priority:string; due?:string|null; entity?:string|null };
 export type AccessUserRow = { id:string; membershipId:string; name:string; email:string|null; role:string; roleCode:string; processRoles:string[]; teams:number; regions:number; scopes:string[]; capabilities:number; systemCapabilities:string[]; isOwner:boolean };
@@ -490,7 +490,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       for(let day=1;day<=endDay;day++){
         const date=`${requestedMonth}-${String(day).padStart(2,"0")}`;if(date<start)continue;
         const absence=worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=date&&(!worker.absenceTo||worker.absenceTo>=date);
-        if(absence){days[String(day)]=({intershift:"МВ",vacation:"О",sick:"Б",personal:"Н",other:"Н"} as Record<string,string>)[worker.absenceType??""]??"Н";continue;}
+        if(absence){days[String(day)]=({intershift:"МВ",vacation:"О",sick:"Б",personal:"В",other:"В"} as Record<string,string>)[worker.absenceType??""]??"В";continue;}
         const cycle=(day+index)%7;const planned=cycle<5;
         if(date>today)days[String(day)]=planned?"П":"В";else if(planned)days[String(day)]=index%13===7&&date===today?"НВ":hours;else days[String(day)]="В";
       }
@@ -512,8 +512,10 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     const plannedCandidate=demo.candidates.find(candidate=>candidate.objectId===object.id&&candidate.stage==="first_shift");
     if(plannedCandidate){const planDate=today>=periodStart&&today<=periodEnd?today:periodStart;rows.push({workerId:`candidate:${plannedCandidate.id}`,name:plannedCandidate.fullName,rowKind:"candidate",candidateId:plannedCandidate.id,specialty:plannedCandidate.need??null,days:{[String(Number(planDate.slice(8,10)))]:"П"},dayCells:{[String(Number(planDate.slice(8,10)))]:"П"},nightCells:{},plannedShiftKinds:{[String(Number(planDate.slice(8,10)))]:"day"},total:0,dayHours:0,night:0,overtime:0,rate:null,dayRate:null,nightRate:null,accrual:null});}
     const internalHours=rows.reduce((sum,row)=>sum+Number(row.total),0);
+    const required=demo.needs.filter(need=>need.objectId===object.id&&!["cancelled","archived"].includes(need.status)).reduce((sum,need)=>sum+Number(need.required),0)||Number(object.required??0);
+    const planByDay=Object.fromEntries(Array.from({length:endDay},(_,index)=>[`${requestedMonth}-${String(index+1).padStart(2,"0")}`,required]));
     const period=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(periodStart+"T00:00:00Z"));
-    return {...object,objectId:object.id,object:object.name,period,month:requestedMonth,periodStart,periodEnd,clientHours:internalHours,internalHours,discrepancy:0,status:"draft",rows,issue:null,internalSnapshot:null,clientSnapshot:null};
+    return {...object,objectId:object.id,object:object.name,period,month:requestedMonth,periodStart,periodEnd,clientHours:internalHours,internalHours,discrepancy:0,status:"draft",planByDay,rows,issue:null,internalSnapshot:null,clientSnapshot:null};
   }
   const maySeeComp=!actor.access.denies.includes("worker.compensation.read")&&(actor.access.capabilities.includes("*")||actor.access.capabilities.includes("worker.compensation.read"));
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
@@ -612,6 +614,28 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
         )::numeric paid
       FROM worker_profiles w WHERE w.id=ANY(${workerIds}::uuid[])
     `:[];
+    const needPlanRows=await sql<Array<{date:string;required:number}>>`
+      SELECT d.day::date::text date,
+        COALESCE(sum(history.count_required) FILTER (WHERE history.status NOT IN ('cancelled','archived')),0)::int required
+      FROM generate_series(${periodStart}::date,${periodEnd}::date,interval '1 day') d(day)
+      LEFT JOIN LATERAL (
+        SELECT nv.count_required,nv.status
+        FROM needs n
+        JOIN LATERAL (
+          SELECT v.count_required,v.status
+          FROM need_versions v
+          WHERE v.need_id=n.id AND v.effective_from<(d.day+interval '1 day')
+          ORDER BY v.effective_from DESC,v.version DESC
+          LIMIT 1
+        ) nv ON true
+        WHERE n.object_id=${meta.objectId}::uuid AND n.source_kind<>'replacement'
+      ) history ON true
+      GROUP BY d.day
+      ORDER BY d.day
+    `;
+    const planByDay=Object.fromEntries(needPlanRows.map(row=>[row.date,Number(row.required)]));
+
+
 
     const codeLabels:Record<string,string>={PLANNED:"П",WORK_PENDING:"?",DAY_OFF:"В",VACATION:"О",INTERSHIFT:"МВ",SICK:"Б",NO_SHOW:"НВ",ABSENCE:"НВ"};
     const absenceLabels:Record<string,string>={intershift:"МВ",vacation:"О",sick:"Б",personal:"В",other:"В"};
@@ -775,7 +799,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     const mapSnapshot=(row:SnapshotMetaRow|undefined):TimesheetSnapshotMeta|null=>row?{id:row.id,status:row.status,version:Number(row.version??1),hours:Number(row.hours??0),comment:row.comment??null,createdAt:row.createdAt}:null;
     const internalSnapshot=mapSnapshot(internalSnap?.[0]);
     const clientSnapshot=mapSnapshot(clientSnap?.[0]);
-    return {...meta,period,month:requestedMonth,periodStart,periodEnd,clientHours,internalHours,discrepancy:internalHours-clientHours,status:clientSnapshot?.status??internalSnapshot?.status??"draft",rows,issue:issue??null,internalSnapshot,clientSnapshot};
+    return {...meta,period,month:requestedMonth,periodStart,periodEnd,clientHours,internalHours,discrepancy:internalHours-clientHours,status:clientSnapshot?.status??internalSnapshot?.status??"draft",planByDay,rows,issue:issue??null,internalSnapshot,clientSnapshot};
   });
 }
 
