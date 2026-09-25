@@ -138,92 +138,55 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   function workerNeedsAttention(worker:WorkerRow){return dates.some(date=>cellState(worker,date).attention)}
   async function persistCells(cells:Array<{workerId:string;date:string;kind:PaintKind}>){
     if(!canEdit||!cells.length)return;
-    const key=cells.length===1?`${cells[0].workerId}:${cells[0].date}`:"bulk";
-    setBusy(key);setMessage("");
-    const before={...overrides};
-    setOverrides(current=>{
-      const next={...current};
-      for(const cell of cells)next[`${cell.workerId}:${cell.date}`]=cell.kind==="clear"?"":cell.kind;
-      return next;
-    });
+    const key=cells.length===1?`${cells[0].workerId}:${cells[0].date}`:"bulk";setBusy(key);setMessage("");
+    const before={...overrides};setOverrides(current=>{const next={...current};for(const cell of cells)next[`${cell.workerId}:${cell.date}`]=cell.kind==="clear"?"":cell.kind;return next});
     try{
       if(!demo){
-        const response=await fetch(`/api/objects/${objectId}/shift-plan`,{
-          method:"POST",
-          headers:{"content-type":"application/json"},
-          body:JSON.stringify(cells.length===1?{action:"set_cell",...cells[0]}:{action:"set_cells",cells}),
-        });
-        const json=await response.json().catch(()=>({}));
-        if(!response.ok)throw new Error(json.error??"Не удалось изменить план");
+        const response=await fetch(`/api/objects/${objectId}/shift-plan`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(cells.length===1?{action:"set_cell",...cells[0]}:{action:"set_cells",cells})});
+        const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить план");
       }
       setMessage(cells.length===1?"План выхода изменён":`Изменено ячеек: ${cells.length}`);
-    }catch(error){
-      setOverrides(before);
-      setMessage(error instanceof Error?error.message:"Не удалось изменить план");
-    }finally{setBusy("")}
+      if(!demo){setOverrides({});setRevision(value=>value+1)}
+    }catch(error){setOverrides(before);setMessage(error instanceof Error?error.message:"Не удалось изменить план")}
+    finally{setBusy("")}
   }
 
   async function generate(){
-    if(!canEdit)return;
+    if(!canEdit)return;const generateStart=start<today?today:start;
+    if(generateStart>end){setMessage("Неделя уже завершена. Прошлые даты отображаются по факту табеля.");return}
     setBusy("generate");setMessage("");
     try{
       if(!demo){
-        const response=await fetch(`/api/objects/${objectId}/shift-plan`,{
-          method:"POST",headers:{"content-type":"application/json"},
-          body:JSON.stringify({action:"generate",startDate:start,endDate:dates.at(-1)}),
-        });
-        const json=await response.json().catch(()=>({}));
-        if(!response.ok)throw new Error(json.error??"Не удалось сформировать график");
-        setMessage(`План обновлён: ${json.updated??0} ячеек`);
-        window.location.reload();
-      }else setMessage("Демо: график сформирован локально");
+        const response=await fetch(`/api/objects/${objectId}/shift-plan`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"generate",startDate:generateStart,endDate:end,workerIds:selected.size?[...selected]:undefined})});
+        const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сформировать график");
+        const skipped=[json.skippedFact&&`факт ${json.skippedFact}`,json.skippedAbsence&&`отсутствия ${json.skippedAbsence}`,json.skippedExisting&&`уже запланировано ${json.skippedExisting}`].filter(Boolean).join(" · ");
+        setMessage(`Зафиксировано по графикам: ${json.updated??0}${skipped?" · пропущено: "+skipped:""}`);setOverrides({});setRevision(value=>value+1);
+      }else setMessage("Демо: план сформирован с текущей даты");
     }catch(error){setMessage(error instanceof Error?error.message:"Не удалось сформировать график")}
     finally{setBusy("")}
   }
 
-  function toggleWorker(id:string){
-    setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next});
-  }
-  function toggleAll(){
-    setSelected(current=>current.size===workers.length?new Set():new Set(workers.map(worker=>worker.id)));
-  }
-  function applyDate(date:string){
-    if(!selected.size){setMessage("Для массового изменения сначала выберите сотрудников");return;}
-    const cells=[...selected].map(workerId=>({workerId,date,kind:paint}));
-    void persistCells(cells);
-  }
+  const specialties=[...new Set([...workers.map(worker=>worker.specialty??"Без специальности"),...demandRows.map(row=>row.specialty)])].sort((a,b)=>a.localeCompare(b,"ru"));
+  const visibleWorkers=mode==="attention"?workers.filter(workerNeedsAttention):workers;
+  const attentionCount=workers.filter(workerNeedsAttention).length;
+  const weekSummary=dates.reduce((acc,date)=>{const required=demandTotal(date),counts=countsFor(date);acc.required+=required;acc.plan+=counts.plan;acc.reserve+=counts.reserve;acc.suggested+=counts.suggested;acc.deficit+=Math.max(required-counts.plan,0);return acc},{required:0,plan:0,reserve:0,suggested:0,deficit:0});
+  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name);return {name,required,plan:counts.plan,reserve:counts.reserve,suggested:counts.suggested,gap:Math.max(required-counts.plan,0)}}).filter(row=>row.required>0||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
+
+  function toggleWorker(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
+  function toggleAll(){setSelected(current=>current.size===visibleWorkers.length?new Set():new Set(visibleWorkers.map(worker=>worker.id)))}
+  function applyDate(date:string){setFocusDate(date);if(!selected.size)return;void persistCells([...selected].map(workerId=>({workerId,date,kind:paint})))}
 
   async function planAbsence(){
-    if(!canPlanAbsence)return;
-    if(!selected.size){setMessage("Выберите сотрудников, которым нужно запланировать отсутствие");return;}
-    if(!absenceFrom||!absenceTo||absenceTo<absenceFrom){setMessage("Проверьте даты отсутствия");return;}
-    const selectedIds=[...selected];
-    setBusy("absence");setMessage("");
+    if(!canPlanAbsence)return;if(!selected.size){setMessage("Выберите сотрудников, которым нужно запланировать отсутствие");return}
+    if(!absenceFrom||!absenceTo||absenceTo<absenceFrom){setMessage("Проверьте даты отсутствия");return}
+    const selectedIds=[...selected];setBusy("absence");setMessage("");
     try{
-      if(!demo){
-        for(const workerId of selectedIds){
-          const response=await fetch(`/api/workers/${workerId}/absences`,{
-            method:"POST",headers:{"content-type":"application/json"},
-            body:JSON.stringify({absenceType,status:"confirmed",plannedFrom:absenceFrom,plannedTo:absenceTo,flexibleReturn:absenceType==="intershift",note:absenceNote||null}),
-          });
-          const json=await response.json().catch(()=>({}));
-          if(!response.ok)throw new Error(json.error??"Не удалось сохранить отсутствие");
-        }
-      }
-      setAbsenceOverrides(current=>{
-        const next={...current};
-        for(const workerId of selectedIds)next[workerId]={type:absenceType,from:absenceFrom,to:absenceTo};
-        return next;
-      });
-      setMessage(`${absenceType==="intershift"?"Межвахта":absenceType==="vacation"?"Отпуск":"Выходной"}: запланировано для ${selectedIds.length} чел. с ${shortDate(absenceFrom)} по ${shortDate(absenceTo)}`);
-      setAbsenceOpen(false);
-      if(!demo)window.location.reload();
+      if(!demo)for(const workerId of selectedIds){const response=await fetch(`/api/workers/${workerId}/absences`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({absenceType,status:"confirmed",plannedFrom:absenceFrom,plannedTo:absenceTo,flexibleReturn:absenceType==="intershift",note:absenceNote||null})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить отсутствие")}
+      setAbsenceOverrides(current=>{const next={...current};for(const workerId of selectedIds)next[workerId]={type:absenceType,from:absenceFrom,to:absenceTo};return next});
+      setMessage(`${absenceType==="intershift"?"Межвахта":absenceType==="vacation"?"Отпуск":"Выходной"}: запланировано для ${selectedIds.length} чел.`);setAbsenceOpen(false);if(!demo)setRevision(value=>value+1);
     }catch(error){setMessage(error instanceof Error?error.message:"Не удалось запланировать отсутствие")}
     finally{setBusy("")}
   }
-
-  const specialties=[...new Set(workers.map(worker=>worker.specialty??"Без специальности"))].sort((a,b)=>a.localeCompare(b,"ru"));
-
   return <div className="object-shift-planner">
     <div className="object-shift-planner-toolbar">
       <div className="page-actions">
