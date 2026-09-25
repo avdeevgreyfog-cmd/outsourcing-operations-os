@@ -20,12 +20,54 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         LEFT JOIN objects o ON o.id=a.object_id WHERE w.id=${id}::uuid
       `;
       if(!worker||!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:worker.objectId??undefined,ownerUserId:worker.ownerUserId??undefined,regionId:worker.regionId??undefined,assigneeUserIds:worker.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
-      const [locked]=worker.objectId?await tx<Array<{id:string}>>`\n        SELECT id FROM timesheet_snapshots\n        WHERE object_id=${worker.objectId}::uuid\n          AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')\n          AND period_end>=${body.plannedFrom}::date\n          AND period_start<=COALESCE(${body.plannedTo??null}::date,${body.plannedFrom}::date)\n        ORDER BY created_at DESC LIMIT 1\n      `:[];\n      if(locked)throw new Error("В выбранном периоде табель уже зафиксирован. Сначала верните его на корректировку.");\n      const [overlap]=await tx<Array<{id:string}>>`\n        SELECT id FROM worker_absence_plans\n        WHERE worker_id=${id}::uuid AND status IN ('tentative','confirmed')\n          AND daterange(planned_from,COALESCE(planned_to,'infinity'::date),'[]')\n              && daterange(${body.plannedFrom}::date,COALESCE(${body.plannedTo??null}::date,'infinity'::date),'[]')\n        LIMIT 1\n      `;\n      if(overlap)throw new Error("На выбранные даты у сотрудника уже есть плановое отсутствие");\n      const [row]=await tx<Array<{id:string}>>`
+      const [locked]=worker.objectId?await tx<Array<{id:string}>>`
+        SELECT id FROM timesheet_snapshots
+        WHERE object_id=${worker.objectId}::uuid
+          AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+          AND period_end>=${body.plannedFrom}::date
+          AND period_start<=COALESCE(${body.plannedTo??null}::date,${body.plannedFrom}::date)
+        ORDER BY created_at DESC LIMIT 1
+      `:[];
+      if(locked)throw new Error("В выбранном периоде табель уже зафиксирован. Сначала верните его на корректировку.");
+      const [overlap]=await tx<Array<{id:string}>>`
+        SELECT id FROM worker_absence_plans
+        WHERE worker_id=${id}::uuid AND status IN ('tentative','confirmed')
+          AND daterange(planned_from,COALESCE(planned_to,'infinity'::date),'[]')
+              && daterange(${body.plannedFrom}::date,COALESCE(${body.plannedTo??null}::date,'infinity'::date),'[]')
+        LIMIT 1
+      `;
+      if(overlap)throw new Error("На выбранные даты у сотрудника уже есть плановое отсутствие");
+      const [row]=await tx<Array<{id:string}>>`
         INSERT INTO worker_absence_plans(organization_id,worker_id,object_id,absence_type,status,planned_from,planned_to,flexible_return,note,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId??null}::uuid,${body.absenceType},${body.status},${body.plannedFrom}::date,${body.plannedTo??null}::date,${body.flexibleReturn},${body.note??null},${actor.userId}::uuid)
         RETURNING id
       `;
-      if(body.status==="confirmed"&&worker.objectId){\n        const timeCode=body.absenceType==="intershift"?"INTERSHIFT":body.absenceType==="vacation"?"VACATION":body.absenceType==="sick"?"SICK":"DAY_OFF";\n        await tx`\n          UPDATE shift_assignments sa SET confirmation_status='cancelled'\n          FROM shifts sh WHERE sh.id=sa.shift_id AND sa.worker_id=${id}::uuid AND sh.object_id=${worker.objectId}::uuid\n            AND sh.shift_date>=${body.plannedFrom}::date AND (${body.plannedTo??null}::date IS NULL OR sh.shift_date<=${body.plannedTo??null}::date)\n            AND sa.confirmation_status<>'cancelled'\n        `;\n        await tx`\n          UPDATE shifts sh SET\n            assigned_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'),\n            reserve_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled')\n          WHERE sh.object_id=${worker.objectId}::uuid AND sh.shift_date>=${body.plannedFrom}::date\n            AND (${body.plannedTo??null}::date IS NULL OR sh.shift_date<=${body.plannedTo??null}::date)\n        `;\n        await tx`\n          UPDATE time_entries SET planned=false,time_code=${timeCode},fact_hours=0,day_hours=0,night_hours=0,overtime_hours=0,\n            planned_shift_kind=NULL,source='schedule',correction_reason='Плановое отсутствие',corrected_by_user_id=${actor.userId}::uuid,updated_at=now()\n          WHERE worker_id=${id}::uuid AND object_id=${worker.objectId}::uuid AND work_date>=${body.plannedFrom}::date\n            AND (${body.plannedTo??null}::date IS NULL OR work_date<=${body.plannedTo??null}::date) AND COALESCE(fact_hours,0)=0\n        `;\n      }\n      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)\n        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'worker_absence_planned',\n          ${body.status==="confirmed"?"Зафиксировано плановое отсутствие":"Добавлено предварительное отсутствие"},\n          ${tx.json({absenceId:row.id,objectId:worker.objectId,absenceType:body.absenceType,plannedFrom:body.plannedFrom,plannedTo:body.plannedTo??null,status:body.status})})`;
+      if(body.status==="confirmed"&&worker.objectId){
+        const timeCode=body.absenceType==="intershift"?"INTERSHIFT":body.absenceType==="vacation"?"VACATION":body.absenceType==="sick"?"SICK":"DAY_OFF";
+        await tx`
+          UPDATE shift_assignments sa SET confirmation_status='cancelled'
+          FROM shifts sh WHERE sh.id=sa.shift_id AND sa.worker_id=${id}::uuid AND sh.object_id=${worker.objectId}::uuid
+            AND sh.shift_date>=${body.plannedFrom}::date AND (${body.plannedTo??null}::date IS NULL OR sh.shift_date<=${body.plannedTo??null}::date)
+            AND sa.confirmation_status<>'cancelled'
+        `;
+        await tx`
+          UPDATE shifts sh SET
+            assigned_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'),
+            reserve_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled')
+          WHERE sh.object_id=${worker.objectId}::uuid AND sh.shift_date>=${body.plannedFrom}::date
+            AND (${body.plannedTo??null}::date IS NULL OR sh.shift_date<=${body.plannedTo??null}::date)
+        `;
+        await tx`
+          UPDATE time_entries SET planned=false,time_code=${timeCode},fact_hours=0,day_hours=0,night_hours=0,overtime_hours=0,
+            planned_shift_kind=NULL,source='schedule',correction_reason='Плановое отсутствие',corrected_by_user_id=${actor.userId}::uuid,updated_at=now()
+          WHERE worker_id=${id}::uuid AND object_id=${worker.objectId}::uuid AND work_date>=${body.plannedFrom}::date
+            AND (${body.plannedTo??null}::date IS NULL OR work_date<=${body.plannedTo??null}::date) AND COALESCE(fact_hours,0)=0
+        `;
+      }
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'worker_absence_planned',
+          ${body.status==="confirmed"?"Зафиксировано плановое отсутствие":"Добавлено предварительное отсутствие"},
+          ${tx.json({absenceId:row.id,objectId:worker.objectId,absenceType:body.absenceType,plannedFrom:body.plannedFrom,plannedTo:body.plannedTo??null,status:body.status})})`;
       return row;
     }));
     return NextResponse.json(result,{status:201});
