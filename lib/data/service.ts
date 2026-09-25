@@ -43,6 +43,8 @@ export type IncidentRow = ScopedRow & { id:string; objectId:string; object:strin
 type TimesheetMeta = ScopedRow & { objectId:string; object:string };
 type SnapshotMetaRow = { id:string; hours:number|string|null; status:string; version:number; comment:string|null; createdAt:string };
 
+function addIsoDays(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
+
 function allowed<T extends Record<string, unknown>>(actor: Actor, capability: string, rows: T[]): T[] {
   requireCapability(actor, capability);
   return rows.filter((row) => canReadRow(actor.access, capability, row, actor));
