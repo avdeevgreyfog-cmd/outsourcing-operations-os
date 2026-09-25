@@ -34,9 +34,7 @@ export function VisualModeToggle({initialMode}:{initialMode:VisualMode}){
       const params=new URLSearchParams(searchParams.toString());
       params.set("ui",next==="classic"?"classic":"pilot");
       router.replace(`${pathname}?${params.toString()}`,{scroll:false});
-      return;
     }
-    router.refresh();
   }
 
   return <div className="visual-mode-toggle" role="group" aria-label="Вариант интерфейса">
