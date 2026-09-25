@@ -21,7 +21,15 @@ export function VisualModeToggle(){
     }catch{}
     setMode(next);
     document.documentElement.dataset.operisUi=next;
-  },[]);
+    if(/^\/objects\/[^/]+$/.test(pathname)){
+      const expected=next==="classic"?"classic":"pilot";
+      if(searchParams.get("ui")!==expected){
+        const params=new URLSearchParams(searchParams.toString());
+        params.set("ui",expected);
+        router.replace(`${pathname}?${params.toString()}`,{scroll:false});
+      }
+    }
+  },[pathname,router,searchParams]);
 
   function choose(next:VisualMode){
     setMode(next);
