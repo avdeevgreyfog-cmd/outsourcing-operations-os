@@ -40,9 +40,10 @@ const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",peop
 const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 
-export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string}>}) {
+export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string;ui?:string}>}) {
   const {id}=await params;
-  const {tab:rawTab,month}=isGithubPagesDemo()?{}:await searchParams;
+  const {tab:rawTab,month,ui}=isGithubPagesDemo()?{}:await searchParams;
+  const uiMode=ui==="classic"?"classic":"pilot";
   const requested=rawTab?(aliases[rawTab]??rawTab):"overview";
   const actor=await requireActor();
   const objects=await listObjects(actor);
@@ -145,28 +146,56 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const tabOrder=["overview",...(showLaunch?["launch"]:[]),"workforce","staffing","shifts","timesheets","supply","contacts","finance","documents","quality","settings","history"];
   const tabs=tabOrder.filter(key=>visibleLabels[key]).map(key=>({
     label:visibleLabels[key],
-    href:`/objects/${id}?tab=${key}`,
+    href:`/objects/${id}?tab=${key}&ui=${uiMode}${month?`&month=${encodeURIComponent(month)}`:""}`,
     count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
   }));
 
 
-  return <div className="object-workspace-pilot">
-    <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
-    <div className="object-hero">
-      <div>
-        <Status tone={operationalRisk==="critical"?"bad":operationalRisk==="high"?"warn":object.status==="active"?"good":"info"}>{objectStatusLabels[object.status]??"В работе"}</Status>
-        <div className="object-meta">
-          <div><span>Клиент</span><strong>{object.client}</strong></div>
-          <div><span>Наше юрлицо</span><strong>{object.legalEntity??"Не указано"}</strong></div>
-          <div><span>Локация</span><strong>{object.address??object.region}</strong></div>
+  const compareQuery=(mode:"classic"|"pilot")=>`/objects/${id}?tab=${tab}&ui=${mode}${month?`&month=${encodeURIComponent(month)}`:""}`;
+  return <div className={`object-workspace-compare object-workspace-${uiMode}`}>
+    <div className="object-ui-compare">
+      <div><strong>Сравнение интерфейса</strong><span>Одни и те же данные и функции, разная организация рабочего пространства.</span></div>
+      <div className="object-ui-switch">
+        <Link href={compareQuery("classic")} className={uiMode==="classic"?"active":""}>Классический</Link>
+        <Link href={compareQuery("pilot")} className={uiMode==="pilot"?"active":""}>Новый</Link>
+      </div>
+    </div>
+
+    {uiMode==="classic"?<>
+      <PageHeader eyebrow={"Объект · "+object.code} title={object.name} subtitle={object.client+" · "+(object.address??object.region)} breadcrumbs={[{label:"Операции"},{label:"Объекты",href:"/objects"},{label:object.name}]}/>
+      <div className="object-hero">
+        <div>
+          <Status tone={operationalRisk==="critical"?"bad":operationalRisk==="high"?"warn":object.status==="active"?"good":"info"}>{objectStatusLabels[object.status]??"В работе"}</Status>
+          <div className="object-meta">
+            <div><span>Клиент</span><strong>{object.client}</strong></div>
+            <div><span>Наше юрлицо</span><strong>{object.legalEntity??"Не указано"}</strong></div>
+            <div><span>Локация</span><strong>{object.address??object.region}</strong></div>
+            <div><span>Менеджер</span><strong>{object.ownerName??"—"}{object.additionalManagers?.length?` +${object.additionalManagers.length}`:""}</strong></div>
+            <div><span>Старт</span><strong>{object.targetStart??"—"}</strong></div>
+            <div><span>Риск</span><strong>{riskLabels[operationalRisk]??"Контроль"}</strong></div>
+          </div>
+        </div>
+        <div className="health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>{required?"укомплектованность":"план не задан"}</span></div>
+      </div>
+      <EntityTabs items={tabs} active={visibleLabels[tab]}/>
+    </>:<>
+      <div className="object-pilot-breadcrumbs"><Link href="/objects">Объекты</Link><span>/</span><span>{object.code}</span></div>
+      <div className="object-pilot-header">
+        <div className="object-pilot-title">
+          <div><Status tone={operationalRisk==="critical"?"bad":operationalRisk==="high"?"warn":object.status==="active"?"good":"info"}>{objectStatusLabels[object.status]??"В работе"}</Status><span className="object-pilot-code">{object.code}</span></div>
+          <h1>{object.name}</h1>
+          <p>{object.client} · {object.address??object.region}</p>
+        </div>
+        <div className="object-pilot-health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>укомплектованность</span><small>{working} из {required||"—"} работают</small></div>
+        <div className="object-pilot-meta">
           <div><span>Менеджер</span><strong>{object.ownerName??"—"}{object.additionalManagers?.length?` +${object.additionalManagers.length}`:""}</strong></div>
+          <div><span>Юрлицо</span><strong>{object.legalEntity??"Не указано"}</strong></div>
           <div><span>Старт</span><strong>{object.targetStart??"—"}</strong></div>
           <div><span>Риск</span><strong>{riskLabels[operationalRisk]??"Контроль"}</strong></div>
         </div>
+        <div className="object-primary-nav"><EntityTabs items={tabs} active={visibleLabels[tab]}/></div>
       </div>
-      <div className="health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>{required?"укомплектованность":"план не задан"}</span></div>
-    </div>
-    <div className="object-primary-nav"><EntityTabs items={tabs} active={visibleLabels[tab]}/></div>
+    </>}
 
     {tab==="overview"&&<>
       <div className="metrics-grid object-operations-metrics">
@@ -250,21 +279,20 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
 
-    {tab==="workforce"&&<div className="object-module-shell">
-      <div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div>
-      <ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties}/>
-      {!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}
-    </div>}
+    {tab==="workforce"&&(uiMode==="classic"
+      ?<Section title="Персонал объекта"><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot={false}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>
+      :<div className="object-module-shell"><div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</div>
+    )}
 
-    {tab==="shifts"&&<div className="object-module-shell">
-      <div className="object-module-head"><div><h2>Смены</h2><p>Планирование выходов, покрытие потребности и работа с отклонениями. Факт приходит из табеля.</p></div></div>
-      <ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo}/>
-    </div>}
+    {tab==="shifts"&&(uiMode==="classic"
+      ?<Section title="Смены объекта" note="План выходов по сотрудникам: день, ночь и выходной. Факт фиксируется в табеле."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo}/></Section>
+      :<div className="object-module-shell"><div className="object-module-head"><div><h2>Смены</h2><p>Планирование выходов, покрытие потребности и работа с отклонениями. Факт приходит из табеля.</p></div></div><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo}/></div>
+    )}
 
-    {tab==="timesheets"&&<div className="object-module-shell">
-      <div className="object-module-head"><div><h2>Табели</h2><p>Фактические выходы, часы, отклонения, начисления и маршрут согласования.</p></div></div>
-      {objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/>}
-    </div>}
+    {tab==="timesheets"&&(uiMode==="classic"
+      ?(objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Section title="Табель объекта"><Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/></Section>)
+      :<div className="object-module-shell"><div className="object-module-head"><div><h2>Табели</h2><p>Фактические выходы, часы, отклонения, начисления и маршрут согласования.</p></div></div>{objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/>)}</div>
+    )}
 
     {tab==="supply"&&<>
       <div className="metrics-grid">
