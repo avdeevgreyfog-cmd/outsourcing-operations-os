@@ -267,8 +267,11 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     <div className="section-actions"><Link className="button primary" href={`/objects/${objectId}?tab=timesheets`}>Перейти к факту в табеле</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный список смен</Link></div>
   </div>;}
+function isFactual(entry:PlannerEntry|undefined){return Boolean(entry&&(entry.source!=="schedule"||Number(entry.factHours)>0||["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode)))}
 function normalizeKind(value:string):Kind{if(value==="day"||value==="День")return"day";if(value==="night"||value==="Ночь")return"night";if(value==="off"||value==="Выходной")return"off";return""}
-function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":value==="intershift"?"МВ":value==="vacation"?"О":"—"}
+function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":value==="reserve_day"?"РД":value==="reserve_night"?"РН":value==="intershift"?"МВ":value==="vacation"?"О":"—"}
+function paintCode(value:PaintKind){return value==="clear"?"×":shortKind(value)}
+function formatHours(value:number|string){const amount=Number(value);return Number.isInteger(amount)?String(amount):String(amount).replace(".",",")}
 function addDays(value:string,n:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+n);return date.toISOString().slice(0,10)}
 function shortDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
 function weekday(value:string){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z")).replace(".","")}
