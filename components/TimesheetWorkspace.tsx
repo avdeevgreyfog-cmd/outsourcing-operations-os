@@ -261,12 +261,13 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   const editable=canEditFact&&row.rowKind!=="candidate"&&!ended&&!band;
                   const classes=[
                     timesheetCellClass(value,ended,isWeekend(data.month,day)),
+                    currentDay===day?"today":"",
                     band?`timesheet-absence-band timesheet-absence-${band.type} range-${bandPosition}`:"",
                     (ended||band)&&!stateCode?"timesheet-blocked-continuation":"",
                   ].filter(Boolean).join(" ");
                   return <td key={day} className={classes}>
                     {editable
-                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
+                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onKeyDown={handleCellKeyDown} onFocus={event=>event.currentTarget.select()} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
                       :stateCode??""}
                   </td>;
                 })}
@@ -276,7 +277,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   <td className="num timesheet-detail-col" rowSpan={segments.length}>{countWorkerCode(row,"Б",days)||"—"}</td>
                   <td className={`num timesheet-detail-col ${countWorkerNoShows(row,days)?"timesheet-detail-alert":""}`} rowSpan={segments.length}>{countWorkerNoShows(row,days)||"—"}</td>
                 </>}
-                {view==="internal"&&sensitive&&<><td className="num timesheet-money">{row.rowKind==="candidate"?"—":money(segmentAccrued)}</td>{first&&<>
+                {view==="internal"&&sensitive&&financeOpen&&<><td className="num timesheet-money">{row.rowKind==="candidate"?"—":money(segmentAccrued)}</td>{first&&<>
                   <td className="num timesheet-money timesheet-money-total" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":money(earned)}</td>
                   <td className="num timesheet-money" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":mode==="month"?signedMoney(correction):"—"}</td>
                   <td className="num timesheet-money" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":mode==="month"?money(row.paidAmount??0):"—"}</td>
