@@ -210,6 +210,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     <div className="object-shift-guidance">
       <div><strong>План → факт</strong><span>Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику; «Сформировать с сегодня» фиксирует их как план.</span></div>
+      {canEdit&&!selected.size&&<div className="object-shift-paint"><span>Клик по ячейке:</span>{(["day","night","off","reserve_day","reserve_night","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{paintCode(kind)}</b>{paintLabels[kind]}</button>)}</div>}
       {plannerLoading&&<span className="cell-sub">Обновляем данные…</span>}
     </div>
 
