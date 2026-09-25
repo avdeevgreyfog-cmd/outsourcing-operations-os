@@ -80,6 +80,23 @@ export type InventorySnapshot = {
   balances:InventoryBalanceRow[];
 };
 
+export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string};
+export type ObjectPpeTemplateRow={id:string;objectId:string;specialtyId:string;specialty:string;name:string;items:ObjectPpeTemplateItemRow[]};
+
+export async function listObjectPpeTemplates(actor:Actor,objectId:string):Promise<ObjectPpeTemplateRow[]>{
+  requireCapability(actor,"assets.read");
+  if(actor.demo){
+    const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"assets.read",row,actor));if(!object)return[];
+    const specialties=[...new Set(demo.workers.filter(w=>w.objectId===objectId).map(w=>w.specialty).filter(Boolean))];
+    return specialties.map((name,index)=>({id:`demo-ppe-${index}`,objectId,specialtyId:`demo-specialty-${index}`,specialty:name??"Специальность",name:"Основной комплект",items:[{itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:""},{itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:""},{itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:""}]}));
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const [scope]=await sql<Array<{organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds" FROM objects o WHERE o.id=${objectId}::uuid`;
+    if(!scope||!canReadRow(actor.access,"assets.read",scope,actor))return[];
+    return sql<ObjectPpeTemplateRow[]>`SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items FROM object_ppe_templates t JOIN specialties s ON s.id=t.specialty_id LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id LEFT JOIN inventory_items i ON i.id=ti.item_id WHERE t.object_id=${objectId}::uuid AND t.active GROUP BY t.id,s.name ORDER BY s.name`;
+  });
+}
+
 export type CrewRow = {
   id:string;
   organizationId:string;
@@ -159,7 +176,7 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
       LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(n.count_required),0)::int required
-        FROM needs n WHERE n.object_id=o.id AND n.status NOT IN ('cancelled','archived')
+        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
       ) needs ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT woa.worker_id)::int working
@@ -562,7 +579,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
 }
 
 
-export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null;transitionDays:number;dailyPaymentShifts:number};
+export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null;transitionDays:number;dailyPaymentShifts:number;dayRate:number|null;nightRate:number|null};
 export type WorkerAbsenceRow={id:string;absenceType:string;status:string;plannedFrom:string;plannedTo:string|null;actualFrom:string|null;actualTo:string|null;flexibleReturn:boolean;note:string|null};
 export type WorkerOperationsDetails={assignments:WorkerAssignmentHistoryRow[];absences:WorkerAbsenceRow[]};
 
@@ -573,7 +590,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
     if(!worker)return {assignments:[],absences:[]};
     const assignmentWorker=worker as typeof worker&{workMode?:string|null;paidHoursPerShift?:number|string|null;absenceType?:string|null;absenceStatus?:string|null;absenceFrom?:string|null;absenceTo?:string|null};
     return {
-      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift),scheduleWorkDays:5,scheduleRestDays:2,scheduleShiftKind:(Number(worker.id.slice(-2))%3===1?"night":"day"),scheduleAnchorDate:worker.startDate??null,transitionDays:7,dailyPaymentShifts:Number(worker.id.slice(-2))<=4?3:0}]:[],
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift),scheduleWorkDays:5,scheduleRestDays:2,scheduleShiftKind:(Number(worker.id.slice(-2))%3===1?"night":"day"),scheduleAnchorDate:worker.startDate??null,transitionDays:7,dailyPaymentShifts:Number(worker.id.slice(-2))<=4?3:0,dayRate:Number(worker.rate??0)||null,nightRate:Number(worker.rate??0)||null}]:[],
       absences:assignmentWorker.absenceType&&assignmentWorker.absenceFrom?[{
         id:"demo-absence-"+worker.id,absenceType:assignmentWorker.absenceType,status:assignmentWorker.absenceStatus??"tentative",
         plannedFrom:assignmentWorker.absenceFrom.split("-").reverse().join("."),plannedTo:assignmentWorker.absenceTo?assignmentWorker.absenceTo.split("-").reverse().join("."):null,
@@ -595,9 +612,13 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
       sql<WorkerAssignmentHistoryRow[]>`
         SELECT a.id,a.object_id "objectId",o.name object,a.specialty_id "specialtyId",s.name specialty,
           to_char(a.effective_from,'DD.MM.YYYY') "effectiveFrom",to_char(a.effective_to,'DD.MM.YYYY') "effectiveTo",u.display_name manager,
-          a.work_mode "workMode",a.paid_hours_per_shift::numeric "paidHoursPerShift",a.schedule_work_days "scheduleWorkDays",a.schedule_rest_days "scheduleRestDays",a.schedule_shift_kind "scheduleShiftKind",a.schedule_anchor_date::text "scheduleAnchorDate",a.transition_days "transitionDays",a.daily_payment_shifts "dailyPaymentShifts"
+          a.work_mode "workMode",a.paid_hours_per_shift::numeric "paidHoursPerShift",a.schedule_work_days "scheduleWorkDays",a.schedule_rest_days "scheduleRestDays",a.schedule_shift_kind "scheduleShiftKind",a.schedule_anchor_date::text "scheduleAnchorDate",a.transition_days "transitionDays",a.daily_payment_shifts "dailyPaymentShifts",
+          COALESCE(day_rate.amount,any_rate.amount)::numeric "dayRate",COALESCE(night_rate.amount,any_rate.amount)::numeric "nightRate"
         FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
         LEFT JOIN specialties s ON s.id=a.specialty_id LEFT JOIN app_users u ON u.id=a.manager_user_id
+        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) any_rate ON true
+        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='day' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) day_rate ON true
+        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='night' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) night_rate ON true
         WHERE a.worker_id=${workerId}::uuid ORDER BY a.effective_from DESC
       `,
       sql<WorkerAbsenceRow[]>`
@@ -677,7 +698,7 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
 
 
 export type WorkerOutstandingAsset={itemId:string;item:string;variant:string;quantity:number;unit:string};
-export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string};
+export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string;replacementRequired:boolean;replacementNeedId:string|null;replacementWorkerId:string|null;replacementWorker:string|null};
 export type WorkerOffboardingContext={
   relationType:string|null;
   relationFrom:string|null;
@@ -727,8 +748,10 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
       ORDER BY st.check_in DESC
     `:[];
     const exits=await sql<WorkerExitHistoryRow[]>`
-      SELECT id,to_char(effective_date,'DD.MM.YYYY') "effectiveDate",reason_code "reasonCode",reason,status,to_char(created_at,'DD.MM.YYYY') "createdAt"
-      FROM worker_exit_processes WHERE worker_id=${workerId}::uuid ORDER BY effective_date DESC,created_at DESC
+      SELECT ep.id,to_char(ep.effective_date,'DD.MM.YYYY') "effectiveDate",ep.reason_code "reasonCode",ep.reason,ep.status,to_char(ep.created_at,'DD.MM.YYYY') "createdAt",
+        ep.replacement_required "replacementRequired",ep.replacement_need_id "replacementNeedId",ep.replacement_worker_id "replacementWorkerId",rw.full_name "replacementWorker"
+      FROM worker_exit_processes ep LEFT JOIN worker_profiles rw ON rw.id=ep.replacement_worker_id
+      WHERE ep.worker_id=${workerId}::uuid ORDER BY ep.effective_date DESC,ep.created_at DESC
     `;
     return {relationType:relation?.relationType??null,relationFrom:relation?.relationFrom??null,relationTo:relation?.relationTo??null,outstandingAssets:assets.map(row=>({...row,quantity:Number(row.quantity)})),housing,exits};
   });
@@ -736,7 +759,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
 
 export type StaffingForecastRow={
   organizationId:string;objectId:string;object:string;specialtyId:string;specialty:string;needIds:string[];editableNeedId:string|null;
-  required:number;working:number;preparing:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;
+  required:number;working:number;preparing:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;replacementNeeds:number;replacementReady:number;
   projectedAvailable:number;projectedDeficit:number;ownerUserId:string|null;assigneeUserIds:string[];regionId:string|null;
 };
 
@@ -756,7 +779,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       const confirmedAbsences=absences.filter(worker=>worker.absenceStatus==="confirmed").length;
       const tentativeAbsences=absences.filter(worker=>worker.absenceStatus==="tentative").length;
       const projectedAvailable=Math.max(working-confirmedAbsences+preparing,0);
-      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
+      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,replacementNeeds:0,replacementReady:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
       return row;
     }).filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
   }
@@ -765,7 +788,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       WITH demand AS (
         SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required,array_agg(n.id ORDER BY n.created_at) need_ids,count(*)::int need_count
         FROM needs n
-        WHERE n.object_id IS NOT NULL AND n.status NOT IN ('cancelled','archived')
+        WHERE n.object_id IS NOT NULL AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
         GROUP BY n.object_id,n.specialty_id
       )
       SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
@@ -775,6 +798,8 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         COALESCE(absences.confirmed,0)::int "confirmedAbsences",
         COALESCE(absences.tentative,0)::int "tentativeAbsences",
         COALESCE(exits.planned,0)::int "plannedExits",
+        COALESCE(replacements.open_count,0)::int "replacementNeeds",
+        COALESCE(replacements.ready_count,0)::int "replacementReady",
         GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
         GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0),0)::int "projectedDeficit",
         o.owner_user_id "ownerUserId",o.region_id "regionId",
@@ -813,6 +838,12 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
           AND (a.effective_to IS NULL OR a.effective_to>=ep.effective_date)
           AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
       ) exits ON true
+      LEFT JOIN LATERAL (
+        SELECT count(*) FILTER (WHERE n.status NOT IN ('filled','cancelled','archived'))::int open_count,
+               count(*) FILTER (WHERE n.status='filled' OR ep.replacement_worker_id IS NOT NULL)::int ready_count
+        FROM needs n LEFT JOIN worker_exit_processes ep ON ep.id=n.replacement_exit_id
+        WHERE n.object_id=o.id AND n.specialty_id=d.specialty_id AND n.source_kind='replacement'
+      ) replacements ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT x.worker_id)::int count
         FROM (
@@ -913,7 +944,7 @@ export async function listObjectDocuments(actor:Actor,objectId:string):Promise<O
   });
 }
 
-export type DailyPaymentShift={workDate:string;hours:number;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|null;paymentDate:string|null;suggestedAmount:number};
+export type DailyPaymentShift={workDate:string;hours:number;dayHours:number;nightHours:number;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|null;paymentDate:string|null;suggestedAmount:number};
 export type DailyPaymentProgressRow={
   organizationId:string;objectId:string;workerId:string;worker:string;specialty:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
   shiftLimit:number;assignmentStart:string;workedCount:number;remaining:number;rate:number|null;rateUnit:string|null;paidHoursPerShift:number|null;shifts:DailyPaymentShift[];
@@ -926,11 +957,11 @@ export async function listDailyPaymentProgress(actor:Actor,objectId:string):Prom
     const workers=demo.workers.filter(row=>row.objectId===objectId&&row.status==="active");
     const today=new Date();
     return workers.flatMap((worker,index)=>{
-      const shiftLimit=index<4?3:0;if(!shiftLimit)return[];
+      const shiftLimit=index<4?3:0;
       const paidHours=Number((worker as {paidHoursPerShift?:number|string|null}).paidHoursPerShift??11);
       const rate=Number(worker.rate??0);const rateUnit=(worker as {rateUnit?:string|null}).rateUnit??"hour";
       const suggested=rateUnit==="shift"?rate:rate*paidHours;
-      const shifts:DailyPaymentShift[]=Array.from({length:Math.min(shiftLimit,Math.max(1,3-index%2))},(_,i)=>{const d=new Date(today);d.setUTCDate(d.getUTCDate()-(3-i));const workDate=d.toISOString().slice(0,10);const paid=i<1+index%2;return {workDate,hours:paidHours,paymentId:paid?`demo-daily-${index}-${i}`:null,paymentStatus:paid?"paid":null,paymentAmount:paid?suggested:null,paymentDate:paid?workDate:null,suggestedAmount:suggested};});
+      const shifts:DailyPaymentShift[]=Array.from({length:Math.min(shiftLimit,Math.max(1,3-index%2))},(_,i)=>{const d=new Date(today);d.setUTCDate(d.getUTCDate()-(3-i));const workDate=d.toISOString().slice(0,10);const paid=i<1+index%2;return {workDate,hours:paidHours,dayHours:index%3===1?0:paidHours,nightHours:index%3===1?paidHours:0,paymentId:paid?`demo-daily-${index}-${i}`:null,paymentStatus:paid?"paid":null,paymentAmount:paid?suggested:null,paymentDate:paid?workDate:null,suggestedAmount:suggested};});
       return [{organizationId:object.organizationId,objectId,workerId:worker.id,worker:worker.fullName,specialty:worker.specialty??null,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[],shiftLimit,assignmentStart:worker.startDate??today.toISOString().slice(0,10),workedCount:shifts.length,remaining:Math.max(shiftLimit-shifts.length,0),rate,rateUnit,paidHoursPerShift:paidHours,shifts}];
     });
   }
@@ -943,16 +974,19 @@ export async function listDailyPaymentProgress(actor:Actor,objectId:string):Prom
     if(!scope||!canReadRow(actor.access,"finance.payments.read",scope,actor))return[];
     const rows=await sql<Array<{
       workerId:string;worker:string;specialty:string|null;shiftLimit:number;assignmentStart:string;rate:number|string|null;rateUnit:string|null;paidHoursPerShift:number|string|null;
-      shifts:Array<{workDate:string;hours:number|string;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|string|null;paymentDate:string|null}>;
+      shifts:Array<{workDate:string;hours:number|string;dayHours:number|string;nightHours:number|string;dayRate:number|string|null;nightRate:number|string|null;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|string|null;paymentDate:string|null}>;
     }>>`
       SELECT w.id "workerId",w.full_name worker,s.name specialty,a.daily_payment_shifts "shiftLimit",a.effective_from::text "assignmentStart",
         wr.amount rate,wr.unit "rateUnit",a.paid_hours_per_shift "paidHoursPerShift",
         COALESCE((
           SELECT jsonb_agg(jsonb_build_object(
-            'workDate',x.work_date::text,'hours',x.hours,'paymentId',ap.id,'paymentStatus',ap.status,'paymentAmount',ap.amount,'paymentDate',ap.payment_date::text
+            'workDate',x.work_date::text,'hours',x.hours,'dayHours',x.day_hours,'nightHours',x.night_hours,
+            'dayRate',COALESCE((SELECT r.amount FROM worker_rates r WHERE r.worker_id=w.id AND r.object_id=a.object_id AND r.day_night='day' AND r.effective_from<=x.work_date AND (r.effective_to IS NULL OR r.effective_to>=x.work_date) ORDER BY r.effective_from DESC LIMIT 1),(SELECT r.amount FROM worker_rates r WHERE r.worker_id=w.id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=x.work_date AND (r.effective_to IS NULL OR r.effective_to>=x.work_date) ORDER BY r.effective_from DESC LIMIT 1)),
+            'nightRate',COALESCE((SELECT r.amount FROM worker_rates r WHERE r.worker_id=w.id AND r.object_id=a.object_id AND r.day_night='night' AND r.effective_from<=x.work_date AND (r.effective_to IS NULL OR r.effective_to>=x.work_date) ORDER BY r.effective_from DESC LIMIT 1),(SELECT r.amount FROM worker_rates r WHERE r.worker_id=w.id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=x.work_date AND (r.effective_to IS NULL OR r.effective_to>=x.work_date) ORDER BY r.effective_from DESC LIMIT 1)),
+            'paymentId',ap.id,'paymentStatus',ap.status,'paymentAmount',ap.amount,'paymentDate',ap.payment_date::text
           ) ORDER BY x.work_date)
           FROM (
-            SELECT te.work_date,sum(te.fact_hours)::numeric hours
+            SELECT te.work_date,sum(te.fact_hours)::numeric hours,sum(te.day_hours)::numeric day_hours,sum(te.night_hours)::numeric night_hours
             FROM time_entries te
             WHERE te.worker_id=w.id AND te.object_id=a.object_id AND te.work_date>=a.effective_from AND te.fact_hours>0
             GROUP BY te.work_date ORDER BY te.work_date LIMIT a.daily_payment_shifts
@@ -966,12 +1000,11 @@ export async function listDailyPaymentProgress(actor:Actor,objectId:string):Prom
         SELECT amount,unit FROM worker_rates r WHERE r.worker_id=w.id AND r.effective_from<=current_date AND (r.effective_to IS NULL OR r.effective_to>=current_date)
         ORDER BY r.effective_from DESC LIMIT 1
       ) wr ON true
-      WHERE a.object_id=${objectId}::uuid AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) AND a.daily_payment_shifts>0
-      ORDER BY w.full_name
+      WHERE a.object_id=${objectId}::uuid AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.full_name
     `;
     return rows.map(row=>{
       const rate=row.rate==null?null:Number(row.rate);const paidHours=row.paidHoursPerShift==null?null:Number(row.paidHoursPerShift);
-      const shifts=(row.shifts??[]).map(item=>{const hours=Number(item.hours??0);const suggested=rate==null?0:row.rateUnit==="shift"?rate:rate*Number(paidHours??hours);return {workDate:item.workDate,hours,paymentId:item.paymentId,paymentStatus:item.paymentStatus,paymentAmount:item.paymentAmount==null?null:Number(item.paymentAmount),paymentDate:item.paymentDate,suggestedAmount:suggested};});
+      const shifts=(row.shifts??[]).map(item=>{const hours=Number(item.hours??0),dayHours=Number(item.dayHours??0),nightHours=Number(item.nightHours??0);const dayRate=item.dayRate==null?rate:Number(item.dayRate),nightRate=item.nightRate==null?rate:Number(item.nightRate);const suggested=row.rateUnit==="shift"&&rate!=null?rate:(dayHours*Number(dayRate??0)+nightHours*Number(nightRate??0));return {workDate:item.workDate,hours,dayHours,nightHours,paymentId:item.paymentId,paymentStatus:item.paymentStatus,paymentAmount:item.paymentAmount==null?null:Number(item.paymentAmount),paymentDate:item.paymentDate,suggestedAmount:suggested};});
       return {...scope,workerId:row.workerId,worker:row.worker,specialty:row.specialty,shiftLimit:Number(row.shiftLimit),assignmentStart:row.assignmentStart,workedCount:shifts.length,remaining:Math.max(Number(row.shiftLimit)-shifts.length,0),rate,rateUnit:row.rateUnit,paidHoursPerShift:paidHours,shifts};
     });
   });

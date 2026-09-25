@@ -112,24 +112,22 @@ async function generateFinance(tx:Sql,actor:Actor,object:ObjectScope,clientSnaps
 
   const workerRows=await tx<Array<{workerId:string;base:number|string;premium:number|string;adjustment:number|string}>>`
     WITH entries AS (
-      SELECT x."workerId"::uuid worker_id,x."workDate"::date work_date,x."factHours"::numeric hours
-      FROM jsonb_to_recordset(${tx.json(internal.snapshotJson as never)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric)
+      SELECT x."workerId"::uuid worker_id,x."workDate"::date work_date,x."factHours"::numeric hours,COALESCE(x."dayHours",0)::numeric day_hours,COALESCE(x."nightHours",0)::numeric night_hours
+      FROM jsonb_to_recordset(${tx.json(internal.snapshotJson as never)}->'entries') AS x("workerId" text,"workDate" text,"factHours" numeric,"dayHours" numeric,"nightHours" numeric)
       WHERE COALESCE(x."factHours",0)>0
     ), base AS (
       SELECT e.worker_id,
-        COALESCE(sum(CASE rate.unit
-          WHEN 'hour' THEN e.hours*rate.amount
-          WHEN 'shift' THEN CASE WHEN e.hours>0 AND assignment.paid_hours_per_shift>0 THEN e.hours*(rate.amount/assignment.paid_hours_per_shift) WHEN e.hours>0 THEN rate.amount ELSE 0 END
-          WHEN 'month' THEN 0
-          ELSE e.hours*rate.amount END),0)::numeric base,
-        COALESCE(max(CASE WHEN rate.unit='month' AND e.hours>0 THEN rate.amount ELSE 0 END),0)::numeric monthly
+        COALESCE(sum(
+          CASE day_rate.unit WHEN 'hour' THEN e.day_hours*day_rate.amount WHEN 'shift' THEN CASE WHEN e.day_hours>0 AND assignment.paid_hours_per_shift>0 THEN e.day_hours*(day_rate.amount/assignment.paid_hours_per_shift) WHEN e.day_hours>0 THEN day_rate.amount ELSE 0 END WHEN 'month' THEN 0 ELSE e.day_hours*COALESCE(day_rate.amount,0) END
+          + CASE night_rate.unit WHEN 'hour' THEN e.night_hours*night_rate.amount WHEN 'shift' THEN CASE WHEN e.night_hours>0 AND assignment.paid_hours_per_shift>0 THEN e.night_hours*(night_rate.amount/assignment.paid_hours_per_shift) WHEN e.night_hours>0 THEN night_rate.amount ELSE 0 END WHEN 'month' THEN 0 ELSE e.night_hours*COALESCE(night_rate.amount,0) END
+        ),0)::numeric base,
+        COALESCE(max(CASE WHEN any_rate.unit='month' AND e.hours>0 THEN any_rate.amount ELSE 0 END),0)::numeric monthly
       FROM entries e
-      LEFT JOIN LATERAL (
-        SELECT r.amount,r.unit FROM worker_rates r
-        WHERE r.worker_id=e.worker_id AND r.object_id=${object.objectId}::uuid
-          AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date)
-        ORDER BY r.effective_from DESC LIMIT 1
-      ) rate ON true
+      LEFT JOIN LATERAL (SELECT r.amount,r.unit FROM worker_rates r WHERE r.worker_id=e.worker_id AND r.object_id=${object.objectId}::uuid AND r.day_night='any' AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date) ORDER BY r.effective_from DESC LIMIT 1) any_rate ON true
+      LEFT JOIN LATERAL (SELECT r.amount,r.unit FROM worker_rates r WHERE r.worker_id=e.worker_id AND r.object_id=${object.objectId}::uuid AND r.day_night='day' AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date) ORDER BY r.effective_from DESC LIMIT 1) specific_day ON true
+      LEFT JOIN LATERAL (SELECT COALESCE(specific_day.amount,any_rate.amount) amount,COALESCE(specific_day.unit,any_rate.unit) unit) day_rate ON true
+      LEFT JOIN LATERAL (SELECT r.amount,r.unit FROM worker_rates r WHERE r.worker_id=e.worker_id AND r.object_id=${object.objectId}::uuid AND r.day_night='night' AND r.effective_from<=e.work_date AND (r.effective_to IS NULL OR r.effective_to>=e.work_date) ORDER BY r.effective_from DESC LIMIT 1) specific_night ON true
+      LEFT JOIN LATERAL (SELECT COALESCE(specific_night.amount,any_rate.amount) amount,COALESCE(specific_night.unit,any_rate.unit) unit) night_rate ON true
       LEFT JOIN LATERAL (
         SELECT a.paid_hours_per_shift FROM worker_object_assignments a
         WHERE a.worker_id=e.worker_id AND a.object_id=${object.objectId}::uuid

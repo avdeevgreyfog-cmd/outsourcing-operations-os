@@ -6,7 +6,7 @@ import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
 const schema=z.discriminatedUnion("action",[
-  z.object({action:z.literal("plan"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional()}),
+  z.object({action:z.literal("plan"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional(),replacementRequired:z.boolean().default(true)}),
   z.object({action:z.literal("complete"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional()}),
   z.object({action:z.literal("cancel"),exitId:z.string().uuid()}),
 ]);
@@ -32,28 +32,67 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(body.action==="cancel"){
         const [exit]=await tx<Array<{id:string}>>`SELECT id FROM worker_exit_processes WHERE id=${body.exitId}::uuid AND worker_id=${id}::uuid AND status='planned' FOR UPDATE`;
         if(!exit)throw new Error("План завершения работы не найден");
+        const [exitMeta]=await tx<Array<{replacementNeedId:string|null}>>`SELECT replacement_need_id "replacementNeedId" FROM worker_exit_processes WHERE id=${exit.id}::uuid`;
         await tx`UPDATE worker_exit_processes SET status='cancelled',updated_at=now() WHERE id=${exit.id}::uuid`;
+        if(exitMeta?.replacementNeedId)await tx`UPDATE needs SET status='cancelled',closed_at=now() WHERE id=${exitMeta.replacementNeedId}::uuid AND status NOT IN ('filled','archived')`;
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
           VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'exit_cancelled','План завершения работы отменён',${tx.json({exitId:exit.id})})`;
         return {status:"cancelled",exitId:exit.id};
       }
 
       if(body.action==="plan"){
-        const [existing]=await tx<Array<{id:string}>>`SELECT id FROM worker_exit_processes WHERE worker_id=${id}::uuid AND status='planned' FOR UPDATE`;
-        let exitId:string;
+        if(!worker.objectId||!worker.specialtyId)throw new Error("Для замены сотрудник должен быть назначен на объект и специальность");
+        const [existing]=await tx<Array<{id:string;replacementNeedId:string|null}>>`SELECT id,replacement_need_id "replacementNeedId" FROM worker_exit_processes WHERE worker_id=${id}::uuid AND status='planned' FOR UPDATE`;
+        let exitId:string;let replacementNeedId=existing?.replacementNeedId??null;
         if(existing){
           exitId=existing.id;
-          await tx`UPDATE worker_exit_processes SET effective_date=${body.effectiveDate}::date,reason_code=${body.reasonCode},reason=${body.reason??null},updated_at=now() WHERE id=${exitId}::uuid`;
+          await tx`UPDATE worker_exit_processes SET effective_date=${body.effectiveDate}::date,reason_code=${body.reasonCode},reason=${body.reason??null},replacement_required=${body.replacementRequired},updated_at=now() WHERE id=${exitId}::uuid`;
         }else{
           const [row]=await tx<Array<{id:string}>>`
-            INSERT INTO worker_exit_processes(organization_id,worker_id,object_id,effective_date,reason_code,reason,status,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId??null}::uuid,${body.effectiveDate}::date,${body.reasonCode},${body.reason??null},'planned',${actor.userId}::uuid)
+            INSERT INTO worker_exit_processes(organization_id,worker_id,object_id,effective_date,reason_code,reason,status,replacement_required,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId}::uuid,${body.effectiveDate}::date,${body.reasonCode},${body.reason??null},'planned',${body.replacementRequired},${actor.userId}::uuid)
             RETURNING id
           `;exitId=row.id;
         }
+        if(body.replacementRequired){
+          if(!replacementNeedId){
+            const [sourceNeed]=await tx<Array<{id:string;regionId:string|null;ownerUserId:string|null;managerUserId:string|null;conditions:Record<string,unknown>;priority:string}>>`
+              SELECT n.id,n.region_id "regionId",n.owner_user_id "ownerUserId",n.manager_user_id "managerUserId",n.conditions_snapshot conditions,n.priority
+              FROM needs n WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
+              ORDER BY n.created_at DESC LIMIT 1
+            `;
+            const [object]=await tx<Array<{regionId:string;recruitingMode:string}>>`SELECT region_id "regionId",recruiting_routing_mode "recruitingMode" FROM objects WHERE id=${worker.objectId}::uuid`;
+            const regionId=sourceNeed?.regionId??object?.regionId;
+            const [routed]=await tx<Array<{userId:string|null;teamId:string|null}>>`
+              WITH object_recruiter AS (
+                SELECT oa.user_id "userId",m.primary_team_id "teamId",1 priority FROM object_assignments oa
+                JOIN organization_memberships m ON m.organization_id=oa.organization_id AND m.user_id=oa.user_id AND m.status='active'
+                WHERE oa.object_id=${worker.objectId}::uuid AND oa.responsibility_type='recruiter' AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)
+                ORDER BY oa.created_at LIMIT 1
+              ), responsibility AS (
+                SELECT user_id "userId",NULL::uuid "teamId",2 priority FROM resolve_organization_responsibility('recruiting_need','owner','region',${regionId}::uuid,current_date) LIMIT 1
+              )
+              SELECT "userId","teamId" FROM (SELECT * FROM object_recruiter UNION ALL SELECT * FROM responsibility) x WHERE "userId" IS NOT NULL ORDER BY priority LIMIT 1
+            `;
+            const ownerId=sourceNeed?.ownerUserId??routed?.userId??actor.userId;
+            const [need]=await tx<Array<{id:string}>>`
+              INSERT INTO needs(organization_id,object_id,region_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,manager_user_id,created_by_user_id,source_kind,title,priority,conditions_snapshot,replacement_exit_id)
+              SELECT ${actor.organizationId}::uuid,${worker.objectId}::uuid,${regionId}::uuid,${worker.specialtyId}::uuid,1,0,${body.effectiveDate}::date,'open',${ownerId}::uuid,${worker.ownerUserId}::uuid,${actor.userId}::uuid,'replacement',${"Замена: "+worker.fullName},${sourceNeed?.priority??"high"},${tx.json((sourceNeed?.conditions??{}) as never)},${exitId}::uuid
+              RETURNING id
+            `;replacementNeedId=need.id;
+            if(sourceNeed){await tx`INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id) SELECT organization_id,${need.id}::uuid,recruiter_user_id,team_id,1,${actor.userId}::uuid FROM need_assignments WHERE need_id=${sourceNeed.id}::uuid AND unassigned_at IS NULL ON CONFLICT DO NOTHING`;}
+            else if(routed?.userId){await tx`INSERT INTO need_assignments(organization_id,need_id,recruiter_user_id,team_id,target_count,assigned_by_user_id) VALUES(${actor.organizationId}::uuid,${need.id}::uuid,${routed.userId}::uuid,${routed.teamId}::uuid,1,${actor.userId}::uuid)`;}
+            await tx`UPDATE worker_exit_processes SET replacement_need_id=${need.id}::uuid WHERE id=${exitId}::uuid`;
+            await tx`INSERT INTO need_quantity_changes(organization_id,need_id,old_count,new_count,delta,reason,changed_by_user_id) VALUES(${actor.organizationId}::uuid,${need.id}::uuid,NULL,1,1,${"Замена сотрудника: "+worker.fullName},${actor.userId}::uuid)`;
+          }else{
+            await tx`UPDATE needs SET deadline=${body.effectiveDate}::date,status=CASE WHEN status IN ('cancelled','archived') THEN 'open' ELSE status END,closed_at=NULL WHERE id=${replacementNeedId}::uuid`;
+          }
+        }else if(replacementNeedId){
+          await tx`UPDATE needs SET status='cancelled',closed_at=now() WHERE id=${replacementNeedId}::uuid AND status NOT IN ('filled','archived')`;
+        }
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'exit_planned',${"Запланировано завершение работы: "+body.effectiveDate},${tx.json({exitId,reasonCode:body.reasonCode})})`;
-        return {status:"planned",exitId};
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'exit_planned',${"Запланировано завершение работы: "+body.effectiveDate},${tx.json({exitId,reasonCode:body.reasonCode,replacementRequired:body.replacementRequired,replacementNeedId})})`;
+        return {status:"planned",exitId,replacementNeedId};
       }
 
       const [dateCheck]=await tx<Array<{future:boolean}>>`SELECT ${body.effectiveDate}::date>current_date future`;

@@ -1075,3 +1075,88 @@ button.sales-funnel-step:active{transform:translateY(1px)}
  .sales-workspace.operations-workspace .object-daily-payment-shifts>div:not(.empty-inline){grid-template-columns:28px 1fr;gap:6px;padding:8px 0}
  .sales-workspace.operations-workspace .object-daily-payment-shifts input[type="number"],.sales-workspace.operations-workspace .object-daily-check{grid-column:2}
 }
+
+/* Object workforce refinement: compact actions, PPE templates, planner and two-line timesheet */
+.sales-workspace.operations-workspace .object-workforce-toolbar.compact{grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(140px,1fr)) auto}
+.sales-workspace.operations-workspace .object-workforce-table-v2{min-width:1180px}
+.sales-workspace.operations-workspace .object-worker-current{display:grid;gap:3px;min-width:125px}
+.sales-workspace.operations-workspace .object-worker-current strong{font-size:11.5px;font-weight:650;color:var(--text)}
+.sales-workspace.operations-workspace .object-worker-current small{font-size:9.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-worker-current.is-attention strong{color:var(--warn)}
+.sales-workspace.operations-workspace .object-worker-rate{display:grid;gap:3px;justify-items:end;white-space:nowrap}
+.sales-workspace.operations-workspace .object-worker-rate strong{font-size:12px}
+.sales-workspace.operations-workspace .object-worker-rate small{font-size:9.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-worker-adaptation{margin-top:3px}
+.sales-workspace.operations-workspace .object-worker-doc-editor{display:grid;gap:4px;min-width:165px}
+.sales-workspace.operations-workspace .object-worker-doc-editor select{height:30px;max-width:190px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-size:10.5px;padding:0 26px 0 8px}
+.sales-workspace.operations-workspace .object-worker-doc-editor a,.sales-workspace.operations-workspace .object-worker-assets a{font-size:9.5px;color:var(--muted);text-decoration:none}
+.sales-workspace.operations-workspace .object-worker-assets{position:relative;min-width:145px}
+.sales-workspace.operations-workspace .object-worker-assets summary{cursor:pointer;list-style:none;display:grid;gap:2px}
+.sales-workspace.operations-workspace .object-worker-assets summary::-webkit-details-marker{display:none}
+.sales-workspace.operations-workspace .object-worker-assets summary strong{font-size:11px}
+.sales-workspace.operations-workspace .object-worker-assets summary small{font-size:9.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-worker-assets-popover{position:absolute;right:0;z-index:20;width:280px;padding:10px;display:grid;gap:7px;border:1px solid var(--border-strong);border-radius:8px;background:var(--panel);box-shadow:var(--shadow-md);font-size:10.5px}
+.sales-workspace.operations-workspace .object-ppe-template-editor{border-bottom:1px solid var(--border);background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-ppe-template-editor>summary{padding:9px 14px;cursor:pointer;font-size:10.5px;font-weight:650}
+.sales-workspace.operations-workspace .object-ppe-template-editor>div{padding:0 14px 12px;display:grid;grid-template-columns:220px 1fr auto;gap:10px;align-items:start}
+.sales-workspace.operations-workspace .object-ppe-template-editor select{height:34px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);padding:0 8px}
+.sales-workspace.operations-workspace .object-ppe-template-items{display:flex;flex-wrap:wrap;gap:6px 12px;padding-top:7px}
+.sales-workspace.operations-workspace .object-ppe-template-items label{display:flex;align-items:center;gap:5px;font-size:10.5px}
+.sales-workspace.operations-workspace .object-ppe-template-items input{width:14px;height:14px}
+
+.sales-workspace.operations-workspace .object-need-editor{display:flex;align-items:center;gap:4px;min-width:190px}
+.sales-workspace.operations-workspace .object-need-editor button{height:30px;min-width:30px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);cursor:pointer}
+.sales-workspace.operations-workspace .object-need-editor input{width:58px;height:30px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);text-align:center;font-weight:650}
+.sales-workspace.operations-workspace .object-need-editor .save{padding:0 8px;min-width:auto;font-size:9.5px;border-color:var(--accent);color:var(--accent)}
+.sales-workspace.operations-workspace .object-deficit-text{font-weight:650;color:var(--warn)}
+.sales-workspace.operations-workspace .object-staffing-replacement{font-size:10.5px;color:var(--text)}
+.sales-workspace.operations-workspace .object-candidate-phone{font-size:10px;color:var(--muted);text-decoration:none}
+.sales-workspace.operations-workspace .object-candidate-phone:hover{text-decoration:underline}
+
+.sales-workspace.operations-workspace .object-shift-planner-toolbar{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-shift-legend{padding:8px 14px;display:flex;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);font-size:10px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-shift-legend b{color:var(--text)}
+.sales-workspace.operations-workspace .object-shift-matrix{min-width:1020px}
+.sales-workspace.operations-workspace .object-shift-matrix th:not(.sticky-col){min-width:70px;text-align:center}
+.sales-workspace.operations-workspace .object-shift-matrix th span{display:block;font-size:8.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-shift-matrix .sticky-col{position:sticky;left:0;z-index:3;min-width:235px;background:var(--panel)}
+.sales-workspace.operations-workspace .object-shift-cell{padding:4px!important;text-align:center}
+.sales-workspace.operations-workspace .object-shift-cell select{width:46px;height:30px;border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--text);font-weight:650;text-align:center}
+.sales-workspace.operations-workspace .object-shift-cell.is-off{background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-shift-specialty{min-width:850px}
+.sales-workspace.operations-workspace .object-shift-specialty td:not(:first-child),.sales-workspace.operations-workspace .object-shift-specialty th:not(:first-child){text-align:center}
+
+.sales-workspace.operations-workspace .timesheet-legend-top{padding:9px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;background:var(--panel);font-size:9.5px;color:var(--muted);margin-bottom:10px}
+.sales-workspace.operations-workspace .timesheet-legend-top strong,.sales-workspace.operations-workspace .timesheet-legend-top b{color:var(--text)}
+.sales-workspace.operations-workspace .compact-timesheet{max-height:68vh;overflow:auto}
+.sales-workspace.operations-workspace .timesheet-two-line{min-width:1260px;font-size:9.5px}
+.sales-workspace.operations-workspace .timesheet-two-line th,.sales-workspace.operations-workspace .timesheet-two-line td{padding:4px 5px;height:30px}
+.sales-workspace.operations-workspace .timesheet-two-line .sticky-col{position:sticky;left:0;z-index:4;min-width:190px;max-width:210px;background:var(--panel)}
+.sales-workspace.operations-workspace .timesheet-two-line thead .sticky-col{z-index:6}
+.sales-workspace.operations-workspace .timesheet-two-line .timesheet-shift-col{width:44px;min-width:44px;text-align:center}
+.sales-workspace.operations-workspace .timesheet-two-line th.day,.sales-workspace.operations-workspace .timesheet-two-line td.day{width:34px;min-width:34px;text-align:center}
+.sales-workspace.operations-workspace .timesheet-two-line th.day span{display:block;font-size:7.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .timesheet-two-line .weekend{background:var(--panel-2)}
+.sales-workspace.operations-workspace .timesheet-two-line .timesheet-night-row td{border-top-style:dashed}
+.sales-workspace.operations-workspace .timesheet-two-line .timesheet-locked{background:var(--panel-2);color:var(--muted)}
+.sales-workspace.operations-workspace .timesheet-two-line .day-planned{font-weight:650}
+.sales-workspace.operations-workspace .timesheet-cell-input{width:30px;height:24px;padding:0;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--text);font-size:9.5px;text-align:center}
+.sales-workspace.operations-workspace .timesheet-cell-input:focus{border-color:var(--border-strong);background:var(--panel);outline:0}
+.sales-workspace.operations-workspace .timesheet-worker-rates{display:block;margin-top:3px;font-size:8.5px;color:var(--muted);font-weight:500}
+.sales-workspace.operations-workspace .worker-exit-days{display:flex;gap:6px}.sales-workspace.operations-workspace .worker-exit-days input{flex:1}
+
+.sales-workspace.operations-workspace .object-payment-entry{padding:10px 14px;display:flex;align-items:end;justify-content:space-between;gap:14px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-payment-entry>div:first-child{display:flex;gap:8px;flex:1}.sales-workspace.operations-workspace .object-payment-entry label{display:grid;gap:4px;font-size:9.5px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-payment-entry input,.sales-workspace.operations-workspace .object-payment-batch input,.sales-workspace.operations-workspace .object-daily-limit input{height:32px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);padding:0 8px}
+.sales-workspace.operations-workspace .object-payment-entry label:last-child{min-width:280px}
+.sales-workspace.operations-workspace .object-payment-batch input{width:120px;text-align:right}
+.sales-workspace.operations-workspace .object-payment-history>summary{padding:10px 14px;border-top:1px solid var(--border);cursor:pointer;font-size:10.5px;font-weight:650}
+.sales-workspace.operations-workspace .object-daily-payment-matrix{min-width:1050px}
+.sales-workspace.operations-workspace .object-daily-payment-matrix .sticky-col{position:sticky;left:0;z-index:3;min-width:190px;background:var(--panel)}
+.sales-workspace.operations-workspace .object-daily-payment-matrix th:not(.sticky-col){min-width:115px}
+.sales-workspace.operations-workspace .object-daily-cell{display:table-cell;text-align:left}.sales-workspace.operations-workspace .object-daily-cell>*{display:block;margin:2px 0}
+.sales-workspace.operations-workspace .object-daily-cell span,.sales-workspace.operations-workspace .object-daily-cell small{font-size:9px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-daily-cell label{display:flex;align-items:center;gap:4px;font-size:9px;cursor:pointer}.sales-workspace.operations-workspace .object-daily-cell label input{width:13px;height:13px}
+.sales-workspace.operations-workspace .object-daily-limit{display:flex;align-items:center;gap:4px}.sales-workspace.operations-workspace .object-daily-limit input{width:52px}.sales-workspace.operations-workspace .object-daily-limit .button{height:30px;padding:0 8px}
+.sales-workspace.operations-workspace .object-daily-empty{color:var(--muted);text-align:center}
+@media(max-width:900px){.sales-workspace.operations-workspace .object-ppe-template-editor>div{grid-template-columns:1fr}.sales-workspace.operations-workspace .object-shift-planner-toolbar,.sales-workspace.operations-workspace .object-payment-entry{align-items:stretch;flex-direction:column}.sales-workspace.operations-workspace .object-payment-entry>div:first-child{flex-direction:column}.sales-workspace.operations-workspace .object-payment-entry label:last-child{min-width:0}}

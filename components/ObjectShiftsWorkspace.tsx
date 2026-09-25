@@ -1,54 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo,useState } from "react";
-import type { ShiftRow,WorkerRow } from "@/lib/data/service";
-import { workerTodayStatus } from "@/lib/operations/workforce-status";
-import { Status } from "@/components/UI";
+import {useMemo,useState} from "react";
+import type {ShiftRow,WorkerRow} from "@/lib/data/service";
 
-const laneOrder=["day","night","mixed"] as const;
-const laneLabels:Record<string,string>={day:"Дневная смена",night:"Ночная смена",mixed:"Смешанная смена",День:"Дневная смена",Ночь:"Ночная смена"};
-
-export function ObjectShiftsWorkspace({objectId,rows,workers,today}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string}){
-  const dates=useMemo(()=>[...new Set(rows.map(row=>row.dateIso).filter((value):value is string=>Boolean(value)))].sort(),[rows]);
-  const initial=dates.includes(today)?today:(dates.find(value=>value>=today)??dates.at(-1)??today);
-  const [date,setDate]=useState(initial);
-  const selected=rows.filter(row=>row.dateIso===date);
-  const workerById=useMemo(()=>new Map(workers.map(row=>[row.id,row])),[workers]);
-  const assignedIds=[...new Set(selected.flatMap(row=>row.workerIds))];
-  const factWorkers=date===today?assignedIds.map(id=>workerById.get(id)).filter((row):row is WorkerRow=>Boolean(row)):[];
-  const onShift=date===today?factWorkers.filter(row=>workerTodayStatus(row,today).key==="on_shift").length:0;
-  const noShows=date===today?factWorkers.filter(row=>workerTodayStatus(row,today).key==="no_show").length:0;
-  const demand=selected.reduce((sum,row)=>sum+row.demand,0);
-  const assigned=selected.reduce((sum,row)=>sum+row.assigned,0);
-  const confirmed=selected.reduce((sum,row)=>sum+Number(row.confirmed??0),0);
-  const reserve=selected.reduce((sum,row)=>sum+row.reserve,0);
-  const deficit=selected.reduce((sum,row)=>sum+row.deficit,0);
-  const groups=laneOrder.map(kind=>({kind,rows:selected.filter(row=>normalizeKind(row.kind)===kind)})).filter(group=>group.rows.length);
-
-  return <>
-    <div className="object-shift-daybar">
-      <div><strong>{date===today?"Сегодня":formatDate(date)}</strong><span>{date===today?formatDate(date):"Оперативный план смен"}</span></div>
-      {dates.length>1&&<select value={date} onChange={e=>setDate(e.target.value)}>{dates.map(value=><option key={value} value={value}>{value===today?`Сегодня · ${shortDate(value)}`:formatDate(value)}</option>)}</select>}
-    </div>
-    <div className="object-shift-summary">
-      <ShiftMetric label="План" value={demand}/><ShiftMetric label="Назначено" value={assigned}/><ShiftMetric label="Подтверждено" value={confirmed}/><ShiftMetric label={date===today?"Вышли":"Резерв"} value={date===today?onShift:reserve}/><ShiftMetric label={date===today?"Невыходы":"Дефицит"} value={date===today?noShows:deficit} tone={(date===today?noShows:deficit)>0?"bad":undefined}/>
-    </div>
-    {selected.length?<div className="object-shift-lanes">{groups.map(group=><section className={`object-shift-lane is-${group.kind}`} key={group.kind}><div className="object-shift-lane-head"><div><strong>{laneLabels[group.kind]}</strong><span>{timeRange(group.rows)}</span></div><div><span>План {group.rows.reduce((sum,row)=>sum+row.demand,0)}</span><span>Назначено {group.rows.reduce((sum,row)=>sum+row.assigned,0)}</span></div></div><div className="object-shift-list">{group.rows.map(row=><ShiftRowView key={row.id} row={row} workers={workers} today={today} selectedDate={date}/>)}</div></section>)}</div>:<div className="object-shift-empty"><strong>На эту дату смены не сформированы</strong><span>Создайте план смен или выберите другую дату.</span></div>}
-    <div className="section-actions"><Link className="button" href={`/objects/${objectId}?tab=timesheets`}>Табель объекта</Link><Link className="button primary" href={`/shifts?object=${objectId}`}>Открыть полный график</Link></div>
-  </>;
+type Kind="day"|"night"|"off"|"";type Mode="workers"|"specialties";
+export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;demo:boolean}){
+  const [start,setStart]=useState(today);const [mode,setMode]=useState<Mode>("workers");const [busy,setBusy]=useState("");const [message,setMessage]=useState("");
+  const dates=useMemo(()=>Array.from({length:7},(_,i)=>addDays(start,i)),[start]);
+  const [overrides,setOverrides]=useState<Record<string,Kind>>({});
+  const map=useMemo(()=>{const out=new Map<string,Kind>();for(const shift of rows){if(!shift.dateIso)continue;const kind=normalizeKind(shift.kind);for(const id of shift.workerIds)out.set(`${id}:${shift.dateIso}`,kind)}return out},[rows]);
+  function planned(worker:WorkerRow,date:string):Kind{const key=`${worker.id}:${date}`;if(overrides[key]!==undefined)return overrides[key];const actual=map.get(key);if(actual)return actual;if(worker.absenceStatus==="confirmed"&&worker.absenceFrom&&worker.absenceFrom<=date&&(!worker.absenceTo||worker.absenceTo>=date))return "off";if(worker.scheduleWorkDays==null||worker.scheduleRestDays==null||!worker.startDate)return "";const anchor=worker.scheduleAnchorDate??worker.startDate;const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);const offset=((diff%cycle)+cycle)%cycle;if(offset>=worker.scheduleWorkDays)return "off";return worker.scheduleShiftKind==="night"?"night":"day"}
+  async function saveCell(worker:WorkerRow,date:string,kind:Exclude<Kind,"">){const key=`${worker.id}:${date}`;setOverrides(current=>({...current,[key]:kind}));if(!canEdit)return;setBusy(key);setMessage("");try{if(!demo){const response=await fetch(`/api/objects/${objectId}/shift-plan`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"set_cell",workerId:worker.id,date,kind})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить план")}}catch(e){setMessage(e instanceof Error?e.message:"Не удалось изменить план")}finally{setBusy("")}}
+  async function generate(){if(!canEdit)return;setBusy("generate");setMessage("");try{if(!demo){const response=await fetch(`/api/objects/${objectId}/shift-plan`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"generate",startDate:start,endDate:dates.at(-1)})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сформировать график");setMessage(`План обновлён: ${json.updated??0} ячеек`);window.location.reload()}else setMessage("Демо: график сформирован локально")}catch(e){setMessage(e instanceof Error?e.message:"Не удалось сформировать график")}finally{setBusy("")}}
+  const specialties=[...new Set(workers.map(w=>w.specialty??"Без специальности"))].sort((a,b)=>a.localeCompare(b,"ru"));
+  return <div className="object-shift-planner">
+    <div className="object-shift-planner-toolbar"><div className="page-actions"><button className="button" onClick={()=>setStart(addDays(start,-7))}>← Неделя</button><button className="button" onClick={()=>setStart(today)}>Сегодня</button><button className="button" onClick={()=>setStart(addDays(start,7))}>Неделя →</button><strong>{formatRange(start,dates.at(-1)!)}</strong></div><div className="page-actions"><div className="segmented"><button className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>По сотрудникам</button><button className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям</button></div>{canEdit&&<button className="button primary" disabled={busy==="generate"} onClick={()=>void generate()}>Заполнить по графикам</button>}</div></div>
+    <div className="object-shift-legend"><span><b>Д</b> дневная</span><span><b>Н</b> ночная</span><span><b>В</b> выходной / отсутствие</span><span>Изменения автоматически создают план <b>П</b> в табеле.</span></div>{message&&<div className="object-staffing-message">{message}</div>}
+    {mode==="workers"?<div className="request-table-wrap"><table className="data-table object-shift-matrix"><thead><tr><th className="sticky-col">Сотрудник</th><th>График</th>{dates.map(date=><th key={date}><span>{weekday(date)}</span>{shortDate(date)}</th>)}</tr></thead><tbody>{workers.map(worker=><tr key={worker.id}><td className="sticky-col"><Link className="cell-title" href={`/workers/${worker.id}`}>{worker.fullName}</Link><span className="cell-sub">{worker.specialty??"—"}{worker.phone&&<> · <a href={`tel:${worker.phone.replace(/[^+\d]/g,"")}`}>{worker.phone}</a></>}</span></td><td><strong>{worker.scheduleWorkDays!=null&&worker.scheduleRestDays!=null?`${worker.scheduleWorkDays}/${worker.scheduleRestDays}`:"Инд."}</strong><span className="cell-sub">{worker.scheduleShiftKind==="night"?"Ночь":worker.scheduleShiftKind==="day"?"День":"Д/Н"}</span></td>{dates.map(date=>{const value=planned(worker,date);const key=`${worker.id}:${date}`;return <td key={date} className={`object-shift-cell is-${value||"empty"}`}>{canEdit?<select aria-label={`${worker.fullName} ${date}`} value={value} disabled={busy===key} onChange={e=>void saveCell(worker,date,e.target.value as Exclude<Kind,"">)}><option value="">—</option><option value="day">Д</option><option value="night">Н</option><option value="off">В</option></select>:<b>{shortKind(value)}</b>}</td>})}</tr>)}</tbody></table></div>:<div className="request-table-wrap"><table className="data-table object-shift-specialty"><thead><tr><th>Специальность</th>{dates.map(date=><th key={date}>{shortDate(date)}</th>)}</tr></thead><tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{const group=workers.filter(w=>(w.specialty??"Без специальности")===name);const day=group.filter(w=>planned(w,date)==="day").length,night=group.filter(w=>planned(w,date)==="night").length;return <td key={date}><strong>Д {day}</strong><span className="cell-sub">Н {night}</span></td>})}</tr>)}</tbody></table></div>}
+    <div className="section-actions"><Link className="button" href={`/timesheets?object=${objectId}`}>Открыть табель</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный план смен</Link></div>
+  </div>
 }
-
-function ShiftRowView({row,workers,today,selectedDate}:{row:ShiftRow;workers:WorkerRow[];today:string;selectedDate:string}){
-  const assigned=workers.filter(worker=>row.workerIds.includes(worker.id));
-  const reserve=workers.filter(worker=>row.reserveWorkerIds.includes(worker.id));
-  const onShift=selectedDate===today?assigned.filter(worker=>workerTodayStatus(worker,today).key==="on_shift").length:null;
-  const noShows=selectedDate===today?assigned.filter(worker=>workerTodayStatus(worker,today).key==="no_show").length:null;
-  return <details className="object-shift-card"><summary><div><strong>{row.specialty}</strong><span>{row.time}</span></div><div className="object-shift-numbers"><span>План <b>{row.demand}</b></span><span>Назначено <b>{row.assigned}</b></span><span>Подтверждено <b>{row.confirmed??0}</b></span>{selectedDate===today&&<span>Вышли <b>{onShift}</b></span>}<span>Резерв <b>{row.reserve}</b></span><Status tone={row.deficit?"warn":"good"}>{row.deficit?`−${row.deficit}`:"План закрыт"}</Status></div></summary><div className="object-shift-people">{assigned.map(worker=>{const day=selectedDate===today?workerTodayStatus(worker,today):null;return <div key={worker.id}><Link href={`/workers/${worker.id}`}>{worker.fullName}</Link><span>{worker.phone??"Телефон не указан"}</span><strong className={day?.key==="no_show"?"priority-critical":""}>{day?.label??"Назначен"}</strong></div>})}{reserve.map(worker=><div key={`reserve-${worker.id}`}><Link href={`/workers/${worker.id}`}>{worker.fullName}</Link><span>{worker.phone??"Телефон не указан"}</span><strong>Резерв</strong></div>)}{!assigned.length&&!reserve.length&&<div className="empty-inline">Сотрудники на смену ещё не назначены</div>}{selectedDate===today&&Boolean(noShows)&&<small className="priority-critical">Невыходы: {noShows}</small>}</div></details>;
-}
-
-function ShiftMetric({label,value,tone}:{label:string;value:number;tone?:"bad"}){return <div className={tone?"is-alert":""}><span>{label}</span><strong>{value}</strong></div>}
-function normalizeKind(value:string):"day"|"night"|"mixed"{if(value==="day"||value==="День")return"day";if(value==="night"||value==="Ночь")return"night";return"mixed"}
-function timeRange(rows:ShiftRow[]){return [...new Set(rows.map(row=>row.time))].join(" · ")}
-function formatDate(value:string){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",day:"2-digit",month:"long",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
-function shortDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
+function normalizeKind(value:string):Kind{if(value==="day"||value==="День")return"day";if(value==="night"||value==="Ночь")return"night";return""}function shortKind(value:Kind){return value==="day"?"Д":value==="night"?"Н":value==="off"?"В":"—"}function addDays(value:string,n:number){const d=new Date(value+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}function shortDate(v:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(v+"T00:00:00Z"))}function weekday(v:string){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(v+"T00:00:00Z")).replace(".","")}function formatRange(a:string,b:string){return `${new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"}).format(new Date(a+"T00:00:00Z"))} — ${new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"}).format(new Date(b+"T00:00:00Z"))}`}

@@ -23,6 +23,8 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
   const [effectiveDate,setEffectiveDate]=useState(new Date().toISOString().slice(0,10));
   const [reasonCode,setReasonCode]=useState("employee_request");
   const [reason,setReason]=useState("");
+  const [replacementRequired,setReplacementRequired]=useState(true);
+  const [daysToWork,setDaysToWork]=useState("7");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const activePlan=useMemo(()=>context.exits.find(row=>row.status==="planned"),[context.exits]);
@@ -34,7 +36,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
     try{
       if(demo){setError("Изменения в текущем режиме недоступны");return;}
       const response=await fetch("/api/workers/"+workerId+"/exit",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-        action:future?"plan":"complete",effectiveDate,reasonCode,reason:reason||null,
+        action:future?"plan":"complete",effectiveDate,reasonCode,reason:reason||null,...(future?{replacementRequired}:{}),
       })});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось сохранить завершение работы");
@@ -69,7 +71,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
 
       <Section title="Завершение работы" note="Операционные связи закрываются централизованно: объект, ставка, жильё и будущие смены.">
         <div className="worker-employment-content">
-          {activePlan?<div className="stack-item"><div><strong>Завершение запланировано на {activePlan.effectiveDate}</strong><small>{reasonLabels[activePlan.reasonCode]??activePlan.reasonCode}{activePlan.reason?" · "+activePlan.reason:""}</small></div>{canOffboard&&<button className="button" disabled={busy} onClick={()=>void cancelPlan()}>Отменить план</button>}</div>:workerStatus==="active"?<div className="summary-strip"><span>Активного плана завершения работы нет.</span>{canOffboard&&<button className="button primary" onClick={()=>setShow(true)}><LogOut size={14}/> Завершение работы</button>}</div>:<Status tone="neutral">Работа завершена</Status>}
+          {activePlan?<div className="stack-item"><div><strong>Завершение запланировано на {activePlan.effectiveDate}</strong><small>{reasonLabels[activePlan.reasonCode]??activePlan.reasonCode}{activePlan.reason?" · "+activePlan.reason:""}{activePlan.replacementRequired?activePlan.replacementWorker?` · замена: ${activePlan.replacementWorker}`:" · замена в подборе":" · без замены"}</small></div>{canOffboard&&<div className="page-actions">{activePlan.replacementWorker&&<button className="button primary" disabled={busy||hasBlockingAssets} onClick={()=>{setEffectiveDate(new Date().toISOString().slice(0,10));setReasonCode("employer_decision");setReason(`Замена ${activePlan.replacementWorker} вышла раньше плановой даты`);setShow(true)}}>Завершить сегодня</button>}<button className="button" disabled={busy} onClick={()=>void cancelPlan()}>Отменить план</button></div>}</div>:workerStatus==="active"?<div className="summary-strip"><span>Активного плана завершения работы нет.</span>{canOffboard&&<button className="button primary" onClick={()=>setShow(true)}><LogOut size={14}/> Завершение работы</button>}</div>:<Status tone="neutral">Работа завершена</Status>}
           {error&&<div className="recruiting-error worker-employment-error">{error}</div>}
         </div>
       </Section>
@@ -84,13 +86,13 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
       </Section>
     </div>
 
-    {context.exits.length>0&&<Section title="История завершения работы" note="Планы, отмены и фактические завершения сохраняются в истории." ><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Дата</th><th>Причина</th><th>Комментарий</th><th>Статус</th></tr></thead><tbody>{context.exits.map(row=><tr key={row.id}><td>{row.effectiveDate}</td><td>{reasonLabels[row.reasonCode]??row.reasonCode}</td><td>{row.reason??"—"}</td><td><Status tone={row.status==="completed"?"neutral":row.status==="cancelled"?"neutral":"warn"}>{row.status==="completed"?"Завершено":row.status==="cancelled"?"Отменено":"Запланировано"}</Status></td></tr>)}</tbody></table></div></Section>}
+    {context.exits.length>0&&<Section title="История завершения работы" note="Планы, отмены и фактические завершения сохраняются в истории." ><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Дата</th><th>Причина</th><th>Комментарий</th><th>Замена</th><th>Статус</th></tr></thead><tbody>{context.exits.map(row=><tr key={row.id}><td>{row.effectiveDate}</td><td>{reasonLabels[row.reasonCode]??row.reasonCode}</td><td>{row.reason??"—"}</td><td>{row.replacementRequired?(row.replacementWorker??"Ищем замену"):"Не требуется"}</td><td><Status tone={row.status==="completed"?"neutral":row.status==="cancelled"?"neutral":"warn"}>{row.status==="completed"?"Завершено":row.status==="cancelled"?"Отменено":"Запланировано"}</Status></td></tr>)}</tbody></table></div></Section>}
 
     {show&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShow(false)}}><div className="recruiting-modal-card">
       <div className="recruiting-modal-head"><div><h2>{future?"Запланировать завершение работы":"Завершить работу сотрудника"}</h2><p>{future?"До указанной даты сотрудник остаётся действующим. План попадёт в прогноз комплектации.":"После подтверждения будут закрыты действующие назначения, ставка, проживание и будущие смены."}</p></div><button className="icon-button" onClick={()=>setShow(false)}><X size={17}/></button></div>
       <div className="candidate-import-body">
         <div className="candidate-import-options">
-          <label>Дата<input type="date" value={effectiveDate} onChange={e=>setEffectiveDate(e.target.value)}/></label>
+          <label>Дата<input type="date" value={effectiveDate} onChange={e=>setEffectiveDate(e.target.value)}/></label>{future&&<label>Доработает ещё, дней<div className="worker-exit-days"><input type="number" min="1" max="90" value={daysToWork} onChange={e=>setDaysToWork(e.target.value)}/><button type="button" className="button" onClick={()=>{const d=new Date();d.setUTCDate(d.getUTCDate()+Number(daysToWork||0));setEffectiveDate(d.toISOString().slice(0,10))}}>Рассчитать дату</button></div></label>}
           <label>Причина<select value={reasonCode} onChange={e=>setReasonCode(e.target.value)}>{Object.entries(reasonLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         </div>
         <label>Комментарий<textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder="Уточнение причины, договорённости и важные детали"/></label>

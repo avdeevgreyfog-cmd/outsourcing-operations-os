@@ -5,8 +5,8 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
-const schema=z.object({workerId:z.string().uuid(),objectId:z.string().uuid(),workDate:z.string().date(),value:z.union([z.string().max(20),z.number().min(0).max(24),z.null()]),nightHours:z.number().min(0).max(24).optional(),overtimeHours:z.number().min(0).max(24).optional(),reason:z.string().trim().max(500).nullable().optional()});
-const codeMap:Record<string,string>={"П":"PLANNED","?":"WORK_PENDING","В":"DAY_OFF","О":"VACATION","МВ":"INTERSHIFT","Б":"SICK","НВ":"NO_SHOW","Н":"ABSENCE"};
+const schema=z.object({workerId:z.string().uuid(),objectId:z.string().uuid(),workDate:z.string().date(),value:z.union([z.string().max(20),z.number().min(0).max(24),z.null()]),nightHours:z.number().min(0).max(24).optional(),overtimeHours:z.number().min(0).max(24).optional(),reason:z.string().trim().max(500).nullable().optional(),segment:z.enum(["day","night"]).optional()});
+const codeMap:Record<string,string>={"П":"PLANNED","?":"WORK_PENDING","В":"DAY_OFF","О":"VACATION","ОТ":"VACATION","МВ":"INTERSHIFT","Б":"SICK","НВ":"NO_SHOW","Н":"ABSENCE"};
 
 export async function PATCH(request:Request){
   try{
@@ -49,22 +49,26 @@ export async function PATCH(request:Request){
         LIMIT 1
       `;
       if(!assignment)throw new Error("На эту дату сотрудник не назначен на объект");
-      const [existing]=await tx<Array<{id:string}>>`
-        SELECT id FROM time_entries
+      const [existing]=await tx<Array<{id:string;dayHours:number|string;nightHours:number|string;plannedShiftKind:"day"|"night"|"mixed"|null}>>`
+        SELECT id,day_hours "dayHours",night_hours "nightHours",planned_shift_kind "plannedShiftKind" FROM time_entries
         WHERE worker_id=${body.workerId}::uuid AND object_id=${body.objectId}::uuid AND work_date=${body.workDate}::date
         ORDER BY (shift_id IS NULL) DESC,updated_at DESC LIMIT 1 FOR UPDATE
       `;
+      const numeric=timeCode==="WORK"&&raw!=="";const existingDay=Number(existing?.dayHours??0),existingNight=Number(existing?.nightHours??0);
+      const nextDay=numeric?(body.segment==="night"?existingDay:factHours):0;
+      const nextNight=numeric?(body.segment==="night"?factHours:(body.segment==="day"?existingNight:Number(body.nightHours??0))):0;
+      const nextFact=numeric?nextDay+nextNight:0;const plannedKind=body.segment??existing?.plannedShiftKind??null;
       if(existing){
         await tx`
-          UPDATE time_entries SET planned=${timeCode!=="DAY_OFF"},time_code=${timeCode},fact_hours=${factHours},day_hours=${factHours},
-            night_hours=${body.nightHours??0},overtime_hours=${body.overtimeHours??0},source='manual',
+          UPDATE time_entries SET planned=${timeCode!=="DAY_OFF"},time_code=${timeCode},fact_hours=${nextFact},day_hours=${nextDay},
+            night_hours=${nextNight},overtime_hours=${body.overtimeHours??0},planned_shift_kind=COALESCE(${plannedKind},planned_shift_kind),source='manual',
             correction_reason=${body.reason??"Ручная корректировка табеля"},corrected_by_user_id=${actor.userId}::uuid,updated_at=now()
           WHERE id=${existing.id}::uuid
         `;
       }else{
         await tx`
-          INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,overtime_hours,source,correction_reason,corrected_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${body.workerId}::uuid,${body.objectId}::uuid,${body.workDate}::date,${timeCode!=="DAY_OFF"},${timeCode},${factHours},${factHours},${body.nightHours??0},${body.overtimeHours??0},'manual',${body.reason??"Ручной ввод табеля"},${actor.userId}::uuid)
+          INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,overtime_hours,planned_shift_kind,source,correction_reason,corrected_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${body.workerId}::uuid,${body.objectId}::uuid,${body.workDate}::date,${timeCode!=="DAY_OFF"},${timeCode},${nextFact},${nextDay},${nextNight},${body.overtimeHours??0},${plannedKind},'manual',${body.reason??"Ручной ввод табеля"},${actor.userId}::uuid)
         `;
       }
     }));

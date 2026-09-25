@@ -59,7 +59,7 @@ const schema=z.object({
 type ScopeRow={
   id:string;candidateId:string;needId:string;organizationId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;
   workflow:WorkflowDetails;plannedStartDate:string|null;plannedArrivalAt:string|null;actualStartAt:string|null;updatedAt:string;
-  clientId:string|null;regionId:string|null;assigneeUserIds:string[];stage:string;specialtyId:string;objectOwnerId:string|null;sourceRequestRoleId:string|null;
+  clientId:string|null;regionId:string|null;assigneeUserIds:string[];stage:string;specialtyId:string;objectOwnerId:string|null;sourceRequestRoleId:string|null;needSourceKind:string;replacementExitId:string|null;
   workMode:"local"|"rotation";paidHoursPerShift:number|string|null;fullName:string;plannedShiftKind:"day"|"night"|"mixed"|null;
   defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed";ppeTaskEnabled:boolean;ppeTaskDueDays:number|null;
 };
@@ -158,7 +158,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",
           o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
           o.ppe_task_enabled "ppeTaskEnabled",o.ppe_task_due_days "ppeTaskDueDays",
-          n.source_request_role_id "sourceRequestRoleId",
+          n.source_request_role_id "sourceRequestRoleId",n.source_kind "needSourceKind",n.replacement_exit_id "replacementExitId",
           COALESCE(NULLIF(ca.conditions_snapshot->>'workMode',''),NULLIF(n.conditions_snapshot->>'workMode',''),'local') "workMode",
           COALESCE(NULLIF(ca.conditions_snapshot->>'paidHoursPerShift','')::numeric,NULLIF(n.conditions_snapshot->>'paidHoursPerShift','')::numeric) "paidHoursPerShift",
           c.full_name "fullName"
@@ -335,20 +335,25 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           }
         }
         await tx`UPDATE candidates SET status='worker',updated_at=now() WHERE id=${current.candidateId}::uuid`;
-        await tx`
-          UPDATE needs SET count_filled=LEAST(count_required,(
-            SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-            WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
-          )),status=CASE WHEN (
-            SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-            WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
-          )>=count_required THEN 'filled' ELSE 'in_progress' END,
-          closed_at=CASE WHEN (
-            SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-            WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
-          )>=count_required THEN COALESCE(closed_at,now()) ELSE NULL END
-          WHERE id=${current.needId}::uuid
-        `;
+        if(current.needSourceKind==='replacement'&&current.replacementExitId){
+          await tx`UPDATE worker_exit_processes SET replacement_worker_id=${workerId}::uuid,updated_at=now() WHERE id=${current.replacementExitId}::uuid`;
+          await tx`UPDATE needs SET count_filled=1,status='filled',closed_at=COALESCE(closed_at,now()),updated_at=now() WHERE id=${current.needId}::uuid`;
+        }else{
+          await tx`
+            UPDATE needs SET count_filled=LEAST(count_required,(
+              SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
+              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+            )),status=CASE WHEN (
+              SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
+              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+            )>=count_required THEN 'filled' ELSE 'in_progress' END,
+            closed_at=CASE WHEN (
+              SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
+              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+            )>=count_required THEN COALESCE(closed_at,now()) ELSE NULL END
+            WHERE id=${current.needId}::uuid
+          `;
+        }
       }else if(changed){
         await tx`UPDATE needs SET status=CASE WHEN status='open' THEN 'in_progress' ELSE status END WHERE id=${current.needId}::uuid`;
       }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { getTimesheet,listAccruals,listFinance,listIncidents,listLaunchTasks,listObjects,listPayments,listShifts,listWorkers } from "@/lib/data/service";
-import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperationsReferenceData,listDailyPaymentProgress,listObjectDocuments,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
+import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperationsReferenceData,listDailyPaymentProgress,listObjectDocuments,listObjectPpeTemplates,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,Metric,PageHeader,Section,Status } from "@/components/UI";
@@ -56,6 +56,10 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canAccruals=hasCapability(actor.access,"finance.worker_accrual.read");
   const canPayments=hasCapability(actor.access,"finance.payments.read");
   const canConfirmDaily=hasCapability(actor.access,"finance.daily_payment.confirm");
+  const canRecordPayment=hasCapability(actor.access,"finance.object_payment.record");
+  const canEditWorkers=hasCapability(actor.access,"worker.edit");
+  const canManageAssets=hasCapability(actor.access,"assets.manage")&&canReadRow(actor.access,"assets.manage",object,actor);
+  const canEditShifts=hasCapability(actor.access,"operations.shift.edit")&&canReadRow(actor.access,"operations.shift.edit",object,actor);
   const canFinance=canPnl||canAccruals||canPayments;
   const canRecruiting=hasCapability(actor.access,"recruiting.candidate.read");
   const canTimesheets=hasCapability(actor.access,"time.timesheet.read");
@@ -67,7 +71,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
   const objectHistory=await listObjectHistory(actor,id,100);
 
-  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions]=await Promise.all([
+  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,ppeTemplates,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions]=await Promise.all([
     canWorkers?listWorkers(actor):Promise.resolve([]),
     canShifts?listShifts(actor):Promise.resolve([]),
     canPnl?listFinance(actor):Promise.resolve([]),
@@ -75,6 +79,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     canPayments?listPayments(actor):Promise.resolve([]),
     canPayments?listDailyPaymentProgress(actor,id):Promise.resolve([]),
     listObjectDocuments(actor,id),
+    canAssets?listObjectPpeTemplates(actor,id):Promise.resolve([]),
     canRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
     listLaunchTasks(actor),
     listIncidents(actor),
@@ -243,9 +248,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="staffing"&&<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>}
 
-    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
+    {tab==="workforce"&&<Section title="Персонал объекта"><ObjectWorkforceWorkspace objectId={id} workers={objectWorkers} today={todayIso} canEdit={canEditWorkers} canManageAssets={canManageAssets} demo={actor.demo} templates={ppeTemplates} inventoryItems={inventory.items}/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</Section>}
 
-    {tab==="shifts"&&<Section title="Смены объекта" note="Кто должен выйти, кто подтверждён и какой факт за выбранный день."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso}/></Section>}
+    {tab==="shifts"&&<Section title="Смены объекта" note="План выходов по сотрудникам: день, ночь и выходной. Факт фиксируется в табеле."><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} demo={actor.demo}/></Section>}
 
     {tab==="timesheets"&&(objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded/>:<Section title="Табель объекта"><Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/></Section>)}
 
@@ -270,7 +275,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {tab==="contacts"&&<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>}
 
-    {tab==="finance"&&<Section title="Финансы объекта" note="Начисления, выплаты и первые ежедневные выплаты сотрудников собраны в одном рабочем месте."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} canConfirmDaily={canConfirmDaily}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>}
+    {tab==="finance"&&<Section title="Финансы объекта" note="Начисления, выплаты и первые ежедневные выплаты сотрудников собраны в одном рабочем месте."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>}
 
     {tab==="documents"&&<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>}
     {tab==="settings"&&objectManagementOptions&&<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>}
