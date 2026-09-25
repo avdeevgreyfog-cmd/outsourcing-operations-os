@@ -1,6 +1,6 @@
 "use client";
 
-import {useMemo,useState,type KeyboardEvent} from "react";
+import {useEffect,useMemo,useRef,useState,type KeyboardEvent} from "react";
 import {useRouter} from "next/navigation";
 import {CheckCircle2,Download,Printer,RotateCcw,Send,ShieldCheck,WalletCards} from "lucide-react";
 import {Status} from "@/components/UI";
@@ -15,6 +15,7 @@ type RowMode="auto"|"all"|"day"|"night";
 
 export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canApproveClient,canClose,embedded=false}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApproveClient:boolean;canClose:boolean;embedded?:boolean}){
   const router=useRouter();
+  const tableWrapRef=useRef<HTMLDivElement>(null);
   const [mode,setMode]=useState<Mode>("month");
   const [view,setView]=useState<View>(sensitive?"internal":"client");
   const [rows,setRows]=useState<TimesheetWorkerRow[]>(data.rows);
@@ -33,6 +34,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   const lastDay=Number(data.periodEnd.slice(8,10));
   const allDays=useMemo(()=>range(1,lastDay),[lastDay]);
   const days=mode==="first"?allDays.filter(day=>day<=15):mode==="second"?allDays.filter(day=>day>=16):allDays;
+  useEffect(()=>{tableWrapRef.current?.scrollTo({left:0,behavior:"auto"})},[mode,view]);
   const totals=useMemo(()=>rows.reduce((acc,row)=>{
     if(row.rowKind==="candidate")return acc;
     for(const day of days){
@@ -217,8 +219,17 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
           {view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}
         </div>
       </div>
-      <div className="timesheet-wrap compact-timesheet">
-        <table className="data-table timesheet timesheet-two-line timesheet-operational">
+      <div className="timesheet-wrap compact-timesheet" ref={tableWrapRef}>
+        <table className={`data-table timesheet timesheet-two-line timesheet-operational timesheet-period-${mode}`}>
+          <colgroup>
+            <col className="timesheet-col-worker"/>
+            <col className="timesheet-col-shift"/>
+            {view==="internal"&&sensitive&&<col className="timesheet-col-rate"/>}
+            {days.map(day=><col className="timesheet-col-day" key={`col-${day}`}/>)}
+            <col className="timesheet-col-shifts"/><col className="timesheet-col-hours"/>
+            {detailsOpen&&<><col className="timesheet-col-detail"/><col className="timesheet-col-detail"/><col className="timesheet-col-detail"/></>}
+            {view==="internal"&&sensitive&&financeOpen&&<><col className="timesheet-col-finance"/><col className="timesheet-col-finance"/><col className="timesheet-col-correction"/><col className="timesheet-col-payment"/><col className="timesheet-col-payment"/></>}
+          </colgroup>
           <thead><tr>
             <th className="sticky-col timesheet-worker-col">Сотрудник</th><th className="timesheet-shift-col timesheet-sticky-shift">Смена</th>
             {view==="internal"&&sensitive&&<th className="timesheet-rate-col timesheet-sticky-rate">Ставка</th>}
