@@ -54,7 +54,7 @@ export default async function StaffingPlanPage({searchParams}:{searchParams:Prom
     <PageHeader eyebrow="Операции → Управление объектами" title="План комплектации" subtitle={"План численности и прогноз обеспеченности персоналом на "+horizon+" дней: работающие сотрудники, подтверждённые выходы, межвахта и плановые завершения работы."} breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"План комплектации"}]}/>
 
     <div className="scheduler-controls staffing-plan-controls">
-      <div className="segmented">{tabs.map(item=><Link key={item.key} className={view===item.key?"active":""} href={"/staffing-plan?view="+item.key+"&horizon="+horizon+(selectedObjectId?"&object="+selectedObjectId:"")}>{item.label}</Link>)}</div>
+      <div className="segmented workspace-tabs">{tabs.map(item=><Link key={item.key} className={view===item.key?"active":""} href={"/staffing-plan?view="+item.key+"&horizon="+horizon+(selectedObjectId?"&object="+selectedObjectId:"")}>{item.label}</Link>)}</div>
       <div className="page-actions"><span className="cell-sub">Горизонт</span><div className="segmented">{[14,30,60,90].map(value=><Link key={value} className={horizon===value?"active":""} href={"/staffing-plan?view="+view+"&horizon="+value+(selectedObjectId?"&object="+selectedObjectId:"")}>{value} дней</Link>)}</div></div>
     </div>
 
