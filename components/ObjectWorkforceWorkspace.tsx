@@ -124,16 +124,16 @@ export function ObjectWorkforceWorkspace({
     {message&&<div className="object-staffing-message">{message}</div>}
     <div className="object-workforce-result">Показано {filtered.length} из {workers.length} · {formatDate(today)}</div>
     {view==="list"
-      ?<WorkerTable rows={filtered} today={today} showSpecialty canEdit={canEdit} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>
-      :<div className="object-workforce-groups">{groups.map(group=><section key={group.name} className="object-workforce-group"><button type="button" className="object-workforce-group-head" onClick={()=>toggleGroup(group.name)} aria-expanded={shouldOpen(group.name)}><span><strong>{group.name}</strong><small>{group.rows.length} чел.</small></span><b>{shouldOpen(group.name)?"Свернуть":"Развернуть"}</b></button>{shouldOpen(group.name)&&<WorkerTable rows={group.rows} today={today} canEdit={canEdit} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>}</section>)}</div>}
+      ?<WorkerTable rows={filtered} today={today} showSpecialty canEdit={canEdit} canManageAssets={canManageAssets} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>
+      :<div className="object-workforce-groups">{groups.map(group=><section key={group.name} className="object-workforce-group"><button type="button" className="object-workforce-group-head" onClick={()=>toggleGroup(group.name)} aria-expanded={shouldOpen(group.name)}><span><strong>{group.name}</strong><small>{group.rows.length} чел.</small></span><b>{shouldOpen(group.name)?"Свернуть":"Развернуть"}</b></button>{shouldOpen(group.name)&&<WorkerTable rows={group.rows} today={today} canEdit={canEdit} canManageAssets={canManageAssets} busy={busy} onDocuments={updateDocuments} onTransfer={openTransfer}/>}</section>)}</div>}
     {!filtered.length&&<div className="empty-inline">По выбранным фильтрам сотрудников нет</div>}
   </>;
 }
 
 function WorkerTable({
-  rows,today,showSpecialty=false,canEdit,busy,onDocuments,onTransfer,
+  rows,today,showSpecialty=false,canEdit,canManageAssets,busy,onDocuments,onTransfer,
 }:{
-  rows:WorkerRow[];today:string;showSpecialty?:boolean;canEdit:boolean;busy:string;
+  rows:WorkerRow[];today:string;showSpecialty?:boolean;canEdit:boolean;canManageAssets:boolean;busy:string;
   onDocuments:(row:WorkerRow,status:string)=>void;onTransfer:(row:WorkerRow)=>void;
 }){
   return <div className="request-table-wrap"><table className="data-table object-workforce-table object-workforce-table-v2"><thead><tr><th>Сотрудник</th><th>Телефон</th>{showSpecialty&&<th>Специальность</th>}<th>График</th><th>Сегодня · {shortDate(today)}</th><th>Ставка</th><th>Документы</th><th>Обеспечение</th></tr></thead><tbody>{rows.map(row=>{
