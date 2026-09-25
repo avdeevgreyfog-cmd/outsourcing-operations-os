@@ -650,13 +650,14 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     }
 
     const nextDate=(value:string|null)=>{if(!value)return null;const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+1);return date.toISOString().slice(0,10)};
+    const datesBetween=(from:string,to:string)=>{const result:string[]=[];for(let date=new Date(from+"T00:00:00Z"),end=new Date(to+"T00:00:00Z");date<=end;date=new Date(date.getTime()+86400000))result.push(date.toISOString().slice(0,10));return result};
     for(const absence of absenceRows){
       const row=byWorker.get(absence.workerId);if(!row)continue;
       row.absenceRanges??=[];
       row.absenceRanges.push({type:absence.type,from:absence.from,to:absence.to,returnDate:nextDate(absence.to)});
       const from=absence.from>periodStart?absence.from:periodStart;
       const to=!absence.to||absence.to>periodEnd?periodEnd:absence.to;
-      for(const date of dateRange(from,to)){
+      for(const date of datesBetween(from,to)){
         if(row.effectiveFrom&&date<row.effectiveFrom)continue;
         if(row.effectiveTo&&date>row.effectiveTo)continue;
         const day=String(Number(date.slice(8,10)));const code=absenceLabels[absence.type]??"Н";
