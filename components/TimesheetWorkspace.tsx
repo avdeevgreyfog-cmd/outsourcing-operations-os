@@ -144,7 +144,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   }
 
   return <>
-    <div className="scheduler-controls">
+    <div className="scheduler-controls timesheet-toolbar">
       <div className="page-actions">
         {!embedded&&<select value={data.objectId} onChange={event=>changeContext(event.target.value,data.month)}>{options.objects.map(object=><option key={object.id} value={object.id}>{object.name}</option>)}</select>}
         <input type="month" value={data.month} onChange={event=>changeContext(data.objectId,event.target.value)}/>
