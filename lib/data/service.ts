@@ -564,8 +564,11 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       ORDER BY worker_id,planned_from
     `:[];
 
-    const financeRows=workerIds.length&&maySeeComp?await sql<Array<{workerId:string;base:number|string;premium:number|string;adjustment:number|string;total:number|string;paid:number|string}>>`
+    const financeRows=workerIds.length&&maySeeComp?await sql<Array<{workerId:string;accrualCount:number;base:number|string;premium:number|string;adjustment:number|string;total:number|string;paid:number|string}>>`
       SELECT w.id "workerId",
+        (SELECT count(*)::int FROM worker_accruals a
+          WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
+            AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date) "accrualCount",
         COALESCE((SELECT sum(a.base_amount) FROM worker_accruals a
           WHERE a.worker_id=w.id AND a.object_id=${meta.objectId}::uuid
             AND a.period_end>=${periodStart}::date AND a.period_start<=${periodEnd}::date),0)::numeric base,
