@@ -301,7 +301,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
     const today=new Date().toISOString().slice(0,10);
     return rows.map((row,index) => {
       const activeAbsence=row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today&&(!row.absenceTo||row.absenceTo>=today);
-      const absenceCode=({intershift:"INTERSHIFT",vacation:"VACATION",sick:"SICK",personal:"ABSENCE",other:"ABSENCE"} as Record<string,string>)[row.absenceType??""];
+      const absenceCode=({intershift:"INTERSHIFT",vacation:"VACATION",sick:"SICK",personal:"DAY_OFF",other:"DAY_OFF"} as Record<string,string>)[row.absenceType??""];
       const simulatedCode=activeAbsence?absenceCode:index%13===7?"NO_SHOW":index%7===3?"DAY_OFF":"WORK";
       const enriched={
         ...row,
