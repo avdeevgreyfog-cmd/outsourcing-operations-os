@@ -48,8 +48,9 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       if(row.rowKind==="candidate")continue;
       const key=String(day);
       if(row.plannedShiftKinds?.[key])planned++;
-      const fact=numericCell(row.dayCells?.[key])+numericCell(row.nightCells?.[key]);
-      if(fact>0)worked++;
+      const dayValue=row.dayCells?.[key],nightValue=row.nightCells?.[key];
+      const fact=numericCell(dayValue)+numericCell(nightValue);
+      if(fact>0||dayValue==="?"||nightValue==="?")worked++;
       hours+=fact;
     }
     return [day,{planned,worked,hours}];
@@ -248,7 +249,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                 {detailsOpen&&first&&<>
                   <td className="num timesheet-detail-col" rowSpan={segments.length}>{countWorkerCode(row,"В",days)||"—"}</td>
                   <td className="num timesheet-detail-col" rowSpan={segments.length}>{countWorkerCode(row,"Б",days)||"—"}</td>
-                  <td className="num timesheet-detail-col timesheet-detail-alert" rowSpan={segments.length}>{countWorkerNoShows(row,days)||"—"}</td>
+                  <td className={`num timesheet-detail-col ${countWorkerNoShows(row,days)?"timesheet-detail-alert":""}`} rowSpan={segments.length}>{countWorkerNoShows(row,days)||"—"}</td>
                 </>}
                 {view==="internal"&&sensitive&&<><td className="num timesheet-money">{row.rowKind==="candidate"?"—":money(segmentAccrued)}</td>{first&&<>
                   <td className="num timesheet-money timesheet-money-total" rowSpan={segments.length}>{row.rowKind==="candidate"?"—":money(earned)}</td>
