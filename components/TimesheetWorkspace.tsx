@@ -210,8 +210,10 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
     <section className="section timesheet-matrix-section">
       <div className="section-head">
         <div><h2>{data.object} · {data.period}</h2><p>План по дням берётся из действующей потребности объекта. Межвахта и отпуск остаются визуальными периодами и в счётчики не входят.</p></div>
-        <div className="page-actions">
+        <div className="page-actions timesheet-table-actions">
+          <button type="button" className={`button timesheet-attention-toggle ${attentionOnly?"active":""}`} onClick={()=>setAttentionOnly(value=>!value)}>Требует внимания{attentionCount?` · ${attentionCount}`:""}</button>
           <button type="button" className={`button timesheet-details-toggle ${detailsOpen?"active":""}`} onClick={()=>setDetailsOpen(value=>!value)}>{detailsOpen?"Скрыть показатели":"Показатели"}</button>
+          {view==="internal"&&sensitive&&<button type="button" className={`button timesheet-finance-toggle ${financeOpen?"active":""}`} onClick={()=>setFinanceOpen(value=>!value)}>{financeOpen?"Скрыть финансы":"Финансы"}</button>}
           {view==="client"&&<Status tone="info"><ShieldCheck size={12}/> без ставок</Status>}
         </div>
       </div>
@@ -220,12 +222,12 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
           <thead><tr>
             <th className="sticky-col timesheet-worker-col">Сотрудник</th><th className="timesheet-shift-col timesheet-sticky-shift">Смена</th>
             {view==="internal"&&sensitive&&<th className="timesheet-rate-col timesheet-sticky-rate">Ставка</th>}
-            {days.map(day=><th className={`day ${isWeekend(data.month,day)?"weekend":""}`} key={day}><span>{weekday(data.month,day)}</span>{day}</th>)}
+            {days.map(day=><th className={`day ${isWeekend(data.month,day)?"weekend":""} ${currentDay===day?"today":""}`} key={day}><span>{weekday(data.month,day)}</span>{day}</th>)}
             <th>Смен</th><th>Часов</th>
             {detailsOpen&&<><th className="timesheet-detail-col">Выходные</th><th className="timesheet-detail-col">Больничные</th><th className="timesheet-detail-col">Прогулы</th></>}
-            {view==="internal"&&sensitive&&<><th>Начислено</th><th>Всего</th><th>Корр.</th><th>Выплачено</th><th>К выплате</th></>}
+            {view==="internal"&&sensitive&&financeOpen&&<><th>Начислено</th><th>Всего</th><th>Корр.</th><th>Выплачено</th><th>К выплате</th></>}
           </tr></thead>
-          <tbody>{rows.flatMap(row=>{
+          <tbody>{visibleRows.flatMap(row=>{
             const segments=visibleSegments(row,rowMode,days);
             const calculatedSelected=calculateSegmentAccrued(row,"day",days,data.month)+calculateSegmentAccrued(row,"night",days,data.month);
             const earned=mode==="month"?(row.accrualTotal??row.calculatedAccrual??calculatedSelected):calculatedSelected;
