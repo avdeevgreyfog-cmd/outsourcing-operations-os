@@ -1632,3 +1632,12 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td.timesheet-terminated{
   background-color:inherit!important
 }
+
+
+/* Preserve state fill while hovering a worker row. */
+.sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td.timesheet-absence-band{
+  background-color:color-mix(in srgb,var(--info) 8%,var(--panel))!important
+}
+.sales-workspace.operations-workspace .timesheet-operational tbody tr:hover>td.timesheet-terminated{
+  background-color:color-mix(in srgb,var(--bad) 8%,var(--panel))!important
+}
