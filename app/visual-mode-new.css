@@ -458,3 +458,216 @@
   :root[data-operis-ui="new"] .page-header{align-items:flex-start}
   :root[data-operis-ui="new"] .page-header h1{font-size:20px}
 }
+
+
+/* Recruiting: keep the board dense, but never below the shared 12/13/14 scale. */
+:root[data-operis-ui="new"] :is(.recruiting-workspace,.recruiting-funnel-workspace,.candidate-directory-v2,.candidate-profile-v2,.candidate-documents-workspace,.needs-control-center,.needs-analytics-screen)
+:is(button,input,select,textarea){font-size:13px}
+:root[data-operis-ui="new"] :is(.recruiting-workspace,.recruiting-funnel-workspace,.candidate-directory-v2,.candidate-profile-v2,.candidate-documents-workspace,.needs-control-center,.needs-analytics-screen)
+:is(label,small,time){font-size:12px}
+:root[data-operis-ui="new"] .recruiting-summary{
+  border-radius:7px
+}
+:root[data-operis-ui="new"] .recruiting-summary>div{
+  min-height:66px;
+  padding:10px 12px
+}
+:root[data-operis-ui="new"] .recruiting-summary span{font-size:12px}
+:root[data-operis-ui="new"] .recruiting-summary strong{font-size:20px}
+:root[data-operis-ui="new"] .need-progress-caption,
+:root[data-operis-ui="new"] .recruiting-source,
+:root[data-operis-ui="new"] .recruiting-card-meta{font-size:12px}
+:root[data-operis-ui="new"] .recruiting-funnel{gap:8px}
+:root[data-operis-ui="new"] .recruiting-column,
+:root[data-operis-ui="new"] .sales-board.recruiting-board .sales-board-column{
+  border-radius:7px;
+  background:var(--panel-2)
+}
+:root[data-operis-ui="new"] .recruiting-column>header,
+:root[data-operis-ui="new"] .sales-board.recruiting-board .sales-board-column>header{
+  min-height:42px;
+  padding:8px 10px;
+  font-size:13px
+}
+:root[data-operis-ui="new"] .recruiting-cards,
+:root[data-operis-ui="new"] .sales-board.recruiting-board .sales-board-cards{
+  gap:7px;
+  padding:7px
+}
+:root[data-operis-ui="new"] .recruiting-card,
+:root[data-operis-ui="new"] .sales-board.recruiting-board .sales-board-card{
+  padding:9px 10px;
+  border-radius:6px;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .recruiting-card strong,
+:root[data-operis-ui="new"] .recruiting-card-title strong{font-size:14px}
+:root[data-operis-ui="new"] .recruiting-card>span,
+:root[data-operis-ui="new"] :is(.recruiting-card-source,.recruiting-card-vacancy,.recruiting-card-stage-info>span,.recruiting-card-footer>span){font-size:12px}
+:root[data-operis-ui="new"] .recruiting-modal-head h2{font-size:16px}
+:root[data-operis-ui="new"] .recruiting-modal-head p,
+:root[data-operis-ui="new"] .recruiting-form label,
+:root[data-operis-ui="new"] .recruiting-error{font-size:12px}
+:root[data-operis-ui="new"] .recruiting-form :is(input,select,textarea){font-size:13px}
+:root[data-operis-ui="new"] .candidate-history-item time,
+:root[data-operis-ui="new"] .candidate-history-item p,
+:root[data-operis-ui="new"] .candidate-application-row span{font-size:12px}
+:root[data-operis-ui="new"] .candidate-history-item strong,
+:root[data-operis-ui="new"] .candidate-application-row strong{font-size:13px}
+:root[data-operis-ui="new"] .entity-tabs button{
+  height:42px;
+  padding:12px 0 9px;
+  font-size:13px
+}
+:root[data-operis-ui="new"] .entity-tabs button span{font-size:11px;border-radius:5px}
+
+/* Candidate dossier */
+:root[data-operis-ui="new"] .candidate-profile-v2{gap:12px;font-size:13px}
+:root[data-operis-ui="new"] .candidate-profile-hero{
+  padding:11px 13px;
+  border-radius:7px
+}
+:root[data-operis-ui="new"] .candidate-profile-titleline h2{font-size:18px}
+:root[data-operis-ui="new"] .candidate-profile-person p{font-size:12px}
+:root[data-operis-ui="new"] .candidate-profile-avatar{font-size:12px}
+:root[data-operis-ui="new"] .candidate-contact-pill{
+  padding:6px 8px;
+  border-radius:6px
+}
+:root[data-operis-ui="new"] .candidate-contact-pill span span{font-size:12px}
+:root[data-operis-ui="new"] .candidate-contact-pill strong{font-size:13px}
+:root[data-operis-ui="new"] .candidate-contact-editor header strong{font-size:13px}
+:root[data-operis-ui="new"] .candidate-contact-editor header span,
+:root[data-operis-ui="new"] .candidate-contact-edit-row>label,
+:root[data-operis-ui="new"] .candidate-profile-source-edit summary,
+:root[data-operis-ui="new"] .candidate-worker-link span,
+:root[data-operis-ui="new"] .candidate-transfer-note{font-size:12px}
+:root[data-operis-ui="new"] .candidate-contact-edit-row :is(input,select){height:34px;font-size:13px}
+:root[data-operis-ui="new"] .candidate-worker-link strong{font-size:13px}
+:root[data-operis-ui="new"] .candidate-dossier-row strong{font-size:13px}
+:root[data-operis-ui="new"] .candidate-dossier-row :is(span,small){font-size:12px}
+:root[data-operis-ui="new"] .recruiting-doc-rule-grid select,
+:root[data-operis-ui="new"] .recruiting-doc-blocking{font-size:12px!important}
+:root[data-operis-ui="new"] .candidate-directory-search>span,
+:root[data-operis-ui="new"] .candidate-directory-v2 .candidates-directory-table .cell-sub,
+:root[data-operis-ui="new"] .candidate-activity-filters button,
+:root[data-operis-ui="new"] .candidate-documents-rail-card>.eyebrow,
+:root[data-operis-ui="new"] .candidate-document-readiness span,
+:root[data-operis-ui="new"] .candidate-document-blockers span{font-size:12px}
+:root[data-operis-ui="new"] .candidate-directory-v2 .candidates-directory-table .cell-title{font-size:14px}
+:root[data-operis-ui="new"] .candidate-directory-filters-v2 select{font-size:13px}
+
+/* Needs: object-first rows instead of mini dashboards. */
+:root[data-operis-ui="new"] .needs-control-center{gap:12px}
+:root[data-operis-ui="new"] .needs-filterbar,
+:root[data-operis-ui="new"] .recruiting-funnel-filterbar,
+:root[data-operis-ui="new"] .candidate-directory-filterbar{
+  padding:9px 0;
+  gap:8px
+}
+:root[data-operis-ui="new"] .needs-object-list{gap:8px}
+:root[data-operis-ui="new"] .needs-object{
+  border-radius:7px
+}
+:root[data-operis-ui="new"] .needs-object-head{
+  padding:11px 13px;
+  gap:10px
+}
+:root[data-operis-ui="new"] .needs-object-name strong{font-size:14px}
+:root[data-operis-ui="new"] .needs-object-name small,
+:root[data-operis-ui="new"] .needs-object-head>span>small,
+:root[data-operis-ui="new"] .need-staffing span,
+:root[data-operis-ui="new"] .need-funnel-values{font-size:12px}
+:root[data-operis-ui="new"] .need-staffing b,
+:root[data-operis-ui="new"] .need-funnel-values b{font-size:13px}
+:root[data-operis-ui="new"] .need-stage-summary span{font-size:12px}
+:root[data-operis-ui="new"] .need-stage-summary strong{font-size:15px}
+:root[data-operis-ui="new"] .needs-attention-marker,
+:root[data-operis-ui="new"] .needs-control-marker{font-size:12px}
+
+/* Organization and administration */
+:root[data-operis-ui="new"] :is(.org-chart-workspace,.directory-workspace,.position-workspace,.department-workspace,.access-editor){
+  border-radius:7px
+}
+:root[data-operis-ui="new"] :is(.org-chart-toolbar,.registry-toolbar,.department-toolbar){
+  min-height:46px;
+  padding:6px 9px
+}
+:root[data-operis-ui="new"] :is(.org-chart-toolbar select,.registry-toolbar select,.department-toolbar select,.toolbar-search input){
+  height:34px;
+  font-size:13px
+}
+:root[data-operis-ui="new"] .toolbar-count,
+:root[data-operis-ui="new"] .org-zoom span{font-size:12px}
+:root[data-operis-ui="new"] .org-canvas-hint{font-size:12px}
+:root[data-operis-ui="new"] .org-node-type{font-size:12px}
+:root[data-operis-ui="new"] :is(.org-unit-card,.org-position-unit-card,.org-profile-card,.org-position-card){
+  border-radius:7px;
+  box-shadow:none
+}
+:root[data-operis-ui="new"] .org-unit-card strong,
+:root[data-operis-ui="new"] .org-person-card strong,
+:root[data-operis-ui="new"] .org-node-title{font-size:13px}
+:root[data-operis-ui="new"] .org-unit-card small,
+:root[data-operis-ui="new"] .org-person-card small,
+:root[data-operis-ui="new"] .org-node-manager,
+:root[data-operis-ui="new"] .org-no-results span{font-size:12px}
+:root[data-operis-ui="new"] .org-person-card .avatar{font-size:11px}
+:root[data-operis-ui="new"] .org-detail-drawer header small,
+:root[data-operis-ui="new"] .org-detail-drawer dl>div,
+:root[data-operis-ui="new"] .directory-detail dl>div,
+:root[data-operis-ui="new"] .org-detail-drawer p,
+:root[data-operis-ui="new"] .position-detail p,
+:root[data-operis-ui="new"] .org-detail-drawer ul,
+:root[data-operis-ui="new"] .directory-detail ul,
+:root[data-operis-ui="new"] .position-detail ul,
+:root[data-operis-ui="new"] .directory-detail>p,
+:root[data-operis-ui="new"] .contact-line,
+:root[data-operis-ui="new"] .tag-list span{font-size:12px}
+:root[data-operis-ui="new"] .org-detail-drawer h3,
+:root[data-operis-ui="new"] .directory-detail h3,
+:root[data-operis-ui="new"] .position-detail h3{font-size:13px}
+:root[data-operis-ui="new"] .department-tree>strong{font-size:12px}
+:root[data-operis-ui="new"] .department-tree button{height:33px;font-size:12px}
+:root[data-operis-ui="new"] .department-tree button i{font-size:11px}
+:root[data-operis-ui="new"] :is(.subview-switch button,.org-view-switch button,.drawer-tabs button){font-size:12px}
+:root[data-operis-ui="new"] :is(.position-meta,.position-detail,.position-facts,.assignment-list,.responsibility-pane){font-size:13px}
+:root[data-operis-ui="new"] :is(.system-access-block>header p,.access-section-heading p,.system-access-item small,.access-source-summary){font-size:12px}
+:root[data-operis-ui="new"] .system-access-item strong{font-size:13px}
+
+/* Operations, staffing and analytics */
+:root[data-operis-ui="new"] .object-portfolio-results,
+:root[data-operis-ui="new"] .object-contact-channel,
+:root[data-operis-ui="new"] .object-coverage span,
+:root[data-operis-ui="new"] .readiness-row span,
+:root[data-operis-ui="new"] .candidate-stage-strip span,
+:root[data-operis-ui="new"] .launch-readiness-head span,
+:root[data-operis-ui="new"] .launch-operational-grid span,
+:root[data-operis-ui="new"] .staffing-drivers span,
+:root[data-operis-ui="new"] .staffing-needs-callout p,
+:root[data-operis-ui="new"] .analytics-ranking-row,
+:root[data-operis-ui="new"] .analytics-chart-labels,
+:root[data-operis-ui="new"] .analytics-chart-labels small,
+:root[data-operis-ui="new"] .analytics-process-grid span,
+:root[data-operis-ui="new"] .analytics-status-grid span,
+:root[data-operis-ui="new"] .analytics-process-grid small{font-size:12px}
+:root[data-operis-ui="new"] .readiness-row strong,
+:root[data-operis-ui="new"] .staffing-needs-callout strong{font-size:13px}
+:root[data-operis-ui="new"] .object-focus-grid>div,
+:root[data-operis-ui="new"] .staffing-drivers>div,
+:root[data-operis-ui="new"] .analytics-process-grid>div,
+:root[data-operis-ui="new"] .analytics-status-grid>div{
+  min-height:68px;
+  padding:10px 12px
+}
+:root[data-operis-ui="new"] .object-focus-grid span,
+:root[data-operis-ui="new"] .staffing-drivers span{font-size:12px}
+:root[data-operis-ui="new"] .object-focus-grid strong,
+:root[data-operis-ui="new"] .staffing-drivers strong{font-size:18px}
+:root[data-operis-ui="new"] .analytics-process-grid strong,
+:root[data-operis-ui="new"] .analytics-status-grid strong{font-size:20px}
+
+/* Forms across the workspace should never fall back to legacy micro type. */
+:root[data-operis-ui="new"] .page-wrap :is(.org-form,.access-form,.recruiting-form,.calculation-inline-form,.client-create-form,.proposal-editor-form)
+:is(label,input,select,textarea,button){font-size:13px}
+:root[data-operis-ui="new"] .page-wrap :is(.org-form,.access-form,.recruiting-form,.calculation-inline-form,.client-create-form,.proposal-editor-form) small{font-size:12px}
