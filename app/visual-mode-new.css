@@ -671,3 +671,209 @@
 :root[data-operis-ui="new"] .page-wrap :is(.org-form,.access-form,.recruiting-form,.calculation-inline-form,.client-create-form,.proposal-editor-form)
 :is(label,input,select,textarea,button){font-size:13px}
 :root[data-operis-ui="new"] .page-wrap :is(.org-form,.access-form,.recruiting-form,.calculation-inline-form,.client-create-form,.proposal-editor-form) small{font-size:12px}
+
+
+/* Standalone timesheet uses the same hierarchy as the object pilot. */
+.timesheet-local-tabs{display:none}
+.timesheet-legend-collapsible{display:none}
+.timesheet-local-tabs-forced{display:flex}
+.timesheet-legend-collapsible-forced{display:block}
+.timesheet-control-view-classic-hidden,
+.timesheet-legend-classic-hidden{display:none!important}
+:root[data-operis-ui="new"] .timesheet-local-tabs{
+  min-height:40px;
+  padding:0 12px;
+  display:flex;
+  align-items:stretch;
+  gap:20px;
+  overflow-x:auto;
+  border:1px solid var(--border);
+  border-bottom:0;
+  border-radius:7px 7px 0 0;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .timesheet-local-tabs button{
+  position:relative;
+  min-height:40px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font-size:13px;
+  font-weight:550;
+  white-space:nowrap;
+  cursor:pointer
+}
+:root[data-operis-ui="new"] .timesheet-local-tabs button::after{
+  content:"";
+  position:absolute;
+  left:0;right:0;bottom:-1px;
+  height:2px;
+  background:transparent
+}
+:root[data-operis-ui="new"] .timesheet-local-tabs button.active{color:var(--text);font-weight:650}
+:root[data-operis-ui="new"] .timesheet-local-tabs button.active::after{background:var(--accent)}
+:root[data-operis-ui="new"] .timesheet-local-tabs button span{font-size:12px;color:var(--muted)}
+:root[data-operis-ui="new"] .timesheet-control-view{display:none}
+:root[data-operis-ui="new"] .timesheet-legend-classic{display:none}
+:root[data-operis-ui="new"] .timesheet-legend-collapsible{
+  margin:0;
+  display:block;
+  border:1px solid var(--border);
+  border-top:0;
+  border-radius:0;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .timesheet-legend-collapsible summary{
+  min-height:32px;
+  padding:7px 12px;
+  display:flex;
+  align-items:center;
+  cursor:pointer;
+  list-style:none;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:600
+}
+:root[data-operis-ui="new"] .timesheet-legend-collapsible summary::-webkit-details-marker{display:none}
+:root[data-operis-ui="new"] .timesheet-legend-collapsible summary::after{content:"▾";margin-left:6px}
+:root[data-operis-ui="new"] .timesheet-legend-collapsible>div{
+  padding:0 12px 9px;
+  display:flex;
+  gap:7px 12px;
+  align-items:center;
+  flex-wrap:wrap;
+  color:var(--muted);
+  font-size:12px
+}
+:root[data-operis-ui="new"] .timesheet-controlbar{
+  margin:0;
+  min-height:48px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:0;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .timesheet-control-label{font-size:12px}
+:root[data-operis-ui="new"] .timesheet-controlbar :is(input,select){height:32px;min-height:32px;font-size:13px}
+:root[data-operis-ui="new"] .timesheet-control-actions .button{height:32px;min-height:32px;font-size:13px}
+:root[data-operis-ui="new"] .timesheet-summary-strip{
+  margin:0;
+  min-height:42px;
+  padding:0;
+  display:flex;
+  gap:0;
+  align-items:stretch;
+  overflow-x:auto;
+  border:1px solid var(--border);
+  border-top:0;
+  border-radius:0;
+  background:var(--panel-2)
+}
+:root[data-operis-ui="new"] .timesheet-summary-strip>div{
+  min-width:145px;
+  padding:7px 12px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  border-right:1px solid var(--border)
+}
+:root[data-operis-ui="new"] .timesheet-summary-strip span,
+:root[data-operis-ui="new"] .timesheet-summary-strip small{font-size:12px}
+:root[data-operis-ui="new"] .timesheet-summary-strip strong{font-size:14px}
+:root[data-operis-ui="new"] .timesheet-mode-note{
+  min-height:36px;
+  margin:0;
+  padding:6px 12px;
+  border:1px solid var(--border);
+  border-top:0;
+  border-radius:0;
+  background:var(--panel);
+  font-size:12px
+}
+:root[data-operis-ui="new"] .timesheet-matrix-section{
+  margin-top:10px;
+  border-radius:7px
+}
+:root[data-operis-ui="new"] .timesheet-matrix-section>.section-head{
+  min-height:44px;
+  padding:7px 11px;
+  background:var(--panel-2)
+}
+:root[data-operis-ui="new"] .timesheet-matrix-section>.section-head h2{font-size:14px}
+:root[data-operis-ui="new"] .timesheet-matrix-section>.section-head p{font-size:12px}
+:root[data-operis-ui="new"] .timesheet-table-actions .button{height:30px;min-height:30px;font-size:12px}
+:root[data-operis-ui="new"] .timesheet-operational th{height:36px;font-size:12px}
+:root[data-operis-ui="new"] .timesheet-operational td{height:40px;font-size:13px}
+:root[data-operis-ui="new"] .timesheet-cell-input{height:30px;min-height:30px;font-size:13px}
+
+/* Standalone shift scheduler */
+:root[data-operis-ui="new"] .scheduler-controls{
+  min-height:46px;
+  margin-bottom:10px;
+  padding:6px 10px;
+  align-items:center;
+  border:1px solid var(--border);
+  border-radius:7px;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .scheduler-summary{
+  margin-bottom:10px;
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  overflow:hidden;
+  border:1px solid var(--border);
+  border-radius:7px;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .scheduler-summary .metric{
+  min-height:68px;
+  margin:0;
+  padding:10px 12px;
+  border:0;
+  border-right:1px solid var(--border);
+  border-radius:0
+}
+:root[data-operis-ui="new"] .scheduler-summary .metric:last-child{border-right:0}
+:root[data-operis-ui="new"] .scheduler-summary .metric>span,
+:root[data-operis-ui="new"] .scheduler-summary .metric small{font-size:12px}
+:root[data-operis-ui="new"] .scheduler-summary .metric strong{margin-top:4px;font-size:18px}
+:root[data-operis-ui="new"] .scheduler{
+  border-radius:7px
+}
+:root[data-operis-ui="new"] .scheduler .cell-link strong{font-size:13px}
+:root[data-operis-ui="new"] .scheduler .cell-link span{font-size:12px}
+:root[data-operis-ui="new"] .scheduler-coverage-cell .cell-sub{font-size:12px}
+
+/* Operational standalone controls */
+:root[data-operis-ui="new"] :is(.staffing-plan-controls,.analytics-context-bar){
+  min-height:46px;
+  margin-bottom:10px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:7px;
+  background:var(--panel)
+}
+:root[data-operis-ui="new"] .analytics-ranking-row{
+  min-height:42px;
+  grid-template-columns:170px 1fr 48px;
+  font-size:13px
+}
+:root[data-operis-ui="new"] .analytics-chart-labels{font-size:12px}
+:root[data-operis-ui="new"] .analytics-chart-labels small{font-size:12px}
+
+/* Responsive standalone workspaces */
+@media(max-width:1180px){
+  :root[data-operis-ui="new"] .scheduler-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+  :root[data-operis-ui="new"] .scheduler-summary .metric:nth-child(3n){border-right:0}
+  :root[data-operis-ui="new"] .scheduler-summary .metric:nth-child(-n+3){border-bottom:1px solid var(--border)}
+}
+@media(max-width:760px){
+  :root[data-operis-ui="new"] .scheduler-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  :root[data-operis-ui="new"] .scheduler-summary .metric:nth-child(n){border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  :root[data-operis-ui="new"] .scheduler-summary .metric:nth-child(2n){border-right:0}
+  :root[data-operis-ui="new"] .scheduler-summary .metric:nth-last-child(-n+2){border-bottom:0}
+}
