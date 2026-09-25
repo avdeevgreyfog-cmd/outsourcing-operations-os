@@ -1,6 +1,6 @@
 "use client";
 
-import {useMemo,useState} from "react";
+import {useMemo,useState,type KeyboardEvent} from "react";
 import {useRouter} from "next/navigation";
 import {CheckCircle2,Download,Printer,RotateCcw,Send,ShieldCheck,WalletCards} from "lucide-react";
 import {Status} from "@/components/UI";
@@ -25,6 +25,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   const [bulkBusy,setBulkBusy]=useState(false);
   const [rowMode,setRowMode]=useState<RowMode>("auto");
   const [detailsOpen,setDetailsOpen]=useState(false);
+  const [attentionOnly,setAttentionOnly]=useState(false);
+  const [financeOpen,setFinanceOpen]=useState(false);
 
   const todayIso=new Date().toISOString().slice(0,10);
   const currentDay=data.month===todayIso.slice(0,7)?Number(todayIso.slice(8,10)):null;
@@ -64,6 +66,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
     return acc;
   },{daysOff:0,sick:0,noShows:0}),[rows,days]);
   const totalHours=totals.dayHours+totals.nightHours;
+  const attentionCount=useMemo(()=>rows.filter(row=>row.rowKind!=="candidate"&&rowNeedsAttention(row,days,data.month,todayIso)).length,[rows,days,data.month,todayIso]);
+  const visibleRows=useMemo(()=>attentionOnly?rows.filter(row=>row.rowKind==="candidate"||rowNeedsAttention(row,days,data.month,todayIso)):rows,[rows,attentionOnly,days,data.month,todayIso]);
   const internal=data.internalSnapshot,client=data.clientSnapshot;
   const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";
   const canEditFact=canEdit&&view==="internal"&&!locked;
@@ -91,6 +95,17 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       if(!quiet)setMessage(error instanceof Error?error.message:"Не удалось сохранить");
       return false;
     }finally{if(!quiet)setSaving("")}
+  }
+
+  function handleCellKeyDown(event:KeyboardEvent<HTMLInputElement>){
+    if(event.key!=="Enter")return;
+    event.preventDefault();
+    const cells=[...document.querySelectorAll<HTMLInputElement>(".timesheet-cell-input:not(:disabled)")];
+    const index=cells.indexOf(event.currentTarget);
+    if(index<0)return;
+    const next=cells[index+(event.shiftKey?-1:1)];
+    event.currentTarget.blur();
+    if(next)requestAnimationFrame(()=>{next.focus();next.select()});
   }
 
   async function bulkToday(action:"confirm"|"hours"){
