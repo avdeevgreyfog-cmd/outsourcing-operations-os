@@ -12,12 +12,13 @@ const documentLabels:Record<string,string>={not_received:"Не получены"
 const shiftLabels:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь"};
 
 export function ObjectWorkforceWorkspace({
-  objectId,workers,today,canEdit,demo,specialties,
+  objectId,workers,today,canEdit,canManageAssets,demo,specialties,
 }:{
   objectId:string;
   workers:WorkerRow[];
   today:string;
   canEdit:boolean;
+  canManageAssets:boolean;
   demo:boolean;
   specialties:SpecialtyOption[];
 }){
@@ -145,15 +146,15 @@ function WorkerTable({
       <td><WorkerToday state={objectState} day={day} shiftTime={row.todayShiftTime}/></td>
       <td className="num"><WorkerRate row={row}/></td>
       <td><div className="object-worker-doc-editor"><select value={row.employmentDocumentsStatus??"not_received"} disabled={!canEdit||busy===`docs:${row.id}`} onChange={event=>void onDocuments(row,event.target.value)}>{Object.entries(documentLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><Link href={`/workers/${row.id}?tab=assignments`}>Карточка</Link></div></td>
-      <td><WorkerAssets row={row}/></td>
+      <td><WorkerAssets row={row} canManageAssets={canManageAssets}/></td>
     </tr>;
   })}</tbody></table></div>;
 }
 
-function WorkerAssets({row}:{row:WorkerRow}){
+function WorkerAssets({row,canManageAssets}:{row:WorkerRow;canManageAssets:boolean}){
   const required=Number(row.ppeRequiredCount??0),issued=Number(row.ppeIssuedCount??0),actual=Number(row.issuedAssetCount??0);
   const sizes=[row.clothingSize&&`одежда ${row.clothingSize}`,row.shoeSize&&`обувь ${row.shoeSize}`].filter(Boolean).join(" · ");
-  return <details className="object-worker-assets"><summary><strong>{required?issued>=required?"Комплект выдан":`${issued}/${required} выдано`:actual?`Выдано ${actual}`:"Не выдавалось"}</strong>{sizes&&<small>{sizes}</small>}</summary><div className="object-worker-assets-popover">{required?<><span>По шаблону: {required} поз.</span>{row.ppeMissingNames?.length?<span>Не хватает: {row.ppeMissingNames.join(", ")}</span>:<span>Комплект по шаблону закрыт</span>}</>:<span>Шаблон для специальности не задан</span>}{row.issuedAssetNames?.length?<span>На сотруднике: {row.issuedAssetNames.join(", ")}</span>:<span>Выдач не найдено</span>}<Link className="button" href={`/assets?worker=${row.id}&action=issue`}>Выдать / вернуть</Link><Link href={`/workers/${row.id}?tab=assets`}>Открыть имущество</Link></div></details>;
+  return <details className="object-worker-assets"><summary><strong>{required?issued>=required?"Комплект выдан":`${issued}/${required} выдано`:actual?`Выдано ${actual}`:"Не выдавалось"}</strong>{sizes&&<small>{sizes}</small>}</summary><div className="object-worker-assets-popover">{required?<><span>По шаблону: {required} поз.</span>{row.ppeMissingNames?.length?<span>Не хватает: {row.ppeMissingNames.join(", ")}</span>:<span>Комплект по шаблону закрыт</span>}</>:<span>Шаблон для специальности не задан</span>}{row.issuedAssetNames?.length?<span>На сотруднике: {row.issuedAssetNames.join(", ")}</span>:<span>Выдач не найдено</span>}{canManageAssets&&<Link className="button" href={`/assets?worker=${row.id}&action=issue`}>Выдать / вернуть</Link>}<Link href={`/workers/${row.id}?tab=assets`}>Открыть имущество</Link></div></details>;
 }
 function WorkerToday({state,day,shiftTime}:{state:ReturnType<typeof workerObjectState>;day:ReturnType<typeof workerTodayStatus>;shiftTime?:string|null}){
   const exceptional=!["working_period","on_shift","assigned","day_off","unmarked"].includes(day.key)||["intershift","vacation","sick","absence"].includes(state.key);
