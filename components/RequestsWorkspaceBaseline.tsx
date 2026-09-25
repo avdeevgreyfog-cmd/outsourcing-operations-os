@@ -117,7 +117,7 @@ export function RequestsWorkspaceBaseline({ rows, stages, options, analytics, me
 
   return <div className="sales-registry">
     <div className="sales-toolbar">
-      <SalesSegments<ViewMode> label="Вид заявок" value={mode} onChange={value=>{setMode(value);onModeChange?.(value);router.replace(value==="analytics"?"/requests?view=analytics":"/requests",{scroll:false})}} items={[{ value: "list", label: "Список", icon: <LayoutList size={15}/> }, { value: "board", label: "Доска", icon: <Columns3 size={15}/> }, { value: "analytics", label: "Аналитика", icon: <ChartNoAxesCombined size={15}/> }]}/>
+      <SalesSegments<ViewMode> label="Вид заявок" value={mode} variant="navigation" onChange={value=>{setMode(value);onModeChange?.(value);router.replace(value==="analytics"?"/requests?view=analytics":"/requests",{scroll:false})}} items={[{ value: "list", label: "Список", icon: <LayoutList size={15}/> }, { value: "board", label: "Доска", icon: <Columns3 size={15}/> }, { value: "analytics", label: "Аналитика", icon: <ChartNoAxesCombined size={15}/> }]}/>
       <div className="sales-toolbar-actions">{canConfigure && <button className="icon-button" aria-label="Настроить этапы" aria-expanded={showSettings} onClick={() => setShowSettings(v => !v)}><SlidersHorizontal size={16}/></button>}{canCreate && <button className="button" disabled={sharing} onClick={shareBlankForm}>{shareText}</button>}{canCreate && <Link className="button primary" href="/requests/new"><Plus size={16}/>Новая заявка</Link>}</div>
     </div>
     {mode !== "analytics" && <div className="sales-filterbar">
