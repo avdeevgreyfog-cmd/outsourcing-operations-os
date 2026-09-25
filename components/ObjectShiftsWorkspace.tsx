@@ -169,8 +169,8 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   const specialties=[...new Set([...workers.map(worker=>worker.specialty??"Без специальности"),...demandRows.map(row=>row.specialty)])].sort((a,b)=>a.localeCompare(b,"ru"));
   const visibleWorkers=mode==="attention"?workers.filter(workerNeedsAttention):workers;
   const attentionCount=workers.filter(workerNeedsAttention).length;
-  const weekSummary=dates.reduce((acc,date)=>{const required=demandTotal(date),counts=countsFor(date);acc.required+=required;acc.plan+=counts.plan;acc.reserve+=counts.reserve;acc.suggested+=counts.suggested;acc.deficit+=Math.max(required-counts.plan,0);return acc},{required:0,plan:0,reserve:0,suggested:0,deficit:0});
-  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name);return {name,required,plan:counts.plan,reserve:counts.reserve,suggested:counts.suggested,gap:Math.max(required-counts.plan,0)}}).filter(row=>row.required>0||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
+  const weekSummary=dates.reduce((acc,date)=>{const required=demandTotal(date),counts=countsFor(date),coverage=date<today?counts.fact:counts.plan;acc.required+=required;acc.plan+=coverage;acc.reserve+=counts.reserve;acc.suggested+=date>=today?counts.suggested:0;acc.deficit+=Math.max(required-coverage,0);return acc},{required:0,plan:0,reserve:0,suggested:0,deficit:0});
+  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name),coverage=focusDate<today?counts.fact:counts.plan;return {name,required,plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.required>0||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
 
   function toggleWorker(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
   function toggleAll(){setSelected(current=>current.size===visibleWorkers.length?new Set():new Set(visibleWorkers.map(worker=>worker.id)))}
@@ -203,7 +203,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     <div className="object-shift-week-summary">
       <div><span>Потребность</span><strong>{weekSummary.required}</strong><small>человеко-выходов</small></div>
-      <div><span>Зафиксировано</span><strong>{weekSummary.plan}</strong><small>{weekSummary.suggested?`ещё ${weekSummary.suggested} рассчитано`:"план смен"}</small></div>
+      <div><span>План / факт</span><strong>{weekSummary.plan}</strong><small>{weekSummary.suggested?`ещё ${weekSummary.suggested} рассчитано`:"закрыто планом или фактом"}</small></div>
       <div className={weekSummary.deficit?"is-attention":""}><span>Дефицит</span><strong>{weekSummary.deficit}</strong><small>{weekSummary.deficit?"нужно закрыть":"план закрыт"}</small></div>
       <div><span>Резерв</span><strong>{weekSummary.reserve}</strong><small>не передаётся в табель как план</small></div>
     </div>
