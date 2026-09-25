@@ -15,25 +15,77 @@ const schema=z.object({
   employmentDocumentsStatus:z.enum(["not_received","collecting","received","submitted","processing","completed","problem"]).optional(),
   dayRate:z.number().positive().max(100000).nullable().optional(),
   nightRate:z.number().positive().max(100000).nullable().optional(),
+  specialtyId:z.string().uuid().optional(),
+  specialtyEffectiveFrom:z.string().date().optional(),
+  transferReason:z.string().trim().max(500).nullable().optional(),
 }).superRefine((value,ctx)=>{
   if((value.scheduleWorkDays==null)!==(value.scheduleRestDays==null))ctx.addIssue({code:"custom",path:["scheduleWorkDays"],message:"Рабочие и выходные дни задаются вместе"});
+  if(value.specialtyId&&!value.specialtyEffectiveFrom)ctx.addIssue({code:"custom",path:["specialtyEffectiveFrom"],message:"Укажите дату перевода"});
 });
+
+type AssignmentScope={
+  assignmentId:string;organizationId:string;objectId:string;specialtyId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
+  effectiveFrom:string;effectiveTo:string|null;managerUserId:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|string|null;
+  transitionDays:number;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null;dailyPaymentShifts:number;
+};
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
-    requireCapability(actor,"worker.edit");const {id}=await params;const body=schema.parse(await request.json());
+    requireCapability(actor,"worker.edit");
+    const {id}=await params;
+    const body=schema.parse(await request.json());
     if(actor.demo)return NextResponse.json({ok:true,demo:true});
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [scope]=await tx<Array<{assignmentId:string;organizationId:string;objectId:string;specialtyId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
-        SELECT a.id "assignmentId",w.organization_id "organizationId",a.object_id "objectId",a.specialty_id "specialtyId",o.owner_user_id "ownerUserId",o.region_id "regionId",
-          ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-        FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id
+      const today=new Date().toISOString().slice(0,10);
+      const assignmentDate=body.specialtyEffectiveFrom??today;
+      const [scope]=await tx<AssignmentScope[]>`
+        SELECT a.id "assignmentId",w.organization_id "organizationId",a.object_id "objectId",a.specialty_id "specialtyId",
+          o.owner_user_id "ownerUserId",o.region_id "regionId",
+          ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds",
+          a.effective_from::text "effectiveFrom",a.effective_to::text "effectiveTo",a.manager_user_id "managerUserId",
+          a.work_mode "workMode",a.paid_hours_per_shift "paidHoursPerShift",a.transition_days "transitionDays",
+          a.schedule_work_days "scheduleWorkDays",a.schedule_rest_days "scheduleRestDays",a.schedule_shift_kind "scheduleShiftKind",
+          a.schedule_anchor_date::text "scheduleAnchorDate",a.daily_payment_shifts "dailyPaymentShifts"
+        FROM worker_profiles w
+        JOIN worker_object_assignments a ON a.worker_id=w.id
         JOIN objects o ON o.id=a.object_id
-        WHERE w.id=${id}::uuid AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+        WHERE w.id=${id}::uuid
+          AND a.effective_from<=${assignmentDate}::date
+          AND (a.effective_to IS NULL OR a.effective_to>=${assignmentDate}::date)
         ORDER BY a.effective_from DESC LIMIT 1 FOR UPDATE OF a
       `;
       if(!scope||!canReadRow(actor.access,"worker.edit",scope,actor))throw new AccessDeniedError("worker.edit");
+
+      let assignmentId=scope.assignmentId;
+      let specialtyId=scope.specialtyId;
+      let transferred=false;
+      if(body.specialtyId){
+        const [target]=await tx<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE id=${body.specialtyId}::uuid AND active`;
+        if(!target)throw new Error("Специальность не найдена или отключена");
+        if(body.specialtyId===scope.specialtyId)throw new Error("Сотрудник уже назначен на эту специальность");
+        if(assignmentDate<scope.effectiveFrom)throw new Error("Дата перевода раньше начала текущего назначения");
+        if(assignmentDate===scope.effectiveFrom){
+          await tx`UPDATE worker_object_assignments SET specialty_id=${body.specialtyId}::uuid WHERE id=${scope.assignmentId}::uuid`;
+        }else{
+          await tx`UPDATE worker_object_assignments SET effective_to=(${assignmentDate}::date-interval '1 day')::date WHERE id=${scope.assignmentId}::uuid`;
+          const [next]=await tx<Array<{id:string}>>`
+            INSERT INTO worker_object_assignments(
+              organization_id,worker_id,object_id,specialty_id,effective_from,effective_to,manager_user_id,created_by_user_id,
+              work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date
+            )
+            VALUES(
+              ${actor.organizationId}::uuid,${id}::uuid,${scope.objectId}::uuid,${body.specialtyId}::uuid,${assignmentDate}::date,${scope.effectiveTo}::date,
+              ${scope.managerUserId}::uuid,${actor.userId}::uuid,${scope.workMode},${scope.paidHoursPerShift},
+              ${scope.transitionDays},${scope.dailyPaymentShifts},${scope.scheduleWorkDays},${scope.scheduleRestDays},${scope.scheduleShiftKind},${scope.scheduleAnchorDate}::date
+            ) RETURNING id
+          `;
+          assignmentId=next.id;
+        }
+        specialtyId=body.specialtyId;
+        transferred=true;
+      }
+
       await tx`
         UPDATE worker_object_assignments SET
           schedule_work_days=CASE WHEN ${body.scheduleWorkDays===undefined} THEN schedule_work_days ELSE ${body.scheduleWorkDays??null}::int END,
@@ -42,21 +94,50 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           schedule_anchor_date=CASE WHEN ${body.scheduleAnchorDate===undefined} THEN schedule_anchor_date ELSE ${body.scheduleAnchorDate??null}::date END,
           transition_days=COALESCE(${body.transitionDays??null}::int,transition_days),
           daily_payment_shifts=COALESCE(${body.dailyPaymentShifts??null}::int,daily_payment_shifts)
-        WHERE id=${scope.assignmentId}::uuid
+        WHERE id=${assignmentId}::uuid
       `;
       if(body.employmentDocumentsStatus!==undefined)await tx`UPDATE worker_profiles SET employment_documents_status=${body.employmentDocumentsStatus},updated_at=now() WHERE id=${id}::uuid`;
+
       if(body.dayRate!==undefined||body.nightRate!==undefined){
-        const today=new Date().toISOString().slice(0,10);
-        await tx`UPDATE worker_rates SET effective_to=(${today}::date-interval '1 day')::date WHERE worker_id=${id}::uuid AND object_id=${scope.objectId}::uuid AND effective_to IS NULL AND day_night=ANY(ARRAY['any','day','night']::text[]) AND effective_from<${today}::date`;
-        await tx`DELETE FROM worker_rates WHERE worker_id=${id}::uuid AND object_id=${scope.objectId}::uuid AND effective_from=${today}::date AND day_night=ANY(ARRAY['any','day','night']::text[])`;
-        const [fallback]=await tx<Array<{amount:number|string;unit:string}>>`SELECT amount,unit FROM worker_rates WHERE worker_id=${id}::uuid AND (object_id=${scope.objectId}::uuid OR object_id IS NULL) AND effective_to=(${today}::date-interval '1 day')::date ORDER BY (object_id=${scope.objectId}::uuid) DESC,effective_from DESC LIMIT 1`;
-        const day=body.dayRate===undefined?Number(fallback?.amount??0):body.dayRate;const night=body.nightRate===undefined?Number(fallback?.amount??0):body.nightRate;
-        if(day&&scope.specialtyId)await tx`INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${scope.specialtyId}::uuid,${scope.objectId}::uuid,${day},'hour','day',${today}::date,${actor.userId}::uuid)`;
-        if(night&&scope.specialtyId)await tx`INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${scope.specialtyId}::uuid,${scope.objectId}::uuid,${night},'hour','night',${today}::date,${actor.userId}::uuid)`;
+        const rateDate=body.specialtyEffectiveFrom??today;
+        const existing=await tx<Array<{dayNight:"any"|"day"|"night";amount:number|string;unit:"hour"|"shift"|"month"}>>`
+          SELECT day_night "dayNight",amount,unit
+          FROM worker_rates
+          WHERE worker_id=${id}::uuid AND object_id=${scope.objectId}::uuid
+            AND effective_from<=${rateDate}::date AND (effective_to IS NULL OR effective_to>=${rateDate}::date)
+            AND day_night=ANY(ARRAY['any','day','night']::text[])
+          ORDER BY effective_from DESC
+        `;
+        const hours=Number(scope.paidHoursPerShift??0);
+        const hourly=(row:{amount:number|string;unit:"hour"|"shift"|"month"}|undefined)=>{
+          if(!row)return 0;
+          const amount=Number(row.amount);
+          return row.unit==="shift"&&hours>0?amount/hours:amount;
+        };
+        const any=existing.find(row=>row.dayNight==="any");
+        const dayExisting=existing.find(row=>row.dayNight==="day")??any;
+        const nightExisting=existing.find(row=>row.dayNight==="night")??any;
+        const day=body.dayRate===undefined?hourly(dayExisting):Number(body.dayRate??0);
+        const night=body.nightRate===undefined?hourly(nightExisting):Number(body.nightRate??0);
+        await tx`
+          UPDATE worker_rates SET effective_to=(${rateDate}::date-interval '1 day')::date
+          WHERE worker_id=${id}::uuid AND object_id=${scope.objectId}::uuid
+            AND day_night=ANY(ARRAY['any','day','night']::text[])
+            AND effective_from<${rateDate}::date AND (effective_to IS NULL OR effective_to>=${rateDate}::date)
+        `;
+        await tx`DELETE FROM worker_rates WHERE worker_id=${id}::uuid AND object_id=${scope.objectId}::uuid AND effective_from=${rateDate}::date AND day_night=ANY(ARRAY['any','day','night']::text[])`;
+        if(day&&specialtyId)await tx`INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${specialtyId}::uuid,${scope.objectId}::uuid,${day},'hour','day',${rateDate}::date,${actor.userId}::uuid)`;
+        if(night&&specialtyId)await tx`INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${specialtyId}::uuid,${scope.objectId}::uuid,${night},'hour','night',${rateDate}::date,${actor.userId}::uuid)`;
       }
+
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'assignment_settings_updated','Обновлены операционные настройки сотрудника',${tx.json(body)})
+        VALUES(
+          ${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,
+          ${transferred?"worker_specialty_transferred":"assignment_settings_updated"},
+          ${transferred?"Сотрудник переведён на другую специальность внутри объекта":"Обновлены операционные настройки сотрудника"},
+          ${tx.json({...body,objectId:scope.objectId,fromSpecialtyId:scope.specialtyId,toSpecialtyId:specialtyId,effectiveFrom:assignmentDate})}
+        )
       `;
     }));
     return NextResponse.json({ok:true});
