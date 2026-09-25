@@ -1,5 +1,6 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -10,6 +11,7 @@ import { getTender } from "@/lib/tenders/service";
 import { getCalculationScenarioSeed, getCalculationWorkspaceMeta, getRateReferencesForRoles, type CalculationWorkspaceMeta } from "@/lib/commercial/calculation-workspace";
 import { getCalculationStandards } from "@/lib/commercial/calculation-standards";
 import { PageHeader, Section, Status, EntityTabs } from "@/components/UI";
+import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
 import { CalculatorWorkspaceWithRateMemory } from "@/components/CalculatorWorkspaceWithRateMemory";
 import { CalculationVersionButton } from "@/components/CalculationVersionButton";
@@ -26,7 +28,8 @@ function statusTone(status:string){if(status==="approved"||status==="accepted")r
 
 export default async function CalculationWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;seed?:string;date?:string}>}){
   const actor=await requireActor();
-  const {id}=await params;const query=isGithubPagesDemo()?{}:await searchParams;const activeTab=safeTab(query.tab);
+  const staticDemo=isGithubPagesDemo();
+  const {id}=await params;const query=staticDemo?{}:await searchParams;const activeTab=safeTab(query.tab);
   const allRows=await listCommercialCalculations(actor);const rows=allRows.filter(row=>row.calculationId===id);
   const storedMeta=actor.demo?null:await getCalculationWorkspaceMeta(actor,id);
   const first=rows[0];
@@ -71,8 +74,12 @@ export default async function CalculationWorkspace({params,searchParams}:{params
   const contribution=roleStats.reduce((sum,item)=>sum+Number(item.accepted?.monthlyContribution??0),0);
   const avgMargin=roleStats.filter(item=>item.accepted).length?roleStats.reduce((sum,item)=>sum+Number(item.accepted?.marginPct??0),0)/roleStats.filter(item=>item.accepted).length:null;
   const immutable=["approved","superseded"].includes(meta.status);
+  const panel=(key:string,content:ReactNode)=>{
+    if(!tabs.some(item=>item.key===key)||(!staticDemo&&activeTab!==key))return null;
+    return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
+  };
 
-  return <>
+  const workspace=<>
     <PageHeader
       eyebrow="Коммерция → Экономика"
       title={`Расчёт v${meta.version} · ${sourceTitle}`}
@@ -87,7 +94,7 @@ export default async function CalculationWorkspace({params,searchParams}:{params
 
     <EntityTabs active={tabs.find(item=>item.key===activeTab)?.label??"Обзор"} items={tabs.map(item=>({label:item.label,href:`/calculations/${meta.id}?tab=${item.key}`}))}/>
 
-    {activeTab==="overview"&&<>
+    {panel("overview",<>
       <div className="calculation-overview-grid">
         <Section title="Позиции и готовность" note="Для КП по каждой позиции должен быть принят актуальный сценарий.">
           <div className="request-table-wrap"><table className="data-table calculation-role-table"><thead><tr><th>Позиция</th><th>Сценарии</th><th>Принятый сценарий</th><th>Ставка</th><th>Маржа</th><th>Состояние</th></tr></thead><tbody>{roleStats.map(item=><tr key={item.role.id}><td><strong>{item.role.specialty}</strong><span className="cell-sub">{item.role.count} чел.</span></td><td className="num">{item.rows.length}</td><td>{item.accepted?`${item.accepted.name} · v${item.accepted.scenarioVersion}`:"—"}</td><td className="num">{item.accepted?rub(item.accepted.clientRate):"—"}</td><td className="num">{item.accepted?pct(item.accepted.marginPct):"—"}</td><td>{item.accepted?<Status tone="good">accepted</Status>:item.latest?<Status tone={statusTone(item.latest.status)}>{item.latest.status}</Status>:<Status>Не рассчитано</Status>}</td></tr>)}</tbody></table></div>
@@ -102,14 +109,15 @@ export default async function CalculationWorkspace({params,searchParams}:{params
 
       {!immutable&&canCreate&&roles.length>0&&<><div className="calculation-workspace-gap"/><Section title={validSeed?`Новая версия сценария · ${validSeed.name}`:"Новый сценарий"} note={validSeed?"Параметры взяты из сохранённого сценария. После сохранения появится новая историческая версия.":"Позиция, график, нормативы и ориентир базы ставок подставляются из связанных данных. Значения можно скорректировать перед сохранением."}><div className="calculation-editor-wrap"><CalculatorWorkspaceWithRateMemory commercialPolicy={standards.commercialPolicy} context={{calculationId:meta.id,sourceType:meta.sourceType,sourceId:meta.sourceId,sourceLabel:sourceTitle,roles,models,vatMode,schedule,projectWorkers,economicsDate,allocationMode:meta.allocationMode,projectCosts:meta.projectCosts,expenseStandards:standards.expenses,scheduleStandards:standards.schedules}} seed={validSeed}/></div></Section></>}
       {immutable&&<div className="calculation-lock-note"><strong>Эта версия расчёта зафиксирована.</strong><span>Для переговоров или пересчёта создайте новую версию. Принятые сценарии останутся в истории без изменений.</span></div>}
-    </>}
+    </>)}
 
-    {activeTab==="scenarios"&&<Section title="Сценарии" note="Все сценарии этой версии расчёта. Черновик можно отправить на согласование или использовать как основу для следующей версии сценария."><div className="calculation-section-body"><CalculationsRegistryWorkspace rows={rows} canEdit={canEdit} compact defaultView="scenarios"/></div></Section>}
+    {panel("scenarios",<Section title="Сценарии" note="Все сценарии этой версии расчёта. Черновик можно отправить на согласование или использовать как основу для следующей версии сценария."><div className="calculation-section-body"><CalculationsRegistryWorkspace rows={rows} canEdit={canEdit} compact defaultView="scenarios"/></div></Section>)}
 
-    {activeTab==="compare"&&<Section title="Сравнение сценариев" note="Выберите от двух до четырёх сценариев. Система показывает экономику и отклонения, но не назначает «лучший» вариант только по максимальной марже."><div className="calculation-section-body"><CalculationsRegistryWorkspace rows={rows} canEdit={false} compact defaultView="scenarios"/></div></Section>}
+    {panel("compare",<Section title="Сравнение сценариев" note="Выберите от двух до четырёх сценариев. Система показывает экономику и отклонения, но не назначает «лучший» вариант только по максимальной марже."><div className="calculation-section-body"><CalculationsRegistryWorkspace rows={rows} canEdit={false} compact defaultView="scenarios"/></div></Section>)}
 
-    {activeTab==="approval"&&<Section title="Согласование" note="Решения относятся к конкретным сценариям и сохраняются отдельно от комментариев и бизнес-статусов.">{canReadApprovals?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сценарий</th><th>Статус</th><th>Инициатор</th><th>Согласующий</th><th>Отправлено</th><th>Комментарий решения</th></tr></thead><tbody>{approvals.length?approvals.map(item=>{const scenario=rows.find(row=>row.id===item.subjectId);return <tr key={item.id}><td><strong>{scenario?.name??item.subject}</strong><span className="cell-sub">{scenario?`${scenario.role} · v${scenario.scenarioVersion}`:""}</span></td><td><Status tone={statusTone(item.status)}>{item.status}</Status></td><td>{item.requestedBy}</td><td>{item.approver??"—"}</td><td>{item.requestedAt}</td><td>{item.decisionComment??"—"}</td></tr>}):<tr><td colSpan={6} className="muted">Согласований по сценариям этой версии пока нет.</td></tr>}</tbody></table></div>:<p className="muted calculation-section-text">У вашей роли нет доступа к реестру согласований. Действия с доступными сценариями остаются в разделе «Сценарии».</p>}</Section>}
+    {panel("approval",<Section title="Согласование" note="Решения относятся к конкретным сценариям и сохраняются отдельно от комментариев и бизнес-статусов.">{canReadApprovals?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сценарий</th><th>Статус</th><th>Инициатор</th><th>Согласующий</th><th>Отправлено</th><th>Комментарий решения</th></tr></thead><tbody>{approvals.length?approvals.map(item=>{const scenario=rows.find(row=>row.id===item.subjectId);return <tr key={item.id}><td><strong>{scenario?.name??item.subject}</strong><span className="cell-sub">{scenario?`${scenario.role} · v${scenario.scenarioVersion}`:""}</span></td><td><Status tone={statusTone(item.status)}>{item.status}</Status></td><td>{item.requestedBy}</td><td>{item.approver??"—"}</td><td>{item.requestedAt}</td><td>{item.decisionComment??"—"}</td></tr>}):<tr><td colSpan={6} className="muted">Согласований по сценариям этой версии пока нет.</td></tr>}</tbody></table></div>:<p className="muted calculation-section-text">У вашей роли нет доступа к реестру согласований. Действия с доступными сценариями остаются в разделе «Сценарии».</p>}</Section>)}
 
-    {activeTab==="history"&&<Section title="История версий" note="История строится по неизменяемым snapshots сценариев и связям «предыдущая версия → новая версия»."><div className="request-table-wrap"><table className="data-table calculation-history-table"><thead><tr><th>Позиция</th><th>Сценарий</th><th>Версия</th><th>Модель</th><th>Ставка клиенту</th><th>Маржа</th><th>Статус</th><th>Создан</th></tr></thead><tbody>{[...rows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(row=><tr key={row.id}><td>{row.role}</td><td><strong>{row.name}</strong><span className="cell-sub">{row.supersedesScenarioId?"Создан из предыдущего сценария":"Исходный сценарий"}</span></td><td>v{row.scenarioVersion}</td><td>{row.model}<span className="cell-sub">Правила {row.ruleVersion?`№${row.ruleVersion}`:"не зафиксированы"}</span></td><td className="num">{rub(row.clientRate)}</td><td className="num">{pct(row.marginPct)}</td><td><Status tone={statusTone(row.status)}>{row.status}</Status></td><td>{new Intl.DateTimeFormat("ru-RU",{dateStyle:"short",timeStyle:"short"}).format(new Date(row.createdAt))}</td></tr>)}</tbody></table></div></Section>}
+    {panel("history",<Section title="История версий" note="История строится по неизменяемым snapshots сценариев и связям «предыдущая версия → новая версия»."><div className="request-table-wrap"><table className="data-table calculation-history-table"><thead><tr><th>Позиция</th><th>Сценарий</th><th>Версия</th><th>Модель</th><th>Ставка клиенту</th><th>Маржа</th><th>Статус</th><th>Создан</th></tr></thead><tbody>{[...rows].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).map(row=><tr key={row.id}><td>{row.role}</td><td><strong>{row.name}</strong><span className="cell-sub">{row.supersedesScenarioId?"Создан из предыдущего сценария":"Исходный сценарий"}</span></td><td>v{row.scenarioVersion}</td><td>{row.model}<span className="cell-sub">Правила {row.ruleVersion?`№${row.ruleVersion}`:"не зафиксированы"}</span></td><td className="num">{rub(row.clientRate)}</td><td className="num">{pct(row.marginPct)}</td><td><Status tone={statusTone(row.status)}>{row.status}</Status></td><td>{new Intl.DateTimeFormat("ru-RU",{dateStyle:"short",timeStyle:"short"}).format(new Date(row.createdAt))}</td></tr>)}</tbody></table></div></Section>)}
   </>;
+  return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }
