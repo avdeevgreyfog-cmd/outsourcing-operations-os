@@ -2,10 +2,12 @@
   "name": "outsourcing-operations-os",
   "version": "0.1.0",
   "private": true,
-  "engines": {"node": ">=22.0.0"},
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "next build",
+    "build": "node scripts/build.mjs",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
