@@ -8,7 +8,6 @@ import { DemoRoleSwitch } from "@/components/DemoRoleSwitch";
 import { WorkspaceContextControls } from "@/components/WorkspaceContextControls";
 import { AccountMenu } from "@/components/AccountMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { VisualModeToggle } from "@/components/VisualModeToggle";
 import { roleLabel } from "@/lib/ui/format";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { Activity, BriefcaseBusiness, Building2, ChartNoAxesCombined, ChevronDown, Factory, Home, Menu, PanelLeftClose, PanelLeftOpen, Pin, Search, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
@@ -25,7 +24,7 @@ function sameRoute(pathname: string, href: string, currentView: string) {
 type Preferences = { sections: Record<string, boolean>; groups: Record<string, boolean>; compact: boolean; pins: string[] };
 const booleanMap = (value: unknown): Record<string, boolean> => value && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([, v]) => typeof v === "boolean")) : {};
 
-export function WorkspaceNavigation({ actor, sections, workspace, visualMode }: { actor: Actor; sections: NavigationSection[]; workspace: WorkspaceContext; visualMode: "classic"|"new" }) {
+export function WorkspaceNavigation({ actor, sections, workspace }: { actor: Actor; sections: NavigationSection[]; workspace: WorkspaceContext }) {
   const staticGithubDemo = process.env.NEXT_PUBLIC_GITHUB_PAGES_DEMO === "1";
   const assetBase = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   const pathname = usePathname(); const router = useRouter(); const currentView = useSearchParams().get("view") ?? "portfolio";
@@ -121,7 +120,7 @@ export function WorkspaceNavigation({ actor, sections, workspace, visualMode }: 
       </nav>
       <div className="sidebar-foot"><div className="avatar">{actor.displayName.split(" ").map(x => x[0]).join("").slice(0, 2)}</div>{!compact && <div className="who"><strong>{actor.displayName}</strong><span>{currentRole}</span></div>}<button type="button" className="sidebar-collapse" onClick={() => setPrefs(current => ({ ...current, compact: !current.compact }))} aria-label={compact ? "Развернуть меню" : "Свернуть меню"}>{compact ? <PanelLeftOpen size={16}/> : <PanelLeftClose size={16}/>}</button></div>
     </aside>
-    <header className={`topbar ${compact ? "topbar-compact" : ""}`}><button className="mobile-menu" type="button" onClick={() => { setPrefs(current => ({ ...current, compact: false })); setMobileOpen(v => !v); }} aria-label="Меню" aria-expanded={mobileOpen}><Menu size={18}/></button><div className="topbar-context"><span className="live-dot"/><strong>{activeSectionLabel}</strong><span className="topbar-separator">·</span><span>{currentRole}</span>{actor.accessPreview&&<span className="access-preview-flag">Режим проверки</span>}</div><div className="topbar-actions">{!staticGithubDemo&&<WorkspaceContextControls context={workspace} demo={actor.demo}/>} {!staticGithubDemo&&actor.demo&&<DemoRoleSwitch currentUserId={actor.userId}/>}<VisualModeToggle initialMode={visualMode}/><ThemeToggle/>{hasCapability(actor.access,"task.read")&&<Link className="icon-button" href="/tasks" aria-label="Задачи"><Activity size={16}/></Link>}<AccountMenu actor={actor}/></div></header>
+    <header className={`topbar ${compact ? "topbar-compact" : ""}`}><button className="mobile-menu" type="button" onClick={() => { setPrefs(current => ({ ...current, compact: false })); setMobileOpen(v => !v); }} aria-label="Меню" aria-expanded={mobileOpen}><Menu size={18}/></button><div className="topbar-context"><span className="live-dot"/><strong>{activeSectionLabel}</strong><span className="topbar-separator">·</span><span>{currentRole}</span>{actor.accessPreview&&<span className="access-preview-flag">Режим проверки</span>}</div><div className="topbar-actions">{!staticGithubDemo&&<WorkspaceContextControls context={workspace} demo={actor.demo}/>} {!staticGithubDemo&&actor.demo&&<DemoRoleSwitch currentUserId={actor.userId}/>}<ThemeToggle/>{hasCapability(actor.access,"task.read")&&<Link className="icon-button" href="/tasks" aria-label="Задачи"><Activity size={16}/></Link>}<AccountMenu actor={actor}/></div></header>
     {palette && <NavigationSearch query={query} setQuery={setQuery} results={results} open={open} close={() => { setPalette(false); setQuery(""); searchRef.current?.focus(); }}/>}
   </>;
 }
