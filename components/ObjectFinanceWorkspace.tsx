@@ -63,4 +63,4 @@ export function ObjectFinanceWorkspace({objectId,pnl,accruals,payments,daily,inc
     </>}
   </div>
 }
-function formatDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}function formatDateShort(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
+function formatDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}function formatDateShort(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}function paymentWord(value:number){const n=Math.abs(value)%100,d=n%10;return n>10&&n<20?"выплат":d===1?"выплата":d>=2&&d<=4?"выплаты":"выплат"}
