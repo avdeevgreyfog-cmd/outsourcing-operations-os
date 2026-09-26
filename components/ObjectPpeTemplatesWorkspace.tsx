@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {useMemo,useState} from "react";
 import {Plus,RotateCcw,Trash2} from "lucide-react";
 import type {InventoryItemRow,ObjectPpeTemplateRow} from "@/lib/operations/service";
@@ -84,7 +85,7 @@ export function ObjectPpeTemplatesWorkspace({
   return <div className="object-ppe-workspace object-supply-norms">
     <div className="object-supply-norm-toolbar">
       <label><span>Специальность на объекте</span><select value={specialtyId} onChange={event=>chooseSpecialty(event.target.value)}>{options.map(option=><option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
-      <div className="object-supply-norm-source"><strong>{currentTemplate?.source==="object"?"Норма объекта":currentTemplate?.source==="global"?"Базовая норма":"Норма не задана"}</strong><span>{currentTemplate?.source==="object"?"Локальное переопределение для этого объекта.":currentTemplate?.source==="global"?"Подтянута из общего контура обеспечения. Сохранение здесь создаст локальное переопределение.":"Сначала можно задать базовую норму в общем обеспечении или настроить её прямо здесь."}</span></div>
+      <div className="object-supply-norm-source"><strong>{currentTemplate?.source==="object"?"Норма объекта":currentTemplate?.source==="global"?"Базовая норма":"Норма не задана"}</strong><span>{currentTemplate?.source==="object"?"Локальное переопределение для этого объекта.":currentTemplate?.source==="global"?"Подтянута из общего контура обеспечения. Сохранение здесь создаст локальное переопределение.":"Сначала можно задать базовую норму в общем обеспечении или настроить её прямо здесь."}</span><Link className="table-link" href="/assets?view=norms">Открыть базовые нормы</Link></div>
     </div>
     <div className="object-ppe-template-editor-panel">
       <header className="object-supply-norm-head">
