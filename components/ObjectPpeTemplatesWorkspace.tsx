@@ -86,16 +86,6 @@ export function ObjectPpeTemplatesWorkspace({
       <label><span>Специальность на объекте</span><select value={specialtyId} onChange={event=>chooseSpecialty(event.target.value)}>{options.map(option=><option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
       <div className="object-supply-norm-source"><strong>{currentTemplate?.source==="object"?"Норма объекта":currentTemplate?.source==="global"?"Базовая норма":"Норма не задана"}</strong><span>{currentTemplate?.source==="object"?"Локальное переопределение для этого объекта.":currentTemplate?.source==="global"?"Подтянута из общего контура обеспечения. Сохранение здесь создаст локальное переопределение.":"Сначала можно задать базовую норму в общем обеспечении или настроить её прямо здесь."}</span></div>
     </div>
-    <aside className="object-ppe-template-list">
-      {options.map(option=>{
-        const template=templates.find(item=>item.specialtyId===option.id);
-        return <button type="button" key={option.id} className={specialtyId===option.id?"active":""} onClick={()=>chooseSpecialty(option.id)}>
-          <strong>{option.name}</strong>
-          <span>{template?.items.length?`${template.items.length} позиций`:"Норма не задана"}</span>
-        </button>;
-      })}
-    </aside>
-
     <div className="object-ppe-template-editor-panel">
       <header className="object-supply-norm-head">
         <div><strong>{currentName}</strong><span>Индивидуальное обеспечение сотрудника этой специальности. Расходники учитываются отдельно на объект.</span></div>
