@@ -158,6 +158,7 @@ FROM role_templates r
 CROSS JOIN permission_definitions p
 WHERE r.organization_id='00000000-0000-4000-8000-000000000002'
   AND r.code='director'
+  AND p.capability<>'admin.system_access.manage'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
