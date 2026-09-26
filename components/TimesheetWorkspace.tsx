@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useRef,useState,type KeyboardEvent} from "react";
 import {useRouter} from "next/navigation";
-import {CheckCircle2,Download,Printer,RotateCcw,Send,ShieldCheck,WalletCards} from "lucide-react";
+import {CheckCircle2,Download,Printer,RotateCcw,ShieldCheck,WalletCards} from "lucide-react";
 import {Status} from "@/components/UI";
 import {rub} from "@/lib/ui/format";
 import type {TimesheetAbsenceRange,TimesheetCellValue,TimesheetData,TimesheetRatePeriod,TimesheetWorkerRow} from "@/lib/data/service";
@@ -13,7 +13,7 @@ type View="client"|"internal";
 type Segment="day"|"night";
 type RowMode="auto"|"all"|"day"|"night";
 
-export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canApproveClient,canClose,embedded=false,pilot=false}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canApproveClient:boolean;canClose:boolean;embedded?:boolean;pilot?:boolean}){
+export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,canReview,canClose,embedded=false,pilot=false}:{data:TimesheetData;options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canSubmit:boolean;canReview:boolean;canClose:boolean;embedded?:boolean;pilot?:boolean}){
   const router=useRouter();
   const tableWrapRef=useRef<HTMLDivElement>(null);
   const [mode,setMode]=useState<Mode>("month");
@@ -71,7 +71,10 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   const attentionCount=useMemo(()=>rows.filter(row=>row.rowKind!=="candidate"&&rowNeedsAttention(row,days,data.month,todayIso)).length,[rows,days,data.month,todayIso]);
   const visibleRows=useMemo(()=>attentionOnly?rows.filter(row=>row.rowKind!=="candidate"&&rowNeedsAttention(row,days,data.month,todayIso)):rows,[rows,attentionOnly,days,data.month,todayIso]);
   const internal=data.internalSnapshot,client=data.clientSnapshot;
-  const locked=internal?.status==="internal_submitted"||internal?.status==="internal_checked"||internal?.status==="closed"||client?.status==="client_sent"||client?.status==="client_approved"||client?.status==="closed";
+  const lockStatuses=["fixed","closed","internal_submitted","internal_checked","client_sent","client_approved"];
+  const locked=lockStatuses.includes(internal?.status??"")||lockStatuses.includes(client?.status??"");
+  const financiallyClosed=internal?.status==="closed"||client?.status==="closed";
+  const fixed=["fixed","closed"].includes(internal?.status??"")||["fixed","client_approved","closed"].includes(client?.status??"");
   const canEditFact=canEdit&&view==="internal"&&!locked;
 
   function changeContext(objectId:string,month:string){
@@ -132,13 +135,13 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
     }finally{setBulkBusy(false)}
   }
 
-  async function workflow(action:"submit_internal"|"review_internal"|"return_internal"|"send_client"|"client_approve"|"client_return"|"close"){
+  async function workflow(action:"finalize"|"reopen"|"close"){
     setBusy(true);setMessage("");
     try{
       const response=await fetch("/api/timesheets/workflow",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,objectId:data.objectId,periodStart:data.periodStart,periodEnd:data.periodEnd,comment:comment||null})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось выполнить действие");
-      const labels:Record<string,string>={submit_internal:"Табель передан на внутреннюю проверку",review_internal:"Внутренний табель проверен",return_internal:"Табель возвращён менеджеру",send_client:"Клиентская версия зафиксирована и отправлена",client_approve:"Подтверждение клиента зафиксировано",client_return:"Возврат клиента зафиксирован",close:"Период закрыт: начисления сформированы"};
+      const labels:Record<string,string>={finalize:"Табель зафиксирован. Факт больше не редактируется.",reopen:"Табель открыт руководителем для корректировки.",close:"Начисления по зафиксированному табелю сформированы."};
       setMessage(labels[action]??"Готово");setComment("");router.refresh();
     }catch(error){setMessage(error instanceof Error?error.message:"Не удалось выполнить действие")}
     finally{setBusy(false)}
@@ -323,15 +326,13 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
     </section>
 
     <section className="section">
-      <div className="section-head"><div><h2>Маршрут табеля</h2><p>Отправленная версия не перезаписывается.</p></div><Status tone="neutral">{statusLabel(data.status)}</Status></div>
+      <div className="section-head"><div><h2>Фиксация табеля</h2><p>В работе факт можно менять. После фиксации часы блокируются; повторное открытие доступно руководителю и сохраняется в истории версий.</p></div><Status tone={fixed?"good":data.status==="returned"?"warn":"neutral"}>{statusLabel(data.status)}</Status></div>
       <div className="timesheet-workflow-panel">
-        <input value={comment} onChange={event=>setComment(event.target.value)} placeholder="Комментарий к передаче или возврату"/>
+        <input value={comment} onChange={event=>setComment(event.target.value)} placeholder={locked?"Причина повторного открытия (обязательна)":"Комментарий к фиксации (необязательно)"}/>
         <div className="page-actions">
-          {canSubmit&&(!internal||["draft","returned"].includes(internal.status))&&<button className="button primary" disabled={busy} onClick={()=>void workflow("submit_internal")}><Send size={14}/> На проверку</button>}
-          {canReview&&internal?.status==="internal_submitted"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("review_internal")}><CheckCircle2 size={14}/> Проверено</button><button className="button" disabled={busy} onClick={()=>void workflow("return_internal")}><RotateCcw size={14}/> Вернуть</button></>}
-          {canSubmit&&internal?.status==="internal_checked"&&(!client||client.status==="returned")&&<button className="button primary" disabled={busy} onClick={()=>void workflow("send_client")}><Send size={14}/> Отправить клиенту</button>}
-          {canApproveClient&&client?.status==="client_sent"&&<><button className="button primary" disabled={busy} onClick={()=>void workflow("client_approve")}><CheckCircle2 size={14}/> Клиент согласовал</button><button className="button" disabled={busy} onClick={()=>void workflow("client_return")}><RotateCcw size={14}/> Вернул</button></>}
-          {canClose&&client?.status==="client_approved"&&<button className="button primary" disabled={busy} onClick={()=>void workflow("close")}><WalletCards size={14}/> Закрыть период</button>}
+          {canSubmit&&!locked&&<button className="button primary" disabled={busy} onClick={()=>void workflow("finalize")}><CheckCircle2 size={14}/> Зафиксировать табель</button>}
+          {canReview&&locked&&!financiallyClosed&&<button className="button" disabled={busy} onClick={()=>void workflow("reopen")}><RotateCcw size={14}/> Открыть для корректировки</button>}
+          {canClose&&fixed&&!financiallyClosed&&<button className="button" disabled={busy} onClick={()=>void workflow("close")}><WalletCards size={14}/> Сформировать начисления</button>}
         </div>
       </div>
     </section>
@@ -461,7 +462,7 @@ function isWeekend(month:string,day:number){const value=dateFor(month,day).getUT
 function weekday(month:string,day:number){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(dateFor(month,day)).replace(".","")}
 function numericCell(value:unknown){return typeof value==="number"?value:typeof value==="string"&&/^\d+(?:[.,]\d+)?$/.test(value)?Number(value.replace(",",".")):0}
 function normalizeCell(value:string):TimesheetCellValue{const normalized=value.trim().toUpperCase();if(normalized==="")return null;if(/^\d+(?:[.,]\d+)?$/.test(normalized))return Number(normalized.replace(",","."));return normalized}
-function statusLabel(value:string){const labels:Record<string,string>={draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"};return labels[value]??value}
+function statusLabel(value:string){const labels:Record<string,string>={draft:"В работе",submitted:"В работе",approved:"Зафиксирован",fixed:"Зафиксирован",returned:"Корректировка",internal_submitted:"На проверке",internal_checked:"На проверке",client_sent:"На согласовании",client_approved:"Зафиксирован",closed:"Зафиксирован"};return labels[value]??value}
 function isAfterEnd(row:TimesheetWorkerRow,date:string){return Boolean(row.effectiveTo&&date>row.effectiveTo)}
 function isFirstAfterEnd(row:TimesheetWorkerRow,date:string){if(!row.effectiveTo)return false;const day=new Date(row.effectiveTo+"T00:00:00Z");day.setUTCDate(day.getUTCDate()+1);return date===day.toISOString().slice(0,10)}
 function shortDate(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
