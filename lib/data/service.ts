@@ -849,7 +849,13 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       ORDER BY ca.planned_start_date,c.full_name
     `;
     const candidateRows:TimesheetWorkerRow[]=plannedCandidates.map(candidate=>{const day=String(Number(candidate.plannedStartDate.slice(8,10)));return {workerId:`candidate:${candidate.applicationId}`,name:candidate.name,rowKind:"candidate",candidateId:candidate.candidateId,applicationId:candidate.applicationId,specialty:candidate.specialty,days:{[day]:"П"},dayCells:candidate.plannedShiftKind==="night"?{}:{[day]:"П"},nightCells:candidate.plannedShiftKind==="night"?{[day]:"П"}:{},plannedShiftKinds:{[day]:candidate.plannedShiftKind??"mixed"},total:0,dayHours:0,night:0,overtime:0,rate:null,dayRate:null,nightRate:null,accrual:null};});
-    const rows=[...workerRows,...candidateRows];
+    const relevantWorkerRows=workerRows.filter(row=>{
+      const hasFact=Object.values(row.dayCells??{}).some(value=>typeof value==="number"&&value>0)||Object.values(row.nightCells??{}).some(value=>typeof value==="number"&&value>0);
+      if(hasFact)return true;
+      const awayAllMonth=(row.absenceRanges??[]).some(absence=>(absence.type==="intershift"||absence.type==="vacation")&&absence.from<=periodStart&&(!absence.to||absence.to>=periodEnd));
+      return !awayAllMonth;
+    });
+    const rows=[...relevantWorkerRows,...candidateRows];
     const [clientSnap,internalSnap]=await Promise.all([
       sql<SnapshotMetaRow[]>`
         SELECT id,(snapshot_json->>'hours')::numeric hours,status,COALESCE(version,1)::int version,workflow_comment comment,to_char(created_at,'DD.MM.YYYY HH24:MI') "createdAt"
