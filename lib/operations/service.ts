@@ -698,7 +698,7 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
 
 
 export type WorkerOutstandingAsset={itemId:string;item:string;variant:string;quantity:number;unit:string};
-export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string;replacementRequired:boolean;replacementNeedId:string|null;replacementWorkerId:string|null;replacementWorker:string|null};
+export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string;replacementRequired:boolean;returnToRecruiting:boolean;replacementNeedId:string|null;replacementWorkerId:string|null;replacementWorker:string|null};
 export type WorkerOffboardingContext={
   relationType:string|null;
   relationFrom:string|null;
@@ -749,7 +749,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
     `:[];
     const exits=await sql<WorkerExitHistoryRow[]>`
       SELECT ep.id,to_char(ep.effective_date,'DD.MM.YYYY') "effectiveDate",ep.reason_code "reasonCode",ep.reason,ep.status,to_char(ep.created_at,'DD.MM.YYYY') "createdAt",
-        ep.replacement_required "replacementRequired",ep.replacement_need_id "replacementNeedId",ep.replacement_worker_id "replacementWorkerId",rw.full_name "replacementWorker"
+        ep.replacement_required "replacementRequired",ep.return_to_recruiting "returnToRecruiting",ep.replacement_need_id "replacementNeedId",ep.replacement_worker_id "replacementWorkerId",rw.full_name "replacementWorker"
       FROM worker_exit_processes ep LEFT JOIN worker_profiles rw ON rw.id=ep.replacement_worker_id
       WHERE ep.worker_id=${workerId}::uuid ORDER BY ep.effective_date DESC,ep.created_at DESC
     `;
