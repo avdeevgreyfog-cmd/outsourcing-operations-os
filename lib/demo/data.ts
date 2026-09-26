@@ -3433,7 +3433,11 @@ export const candidates = [
       "10000000-0000-4000-8000-000000000004",
       "10000000-0000-4000-8000-000000000003"
     ],
-    "nextAction": "Адаптация подтверждена"
+    "nextAction": "Адаптация подтверждена",
+    "formerWorkerAvailable": true,
+    "formerWorkerExitReasonCode": "project_end",
+    "formerWorkerExitReason": "Потребность на объекте сокращена",
+    "formerWorkerExitDate": "2026-09-22"
   }
 ];
 
