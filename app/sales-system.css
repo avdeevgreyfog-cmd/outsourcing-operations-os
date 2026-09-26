@@ -2750,3 +2750,47 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .object-supply-norm-toolbar{grid-template-columns:1fr;align-items:start}
   .sales-workspace.operations-workspace .object-worker-actions>div{right:38px}
 }
+
+
+/* Personnel row actions live in a viewport portal so table overflow never clips the menu. */
+.object-worker-actions-layer{
+  position:fixed;
+  inset:0;
+  z-index:1600;
+}
+.object-worker-actions-popover{
+  position:fixed;
+  width:220px;
+  padding:6px;
+  display:grid;
+  gap:2px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--panel);
+  box-shadow:0 12px 32px rgba(0,0,0,.16);
+}
+.object-worker-actions-popover :is(button,a){
+  width:100%;
+  min-height:34px;
+  padding:0 9px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  font-size:12px;
+  text-align:left;
+  text-decoration:none;
+  cursor:pointer;
+}
+.object-worker-actions-popover :is(button,a):hover{background:var(--panel-2)}
+.object-worker-actions-popover .danger{color:var(--bad)}
+.object-worker-actions-popover .danger,
+.object-worker-actions-popover a{
+  margin-top:2px;
+  padding-top:7px;
+  border-top:1px solid var(--border);
+}
