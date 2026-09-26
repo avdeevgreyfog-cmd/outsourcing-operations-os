@@ -86,7 +86,7 @@ export function ObjectSupplyWorkspace({
       </Section>
     </div>}
 
-    {canAssets&&<Section title="Нормы выдачи по специальностям" note="Настройка объекта: что и в каком количестве сотрудник должен получить. Фактическая выдача проводится через общий склад.">
+    {canAssets&&<Section title="Нормы выдачи по специальностям объекта" note="Показываются только специальности этого объекта. Базовая норма приходит из общего контура обеспечения; здесь можно создать локальное переопределение.">
       <ObjectPpeTemplatesWorkspace objectId={objectId} templates={templates} inventoryItems={inventoryItems} specialties={specialties} canManage={canManageAssets} demo={demo}/>
     </Section>}
 
