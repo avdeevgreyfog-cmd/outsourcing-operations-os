@@ -8,7 +8,11 @@ import { withTenant } from "@/lib/db/client";
 const rowSchema=z.object({
   workerId:z.string().uuid(),amount:z.number().positive().max(10000000),paymentDate:z.string().date(),reference:z.string().trim().max(500).nullable().optional(),
 });
-const schema=z.object({rows:z.array(rowSchema).min(1).max(200)});
+const schema=z.object({
+  rows:z.array(rowSchema).min(1).max(200),
+  paymentKind:z.enum(["salary","advance","other"]).default("salary"),
+  paymentMethod:z.enum(["transfer","cash","other"]).nullable().optional(),
+});
 
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -30,17 +34,25 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           ) LIMIT 1
         `;
         if(!worker)throw new Error("Один из сотрудников не относится к этому объекту");
-        const [accrual]=await tx<Array<{id:string}>>`
-          SELECT id FROM worker_accruals WHERE worker_id=${row.workerId}::uuid AND object_id=${id}::uuid AND status IN ('approved','closed')
-          ORDER BY period_end DESC,created_at DESC LIMIT 1
-        `;
-        await tx`
-          INSERT INTO worker_payments(organization_id,worker_id,object_id,accrual_id,amount,payment_date,status,reference,created_by_user_id,updated_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${row.workerId}::uuid,${id}::uuid,${accrual?.id??null}::uuid,${row.amount},${row.paymentDate}::date,'paid',${row.reference??null},${actor.userId}::uuid,${actor.userId}::uuid)
-        `;count++;
+        if(body.paymentKind==="salary"){
+          const [accrual]=await tx<Array<{id:string}>>`
+            SELECT id FROM worker_accruals WHERE worker_id=${row.workerId}::uuid AND object_id=${id}::uuid AND status IN ('approved','closed')
+            ORDER BY period_end DESC,created_at DESC LIMIT 1
+          `;
+          await tx`
+            INSERT INTO worker_payments(organization_id,worker_id,object_id,accrual_id,amount,payment_date,status,reference,record_source,reconciliation_status,payment_method,created_by_user_id,updated_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${row.workerId}::uuid,${id}::uuid,${accrual?.id??null}::uuid,${row.amount},${row.paymentDate}::date,'paid',${row.reference??null},'object_manager','unreconciled',${body.paymentMethod??null},${actor.userId}::uuid,${actor.userId}::uuid)
+          `;
+        }else{
+          await tx`
+            INSERT INTO advance_payments(organization_id,worker_id,object_id,amount,payment_date,status,reference,payment_purpose,record_source,reconciliation_status,payment_method,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${row.workerId}::uuid,${id}::uuid,${row.amount},${row.paymentDate}::date,'paid',${row.reference??null},${body.paymentKind==="advance"?"advance":"other"},'object_manager','unreconciled',${body.paymentMethod??null},${actor.userId}::uuid)
+          `;
+        }
+        count++;
       }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,'worker_payments_recorded',${`Внесены выплаты сотрудникам: ${count}`},${tx.json({count})})`;
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,'worker_payments_recorded',${`Внесены выплаты сотрудникам: ${count}`},${tx.json({count,paymentKind:body.paymentKind,paymentMethod:body.paymentMethod??null})})`;
       return {ok:true,count};
     }));
     return NextResponse.json(result,{status:201});
