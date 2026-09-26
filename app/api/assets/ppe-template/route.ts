@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
-import { requireCapability } from "@/lib/access/server";
+import { AccessDeniedError,requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
 const schema=z.object({
@@ -49,6 +49,7 @@ export async function PUT(request:Request){
     return NextResponse.json(result);
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте базовую норму",issues:error.issues},{status:400});
+    if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);
     return NextResponse.json({error:error instanceof Error?error.message:"Не удалось сохранить базовую норму"},{status:500});
   }
