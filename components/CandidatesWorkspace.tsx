@@ -237,7 +237,15 @@ function CandidatePeopleTable({rows,applications,needs,demo,canEdit}:{rows:Candi
  </tr>})}</tbody></table>{!rows.length&&<div className="empty-inline">Кандидаты по выбранным условиям не найдены</div>}</div></div>
  {selected&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setSelected(null)}}><div className="recruiting-modal-card candidate-repeat-modal">
   <div className="recruiting-modal-head"><div><h2>Повторный подбор</h2><p>{selected.fullName} уже работал в компании. Выберите новую активную потребность — будет создан новый цикл подбора в той же карточке человека.</p></div><button className="icon-button" onClick={()=>setSelected(null)}><X size={17}/></button></div>
-  <div className="candidate-import-body"><label>Потребность<select value={needId} onChange={e=>setNeedId(e.target.value)}><option value="">Выберите</option>{activeNeeds.map(row=><option key={row.id} value={row.id}>{row.title} · {row.object??row.region??'без объекта'}</option>)}</select></label>{demo&&<div className="candidate-import-result">Демо: действие можно проверить визуально; серверное сохранение отключено.</div>}{error&&<div className="recruiting-error">{error}</div>}</div>
+  <div className="candidate-import-body">
+   <div className="candidate-repeat-context">
+    <strong>Предыдущая работа</strong>
+    <span>{selected.latestObject??'Объект не указан'}{selected.formerWorkerExitDate?` · до ${formatWorkDate(selected.formerWorkerExitDate)}`:''}</span>
+    <small>{selected.formerWorkerExitReasonCode?formerExitReasonLabel(selected.formerWorkerExitReasonCode):'Причина не указана'}{selected.formerWorkerExitReason?` · ${selected.formerWorkerExitReason}`:''}</small>
+   </div>
+   <label>Потребность<select value={needId} onChange={e=>setNeedId(e.target.value)}><option value="">Выберите</option>{activeNeeds.map(row=><option key={row.id} value={row.id}>{row.title} · {row.object??row.region??'без объекта'}</option>)}</select></label>
+   {demo&&<div className="candidate-import-result">Демо: действие можно проверить визуально; серверное сохранение отключено.</div>}{error&&<div className="recruiting-error">{error}</div>}
+  </div>
   <div className="recruiting-modal-footer"><button className="button" onClick={()=>setSelected(null)}>Отмена</button><button className="button primary" disabled={busy||!needId} onClick={()=>void repeatAction(selected,'apply')}>{busy?'Сохраняю…':'Отправить в подбор'}</button></div>
  </div></div></Portal>}
  </>;
