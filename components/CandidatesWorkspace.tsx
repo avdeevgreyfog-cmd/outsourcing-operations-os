@@ -136,7 +136,7 @@ export function CandidatesWorkspace({
         current.unshift({
           id:candidateId,fullName:item.fullName,phone:item.phone,city:item.city,preferredChannel:item.preferredChannel,preferredContact:preferredValue(item),
           source:importSource,status:importNeedId?'active':'candidate',latestNeed:null,latestObject:null,latestStage:null,latestStageLabel:null,owner:options.recruiters.find(r=>r.id===importOwner)?.name??null,
-          applicationsCount:0,activeApplications:0,workerId:null,updatedAt:new Date().toISOString(),
+          applicationsCount:0,activeApplications:0,workerId:null,formerWorkerExitReasonCode:null,formerWorkerExitReason:null,formerWorkerExitDate:null,updatedAt:new Date().toISOString(),
         });
       }
       if(importNeedId){
@@ -229,7 +229,7 @@ function CandidatePeopleTable({rows,applications,needs,demo,canEdit}:{rows:Candi
   <td>{localOnly?<strong className="cell-title">{row.fullName}</strong>:<Link className="cell-title" href={`/candidates/${row.id}`}>{row.fullName}</Link>}<span className="cell-sub">{row.city??'Город не указан'}{row.phone?` · ${row.phone}`:''}</span></td>
   <td><Status tone={candidateStatusTone(row,latest)}>{candidateStatusLabel(row,latest)}</Status>{row.latestStageLabel&&<span className="cell-sub">{row.latestStageLabel}</span>}</td>
   <td><strong>{contactChannelLabels[row.preferredChannel??'']??'Контакт'}</strong><span className="cell-sub">{row.preferredContact??row.phone??'—'}</span></td>
-  <td>{repeat?'Готов к новой потребности':row.latestNeed??'Нет активной заявки'}<span className="cell-sub">{repeat&&row.latestObject?`Предыдущий объект: ${row.latestObject}`:row.latestObject??''}</span></td>
+  <td>{repeat?'Готов к новой потребности':row.latestNeed??'Нет активной заявки'}<span className="cell-sub">{repeat?[`Предыдущий объект: ${row.latestObject??'—'}`,row.formerWorkerExitReasonCode?`Причина: ${formerExitReasonLabel(row.formerWorkerExitReasonCode)}`:null,row.formerWorkerExitDate?`освободился ${formatWorkDate(row.formerWorkerExitDate)}`:null].filter(Boolean).join(' · '):row.latestObject??''}</span></td>
   <td>{row.source??'—'}</td><td>{row.owner??'—'}</td>
   <td>Заявок: {row.applicationsCount}<span className="cell-sub">Активных: {row.activeApplications}</span></td>
   <td>{formatWorkDate(row.updatedAt)}</td>
@@ -269,6 +269,9 @@ function candidateBucket(row:CandidateDirectoryRow,latest?:RecruitingApplication
  if(stage==='retention_30'||(row.workerId&&row.status==='worker'))return'employee';
  if((stage&&terminalStages.has(stage))||row.status==='reserve'||row.status==='completed')return'inactive';
  return row.status==='active'?'recruiting':'new';
+}
+function formerExitReasonLabel(code:string){
+ return ({employee_request:'По инициативе сотрудника',employer_decision:'По инициативе компании',project_end:'Завершение потребности / проекта',transfer_out:'Вывод с объекта',no_show:'Невыходы / прекращение работы',medical:'Медицинские ограничения',other:'Другая причина'} as Record<string,string>)[code]??code;
 }
 function candidateStatusLabel(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow){
  const value=candidateBucket(row,latest);
