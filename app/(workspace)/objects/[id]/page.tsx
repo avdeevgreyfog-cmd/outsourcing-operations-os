@@ -31,7 +31,7 @@ const labels:Record<string,string>={
   shifts:"Смены",
   timesheets:"Табели",
   supply:"Обеспечение",
-  quality:"Качество",
+  quality:"Инциденты",
   contacts:"Контакты",
   finance:"Финансы",
   documents:"Документы",
@@ -61,6 +61,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canPayments=hasCapability(actor.access,"finance.payments.read");
   const canConfirmDaily=hasCapability(actor.access,"finance.daily_payment.confirm");
   const canRecordPayment=hasCapability(actor.access,"finance.object_payment.record");
+  const canFinanceAdjust=hasCapability(actor.access,"finance.worker_accrual.edit");
   const canEditWorkers=hasCapability(actor.access,"worker.edit");
   const canOffboard=hasCapability(actor.access,"worker.offboarding.manage")&&canReadRow(actor.access,"worker.offboarding.manage",object,actor);
   const canManageAssets=hasCapability(actor.access,"assets.manage")&&canReadRow(actor.access,"assets.manage",object,actor);
@@ -201,7 +202,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
               {plannedExitCount>0&&<div className="stack-item"><div><strong>Запланировано завершение работы</strong><small>{plannedExitCount} сотрудников на горизонте 30 дней</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Проверить план</Link></div>}
               {objectShifts.filter(row=>row.deficit>0).slice(0,3).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.specialty}</strong><small>На смену назначено {row.assigned} из {row.demand}</small></div><Status tone="warn">−{row.deficit}</Status></div>)}
               {noShows>0&&<div className="stack-item"><div><strong className="priority-critical">Невыходы на смену</strong><small>Сегодня зафиксировано {noShows}</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Разобрать</Link></div>}
-              {openIncidents>0&&<div className="stack-item"><div><strong>Открытые инциденты</strong><small>{openIncidents} требуют контроля</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Качество</Link></div>}
+              {openIncidents>0&&<div className="stack-item"><div><strong>Открытые инциденты</strong><small>{openIncidents} требуют контроля</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Инциденты</Link></div>}
               {lowStock.slice(0,2).map(row=><div className="stack-item" key={row.locationId+row.itemId+row.variant}><div><strong>Заканчивается {row.item}</strong><small>{row.location} · остаток {row.quantity} {row.unit} · минимум {row.minQuantity}</small></div><Link className="button" href={"/assets?object="+id}>Запасы</Link></div>)}
               {showLaunch&&launchBlockers.slice(0,2).map(row=><div className="stack-item" key={row.id}><div><strong>Блокер запуска: {row.title}</strong><small>{row.owner} · прогресс {row.progress}%</small></div><Link className="button" href={"/objects/"+id+"?tab=launch"}>Запуск</Link></div>)}
               {!projectedDeficit&&!upcomingAbsences.length&&!plannedExitCount&&!objectShifts.some(row=>row.deficit>0)&&!noShows&&!openIncidents&&!lowStock.length&&(!showLaunch||!launchBlockers.length)&&<div className="empty-inline">Операционных исключений, требующих действия, нет</div>}
@@ -290,12 +291,12 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {panel("quality",<>
       <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
-      <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
+      <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} canFinance={canFinanceAdjust} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
     </>)}
 
     {panel("contacts",<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>)}
 
-    {panel("finance",<Section title="Финансы объекта" note="Начисления, выплаты и первые ежедневные выплаты сотрудников собраны в одном рабочем месте."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>)}
+    {panel("finance",<Section title="Финансы объекта" note="Операционный контроль начислений, выплат, ежедневной схемы и сверки с финансовым контуром."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} objectDefaultDailyPaymentShifts={object.defaultDailyPaymentShifts??0} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canReconcilePayments={canFinanceAdjust} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>)}
 
     {panel("documents",<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
     {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
