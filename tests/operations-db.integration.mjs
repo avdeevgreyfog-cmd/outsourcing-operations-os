@@ -150,6 +150,28 @@ try{
   assert.equal(managerPaymentRow.reconciliation_status,"unreconciled");
   assert.equal(managerPaymentRow.payment_method,"transfer");
 
+  const financeIncident=randomUUID();
+  await sql`
+    INSERT INTO incidents(
+      id,organization_id,object_id,worker_id,incident_type,severity,status,title,description,occurred_at,
+      responsible_user_id,financial_effect_amount,financial_effect_status,financial_effect_kind,financial_effect_basis,created_by_user_id
+    )
+    VALUES(
+      ${financeIncident}::uuid,${org}::uuid,${object.id}::uuid,${worker}::uuid,'property','normal','open',
+      'Integration company expense incident','Integration finance consequence',now(),${director}::uuid,
+      500,'approved','company_expense','Integration basis',${director}::uuid
+    )
+  `;
+  await sql`
+    INSERT INTO object_expenses(organization_id,object_id,expense_date,category,amount,reference,plan_fact,incident_id,created_by_user_id)
+    VALUES(${org}::uuid,${object.id}::uuid,current_date,'incident',500,'Integration basis','fact',${financeIncident}::uuid,${director}::uuid)
+  `;
+  const [incidentExpense]=await sql`
+    SELECT incident_id,amount::numeric FROM object_expenses WHERE incident_id=${financeIncident}::uuid
+  `;
+  assert.equal(incidentExpense.incident_id,financeIncident);
+  assert.equal(Number(incidentExpense.amount),500);
+
   const location=randomUUID();
   const item=randomUUID();
   await sql`
