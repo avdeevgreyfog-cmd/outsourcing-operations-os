@@ -68,7 +68,7 @@ export function ObjectSupplyWorkspace({
           <tbody>{individualStock.slice(0,14).map(row=>{const low=row.minQuantity>0&&row.quantity<=row.minQuantity;return <tr key={row.locationId+row.itemId+row.variant}>
             <td><strong className="cell-title">{row.item}</strong><span className="cell-sub">{row.location}</span></td>
             <td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td><td className="num">{row.minQuantity||"—"}</td>
-            <td><Status tone={low?"warn":"good"}>{low?"Пополнить":"В норме"}</Status></td>
+            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}&quantity=${encodeURIComponent(String(Math.max(row.minQuantity-row.quantity,0)))}&create=1`}>Пополнить · {Math.max(row.minQuantity-row.quantity,0)} {row.unit}</Link>:<Status tone={low?"warn":"good"}>{low?"Пополнить":"В норме"}</Status>}</td>
           </tr>})}</tbody>
         </table>{!individualStock.length&&<div className="empty-inline">Остатки индивидуального имущества на объекте пока не заведены.</div>}</div>
         <div className="section-actions"><Link className="button" href={`/assets?object=${objectId}`}>Все остатки и движения</Link></div>
@@ -80,7 +80,7 @@ export function ObjectSupplyWorkspace({
           <tbody>{consumables.map(row=>{const low=row.minQuantity>0&&row.quantity<=row.minQuantity;return <tr key={row.locationId+row.itemId+row.variant}>
             <td><strong className="cell-title">{row.item}</strong><span className="cell-sub">{row.location}</span></td>
             <td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td><td className="num">{row.minQuantity||"—"}</td>
-            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}`}>Пополнить</Link>:<Status tone={low?"warn":"good"}>{low?"Мало":"В норме"}</Status>}</td>
+            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}&quantity=${encodeURIComponent(String(Math.max(row.minQuantity-row.quantity,0)))}&create=1`}>Пополнить</Link>:<Status tone={low?"warn":"good"}>{low?"Мало":"В норме"}</Status>}</td>
           </tr>})}</tbody>
         </table>{!consumables.length&&<div className="empty-inline">Расходные материалы на объекте пока не заведены.</div>}</div>
       </Section>
