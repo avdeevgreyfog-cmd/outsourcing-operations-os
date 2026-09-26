@@ -11,7 +11,7 @@ type MovementType="receipt"|"transfer"|"issue"|"return"|"writeoff";
 const categoryLabels:Record<string,string>={workwear:"Спецодежда",ppe:"СИЗ",tool:"Инструмент",equipment:"Оборудование",consumable:"Расходник",other:"Другое"};
 const locationLabels:Record<string,string>={office:"Офис",manager:"Запас менеджера",object:"Объект",housing:"Жильё",vehicle:"Автомобиль",other:"Другое"};
 
-export function InventoryWorkspace({snapshot,options,canManage,demo,initialWorkerId,initialAction,initialItemId,initialVariant}:{snapshot:InventorySnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean;initialWorkerId?:string|null;initialAction?:"issue"|"return"|null;initialItemId?:string|null;initialVariant?:string|null}){
+export function InventoryWorkspace({snapshot,options,canManage,demo,initialWorkerId,initialAction,initialItemId,initialVariant,initialObjectId}:{snapshot:InventorySnapshot;options:OperationsReferenceData;canManage:boolean;demo:boolean;initialWorkerId?:string|null;initialAction?:"issue"|"return"|null;initialItemId?:string|null;initialVariant?:string|null;initialObjectId?:string|null}){
   const [showMovement,setShowMovement]=useState(Boolean(initialWorkerId)&&canManage);
   const [showLocation,setShowLocation]=useState(false);
   const [showItem,setShowItem]=useState(false);
@@ -36,10 +36,11 @@ export function InventoryWorkspace({snapshot,options,canManage,demo,initialWorke
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [limitDrafts,setLimitDrafts]=useState<Record<string,string>>({});
+  const [scopeObjectId,setScopeObjectId]=useState(initialObjectId??"");
 
-  const total=snapshot.balances.reduce((sum,row)=>sum+row.quantity,0);
-  const low=snapshot.balances.filter(row=>row.minQuantity>0&&row.quantity<=row.minQuantity).length;
-  const grouped=useMemo(()=>snapshot.balances,[snapshot.balances]);
+  const grouped=useMemo(()=>snapshot.balances.filter(row=>!scopeObjectId||row.objectId===scopeObjectId),[snapshot.balances,scopeObjectId]);
+  const total=grouped.reduce((sum,row)=>sum+row.quantity,0);
+  const low=grouped.filter(row=>row.minQuantity>0&&row.quantity<=row.minQuantity).length;
 
   function openMovement(next:MovementType,row?:InventorySnapshot["balances"][number]){
     setType(next);setError("");setWriteoffAfterReturn(false);
@@ -72,7 +73,7 @@ export function InventoryWorkspace({snapshot,options,canManage,demo,initialWorke
   return <div>
     <div className="metrics-grid"><Metric label="Места хранения" value={snapshot.locations.length}/><Metric label="Номенклатура" value={snapshot.items.length}/><Metric label="Единиц в запасе" value={total}/><Metric label="Ниже минимума" value={low} tone={low?"warn":"good"}/></div>
     <div className="candidate-directory-viewbar">
-      <div className="summary-strip"><span>Запасы учитываются по фактическим местам хранения: офис, менеджер, объект, автомобиль и другие точки.</span></div>
+      <div className="inventory-scope-control"><span>Показывать</span><select value={scopeObjectId} onChange={e=>setScopeObjectId(e.target.value)}><option value="">Все места хранения</option>{options.objects.map(object=><option key={object.id} value={object.id}>{object.name}</option>)}</select></div>
       {canManage&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>setShowLocation(true)}><Plus size={14}/> Место хранения</button><button className="button" onClick={()=>setShowItem(true)}><PackagePlus size={14}/> Номенклатура</button><button className="button primary" onClick={()=>openMovement("receipt")}><Plus size={14}/> Движение</button></div>}
     </div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table">
