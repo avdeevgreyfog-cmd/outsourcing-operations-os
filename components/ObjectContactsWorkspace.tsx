@@ -1,10 +1,10 @@
 "use client";
 
-import { createPortal } from "react-dom";
-import { useMemo, useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
-import type { ClientContactOption, ObjectContactRow } from "@/lib/operations/service";
-import { Empty } from "@/components/UI";
+import {createPortal} from "react-dom";
+import {useMemo,useState} from "react";
+import {Plus,Trash2,X} from "lucide-react";
+import type {ClientContactOption,ObjectContactRow} from "@/lib/operations/service";
+import {Empty} from "@/components/UI";
 
 const roleLabels:Record<string,string>={
   operations:"Операционные вопросы",
@@ -19,12 +19,9 @@ const roleLabels:Record<string,string>={
   other:"Другое",
 };
 const roleOptions=Object.entries(roleLabels);
-
-type FormState={
-  contactId:string;fullName:string;position:string;phone:string;email:string;telegram:string;whatsapp:string;maxContact:string;
-  preferredChannel:string;roles:string[];note:string;
-};
-const blank=():FormState=>({contactId:"",fullName:"",position:"",phone:"",email:"",telegram:"",whatsapp:"",maxContact:"",preferredChannel:"phone",roles:["operations"],note:""});
+type Channel="phone"|"email"|"telegram"|"whatsapp"|"max";
+const channelLabels:Record<Channel,string>={phone:"Телефон",email:"Email",telegram:"Telegram",whatsapp:"WhatsApp",max:"MAX"};
+type Method={id:string;channel:Channel;value:string};
 
 export function ObjectContactsWorkspace({
   objectId,assigned,contacts,canEdit,demo,
@@ -33,29 +30,55 @@ export function ObjectContactsWorkspace({
 }){
   const [rows,setRows]=useState(assigned);
   const [show,setShow]=useState(false);
-  const [form,setForm]=useState<FormState>(blank);
+  const [mode,setMode]=useState<"existing"|"new">("existing");
+  const [contactId,setContactId]=useState("");
+  const [fullName,setFullName]=useState("");
+  const [position,setPosition]=useState("");
+  const [methods,setMethods]=useState<Method[]>([{id:"phone",channel:"phone",value:""}]);
+  const [preferred,setPreferred]=useState<Channel>("phone");
+  const [roles,setRoles]=useState<string[]>(["operations"]);
+  const [note,setNote]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const assignedIds=useMemo(()=>new Set(rows.map(row=>row.contactId)),[rows]);
   const available=contacts.filter(row=>!assignedIds.has(row.id));
+  const selected=contacts.find(row=>row.id===contactId)??null;
+  const filledMethods=methods.filter(item=>item.value.trim());
 
-  function selectContact(contactId:string){
-    const contact=contacts.find(row=>row.id===contactId);
-    if(!contact){setForm(current=>({...current,contactId:""}));return;}
-    setForm(current=>({...current,contactId:contact.id,fullName:contact.fullName,position:contact.position??"",phone:contact.phone??"",email:contact.email??"",telegram:contact.telegram??"",whatsapp:contact.whatsapp??"",maxContact:contact.maxContact??"",preferredChannel:contact.preferredChannel??"phone"}));
+  function open(){
+    setMode(available.length?"existing":"new");setContactId(available[0]?.id??"");
+    setFullName("");setPosition("");setMethods([{id:crypto.randomUUID(),channel:"phone",value:""}]);setPreferred("phone");
+    setRoles(["operations"]);setNote("");setError("");setShow(true);
   }
-  function toggleRole(role:string){
-    setForm(current=>({...current,roles:current.roles.includes(role)?current.roles.filter(item=>item!==role):[...current.roles,role]}));
+  function switchMode(value:"existing"|"new"){setMode(value);setError("");if(value==="existing")setContactId(available[0]?.id??"")}
+  function toggleRole(role:string){setRoles(current=>current.includes(role)?current.filter(item=>item!==role):[...current,role])}
+  function addMethod(){
+    const used=new Set(methods.map(item=>item.channel));
+    const channel=(Object.keys(channelLabels) as Channel[]).find(item=>!used.has(item))??"phone";
+    setMethods(current=>[...current,{id:crypto.randomUUID(),channel,value:""}]);
+  }
+  function patchMethod(id:string,patch:Partial<Method>){
+    setMethods(current=>current.map(item=>item.id===id?{...item,...patch}:item));
+  }
+  function removeMethod(id:string){
+    setMethods(current=>{const next=current.filter(item=>item.id!==id);if(!next.some(item=>item.channel===preferred&&item.value.trim()))setPreferred(next.find(item=>item.value.trim())?.channel??"phone");return next});
   }
   async function save(){
-    if(!form.roles.length){setError("Укажите хотя бы одну роль контакта.");return;}
+    if(!roles.length){setError("Укажите хотя бы одну зону ответственности.");return;}
+    if(mode==="existing"&&!contactId){setError("Выберите контакт клиента.");return;}
+    if(mode==="new"&&!fullName.trim()){setError("Укажите ФИО.");return;}
+    if(mode==="new"&&!filledMethods.length){setError("Добавьте хотя бы один способ связи.");return;}
     setBusy(true);setError("");
     try{
-      if(demo){setError("Изменение контактов в текущем режиме недоступно.");return;}
-      const response=await fetch("/api/objects/"+objectId+"/contacts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-        contactId:form.contactId||null,fullName:form.fullName||null,position:form.position||null,phone:form.phone||null,email:form.email||null,
-        telegram:form.telegram||null,whatsapp:form.whatsapp||null,maxContact:form.maxContact||null,preferredChannel:form.preferredChannel||null,
-        roles:form.roles,note:form.note||null,
+      if(demo){setError("Демо: форма доступна для проверки, сохранение отключено.");return;}
+      const values=Object.fromEntries(filledMethods.map(item=>[item.channel,item.value.trim()])) as Partial<Record<Channel,string>>;
+      const preferredChannel=filledMethods.some(item=>item.channel===preferred)?preferred:filledMethods[0]?.channel??null;
+      const response=await fetch("/api/objects/"+objectId+"/contacts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(mode==="existing"?{
+        contactId,roles,note:note||null,
+      }:{
+        contactId:null,fullName:fullName.trim(),position:position.trim()||null,
+        phone:values.phone??null,email:values.email??null,telegram:values.telegram??null,whatsapp:values.whatsapp??null,maxContact:values.max??null,
+        preferredChannel,roles,note:note||null,
       })});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось сохранить контакт");
@@ -78,8 +101,8 @@ export function ObjectContactsWorkspace({
 
   return <>
     <section className="section section-flush">
-      <div className="section-head"><div><h2>Контакты объекта</h2><p>Контакты заказчика с конкретной зоной ответственности на этом объекте.</p></div>{canEdit&&<button className="button primary" onClick={()=>{setForm(blank());setError("");setShow(true)}}><Plus size={14}/> Добавить контакт</button>}</div>
-      {error&&<div className="recruiting-error">{error}</div>}
+      <div className="section-head"><div><h2>Контакты объекта</h2><p>Контакты заказчика и их зона ответственности именно на этом объекте.</p></div>{canEdit&&<button className="button primary" onClick={open}><Plus size={14}/> Добавить контакт</button>}</div>
+      {error&&!show&&<div className="recruiting-error">{error}</div>}
       {rows.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Контакт</th><th>Роль на объекте</th><th>Связь</th><th>Комментарий</th>{canEdit&&<th aria-label="Действия"></th>}</tr></thead><tbody>{rows.map(row=><tr key={row.assignmentId}>
         <td><strong className="cell-title">{row.fullName}</strong><span className="cell-sub">{row.position??"Должность не указана"}</span></td>
         <td>{row.roles.map(role=>roleLabels[role]??role).join(" · ")}</td>
@@ -89,29 +112,41 @@ export function ObjectContactsWorkspace({
       </tr>)}</tbody></table></div>:<Empty title="Контакты не назначены" text="Добавьте контакт заказчика и укажите, за какие вопросы он отвечает на объекте."/>}
     </section>
 
-    {show&&<Portal><div className="recruiting-modal" onMouseDown={event=>{if(event.currentTarget===event.target)setShow(false)}}><div className="recruiting-modal-card">
-      <div className="recruiting-modal-head"><div><h2>Контакт объекта</h2><p>Можно выбрать существующий контакт клиента или создать новый. Один контакт может использоваться на нескольких объектах.</p></div><button className="icon-button" type="button" onClick={()=>setShow(false)}><X size={17}/></button></div>
-      <div className="candidate-import-body">
-        {error&&<div className="recruiting-error">{error}</div>}
-        <div className="candidate-import-options">
-          <label>Контакт клиента<select value={form.contactId} onChange={event=>selectContact(event.target.value)}><option value="">Новый контакт</option>{available.map(item=><option key={item.id} value={item.id}>{item.fullName}{item.position?" · "+item.position:""}</option>)}</select></label>
-          <label>ФИО<input value={form.fullName} onChange={event=>setForm(current=>({...current,fullName:event.target.value}))} placeholder="Иванов Иван Иванович"/></label>
-          <label>Должность<input value={form.position} onChange={event=>setForm(current=>({...current,position:event.target.value}))} placeholder="Начальник участка"/></label>
-          <label>Телефон<input value={form.phone} onChange={event=>setForm(current=>({...current,phone:event.target.value}))} placeholder="+7 ..."/></label>
-          <label>Email<input type="email" value={form.email} onChange={event=>setForm(current=>({...current,email:event.target.value}))}/></label>
-          <label>Telegram<input value={form.telegram} onChange={event=>setForm(current=>({...current,telegram:event.target.value}))} placeholder="@username"/></label>
-          <label>WhatsApp<input value={form.whatsapp} onChange={event=>setForm(current=>({...current,whatsapp:event.target.value}))}/></label>
-          <label>MAX<input value={form.maxContact} onChange={event=>setForm(current=>({...current,maxContact:event.target.value}))}/></label>
-          <label>Предпочтительный канал<select value={form.preferredChannel} onChange={event=>setForm(current=>({...current,preferredChannel:event.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="whatsapp">WhatsApp</option><option value="max">MAX</option><option value="email">Email</option><option value="other">Другой</option></select></label>
+    {show&&<Portal><div className="object-contact-drawer-overlay" onMouseDown={event=>{if(event.currentTarget===event.target)setShow(false)}}>
+      <aside className="object-contact-drawer" role="dialog" aria-modal="true" aria-label="Контакт объекта">
+        <header className="object-contact-drawer-head"><div><h2>Контакт объекта</h2><p>Контакт клиента хранится один раз; здесь задаётся только его роль на объекте.</p></div><button className="icon-button" type="button" onClick={()=>setShow(false)}><X size={17}/></button></header>
+        <div className="object-contact-drawer-body">
+          <div className="object-action-choice object-contact-mode"><button type="button" className={mode==="existing"?"active":""} onClick={()=>switchMode("existing")} disabled={!available.length}>Выбрать существующий</button><button type="button" className={mode==="new"?"active":""} onClick={()=>switchMode("new")}>Создать новый</button></div>
+
+          {mode==="existing"?<section className="object-contact-form-section">
+            <label>Контакт клиента<select value={contactId} onChange={event=>setContactId(event.target.value)}><option value="">Выберите</option>{available.map(item=><option key={item.id} value={item.id}>{item.fullName}{item.position?" · "+item.position:""}</option>)}</select></label>
+            {selected&&<div className="object-contact-preview"><strong>{selected.fullName}</strong><span>{selected.position??"Должность не указана"}</span><div>{contactValues(selected).map(value=><small key={value}>{value}</small>)}</div></div>}
+          </section>:<section className="object-contact-form-section">
+            <div className="candidate-import-options object-contact-identity"><label>ФИО<input value={fullName} onChange={event=>setFullName(event.target.value)} placeholder="Иванов Иван Иванович"/></label><label>Должность<input value={position} onChange={event=>setPosition(event.target.value)} placeholder="Начальник участка"/></label></div>
+            <div className="object-contact-methods">
+              <div className="object-contact-methods-head"><div><strong>Способы связи</strong><span>Добавляйте только те каналы, которыми контакт реально пользуется.</span></div><button className="button" type="button" onClick={addMethod}><Plus size={14}/> Добавить</button></div>
+              {methods.map(method=><div className="object-contact-method-row" key={method.id}>
+                <select value={method.channel} onChange={event=>patchMethod(method.id,{channel:event.target.value as Channel})}>{Object.entries(channelLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+                <input type={method.channel==="email"?"email":"text"} value={method.value} onChange={event=>patchMethod(method.id,{value:event.target.value})} placeholder={method.channel==="phone"?"+7 ...":method.channel==="email"?"mail@company.ru":method.channel==="telegram"?"@username":"Номер / контакт"}/>
+                <button className="icon-button" type="button" aria-label="Удалить способ связи" onClick={()=>removeMethod(method.id)}><Trash2 size={14}/></button>
+              </div>)}
+              {filledMethods.length>0&&<label>Предпочтительный канал<select value={preferred} onChange={event=>setPreferred(event.target.value as Channel)}>{filledMethods.map(method=><option key={method.id} value={method.channel}>{channelLabels[method.channel]}</option>)}</select></label>}
+            </div>
+          </section>}
+
+          <section className="object-contact-form-section"><div className="object-contact-section-title"><strong>Зона ответственности на объекте</strong><span>Можно выбрать несколько направлений.</span></div><div className="object-contact-role-grid">{roleOptions.map(([value,label])=><label className={roles.includes(value)?"active":""} key={value}><input type="checkbox" checked={roles.includes(value)} onChange={()=>toggleRole(value)}/><span>{label}</span></label>)}</div></section>
+          <section className="object-contact-form-section"><label>Комментарий<textarea value={note} onChange={event=>setNote(event.target.value)} placeholder="Например: табель присылает до 10:00, по пропускам писать в Telegram"/></label></section>
+          {error&&<div className="recruiting-error">{error}</div>}
         </div>
-        <fieldset className="object-contact-roles"><legend>Зона ответственности на объекте</legend><div>{roleOptions.map(([value,label])=><label key={value}><input type="checkbox" checked={form.roles.includes(value)} onChange={()=>toggleRole(value)}/>{label}</label>)}</div></fieldset>
-        <label>Комментарий<textarea value={form.note} onChange={event=>setForm(current=>({...current,note:event.target.value}))} placeholder="Например, присылает табель до 10:00, по пропускам писать в Telegram"/></label>
-      </div>
-      <div className="recruiting-modal-footer"><button className="button" type="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||(!form.contactId&&!form.fullName.trim())||!form.roles.length} onClick={()=>void save()}>{busy?"Сохраняю…":"Сохранить"}</button></div>
-    </div></div></Portal>}
+        <footer className="object-contact-drawer-footer"><button className="button" type="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||!roles.length||(mode==="existing"?!contactId:!fullName.trim()||!filledMethods.length)} onClick={()=>void save()}>{busy?"Сохраняю…":"Добавить контакт"}</button></footer>
+      </aside>
+    </div></Portal>}
   </>;
 }
 
+function contactValues(contact:ClientContactOption){
+  return [contact.phone,contact.email,contact.telegram,contact.whatsapp,contact.maxContact].filter((value):value is string=>Boolean(value));
+}
 function primaryContact(row:ObjectContactRow){
   if(row.preferredChannel==="telegram"&&row.telegram)return "Telegram: "+row.telegram;
   if(row.preferredChannel==="whatsapp"&&row.whatsapp)return "WhatsApp: "+row.whatsapp;
