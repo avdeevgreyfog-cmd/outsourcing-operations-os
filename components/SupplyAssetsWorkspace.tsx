@@ -24,7 +24,7 @@ export function SupplyAssetsWorkspace({
 }){
   const [view,setView]=useState<View>("stock");
   return <div className="supply-assets-workspace">
-    <div className="sales-views supply-assets-views" role="tablist" aria-label="Раздел обеспечения">
+    <div className="object-local-tabs supply-assets-views" role="tablist" aria-label="Раздел обеспечения">
       <button type="button" className={view==="stock"?"active":""} onClick={()=>setView("stock")}>Запасы и движения</button>
       <button type="button" className={view==="norms"?"active":""} onClick={()=>setView("norms")}>Нормы выдачи</button>
     </div>
