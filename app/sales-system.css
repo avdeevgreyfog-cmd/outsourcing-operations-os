@@ -2492,7 +2492,6 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .object-workforce-table-v2 thead .object-worker-actions-cell{background:var(--panel-2)}
 .sales-workspace.operations-workspace .object-worker-actions{position:relative}
 .sales-workspace.operations-workspace .object-worker-actions>.icon-button{list-style:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
-.sales-workspace.operations-workspace .object-worker-actions>.icon-button::-webkit-details-marker{display:none}
 .sales-workspace.operations-workspace .object-worker-actions>div{
   position:absolute;right:0;top:34px;z-index:30;width:210px;padding:6px;display:grid;gap:2px;
   border:1px solid var(--border);border-radius:8px;background:var(--panel);box-shadow:0 10px 28px rgba(0,0,0,.14)
@@ -2641,7 +2640,7 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 
 /* 2026-09 object personnel and supply follow-up: compact actions, balanced stock cards, inherited norms. */
 .sales-workspace.operations-workspace .object-worker-actions.is-open{z-index:60}
-.sales-workspace.operations-workspace .object-worker-actions.is-open>summary{
+.sales-workspace.operations-workspace .object-worker-actions.is-open>.icon-button{
   background:var(--accent-soft);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 38%,var(--border));
 }
