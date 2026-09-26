@@ -16,6 +16,7 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0047_workforce_rehire_and_supply_norms.sql"),"repeat recruiting/supply norm migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0048_supply_norm_inheritance.sql"),"supply norm inheritance migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0049_object_finance_incident_workflows.sql"),"object finance/incident workflow migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0050_object_document_metadata.sql"),"object document metadata migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const [object]=await sql`SELECT id,owner_user_id,client_company_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
@@ -34,6 +35,23 @@ try{
       AND a.manager_user_id IS DISTINCT FROM o.owner_user_id
   `;
   assert.equal(managerMismatch.count,0,"every active worker assignment must inherit the current object manager");
+
+  const objectDocument=randomUUID();
+  await sql`
+    INSERT INTO object_documents(
+      id,organization_id,object_id,name,category,status,document_date,version_label,created_by_user_id,updated_by_user_id
+    )
+    VALUES(
+      ${objectDocument}::uuid,${org}::uuid,${object.id}::uuid,'Integration object instruction','client_instruction','active',
+      current_date,'2.1',${director}::uuid,${director}::uuid
+    )
+  `;
+  const [objectDocumentRow]=await sql`
+    SELECT version_label,document_date::text "documentDate" FROM object_documents WHERE id=${objectDocument}::uuid
+  `;
+  assert.equal(objectDocumentRow.version_label,"2.1","object document metadata must retain version and document date");
+  assert.ok(objectDocumentRow.documentDate);
+
 
   const [managerlessObject]=await sql`
     SELECT count(*)::int count
