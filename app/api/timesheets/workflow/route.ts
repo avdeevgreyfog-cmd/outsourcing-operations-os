@@ -8,7 +8,7 @@ import { withTenant } from "@/lib/db/client";
 import type { Actor } from "@/lib/access/types";
 
 const schema=z.object({
-  action:z.enum(["submit_internal","review_internal","return_internal","send_client","client_approve","client_return","close"]),
+  action:z.enum(["finalize","reopen","submit_internal","review_internal","return_internal","send_client","client_approve","client_return","close"]),
   objectId:z.string().uuid(),
   periodStart:z.string().date(),
   periodEnd:z.string().date(),
@@ -215,7 +215,7 @@ export async function POST(request:Request){
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     if(actor.demo)return NextResponse.json({error:"Демо-режим доступен только для чтения"},{status:409});
     const body=schema.parse(await request.json());
-    const capability=body.action==="review_internal"||body.action==="return_internal"?"time.timesheet.review":
+    const capability=body.action==="reopen"||body.action==="review_internal"||body.action==="return_internal"?"time.timesheet.review":
       body.action==="client_approve"||body.action==="client_return"?"time.timesheet.approve_client":
       body.action==="close"?"finance.worker_accrual.edit":"time.timesheet.submit";
     requireCapability(actor,capability);
@@ -225,6 +225,42 @@ export async function POST(request:Request){
       const internal=await latestSnapshot(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
       const client=await latestSnapshot(tx,body.objectId,"client",body.periodStart,body.periodEnd);
       const baseKey=`timesheet:${body.objectId}:${body.periodStart}:${body.periodEnd}`;
+
+      if(body.action==="finalize"){
+        const alreadyLocked=[internal?.status,client?.status].some(status=>status&&["fixed","closed","internal_submitted","internal_checked","client_sent","client_approved"].includes(status));
+        if(alreadyLocked)throw new Error("Табель уже зафиксирован или находится в старом маршруте согласования. Для изменения руководитель должен открыть его для корректировки.");
+        const internalPayload=await captureFact(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
+        const internalVersion=(internal?.version??0)+1;
+        const [internalRow]=await tx<Array<{id:string}>>`
+          INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json,version,supersedes_snapshot_id,workflow_comment,submitted_by_user_id,submitted_at)
+          VALUES(${actor.organizationId}::uuid,${body.objectId}::uuid,'internal','month',${body.periodStart}::date,${body.periodEnd}::date,'fixed',
+            ${tx.json(internalPayload)},${internalVersion},${internal?.id??null}::uuid,${body.comment??null},${actor.userId}::uuid,now()) RETURNING id
+        `;
+        const clientPayload={...(await captureFact(tx,body.objectId,"client",body.periodStart,body.periodEnd)),internalSnapshotId:internalRow.id};
+        const clientVersion=(client?.version??0)+1;
+        const [clientRow]=await tx<Array<{id:string}>>`
+          INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json,version,supersedes_snapshot_id,workflow_comment,submitted_by_user_id,submitted_at)
+          VALUES(${actor.organizationId}::uuid,${body.objectId}::uuid,'client','month',${body.periodStart}::date,${body.periodEnd}::date,'fixed',
+            ${tx.json(clientPayload)},${clientVersion},${client?.id??null}::uuid,${body.comment??null},${actor.userId}::uuid,now()) RETURNING id
+        `;
+        await completeTask(tx,actor.organizationId,baseKey+":review");
+        await completeTask(tx,actor.organizationId,baseKey+":correct");
+        await completeTask(tx,actor.organizationId,baseKey+":client");
+        return {status:"fixed",snapshotId:clientRow.id,internalSnapshotId:internalRow.id,version:clientVersion};
+      }
+
+      if(body.action==="reopen"){
+        if(!body.comment?.trim())throw new Error("Укажите причину повторного открытия табеля");
+        if(internal?.status==="closed"||client?.status==="closed")throw new Error("По этому периоду уже сформированы начисления. Сначала нужно урегулировать финансовое закрытие.");
+        const reopenable=[internal?.status,client?.status].some(status=>status&&["fixed","internal_submitted","internal_checked","client_sent","client_approved"].includes(status));
+        if(!reopenable)throw new Error("Нет зафиксированной версии, которую можно открыть для корректировки");
+        if(internal)await tx`UPDATE timesheet_snapshots SET status='returned',workflow_comment=${body.comment},checked_by_user_id=${actor.userId}::uuid,checked_at=now() WHERE id=${internal.id}::uuid`;
+        if(client)await tx`UPDATE timesheet_snapshots SET status='returned',workflow_comment=${body.comment} WHERE id=${client.id}::uuid`;
+        await completeTask(tx,actor.organizationId,baseKey+":review");
+        await completeTask(tx,actor.organizationId,baseKey+":client");
+        await completeTask(tx,actor.organizationId,baseKey+":close");
+        return {status:"returned",snapshotId:client?.id??internal?.id??null,version:client?.version??internal?.version??1};
+      }
 
       if(body.action==="submit_internal"){
         if(client&&["client_sent","client_approved","closed"].includes(client.status))throw new Error("Клиентская версия уже зафиксирована. Сначала завершите текущий цикл.");
@@ -284,7 +320,7 @@ export async function POST(request:Request){
         return {status,snapshotId:client.id,version:client.version};
       }
 
-      if(!client||client.status!=="client_approved")throw new Error("Период можно закрыть только после подтверждения клиентом");
+      if(!client||!["fixed","client_approved"].includes(client.status))throw new Error("Начисления можно сформировать только по зафиксированному табелю");
       const finance=await generateFinance(tx,actor,object,client,body.periodStart,body.periodEnd);
       await tx`UPDATE timesheet_snapshots SET status='closed',closed_by_user_id=${actor.userId}::uuid,closed_at=now(),workflow_comment=COALESCE(${body.comment??null},workflow_comment) WHERE id=${client.id}::uuid`;
       const linkedInternal=typeof client.snapshotJson.internalSnapshotId==="string"?client.snapshotJson.internalSnapshotId:null;
@@ -297,7 +333,7 @@ export async function POST(request:Request){
       `;
       return {status:"closed",snapshotId:client.id,version:client.version,finance};
     }));
-    return NextResponse.json(result,{status:body.action==="submit_internal"||body.action==="send_client"?201:200});
+    return NextResponse.json(result,{status:["finalize","submit_internal","send_client"].includes(body.action)?201:200});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте действие с табелем",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав для этого этапа табеля"},{status:403});
