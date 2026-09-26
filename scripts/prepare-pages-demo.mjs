@@ -26,4 +26,8 @@ for (const [path,key] of Object.entries(routes)) {
   fs.writeFileSync(path,source);
 }
 
+for (const path of ["app/demo","app/work"]) {
+  fs.rmSync(path,{recursive:true,force:true});
+}
+
 console.log("GitHub Pages static detail params prepared.");
