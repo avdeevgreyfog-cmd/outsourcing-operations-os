@@ -20,6 +20,7 @@ import { ObjectDocumentsWorkspace } from "@/components/ObjectDocumentsWorkspace"
 import { ObjectQualityWorkspace } from "@/components/ObjectQualityWorkspace";
 import { TimesheetWorkspace } from "@/components/TimesheetWorkspace";
 import { listRecruitingApplications } from "@/lib/recruiting/service";
+import { listContracts } from "@/lib/commercial/contracts";
 import { pct,rub } from "@/lib/ui/format";
 import { absenceTypeLabel } from "@/lib/operations/workforce-status";
 
@@ -118,6 +119,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objFinance=finance.find(row=>row.objectId===id)??null;
   const objectAccruals=accruals.filter(row=>row.objectId===id);
   const objectPayments=payments.filter(row=>row.objectId===id);
+  const objectContracts=hasCapability(actor.access,"contract.read")?(await listContracts(actor)).filter(row=>row.objectId===id):[];
+  const linkedObjectDocuments=[...(object.sourceRequestId?[{id:"request:"+object.sourceRequestId,label:"Исходная заявка",meta:"Коммерческий контур",href:"/requests/"+object.sourceRequestId}]:[]),...(object.sourceProposalId?[{id:"proposal:"+object.sourceProposalId,label:"Согласованное коммерческое предложение",meta:"Коммерческий контур",href:"/proposals/"+object.sourceProposalId}]:[]),...objectContracts.map(row=>({id:"contract:"+row.id,label:row.number?`Договор № ${row.number}`:row.title,meta:row.status==="signed"?"Подписан":"Договорной контур",href:"/contracts/"+row.id}))];
 
   const projectedAvailable=objectForecast.reduce((sum,row)=>sum+row.projectedAvailable,0);
   const projectedDeficit=objectForecast.reduce((sum,row)=>sum+row.projectedDeficit,0);
@@ -298,7 +301,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {panel("finance",<Section title="Финансы объекта" note="Операционный контроль начислений, выплат, ежедневной схемы и сверки с финансовым контуром."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} objectDefaultDailyPaymentShifts={object.defaultDailyPaymentShifts??0} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canReconcilePayments={canFinanceAdjust} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>)}
 
-    {panel("documents",<Section title="Документы объекта" note="Инструкции заказчика, пропуска, СИЗ, охрана труда, акты и рабочие формы объекта."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
+    {panel("documents",<Section title="Документы объекта" note="Рабочие документы объекта и ссылки на исходные коммерческие и договорные сущности без дублирования файлов."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} linked={linkedObjectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
     {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
         {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
   </>;
