@@ -14,6 +14,12 @@ CREATE INDEX IF NOT EXISTS idx_worker_exit_recruiting_handoff
 CREATE INDEX IF NOT EXISTS idx_candidates_status_updated
   ON candidates(organization_id,status,updated_at DESC);
 
+-- A person can return to the same need in a later employment cycle.
+ALTER TABLE candidate_applications DROP CONSTRAINT IF EXISTS candidate_applications_candidate_id_need_id_key;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_candidate_application_active_need
+  ON candidate_applications(candidate_id,need_id)
+  WHERE stage IN ('new','interview','documents','clearance','preparation','first_shift','retention_7','reserve');
+
 -- Object equipment norms remain object-specific. Actual stock and movement stay in inventory.
 ALTER TABLE object_ppe_template_items
   ADD COLUMN IF NOT EXISTS replacement_cycle_days integer;
