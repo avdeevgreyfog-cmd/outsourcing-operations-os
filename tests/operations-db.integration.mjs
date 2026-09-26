@@ -13,11 +13,13 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0035_operations_offboarding_and_supply_approval.sql"),"offboarding/supply approval migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0039_object_worker_manager_integrity.sql"),"object/worker manager integrity migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0041_object_contacts.sql"),"object contacts migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0047_workforce_rehire_and_supply_norms.sql"),"repeat recruiting/supply norm migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const [object]=await sql`SELECT id,owner_user_id,client_company_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
   const [specialty]=await sql`SELECT id FROM specialties WHERE organization_id=${org}::uuid ORDER BY name LIMIT 1`;
-  assert.ok(object?.id&&specialty?.id,"seed must provide object and specialty");
+  const [need]=await sql`SELECT id FROM needs WHERE organization_id=${org}::uuid AND object_id=${object?.id??null}::uuid ORDER BY created_at LIMIT 1`;
+  assert.ok(object?.id&&specialty?.id&&need?.id,"seed must provide object, specialty and need");
 
   const [managerMismatch]=await sql`
     SELECT count(*)::int count
@@ -88,6 +90,26 @@ try{
     /same client/i,
     "database must reject a contact belonging to another client"
   );
+
+  const repeatCandidate=randomUUID();
+  await sql`
+    INSERT INTO candidates(id,organization_id,full_name,phone,status,created_by_user_id)
+    VALUES(${repeatCandidate}::uuid,${org}::uuid,'Repeat recruiting integration candidate','+7 900 000-09-99','available',${director}::uuid)
+  `;
+  await sql`
+    INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,created_by_user_id)
+    VALUES(${org}::uuid,${repeatCandidate}::uuid,${need.id}::uuid,${object.id}::uuid,'rejected',${director}::uuid)
+  `;
+  await sql`
+    INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,created_by_user_id)
+    VALUES(${org}::uuid,${repeatCandidate}::uuid,${need.id}::uuid,${object.id}::uuid,'new',${director}::uuid)
+  `;
+  const [repeatCycle]=await sql`
+    SELECT count(*)::int count,count(*) FILTER (WHERE stage='new')::int active
+    FROM candidate_applications WHERE candidate_id=${repeatCandidate}::uuid AND need_id=${need.id}::uuid
+  `;
+  assert.equal(repeatCycle.count,2,"same person must keep historical and new recruiting cycles for one need");
+  assert.equal(repeatCycle.active,1,"only one active repeat recruiting cycle is allowed");
 
   const worker=randomUUID();
   await sql`
@@ -183,9 +205,10 @@ try{
     INSERT INTO worker_exit_processes(id,organization_id,worker_id,object_id,effective_date,reason_code,status,created_by_user_id)
     VALUES(${exit}::uuid,${org}::uuid,${worker}::uuid,${object.id}::uuid,current_date+14,'project_end','planned',${director}::uuid)
   `;
-  const [plannedExit]=await sql`SELECT status,effective_date>current_date future FROM worker_exit_processes WHERE id=${exit}::uuid`;
+  const [plannedExit]=await sql`SELECT status,effective_date>current_date future,return_to_recruiting FROM worker_exit_processes WHERE id=${exit}::uuid`;
   assert.equal(plannedExit.status,"planned");
   assert.equal(plannedExit.future,true);
+  assert.equal(plannedExit.return_to_recruiting,true,"planned exit should default to repeat recruiting handoff");
 
   const audited=await sql`
     SELECT count(*)::int count FROM audit_events
