@@ -36,7 +36,10 @@ export async function GET(request:Request){
     ...(diagnosticAllowed?{
       neonProjectId:process.env.NEON_PROJECT_ID??null,
       neonBranchId:process.env.NEON_BRANCH_ID??null,
-      databaseEndpoint:(process.env.PGHOST??"").split(".")[0]||null,
+      databaseEndpoint:(()=>{try{
+        const host=new URL(process.env.DATABASE_URL??"").hostname;
+        return host.split(".")[0].replace(/-pooler$/,"")||null;
+      }catch{return null}})(),
     }:{}),
   });
 }
