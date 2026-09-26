@@ -72,6 +72,15 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       `;
       if(!scope||!canReadRow(actor.access,"worker.edit",scope,actor))throw new AccessDeniedError("worker.edit");
 
+      if(body.specialtyId||body.dayRate!==undefined||body.nightRate!==undefined){
+        const [exitPlan]=await tx<Array<{effectiveDate:string}>>`
+          SELECT effective_date::text "effectiveDate" FROM worker_exit_processes
+          WHERE worker_id=${id}::uuid AND status='planned'
+          ORDER BY effective_date LIMIT 1
+        `;
+        if(exitPlan)throw new Error(`У сотрудника уже запланировано завершение работы на ${exitPlan.effectiveDate}. Сначала отмените или измените этот план.`);
+      }
+
       let assignmentId=scope.assignmentId;
       let specialtyId=scope.specialtyId;
       let transferred=false;
@@ -99,6 +108,22 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         }
         specialtyId=body.specialtyId;
         transferred=true;
+        const mismatchedShiftIds=await tx<Array<{id:string}>>`
+          SELECT DISTINCT sh.id FROM shifts sh
+          JOIN shift_assignments sa ON sa.shift_id=sh.id
+          WHERE sa.worker_id=${id}::uuid AND sh.object_id=${scope.objectId}::uuid
+            AND sh.shift_date>=${assignmentDate}::date AND sh.specialty_id<>${body.specialtyId}::uuid
+        `;
+        if(mismatchedShiftIds.length){
+          const ids=mismatchedShiftIds.map(row=>row.id);
+          await tx`UPDATE shift_assignments SET confirmation_status='cancelled' WHERE worker_id=${id}::uuid AND shift_id=ANY(${ids}::uuid[])`;
+          await tx`
+            UPDATE shifts sh SET
+              assigned_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'),
+              reserve_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled')
+            WHERE sh.id=ANY(${ids}::uuid[])
+          `;
+        }
       }
 
       await tx`
