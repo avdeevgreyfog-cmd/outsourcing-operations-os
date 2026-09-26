@@ -412,7 +412,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
         FROM (
           SELECT t.id FROM object_ppe_templates t
           WHERE t.specialty_id=woa.specialty_id AND t.active AND (t.object_id=woa.object_id OR t.object_id IS NULL)
-          ORDER BY (t.object_id=woa.object_id) DESC,t.updated_at DESC,t.created_at DESC
+          ORDER BY (t.object_id=woa.object_id) DESC NULLS LAST,t.updated_at DESC,t.created_at DESC
           LIMIT 1
         ) effective_template
         JOIN object_ppe_template_items ti ON ti.template_id=effective_template.id
