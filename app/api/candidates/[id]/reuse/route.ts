@@ -55,7 +55,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(existing)throw new Error("Кандидат уже находится в активном подборе на эту потребность");
       const [application]=await tx<Array<{id:string}>>`
         INSERT INTO candidate_applications(organization_id,candidate_id,need_id,object_id,stage,owner_user_id,manager_user_id,conditions_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${need.id}::uuid,${need.objectId}::uuid,'new',${actor.userId}::uuid,${need.managerUserId}::uuid,${tx.json(need.conditions??{})},${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${need.id}::uuid,${need.objectId}::uuid,'new',${actor.userId}::uuid,${need.managerUserId}::uuid,${tx.json((need.conditions??{}) as never)},${actor.userId}::uuid)
         RETURNING id
       `;
       await tx`
