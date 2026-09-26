@@ -1,0 +1,17 @@
+name: Temporary DB Diagnostics
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Read production database identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS "https://outsourcing-operations-os-g942.vercel.app/api/system/status?diagnostic=0CIhX4AK4nwx46dalGrHBIfYaywU1bU5"
+          echo
