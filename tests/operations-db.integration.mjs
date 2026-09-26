@@ -132,6 +132,24 @@ try{
   `;
   assert.equal(workerManager.manager_user_id,object.owner_user_id,"worker assignment trigger must override an arbitrary manager with the object manager");
 
+  const managerPayment=randomUUID();
+  await sql`
+    INSERT INTO worker_payments(
+      id,organization_id,worker_id,object_id,amount,payment_date,status,reference,
+      record_source,reconciliation_status,payment_method,created_by_user_id,updated_by_user_id
+    )
+    VALUES(
+      ${managerPayment}::uuid,${org}::uuid,${worker}::uuid,${object.id}::uuid,1250,current_date,'paid',
+      'Integration manager-recorded payment','object_manager','unreconciled','transfer',${director}::uuid,${director}::uuid
+    )
+  `;
+  const [managerPaymentRow]=await sql`
+    SELECT record_source,reconciliation_status,payment_method FROM worker_payments WHERE id=${managerPayment}::uuid
+  `;
+  assert.equal(managerPaymentRow.record_source,"object_manager");
+  assert.equal(managerPaymentRow.reconciliation_status,"unreconciled");
+  assert.equal(managerPaymentRow.payment_method,"transfer");
+
   const location=randomUUID();
   const item=randomUUID();
   await sql`
