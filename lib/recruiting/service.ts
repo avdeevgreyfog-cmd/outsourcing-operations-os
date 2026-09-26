@@ -147,7 +147,7 @@ export type CandidateDirectoryRow = {
   preferredChannel:string|null;
   preferredContact:string|null;
   source:string|null;
-  status:"candidate"|"active"|"reserve"|"completed"|"worker";
+  status:"candidate"|"active"|"available"|"reserve"|"completed"|"worker";
   latestNeed:string|null;
   latestObject:string|null;
   latestStage:RecruitingStage|null;
@@ -617,6 +617,7 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
         wp.id "workerId",c.status "rawStatus",c.updated_at::text "updatedAt",
         CASE
           WHEN wp.id IS NOT NULL AND wp.status='active' THEN 'worker'
+          WHEN c.status='available' THEN 'available'
           WHEN count_apps.active>0 THEN 'active'
           WHEN count_apps.reserve>0 THEN 'reserve'
           WHEN count_apps.cnt>0 AND count_apps.terminal=count_apps.cnt THEN 'completed'
