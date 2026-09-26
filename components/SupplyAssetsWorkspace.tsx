@@ -9,7 +9,7 @@ import type {InventorySnapshot,ObjectPpeTemplateRow,OperationsReferenceData} fro
 type View="stock"|"norms";
 
 export function SupplyAssetsWorkspace({
-  snapshot,options,templates,canManage,demo,initialWorkerId,initialAction,initialItemId,initialVariant,initialObjectId,
+  snapshot,options,templates,canManage,demo,initialWorkerId,initialAction,initialItemId,initialVariant,initialObjectId,initialView="stock",
 }:{
   snapshot:InventorySnapshot;
   options:OperationsReferenceData;
@@ -21,8 +21,9 @@ export function SupplyAssetsWorkspace({
   initialItemId?:string|null;
   initialVariant?:string|null;
   initialObjectId?:string|null;
+  initialView?:View;
 }){
-  const [view,setView]=useState<View>("stock");
+  const [view,setView]=useState<View>(initialView);
   return <div className="supply-assets-workspace">
     <div className="object-local-tabs supply-assets-views" role="tablist" aria-label="Раздел обеспечения">
       <button type="button" className={view==="stock"?"active":""} onClick={()=>setView("stock")}>Запасы и движения</button>
