@@ -2471,3 +2471,165 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational th{height:34px}
 .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-operational td{height:40px}
 .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-pilot .timesheet-cell-input{height:30px;min-height:30px}
+
+
+/* 2026-09 workforce lifecycle, staffing board, object supply and contact drawer refinements. */
+.sales-workspace.operations-workspace .object-candidate-section{overflow-x:auto}
+.sales-workspace.operations-workspace .object-candidate-board{
+  grid-template-columns:repeat(5,272px);
+  width:max-content;
+  min-width:100%;
+}
+.sales-workspace.operations-workspace .object-candidate-lane{width:272px;min-width:272px}
+.sales-workspace.operations-workspace .object-candidate-cards{overflow-x:hidden;overflow-y:auto}
+.sales-workspace.operations-workspace .object-candidate-card{min-width:0}
+.sales-workspace.operations-workspace .object-candidate-card :is(input,select,button){max-width:100%}
+
+.sales-workspace.operations-workspace .object-worker-actions-cell{
+  position:sticky;right:0;width:46px;min-width:46px;padding-left:6px!important;padding-right:8px!important;
+  background:var(--panel);z-index:2
+}
+.sales-workspace.operations-workspace .object-workforce-table-v2 thead .object-worker-actions-cell{background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-worker-actions{position:relative}
+.sales-workspace.operations-workspace .object-worker-actions>summary{list-style:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.sales-workspace.operations-workspace .object-worker-actions>summary::-webkit-details-marker{display:none}
+.sales-workspace.operations-workspace .object-worker-actions>div{
+  position:absolute;right:0;top:34px;z-index:30;width:210px;padding:6px;display:grid;gap:2px;
+  border:1px solid var(--border);border-radius:8px;background:var(--panel);box-shadow:0 10px 28px rgba(0,0,0,.14)
+}
+.sales-workspace.operations-workspace .object-worker-actions>div :is(button,a){
+  width:100%;min-height:34px;padding:0 9px;display:flex;align-items:center;gap:8px;border:0;border-radius:6px;
+  background:transparent;color:var(--text);font:inherit;font-size:12px;text-align:left;text-decoration:none;cursor:pointer
+}
+.sales-workspace.operations-workspace .object-worker-actions>div :is(button,a):hover{background:var(--panel-2)}
+.sales-workspace.operations-workspace .object-worker-actions>div .danger{color:var(--bad)}
+.sales-workspace.operations-workspace .object-worker-planned-change{margin-top:4px;font-weight:600;color:var(--info)}
+.sales-workspace.operations-workspace .object-worker-planned-change.is-exit{color:var(--warn)}
+
+.object-worker-action-overlay.recruiting-modal{
+  align-items:stretch;justify-content:flex-end;padding:0
+}
+.object-worker-action-overlay .object-worker-action-drawer{
+  width:min(560px,100vw);max-width:none;height:100dvh;max-height:100dvh;margin:0;
+  border-radius:0;border-top:0;border-right:0;border-bottom:0;display:flex;flex-direction:column
+}
+.object-worker-action-drawer .candidate-import-body{flex:1;overflow-y:auto}
+.object-worker-action-body{display:grid;align-content:start;gap:18px}
+.object-action-choice{
+  display:inline-flex;width:max-content;max-width:100%;padding:3px;gap:2px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)
+}
+.object-action-choice button{
+  min-height:32px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;cursor:pointer
+}
+.object-action-choice button.active{background:var(--panel);box-shadow:inset 0 0 0 1px var(--border);color:var(--text);font-weight:650}
+.object-action-choice.compact button{min-height:29px}
+.object-action-timing{display:grid;gap:10px;padding-top:14px;border-top:1px solid var(--border)}
+.object-action-timing>strong{font-size:13px}
+.object-action-timing label,.object-worker-action-body>label{display:grid;gap:5px;font-size:12px;color:var(--muted)}
+.object-action-timing input,.object-worker-action-body>label input{height:38px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)}
+.object-action-shifts{display:grid;grid-template-columns:minmax(150px,.7fr) 1fr;gap:12px;align-items:end}
+.object-action-date-preview{min-height:58px;padding:9px 11px;display:grid;gap:2px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2)}
+.object-action-date-preview span,.object-action-date-preview small{font-size:11px;color:var(--muted)}
+.object-action-date-preview strong{font-size:13px}
+.object-action-summary{padding:11px 12px;display:grid;gap:4px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2)}
+.object-action-summary strong{font-size:12px}
+.object-action-summary span{font-size:12px;color:var(--muted)}
+
+.sales-workspace.operations-workspace .object-supply-workspace{display:grid;gap:14px}
+.sales-workspace.operations-workspace .object-supply-metrics{margin:0}
+.sales-workspace.operations-workspace .object-supply-actions{
+  padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  border:1px solid var(--border);border-radius:10px;background:var(--panel)
+}
+.sales-workspace.operations-workspace .object-supply-actions>div:first-child{display:grid;gap:3px}
+.sales-workspace.operations-workspace .object-supply-actions strong{font-size:13px}
+.sales-workspace.operations-workspace .object-supply-actions span{max-width:780px;font-size:12px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-supply-stock-grid{align-items:start}
+.sales-workspace.operations-workspace .object-supply-workers .object-supply-missing{color:var(--warn);font-size:12px;font-weight:600}
+.sales-workspace.operations-workspace .object-supply-norms{min-height:260px}
+.sales-workspace.operations-workspace .object-supply-norm-head{display:flex;justify-content:space-between;gap:12px}
+.sales-workspace.operations-workspace .object-supply-norm-head>div{display:grid;gap:3px}
+.sales-workspace.operations-workspace .object-supply-norm-head strong{font-size:13px}
+.sales-workspace.operations-workspace .object-supply-norm-head span{font-size:12px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-supply-norm-table{margin:0}
+.sales-workspace.operations-workspace .object-supply-norm-table table{min-width:720px}
+.sales-workspace.operations-workspace .object-supply-norm-table :is(input,select){
+  min-height:32px;height:32px;padding:0 7px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-size:12px
+}
+.sales-workspace.operations-workspace .object-norm-quantity,.sales-workspace.operations-workspace .object-norm-cycle{display:flex;align-items:center;gap:6px}
+.sales-workspace.operations-workspace .object-norm-quantity input{width:74px}
+.sales-workspace.operations-workspace .object-norm-cycle input{width:72px}
+.sales-workspace.operations-workspace .object-norm-quantity span,.sales-workspace.operations-workspace .object-norm-cycle span{font-size:11px;color:var(--muted)}
+.sales-workspace.operations-workspace .object-supply-norm-add{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sales-workspace.operations-workspace .object-supply-norm-add select{
+  min-width:280px;height:36px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)
+}
+.sales-workspace.operations-workspace .object-ppe-template-list strong{font-size:12px}
+.sales-workspace.operations-workspace .object-ppe-template-list span{font-size:11px}
+.sales-workspace.operations-workspace .object-ppe-template-editor-panel{min-width:0}
+
+.inventory-scope-control{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.inventory-scope-control select{height:36px;min-width:230px;padding:0 9px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)}
+
+.object-contact-drawer-overlay{
+  position:fixed;inset:0;z-index:1000;display:flex;justify-content:flex-end;background:rgba(15,23,42,.38)
+}
+.object-contact-drawer{
+  width:min(490px,100vw);height:100dvh;display:flex;flex-direction:column;border-left:1px solid var(--border);
+  background:var(--panel);box-shadow:-16px 0 40px rgba(0,0,0,.14)
+}
+.object-contact-drawer-head{
+  min-height:88px;padding:22px 24px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border)
+}
+.object-contact-drawer-head h2{margin:0;font-size:17px}
+.object-contact-drawer-head p{margin:4px 0 0;font-size:12px;line-height:1.45;color:var(--muted)}
+.object-contact-drawer-body{flex:1;padding:20px 24px;display:grid;align-content:start;gap:20px;overflow-y:auto}
+.object-contact-drawer-footer{padding:14px 24px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);background:var(--panel)}
+.object-contact-mode{width:100%}
+.object-contact-mode button{flex:1}
+.object-contact-form-section{display:grid;gap:12px;padding-top:2px}
+.object-contact-form-section+ .object-contact-form-section{padding-top:18px;border-top:1px solid var(--border)}
+.object-contact-form-section>label,.object-contact-methods>label{display:grid;gap:5px;color:var(--muted);font-size:12px}
+.object-contact-form-section :is(input,select,textarea),.object-contact-methods :is(input,select){
+  width:100%;min-height:38px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font:inherit
+}
+.object-contact-form-section textarea{min-height:92px;resize:vertical}
+.object-contact-preview{padding:12px;display:grid;gap:4px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2)}
+.object-contact-preview>strong{font-size:13px}
+.object-contact-preview>span{font-size:12px;color:var(--muted)}
+.object-contact-preview>div{margin-top:4px;display:flex;flex-wrap:wrap;gap:5px 10px}
+.object-contact-preview small{font-size:11px;color:var(--muted)}
+.object-contact-identity{grid-template-columns:1fr}
+.object-contact-methods{display:grid;gap:8px}
+.object-contact-methods-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.object-contact-methods-head>div{display:grid;gap:2px}
+.object-contact-methods-head strong,.object-contact-section-title strong{font-size:13px}
+.object-contact-methods-head span,.object-contact-section-title span{font-size:11px;color:var(--muted)}
+.object-contact-method-row{display:grid;grid-template-columns:120px 1fr 36px;gap:7px;align-items:center}
+.object-contact-section-title{display:grid;gap:2px}
+.object-contact-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.object-contact-role-grid label{
+  min-height:38px;padding:7px 9px;display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:6px;background:var(--panel);font-size:11px;cursor:pointer
+}
+.object-contact-role-grid label.active{border-color:color-mix(in srgb,var(--accent) 45%,var(--border));background:var(--accent-soft)}
+.object-contact-role-grid input{width:14px!important;height:14px!important;min-height:0!important}
+
+.candidate-repeat-actions{flex-wrap:nowrap}
+.candidate-repeat-actions .button{white-space:nowrap}
+.candidate-repeat-modal{width:min(620px,calc(100vw - 24px))}
+
+.timesheet-worker-identity small{display:block;margin-top:2px}
+.timesheet-worker-identity small:first-of-type{color:var(--muted)}
+
+@media(max-width:900px){
+  .sales-workspace.operations-workspace .object-supply-actions{align-items:flex-start;flex-direction:column}
+  .sales-workspace.operations-workspace .object-supply-stock-grid{grid-template-columns:1fr}
+  .sales-workspace.operations-workspace .object-ppe-workspace{grid-template-columns:1fr}
+  .sales-workspace.operations-workspace .object-ppe-template-list{border-right:0;border-bottom:1px solid var(--border)}
+  .object-action-shifts{grid-template-columns:1fr}
+}
+@media(max-width:620px){
+  .object-contact-drawer-head,.object-contact-drawer-body,.object-contact-drawer-footer{padding-left:16px;padding-right:16px}
+  .object-contact-role-grid{grid-template-columns:1fr}
+  .object-contact-method-row{grid-template-columns:104px 1fr 34px}
+}
