@@ -1,7 +1,7 @@
 "use client";
 
 import {useMemo,useState} from "react";
-import {Plus,Trash2} from "lucide-react";
+import {Plus,RotateCcw,Trash2} from "lucide-react";
 import type {InventoryItemRow,ObjectPpeTemplateRow} from "@/lib/operations/service";
 
 type SpecialtyOption={id:string;name:string};
@@ -46,6 +46,19 @@ export function ObjectPpeTemplatesWorkspace({
   }
   function patchRow(itemId:string,patch:Partial<DraftRow>){setDraft(current=>current.map(row=>row.itemId===itemId?{...row,...patch}:row))}
   function removeRow(itemId:string){setDraft(current=>current.filter(row=>row.itemId!==itemId))}
+  async function resetToBase(){
+    if(!canManage||!specialtyId||currentTemplate?.source!=="object")return;
+    setBusy(true);setMessage("");
+    try{
+      if(!demo){
+        const response=await fetch("/api/objects/"+objectId+"/ppe-template/reset",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({specialtyId})});
+        const json=await response.json().catch(()=>({}));
+        if(!response.ok)throw new Error(json.error??"Не удалось сбросить норму");
+        window.location.reload();
+      }else setMessage("Демо: норма объекта сброшена к базовой");
+    }catch(error){setMessage(error instanceof Error?error.message:"Не удалось сбросить норму")}
+    finally{setBusy(false)}
+  }
   async function save(){
     if(!canManage||!specialtyId)return;
     setBusy(true);setMessage("");
@@ -86,6 +99,7 @@ export function ObjectPpeTemplatesWorkspace({
     <div className="object-ppe-template-editor-panel">
       <header className="object-supply-norm-head">
         <div><strong>{currentName}</strong><span>Индивидуальное обеспечение сотрудника этой специальности. Расходники учитываются отдельно на объект.</span></div>
+        {canManage&&currentTemplate?.source==="object"&&<button className="button" type="button" disabled={busy} onClick={()=>void resetToBase()}><RotateCcw size={14}/> Сбросить к базовой</button>}
       </header>
 
       <div className="request-table-wrap object-supply-norm-table"><table className="data-table">
@@ -103,7 +117,7 @@ export function ObjectPpeTemplatesWorkspace({
       {canManage&&<div className="object-supply-norm-add">
         <select value={addItemId} onChange={event=>setAddItemId(event.target.value)}><option value="">Добавить позицию…</option>{available.map(item=><option key={item.id} value={item.id}>{item.name} · {categoryLabels[item.category]??item.category}</option>)}</select>
         <button className="button" type="button" disabled={!addItemId} onClick={addItem}><Plus size={14}/> Добавить</button>
-        <button className="button primary" type="button" disabled={busy} onClick={()=>void save()}>{busy?"Сохраняем…":"Сохранить норму"}</button>
+        <button className="button primary" type="button" disabled={busy} onClick={()=>void save()}>{busy?"Сохраняем…":currentTemplate?.source==="global"?"Переопределить для объекта":"Сохранить для объекта"}</button>
       </div>}
       {message&&<div className="object-staffing-message">{message}</div>}
     </div>
