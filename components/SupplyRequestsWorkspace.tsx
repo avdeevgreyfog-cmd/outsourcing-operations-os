@@ -10,10 +10,10 @@ import { rub } from "@/lib/ui/format";
 const typeLabels:Record<string,string>={purchase:"Закупка",payment:"Оплата",compensation:"Компенсация",service:"Услуга"};
 const statusLabels:Record<string,string>={draft:"Черновик",submitted:"Подана",approved:"Согласована",rejected:"Отклонена",in_progress:"В работе",received:"Исполнено",closed:"Закрыта"};
 
-export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,initialItemId,initialLocationId}:{rows:SupplyRequestRow[];options:OperationsReferenceData;inventory:InventorySnapshot;canManage:boolean;demo:boolean;initialItemId?:string|null;initialLocationId?:string|null}){
-  const [show,setShow]=useState(Boolean(initialItemId||initialLocationId));
+export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,initialItemId,initialLocationId,initialObjectId,openInitially=false}:{rows:SupplyRequestRow[];options:OperationsReferenceData;inventory:InventorySnapshot;canManage:boolean;demo:boolean;initialItemId?:string|null;initialLocationId?:string|null;initialObjectId?:string|null;openInitially?:boolean}){
+  const [show,setShow]=useState(Boolean(openInitially||initialItemId||initialLocationId));
   const [requestType,setRequestType]=useState<"purchase"|"payment"|"compensation"|"service">("purchase");
-  const [objectId,setObjectId]=useState(options.objects[0]?.id??"");
+  const [objectId,setObjectId]=useState(initialObjectId??options.objects[0]?.id??"");
   const [title,setTitle]=useState(initialItemId?("Пополнить "+(inventory.items.find(x=>x.id===initialItemId)?.name??"запас")):"");
   const [description,setDescription]=useState("");
   const [itemId,setItemId]=useState(initialItemId??"");
