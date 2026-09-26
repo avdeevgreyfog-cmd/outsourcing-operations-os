@@ -141,6 +141,39 @@ try{
     INSERT INTO inventory_items(id,organization_id,code,name,category,unit,returnable,tracks_variant,created_by_user_id)
     VALUES(${item}::uuid,${org}::uuid,${"TEST-"+item.slice(0,8)},'Integration boots','workwear','пар',true,true,${director}::uuid)
   `;
+
+  const globalNorm=randomUUID();
+  const objectNorm=randomUUID();
+  await sql`
+    INSERT INTO object_ppe_templates(id,organization_id,object_id,specialty_id,name,active,created_by_user_id)
+    VALUES
+      (${globalNorm}::uuid,${org}::uuid,NULL,${specialty.id}::uuid,'Integration base norm',true,${director}::uuid),
+      (${objectNorm}::uuid,${org}::uuid,${object.id}::uuid,${specialty.id}::uuid,'Integration object override',true,${director}::uuid)
+  `;
+  await sql`
+    INSERT INTO object_ppe_template_items(organization_id,template_id,item_id,quantity,size_source,variant)
+    VALUES
+      (${org}::uuid,${globalNorm}::uuid,${item}::uuid,2,'shoe',''),
+      (${org}::uuid,${objectNorm}::uuid,${item}::uuid,1,'shoe','')
+  `;
+  const [effectiveObjectNorm]=await sql`
+    SELECT t.id
+    FROM object_ppe_templates t
+    WHERE t.specialty_id=${specialty.id}::uuid AND t.active AND (t.object_id=${object.id}::uuid OR t.object_id IS NULL)
+    ORDER BY (t.object_id=${object.id}::uuid) DESC NULLS LAST,t.updated_at DESC
+    LIMIT 1
+  `;
+  assert.equal(effectiveObjectNorm.id,objectNorm,"object supply norm must override company base norm");
+  await sql`UPDATE object_ppe_templates SET active=false WHERE id=${objectNorm}::uuid`;
+  const [effectiveBaseNorm]=await sql`
+    SELECT t.id
+    FROM object_ppe_templates t
+    WHERE t.specialty_id=${specialty.id}::uuid AND t.active AND (t.object_id=${object.id}::uuid OR t.object_id IS NULL)
+    ORDER BY (t.object_id=${object.id}::uuid) DESC NULLS LAST,t.updated_at DESC
+    LIMIT 1
+  `;
+  assert.equal(effectiveBaseNorm.id,globalNorm,"company base norm must be inherited when object override is disabled");
+
   await sql`
     INSERT INTO inventory_stock_limits(organization_id,location_id,item_id,variant,min_quantity,updated_by_user_id)
     VALUES(${org}::uuid,${location}::uuid,${item}::uuid,'43',5,${director}::uuid)
