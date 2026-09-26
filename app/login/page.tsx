@@ -4,9 +4,10 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { LoginForm } from "@/components/LoginForm";
 import { isDemoMode } from "@/lib/demo/mode";
 
-export default async function LoginPage(){
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ force?: string }> }){
+  const params=await searchParams;
   const actor=await getCurrentActor();
-  if(actor&&!actor.demo) redirect("/");
+  if(actor&&!actor.demo&&params.force!=="work") redirect("/");
   return <main className="login-shell">
     <div className="login-panel">
       <div className="brand brand-login"><span className="brand-mark"><Image src="/operis-symbol.svg" alt="" width={24} height={24} priority/></span><div><strong>OPERIS</strong><small>Операционная система аутсорсинга</small></div></div>

@@ -43,6 +43,19 @@ jobs:
           if (status.demoAvailable !== true) throw new Error("demo workspace is expected to remain available");
           NODE
 
+      - name: Verify dedicated workspace entry links
+        shell: bash
+        run: |
+          set -euo pipefail
+          demo_headers="$(mktemp)"
+          work_headers="$(mktemp)"
+          curl -sS -D "$demo_headers" -o /dev/null "$BASE_URL/demo"
+          curl -sS -D "$work_headers" -o /dev/null "$BASE_URL/work"
+          grep -qi '^location: /' "$demo_headers"
+          grep -qi 'oo_workspace_mode=demo' "$demo_headers"
+          grep -qi '^location: /login?force=work' "$work_headers"
+          grep -qi 'oo_workspace_mode=' "$work_headers"
+
       - name: Verify login surface
         shell: bash
         run: |
