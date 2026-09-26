@@ -967,14 +967,15 @@ export async function getObjectContacts(actor:Actor,objectId:string):Promise<{as
 
 export type ObjectDocumentRow={
   id:string;organizationId:string;objectId:string;name:string;category:string;documentNumber:string|null;sourceUrl:string|null;status:string;
-  validFrom:string|null;expiresAt:string|null;notes:string|null;updatedAt:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
+  documentDate:string|null;versionLabel:string|null;validFrom:string|null;expiresAt:string|null;notes:string|null;createdAt:string;createdBy:string;updatedAt:string;
+  ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
 };
 export async function listObjectDocuments(actor:Actor,objectId:string):Promise<ObjectDocumentRow[]>{
   requireCapability(actor,"operations.object.read");
   if(actor.demo){
     const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"operations.object.read",row,actor));
     if(!object)return[];
-    const base={organizationId:object.organizationId,objectId,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[],documentNumber:null,validFrom:null,expiresAt:null,updatedAt:"25.09.2026"};
+    const base={organizationId:object.organizationId,objectId,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[],documentNumber:null,documentDate:"2026-09-25",versionLabel:"1.0",validFrom:null,expiresAt:null,createdAt:"25.09.2026",createdBy:"Анна Лебедева",updatedAt:"25.09.2026"};
     return [
       {...base,id:`doc-${objectId}-1`,name:"Инструкция по пропускному режиму",category:"access",sourceUrl:null,status:"active",notes:"Рабочая инструкция заказчика"},
       {...base,id:`doc-${objectId}-2`,name:"Требования к СИЗ",category:"ppe",sourceUrl:null,status:"active",notes:"Комплект и требования по объекту"},
@@ -984,10 +985,12 @@ export async function listObjectDocuments(actor:Actor,objectId:string):Promise<O
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<ObjectDocumentRow[]>`
       SELECT d.id,d.organization_id "organizationId",d.object_id "objectId",d.name,d.category,d.document_number "documentNumber",d.source_url "sourceUrl",d.status,
-        d.valid_from::text "validFrom",d.expires_at::text "expiresAt",d.notes,to_char(d.updated_at,'DD.MM.YYYY') "updatedAt",
+        d.document_date::text "documentDate",d.version_label "versionLabel",d.valid_from::text "validFrom",d.expires_at::text "expiresAt",d.notes,
+        to_char(d.created_at,'DD.MM.YYYY') "createdAt",creator.display_name "createdBy",to_char(d.updated_at,'DD.MM.YYYY') "updatedAt",
         o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM object_documents d JOIN objects o ON o.id=d.object_id
+      JOIN app_users creator ON creator.id=d.created_by_user_id
       WHERE d.object_id=${objectId}::uuid
       ORDER BY d.status='archived',d.expires_at NULLS LAST,d.name
     `;
