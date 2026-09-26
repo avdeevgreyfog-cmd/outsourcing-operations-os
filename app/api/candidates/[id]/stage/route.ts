@@ -278,7 +278,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         `;
         const documentStatus=employmentDocs&&employmentDocs.required>0&&employmentDocs.ready>=employmentDocs.required?"received":employmentDocs&&employmentDocs.ready>0?"collecting":"not_received";
         const [existingWorker]=await tx<Array<{id:string}>>`SELECT id FROM worker_profiles WHERE origin_candidate_id=${current.candidateId}::uuid FOR UPDATE`;
-        if(existingWorker){workerId=existingWorker.id;await tx`UPDATE worker_profiles SET employment_documents_status=CASE WHEN employment_documents_status='completed' THEN employment_documents_status ELSE ${documentStatus} END,updated_at=now() WHERE id=${workerId}::uuid`;}
+        if(existingWorker){workerId=existingWorker.id;await tx`UPDATE worker_profiles SET status='active',employment_documents_status=CASE WHEN employment_documents_status='completed' THEN employment_documents_status ELSE ${documentStatus} END,updated_at=now() WHERE id=${workerId}::uuid`;}
         else{
           const [worker]=await tx<Array<{id:string}>>`
             INSERT INTO worker_profiles(organization_id,origin_candidate_id,full_name,phone,email,city,birth_date,notes,status,source,original_recruiter_user_id,employment_documents_status,created_by_user_id)
