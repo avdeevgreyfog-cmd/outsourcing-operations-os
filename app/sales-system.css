@@ -2617,6 +2617,10 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .candidate-repeat-actions{flex-wrap:nowrap}
 .candidate-repeat-actions .button{white-space:nowrap}
 .candidate-repeat-modal{width:min(620px,calc(100vw - 24px))}
+.candidate-repeat-context{padding:12px 13px;display:grid;gap:4px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2)}
+.candidate-repeat-context strong{font-size:13px}
+.candidate-repeat-context span{font-size:12px;color:var(--text)}
+.candidate-repeat-context small{font-size:11px;line-height:1.45;color:var(--muted)}
 
 .timesheet-worker-identity small{display:block;margin-top:2px}
 .timesheet-worker-identity small:first-of-type{color:var(--muted)}
