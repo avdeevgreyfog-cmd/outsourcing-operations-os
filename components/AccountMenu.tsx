@@ -35,6 +35,11 @@ export function AccountMenu({ actor }: { actor: Actor }) {
     window.location.assign("/login");
   }
 
+  function openWorkLogin(){
+    setOpen(false);
+    window.location.assign("/login");
+  }
+
   return <div className="account-menu">
     <button className="icon-button" type="button" aria-label="Аккаунт" aria-expanded={open} onClick={()=>setOpen((value)=>!value)}><UserRound size={16}/></button>
     {open&&<div className="account-popover" role="dialog" aria-label="Аккаунт">
@@ -51,7 +56,7 @@ export function AccountMenu({ actor }: { actor: Actor }) {
         <button type="submit" className="button" disabled={busy}>Сохранить пароль</button>
       </form>}
       {message&&<p className="account-message">{message}</p>}
-{staticGithubDemo?<div className="account-message">Статическая демо-версия GitHub Pages</div>:<button type="button" className="account-logout" onClick={logout} disabled={busy}><LogOut size={14}/>Выйти</button>}
+{staticGithubDemo?<div className="account-message">Статическая демо-версия GitHub Pages</div>:actor.demo?<button type="button" className="account-logout" onClick={openWorkLogin} disabled={busy}><KeyRound size={14}/>Войти в рабочую организацию</button>:<button type="button" className="account-logout" onClick={logout} disabled={busy}><LogOut size={14}/>Выйти</button>}
     </div>}
   </div>;
 }
