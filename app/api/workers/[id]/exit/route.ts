@@ -6,8 +6,8 @@ import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
 const schema=z.discriminatedUnion("action",[
-  z.object({action:z.literal("plan"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional(),replacementRequired:z.boolean().default(true)}),
-  z.object({action:z.literal("complete"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional()}),
+  z.object({action:z.literal("plan"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional(),replacementRequired:z.boolean().default(true),returnToRecruiting:z.boolean().default(true)}),
+  z.object({action:z.literal("complete"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional(),returnToRecruiting:z.boolean().default(true)}),
   z.object({action:z.literal("cancel"),exitId:z.string().uuid()}),
 ]);
 
@@ -17,8 +17,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     requireCapability(actor,"worker.offboarding.manage");if(actor.demo)return NextResponse.json({error:"В демо-режиме завершение работы не сохраняется"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [worker]=await tx<Array<{id:string;fullName:string;objectId:string|null;specialtyId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
-        SELECT w.id,w.full_name "fullName",a.object_id "objectId",a.specialty_id "specialtyId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+      const [worker]=await tx<Array<{id:string;fullName:string;phone:string|null;email:string|null;city:string|null;source:string|null;originCandidateId:string|null;originalRecruiterUserId:string|null;objectId:string|null;specialtyId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+        SELECT w.id,w.full_name "fullName",w.phone,w.email,w.city,w.source,w.origin_candidate_id "originCandidateId",w.original_recruiter_user_id "originalRecruiterUserId",
+          a.object_id "objectId",a.specialty_id "specialtyId",o.owner_user_id "ownerUserId",o.region_id "regionId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
         FROM worker_profiles w
         LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_to IS NULL ORDER BY x.effective_from DESC LIMIT 1) a ON true
@@ -28,6 +29,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(!worker)throw new Error("Сотрудник не найден");
       const scope={organizationId:actor.organizationId,objectId:worker.objectId??undefined,ownerUserId:worker.ownerUserId??undefined,regionId:worker.regionId??undefined,assigneeUserIds:worker.assigneeUserIds};
       if(!canReadRow(actor.access,"worker.offboarding.manage",scope,actor))throw new AccessDeniedError("worker.offboarding.manage");
+      if(body.action!=="cancel"){
+        const [futureTransfer]=await tx<Array<{effectiveFrom:string;object:string}>>`
+          SELECT a.effective_from::text "effectiveFrom",o.name object
+          FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
+          WHERE a.worker_id=${id}::uuid AND a.effective_from>current_date
+          ORDER BY a.effective_from LIMIT 1
+        `;
+        if(futureTransfer)throw new Error(`У сотрудника уже запланирован перевод на ${futureTransfer.object} с ${futureTransfer.effectiveFrom}. Сначала измените или отмените перевод.`);
+      }
 
       if(body.action==="cancel"){
         const [exit]=await tx<Array<{id:string}>>`SELECT id FROM worker_exit_processes WHERE id=${body.exitId}::uuid AND worker_id=${id}::uuid AND status='planned' FOR UPDATE`;
@@ -46,11 +56,11 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         let exitId:string;let replacementNeedId=existing?.replacementNeedId??null;
         if(existing){
           exitId=existing.id;
-          await tx`UPDATE worker_exit_processes SET effective_date=${body.effectiveDate}::date,reason_code=${body.reasonCode},reason=${body.reason??null},replacement_required=${body.replacementRequired},updated_at=now() WHERE id=${exitId}::uuid`;
+          await tx`UPDATE worker_exit_processes SET effective_date=${body.effectiveDate}::date,reason_code=${body.reasonCode},reason=${body.reason??null},replacement_required=${body.replacementRequired},return_to_recruiting=${body.returnToRecruiting},updated_at=now() WHERE id=${exitId}::uuid`;
         }else{
           const [row]=await tx<Array<{id:string}>>`
-            INSERT INTO worker_exit_processes(organization_id,worker_id,object_id,effective_date,reason_code,reason,status,replacement_required,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId}::uuid,${body.effectiveDate}::date,${body.reasonCode},${body.reason??null},'planned',${body.replacementRequired},${actor.userId}::uuid)
+            INSERT INTO worker_exit_processes(organization_id,worker_id,object_id,effective_date,reason_code,reason,status,replacement_required,return_to_recruiting,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId}::uuid,${body.effectiveDate}::date,${body.reasonCode},${body.reason??null},'planned',${body.replacementRequired},${body.returnToRecruiting},${actor.userId}::uuid)
             RETURNING id
           `;exitId=row.id;
         }
@@ -114,15 +124,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       `;
       if(outstanding.length)throw new Error("Нельзя завершить работу: не закрыто имущество — "+outstanding.map(row=>row.item+(row.variant?" "+row.variant:"")+" × "+Number(row.quantity)+" "+row.unit).join(", "));
 
-      const [planned]=await tx<Array<{id:string}>>`SELECT id FROM worker_exit_processes WHERE worker_id=${id}::uuid AND status='planned' FOR UPDATE`;
+      const [planned]=await tx<Array<{id:string;returnToRecruiting:boolean}>>`SELECT id,return_to_recruiting "returnToRecruiting" FROM worker_exit_processes WHERE worker_id=${id}::uuid AND status='planned' FOR UPDATE`;
       let exitId:string;
       if(planned){
         exitId=planned.id;
-        await tx`UPDATE worker_exit_processes SET effective_date=${body.effectiveDate}::date,reason_code=${body.reasonCode},reason=${body.reason??null},status='completed',completed_by_user_id=${actor.userId}::uuid,completed_at=now(),updated_at=now() WHERE id=${exitId}::uuid`;
+        await tx`UPDATE worker_exit_processes SET effective_date=${body.effectiveDate}::date,reason_code=${body.reasonCode},reason=${body.reason??null},return_to_recruiting=${body.returnToRecruiting},status='completed',completed_by_user_id=${actor.userId}::uuid,completed_at=now(),updated_at=now() WHERE id=${exitId}::uuid`;
       }else{
         const [exit]=await tx<Array<{id:string}>>`
-          INSERT INTO worker_exit_processes(organization_id,worker_id,object_id,effective_date,reason_code,reason,status,created_by_user_id,completed_by_user_id,completed_at)
-          VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId??null}::uuid,${body.effectiveDate}::date,${body.reasonCode},${body.reason??null},'completed',${actor.userId}::uuid,${actor.userId}::uuid,now())
+          INSERT INTO worker_exit_processes(organization_id,worker_id,object_id,effective_date,reason_code,reason,status,return_to_recruiting,created_by_user_id,completed_by_user_id,completed_at)
+          VALUES(${actor.organizationId}::uuid,${id}::uuid,${worker.objectId??null}::uuid,${body.effectiveDate}::date,${body.reasonCode},${body.reason??null},'completed',${body.returnToRecruiting},${actor.userId}::uuid,${actor.userId}::uuid,now())
           RETURNING id
         `;exitId=exit.id;
       }
@@ -167,6 +177,48 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       }
 
       await tx`UPDATE worker_profiles SET status='dismissed',updated_at=now() WHERE id=${id}::uuid`;
+
+      let recruitingCandidateId=worker.originCandidateId;
+      if(body.returnToRecruiting){
+        const [routed]=worker.objectId?await tx<Array<{userId:string|null}>>`
+          SELECT COALESCE(
+            (SELECT na.recruiter_user_id FROM needs n JOIN need_assignments na ON na.need_id=n.id AND na.unassigned_at IS NULL
+             WHERE n.object_id=${worker.objectId}::uuid AND (${worker.specialtyId}::uuid IS NULL OR n.specialty_id=${worker.specialtyId}::uuid)
+             AND n.status NOT IN ('cancelled','archived') AND na.recruiter_user_id IS NOT NULL
+             ORDER BY n.created_at DESC,na.assigned_at DESC LIMIT 1),
+            ${worker.originalRecruiterUserId}::uuid
+          ) "userId"
+        `:[] as Array<{userId:string|null}>;
+        const recruiterId=routed?.userId??worker.originalRecruiterUserId??null;
+        if(recruitingCandidateId){
+          await tx`
+            UPDATE candidates SET status='available',current_recruiter_user_id=COALESCE(${recruiterId}::uuid,current_recruiter_user_id),
+              updated_at=now() WHERE id=${recruitingCandidateId}::uuid
+          `;
+        }else{
+          const [candidate]=await tx<Array<{id:string}>>`
+            INSERT INTO candidates(organization_id,full_name,phone,email,city,source,original_recruiter_user_id,current_recruiter_user_id,created_by_user_id,status)
+            VALUES(${actor.organizationId}::uuid,${worker.fullName},${worker.phone},${worker.email},${worker.city},
+              'Повторный подбор / бывший сотрудник',${worker.originalRecruiterUserId}::uuid,${recruiterId}::uuid,${actor.userId}::uuid,'available')
+            RETURNING id
+          `;
+          recruitingCandidateId=candidate.id;
+          await tx`UPDATE worker_profiles SET origin_candidate_id=${candidate.id}::uuid WHERE id=${id}::uuid`;
+          if(worker.phone)await tx`
+            INSERT INTO candidate_contact_methods(organization_id,candidate_id,channel,value,is_preferred,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${candidate.id}::uuid,'phone',${worker.phone},true,${actor.userId}::uuid)
+            ON CONFLICT(candidate_id,channel,value) DO NOTHING
+          `;
+          if(worker.email)await tx`
+            INSERT INTO candidate_contact_methods(organization_id,candidate_id,channel,value,is_preferred,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${candidate.id}::uuid,'email',${worker.email},false,${actor.userId}::uuid)
+            ON CONFLICT(candidate_id,channel,value) DO NOTHING
+          `;
+        }
+        await tx`UPDATE worker_exit_processes SET recruiting_candidate_id=${recruitingCandidateId}::uuid,recruiting_handoff_at=now(),updated_at=now() WHERE id=${exitId}::uuid`;
+      }else if(recruitingCandidateId){
+        await tx`UPDATE candidates SET status='completed',updated_at=now() WHERE id=${recruitingCandidateId}::uuid`;
+      }
 
       if(worker.objectId&&worker.specialtyId){
         await tx`
