@@ -771,6 +771,72 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       row.payableAmount=earned-Number(row.paidAmount??0);
       row.accrual=earned;
     }
+
+    const cellNumber=(value:TimesheetCellValue|undefined)=>typeof value==="number"?value:typeof value==="string"&&/^\\d+(?:[.,]\\d+)?$/.test(value.trim())?Number(value.replace(",",".")):0;
+    const workerRows:TimesheetWorkerRow[]=[];
+    for(const base of byWorker.values()){
+      const activeDates=datesBetween(periodStart,periodEnd).filter(date=>Boolean(assignmentAt(base.workerId,date)));
+      if(!activeDates.length){workerRows.push({...base,rowId:base.workerId});continue;}
+      const segments:Array<{from:string;to:string;signature:string;assignment:(typeof workers)[number]}>=[];
+      for(const date of activeDates){
+        const assignment=assignmentAt(base.workerId,date)!;
+        const dayRatePeriod=rateAt(base,date,"day");
+        const nightRatePeriod=rateAt(base,date,"night");
+        const signature=[
+          assignment.specialtyId??"",
+          assignment.specialty??"",
+          Number(assignment.plannedHours??0),
+          dayRatePeriod?.unit??"",dayRatePeriod?.amount==null?"":String(Number(dayRatePeriod.amount)),
+          nightRatePeriod?.unit??"",nightRatePeriod?.amount==null?"":String(Number(nightRatePeriod.amount)),
+        ].join("|");
+        const current=segments.at(-1);
+        if(current&&current.signature===signature&&addIsoDays(current.to,1)===date)current.to=date;
+        else segments.push({from:date,to:date,signature,assignment});
+      }
+      const multiple=segments.length>1;
+      segments.forEach((segment,index)=>{
+        const allowed=(day:string)=>{const date=`${requestedMonth}-${String(day).padStart(2,"0")}`;return date>=segment.from&&date<=segment.to};
+        const pickCells=(source:Record<string,TimesheetCellValue>|undefined)=>Object.fromEntries(Object.entries(source??{}).filter(([day])=>allowed(day)));
+        const pickKinds=(source:Record<string,"day"|"night"|"mixed">|undefined)=>Object.fromEntries(Object.entries(source??{}).filter(([day])=>allowed(day)));
+        const dayCells=pickCells(base.dayCells),nightCells=pickCells(base.nightCells),days=pickCells(base.days),plannedShiftKinds=pickKinds(base.plannedShiftKinds);
+        const segmentDates=activeDates.filter(date=>date>=segment.from&&date<=segment.to);
+        let dayHours=0,nightHours=0,dayAccrued=0,nightAccrued=0;
+        for(const date of segmentDates){
+          const day=String(Number(date.slice(8,10))),d=cellNumber(dayCells[day]),n=cellNumber(nightCells[day]);
+          dayHours+=d;nightHours+=n;
+          const assignment=assignmentAt(base.workerId,date);
+          const plannedHours=Number(assignment?.plannedHours??base.plannedHours??0);
+          dayAccrued+=ratedAmount(rateAt(base,date,"day"),d,plannedHours);
+          nightAccrued+=ratedAmount(rateAt(base,date,"night"),n,plannedHours);
+        }
+        const monthly=(base.rateHistory??[]).filter(rate=>rate.kind==="any"&&rate.unit==="month"&&rate.effectiveFrom<=segment.to&&(!rate.effectiveTo||rate.effectiveTo>=segment.from)).reduce((max,rate)=>Math.max(max,Number(rate.amount)),0);
+        const calculated=dayAccrued+nightAccrued+(index===segments.length-1?monthly:0);
+        const correction=index===segments.length-1?Number(base.premium??0)+Number(base.adjustment??0):0;
+        const paid=index===segments.length-1?Number(base.paidAmount??0):0;
+        const total=calculated+correction;
+        const overlappingRates=(base.rateHistory??[]).filter(rate=>rate.effectiveFrom<=segment.to&&(!rate.effectiveTo||rate.effectiveTo>=segment.from));
+        workerRows.push({
+          ...base,
+          rowId:`${base.workerId}:${segment.from}:${segment.signature}`,
+          conditionSegment:multiple,
+          specialty:segment.assignment.specialty??base.specialty??null,
+          effectiveFrom:segment.from,effectiveTo:segment.to,
+          specialtyHistory:[{specialtyId:segment.assignment.specialtyId??null,specialty:segment.assignment.specialty??null,effectiveFrom:segment.from,effectiveTo:segment.to}],
+          rateHistory:overlappingRates,
+          days,dayCells,nightCells,plannedShiftKinds,
+          plannedHours:segment.assignment.plannedHours==null?base.plannedHours:Number(segment.assignment.plannedHours),
+          total:dayHours+nightHours,dayHours,night:nightHours,
+          dayAccrued,nightAccrued,calculatedAccrual:calculated,
+          premium:index===segments.length-1?base.premium:null,
+          adjustment:index===segments.length-1?base.adjustment:null,
+          accrualTotal:total,
+          paidAmount:paid,
+          payableAmount:Math.max(total-paid,0),
+          accrual:total,
+        });
+      });
+    }
+
     const plannedCandidates=await sql<Array<{applicationId:string;candidateId:string;name:string;specialty:string;plannedStartDate:string;plannedShiftKind:"day"|"night"|"mixed"|null}>>`
       SELECT ca.id "applicationId",c.id "candidateId",c.full_name name,s.name specialty,ca.planned_start_date::text "plannedStartDate",ca.planned_shift_kind "plannedShiftKind"
       FROM candidate_applications ca JOIN candidates c ON c.id=ca.candidate_id JOIN needs n ON n.id=ca.need_id JOIN specialties s ON s.id=n.specialty_id
@@ -779,7 +845,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       ORDER BY ca.planned_start_date,c.full_name
     `;
     const candidateRows:TimesheetWorkerRow[]=plannedCandidates.map(candidate=>{const day=String(Number(candidate.plannedStartDate.slice(8,10)));return {workerId:`candidate:${candidate.applicationId}`,name:candidate.name,rowKind:"candidate",candidateId:candidate.candidateId,applicationId:candidate.applicationId,specialty:candidate.specialty,days:{[day]:"П"},dayCells:candidate.plannedShiftKind==="night"?{}:{[day]:"П"},nightCells:candidate.plannedShiftKind==="night"?{[day]:"П"}:{},plannedShiftKinds:{[day]:candidate.plannedShiftKind??"mixed"},total:0,dayHours:0,night:0,overtime:0,rate:null,dayRate:null,nightRate:null,accrual:null};});
-    const rows=[...byWorker.values(),...candidateRows];
+    const rows=[...workerRows,...candidateRows];
     const [clientSnap,internalSnap]=await Promise.all([
       sql<SnapshotMetaRow[]>`
         SELECT id,(snapshot_json->>'hours')::numeric hours,status,COALESCE(version,1)::int version,workflow_comment comment,to_char(created_at,'DD.MM.YYYY HH24:MI') "createdAt"
