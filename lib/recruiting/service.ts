@@ -591,6 +591,12 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
     return ids.map(id=>{
       const related=applications.filter(row=>row.candidateId===id).sort((a,b)=>(b.updatedAt??"").localeCompare(a.updatedAt??""));
       const first=related[0];
+      const seed=demo.candidates.find(row=>row.id===id) as (typeof demo.candidates)[number] & {
+        formerWorkerAvailable?:boolean;
+        formerWorkerExitReasonCode?:string|null;
+        formerWorkerExitReason?:string|null;
+        formerWorkerExitDate?:string|null;
+      } | undefined;
       const active=related.filter(row=>["new","interview","documents","clearance","preparation"].includes(row.stage));
       const worker=related.some(row=>["first_shift","retention_7","retention_30"].includes(row.stage));
       const reserve=related.some(row=>row.stage==="reserve");
@@ -598,9 +604,11 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
       const preferredContact=first.preferredChannel==="telegram"?first.telegram:first.preferredChannel==="whatsapp"?first.whatsapp:first.preferredChannel==="email"?first.email:first.phone;
       return {
         id,fullName:first.fullName,phone:first.phone,city:first.city,preferredChannel:first.preferredChannel,preferredContact:preferredContact??first.phone,
-        source:first.source,status:worker?"worker":active.length?"active":reserve?"reserve":completed?"completed":"candidate",
+        source:first.source,status:seed?.formerWorkerAvailable?"available":worker?"worker":active.length?"active":reserve?"reserve":completed?"completed":"candidate",
         latestNeed:first.need,latestObject:first.object,latestStage:first.stage,latestStageLabel:first.stageLabel,owner:first.owner,
-        applicationsCount:related.length,activeApplications:active.length,workerId:worker?`demo-worker-${id}`:null,formerWorkerExitReasonCode:null,formerWorkerExitReason:null,formerWorkerExitDate:null,updatedAt:first.updatedAt??first.createdAt??"",
+        applicationsCount:related.length,activeApplications:seed?.formerWorkerAvailable?0:active.length,workerId:worker?`demo-worker-${id}`:null,
+        formerWorkerExitReasonCode:seed?.formerWorkerExitReasonCode??null,formerWorkerExitReason:seed?.formerWorkerExitReason??null,formerWorkerExitDate:seed?.formerWorkerExitDate??null,
+        updatedAt:first.updatedAt??first.createdAt??"",
       } satisfies CandidateDirectoryRow;
     });
   }
