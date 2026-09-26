@@ -15,6 +15,7 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0041_object_contacts.sql"),"object contacts migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0047_workforce_rehire_and_supply_norms.sql"),"repeat recruiting/supply norm migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0048_supply_norm_inheritance.sql"),"supply norm inheritance migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0049_object_finance_incident_workflows.sql"),"object finance/incident workflow migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const [object]=await sql`SELECT id,owner_user_id,client_company_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
