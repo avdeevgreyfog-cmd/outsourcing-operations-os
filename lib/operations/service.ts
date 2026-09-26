@@ -127,7 +127,7 @@ export async function listObjectPpeTemplates(actor:Actor,objectId:string):Promis
       WITH ranked AS (
         SELECT t.*,row_number() OVER (
           PARTITION BY t.specialty_id
-          ORDER BY (t.object_id=${objectId}::uuid) DESC,t.updated_at DESC,t.created_at DESC
+          ORDER BY (t.object_id=${objectId}::uuid) DESC NULLS LAST,t.updated_at DESC,t.created_at DESC
         ) rn
         FROM object_ppe_templates t
         WHERE t.active AND (t.object_id=${objectId}::uuid OR t.object_id IS NULL)
