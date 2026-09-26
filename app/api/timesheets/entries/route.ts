@@ -38,7 +38,7 @@ export async function PATCH(request:Request){
           WHERE object_id=${body.objectId}::uuid AND period_start<=${body.workDate}::date AND period_end>=${body.workDate}::date
           ORDER BY view_type,COALESCE(version,1) DESC,created_at DESC
         ) latest
-        WHERE status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+        WHERE status IN ('fixed','internal_submitted','internal_checked','client_sent','client_approved','closed')
         LIMIT 1
       `;
       if(locked)throw new Error("Табель за эту дату уже зафиксирован в маршруте согласования. Верните период на корректировку перед изменением факта.");
