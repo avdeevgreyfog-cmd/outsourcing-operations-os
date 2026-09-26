@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {createPortal} from 'react-dom';
 import {useEffect,useMemo,useState} from 'react';
-import {Download,FileSpreadsheet,Filter,Upload,X} from 'lucide-react';
+import {Archive,Download,FileSpreadsheet,Filter,Phone,Upload,UserPlus,X} from 'lucide-react';
 import type {CandidateDirectoryRow,RecruitingApplicationRow,RecruitingNeedRow,RecruitingOptions} from '@/lib/recruiting/service';
 import {contactChannelLabels,type RecruitingStage} from '@/lib/recruiting/model';
 import {useRecruitingApplications,saveDemoApplication} from '@/lib/recruiting/demo-client';
@@ -14,7 +14,7 @@ import {SalesSearch,SalesSegments} from './sales/SalesUI';
 type ImportRow={
  fullName:string;phone:string|null;email:string|null;city:string|null;telegram:string|null;whatsapp:string|null;max:string|null;preferredChannel:"phone"|"email"|"telegram"|"whatsapp"|"max"|"other"|null;
 };
-type CandidateBucket='new'|'recruiting'|'post_exit'|'inactive';
+type CandidateBucket='new'|'recruiting'|'available'|'post_exit'|'inactive';
 type OperationalBucket=CandidateBucket|'employee';
 const directoryStorage='operis.recruiting.directory.imports.v1';
 const recruitingStages=new Set<RecruitingStage>(['interview','documents','clearance','preparation']);
@@ -22,7 +22,7 @@ const postExitStages=new Set<RecruitingStage>(['first_shift','retention_7']);
 const terminalStages=new Set<RecruitingStage>(['reserve','rejected','no_show']);
 
 export function CandidatesWorkspace({
- rows,directory,needs,options,initialQueue,demo,canCreate,
+ rows,directory,needs,options,initialQueue,demo,canCreate,canEdit,
 }:{
  rows:RecruitingApplicationRow[];
  directory:CandidateDirectoryRow[];
@@ -31,6 +31,7 @@ export function CandidatesWorkspace({
  initialQueue:string;
  demo:boolean;
  canCreate:boolean;
+ canEdit:boolean;
 }){
  const all=useRecruitingApplications(rows,demo);
  const [query,setQuery]=useState('');
@@ -74,7 +75,7 @@ export function CandidatesWorkspace({
   const value=candidateBucket(row,latestByCandidate.get(row.id));
   if(value!=="employee")acc[value]++;
   return acc;
- },{new:0,recruiting:0,post_exit:0,inactive:0}),[people,latestByCandidate]);
+ },{new:0,recruiting:0,available:0,post_exit:0,inactive:0}),[people,latestByCandidate]);
  const searchActive=Boolean(query.trim());
  const filteredPeople=people.filter(row=>{
   const latest=latestByCandidate.get(row.id);
@@ -171,6 +172,7 @@ export function CandidatesWorkspace({
    <SalesSegments label="Состояние кандидатов" value={bucket} variant="navigation" onChange={value=>{setBucket(value);setStage('all')}} items={[
     {value:'new',label:`Новые · ${counts.new}`},
     {value:'recruiting',label:`В подборе · ${counts.recruiting}`},
+    {value:'available',label:`Повторный подбор · ${counts.available}`},
     {value:'post_exit',label:`После выхода · ${counts.post_exit}`},
     {value:'inactive',label:`Неактивные · ${counts.inactive}`},
    ]}/>
@@ -189,7 +191,7 @@ export function CandidatesWorkspace({
    <SalesSearch value={query} onChange={setQuery} placeholder="ФИО, телефон, email или мессенджер"/>
   </div>
 
-  <CandidatePeopleTable rows={filteredPeople} applications={all} demo={demo}/>
+  <CandidatePeopleTable rows={filteredPeople} applications={all} needs={needs} demo={demo} canEdit={canEdit}/>
   {showImport&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowImport(false)}}>
    <div className="recruiting-modal-card candidate-import-modal">
     <div className="recruiting-modal-head"><div><h2>Импорт базы кандидатов</h2><p>Загрузите Excel. Совпадения по контактам будут объединены с существующими карточками.</p></div><button className="icon-button" onClick={()=>setShowImport(false)}><X size={17}/></button></div>
@@ -206,17 +208,39 @@ export function CandidatesWorkspace({
  </div>;
 }
 
-function CandidatePeopleTable({rows,applications,demo}:{rows:CandidateDirectoryRow[];applications:RecruitingApplicationRow[];demo:boolean}){
- return <div className="section section-flush"><div className="request-table-wrap"><table className="data-table candidates-directory-table"><thead><tr>{['Кандидат','Статус','Предпочтительная связь','Последняя заявка','Источник','Ответственный','История','Обновлено',''].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(row=>{const latest=applications.find(app=>app.candidateId===row.id);const localOnly=demo&&!applications.some(app=>app.candidateId===row.id);return <tr key={row.id}>
+function CandidatePeopleTable({rows,applications,needs,demo,canEdit}:{rows:CandidateDirectoryRow[];applications:RecruitingApplicationRow[];needs:RecruitingNeedRow[];demo:boolean;canEdit:boolean}){
+ const [selected,setSelected]=useState<CandidateDirectoryRow|null>(null);
+ const [needId,setNeedId]=useState('');
+ const [busy,setBusy]=useState(false);
+ const [error,setError]=useState('');
+ const activeNeeds=needs.filter(row=>['open','in_progress'].includes(row.status));
+ async function repeatAction(candidate:CandidateDirectoryRow,action:'apply'|'archive'){
+  if(action==='archive'&&!window.confirm(`Отправить «${candidate.fullName}» в архив?`))return;
+  setBusy(true);setError('');
+  try{
+   if(demo){if(action==='apply')setSelected(null);return;}
+   const response=await fetch(`/api/candidates/${candidate.id}/reuse`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(action==='apply'?{action,needId}:{action})});
+   const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??'Не удалось обновить повторный подбор');
+   window.location.reload();
+  }catch(e){setError(e instanceof Error?e.message:'Не удалось выполнить действие');}
+  finally{setBusy(false);}
+ }
+ return <><div className="section section-flush"><div className="request-table-wrap"><table className="data-table candidates-directory-table"><thead><tr>{['Кандидат','Статус','Предпочтительная связь','Последняя заявка','Источник','Ответственный','История','Обновлено',''].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{rows.map(row=>{const latest=applications.find(app=>app.candidateId===row.id);const localOnly=demo&&!applications.some(app=>app.candidateId===row.id);const repeat=row.status==='available';return <tr key={row.id}>
   <td>{localOnly?<strong className="cell-title">{row.fullName}</strong>:<Link className="cell-title" href={`/candidates/${row.id}`}>{row.fullName}</Link>}<span className="cell-sub">{row.city??'Город не указан'}{row.phone?` · ${row.phone}`:''}</span></td>
   <td><Status tone={candidateStatusTone(row,latest)}>{candidateStatusLabel(row,latest)}</Status>{row.latestStageLabel&&<span className="cell-sub">{row.latestStageLabel}</span>}</td>
   <td><strong>{contactChannelLabels[row.preferredChannel??'']??'Контакт'}</strong><span className="cell-sub">{row.preferredContact??row.phone??'—'}</span></td>
-  <td>{row.latestNeed??'Нет активной заявки'}<span className="cell-sub">{row.latestObject??''}</span></td>
+  <td>{repeat?'Готов к новой потребности':row.latestNeed??'Нет активной заявки'}<span className="cell-sub">{repeat&&row.latestObject?`Предыдущий объект: ${row.latestObject}`:row.latestObject??''}</span></td>
   <td>{row.source??'—'}</td><td>{row.owner??'—'}</td>
   <td>Заявок: {row.applicationsCount}<span className="cell-sub">Активных: {row.activeApplications}</span></td>
   <td>{formatWorkDate(row.updatedAt)}</td>
-  <td>{latest?<Link className="button" href={`/candidates/${row.id}`}>Карточка</Link>:<span className="cell-sub">База</span>}</td>
- </tr>})}</tbody></table>{!rows.length&&<div className="empty-inline">Кандидаты по выбранным условиям не найдены</div>}</div></div>;
+  <td>{repeat&&canEdit?<div className="page-actions candidate-repeat-actions">{row.phone&&<a className="icon-button" href={`tel:${row.phone.replace(/[^+\d]/g,'')}`} title="Позвонить"><Phone size={14}/></a>}<button className="button primary" type="button" onClick={()=>{setSelected(row);setNeedId(activeNeeds[0]?.id??'');setError('')}}><UserPlus size={14}/> Подобрать</button><button className="icon-button" type="button" title="В архив" disabled={busy} onClick={()=>void repeatAction(row,'archive')}><Archive size={14}/></button></div>:latest?<Link className="button" href={`/candidates/${row.id}`}>Карточка</Link>:<span className="cell-sub">База</span>}</td>
+ </tr>})}</tbody></table>{!rows.length&&<div className="empty-inline">Кандидаты по выбранным условиям не найдены</div>}</div></div>
+ {selected&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setSelected(null)}}><div className="recruiting-modal-card candidate-repeat-modal">
+  <div className="recruiting-modal-head"><div><h2>Повторный подбор</h2><p>{selected.fullName} уже работал в компании. Выберите новую активную потребность — будет создан новый цикл подбора в той же карточке человека.</p></div><button className="icon-button" onClick={()=>setSelected(null)}><X size={17}/></button></div>
+  <div className="candidate-import-body"><label>Потребность<select value={needId} onChange={e=>setNeedId(e.target.value)}><option value="">Выберите</option>{activeNeeds.map(row=><option key={row.id} value={row.id}>{row.title} · {row.object??row.region??'без объекта'}</option>)}</select></label>{demo&&<div className="candidate-import-result">Демо: действие можно проверить визуально; серверное сохранение отключено.</div>}{error&&<div className="recruiting-error">{error}</div>}</div>
+  <div className="recruiting-modal-footer"><button className="button" onClick={()=>setSelected(null)}>Отмена</button><button className="button primary" disabled={busy||!needId} onClick={()=>void repeatAction(selected,'apply')}>{busy?'Сохраняю…':'Отправить в подбор'}</button></div>
+ </div></div></Portal>}
+ </>;
 }
 
 function mapImportRow(row:Record<string,unknown>,index:number):ImportRow|null{
@@ -231,12 +255,14 @@ function digits(value:string){return value.replace(/\D/g,'')}
 function preferredValue(row:ImportRow){return row.preferredChannel==='telegram'?row.telegram:row.preferredChannel==='whatsapp'?row.whatsapp:row.preferredChannel==='max'?row.max:row.preferredChannel==='email'?row.email:row.phone}
 function normalizeQueue(value:string):CandidateBucket{
  if(value==='candidate'||value==='new')return'new';
+ if(value==='available'||value==='repeat')return'available';
  if(value==='worker'||value==='post_exit')return'post_exit';
  if(value==='reserve'||value==='completed'||value==='closed'||value==='inactive')return'inactive';
  return'recruiting';
 }
 function candidateBucket(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow):OperationalBucket{
  const stage=latest?.stage??row.latestStage;
+ if(row.status==='available')return'available';
  if(stage==='new'||(!stage&&row.status==='candidate'))return'new';
  if(stage&&recruitingStages.has(stage))return'recruiting';
  if(stage&&postExitStages.has(stage))return'post_exit';
@@ -248,6 +274,7 @@ function candidateStatusLabel(row:CandidateDirectoryRow,latest?:RecruitingApplic
  const value=candidateBucket(row,latest);
  if(value==='new')return'Новый';
  if(value==='recruiting')return'В подборе';
+ if(value==='available')return'Повторный подбор';
  if(value==='post_exit')return'После выхода';
  if(value==='employee')return'Сотрудник';
  if(latest?.stage==='reserve'||row.status==='reserve')return'Резерв';
@@ -257,12 +284,13 @@ function candidateStatusLabel(row:CandidateDirectoryRow,latest?:RecruitingApplic
 function candidateStatusTone(row:CandidateDirectoryRow,latest?:RecruitingApplicationRow):'good'|'warn'|'bad'|'info'|'neutral'{
  const value=candidateBucket(row,latest);
  if(value==='employee')return'good';
+ if(value==='available')return'info';
  if(value==='new'||value==='recruiting'||value==='post_exit')return'neutral';
  if(latest?.stage==='reserve'||row.status==='reserve')return'warn';
  if(latest?.stage==='no_show'||latest?.stage==='rejected')return'bad';
  return'neutral';
 }
-function bucketRank(value:OperationalBucket){return value==='new'?0:value==='recruiting'?1:value==='post_exit'?2:value==='inactive'?3:4}
+function bucketRank(value:OperationalBucket){return value==='new'?0:value==='recruiting'?1:value==='available'?2:value==='post_exit'?3:value==='inactive'?4:5}
 function matchesCandidateQuery(row:CandidateDirectoryRow,app:RecruitingApplicationRow|undefined,query:string){
  const raw=query.trim();if(!raw)return true;
  const text=[row.id,row.fullName,row.phone,row.city,row.preferredContact,row.source,app?.fullName,app?.phone,app?.email,app?.telegram,app?.whatsapp,app?.need,app?.object,app?.source,app?.sourceChannel,app?.sourceCampaign,app?.sourceReference].filter(Boolean).join(' ').toLocaleLowerCase('ru');
@@ -280,6 +308,7 @@ function stageOptionsFor(bucket:CandidateBucket,options:RecruitingOptions):Array
  const labels=new Map(options.funnelStages.map(row=>[row.code,row.label]));
  const codes:RecruitingStage[]=bucket==='new'?['new']:
   bucket==='recruiting'?['interview','documents','clearance','preparation']:
+  bucket==='available'?[]:
   bucket==='post_exit'?['first_shift','retention_7']:
   ['reserve','rejected','no_show'];
  return codes.map(code=>[code,labels.get(code)??(code==='reserve'?'Резерв':code==='rejected'?'Отказ':code==='no_show'?'Не вышел':code)]);
