@@ -2984,3 +2984,161 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .object-daily-toolbar>span{margin-right:0}
   .sales-workspace.operations-workspace .object-quality-toolbar{align-items:stretch;flex-direction:column}
 }
+
+
+/* Object finance polish: dense, aligned and quiet status language. */
+.sales-workspace.operations-workspace .object-pilot-header .object-primary-nav .entity-tabs a{
+  align-items:center;
+  line-height:1;
+}
+.sales-workspace.operations-workspace .object-pilot-header .object-primary-nav .entity-tabs a span{
+  min-width:20px;
+  height:20px;
+  padding:0 6px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+  border-radius:5px;
+}
+
+.sales-workspace.operations-workspace .object-finance-tabs{
+  min-height:44px;
+  padding:0 16px;
+  align-items:stretch;
+}
+.sales-workspace.operations-workspace .object-finance-tabs button{
+  min-height:44px;
+  height:44px;
+  display:flex;
+  align-items:center;
+  padding:0;
+  line-height:1;
+}
+
+.sales-workspace.operations-workspace .object-finance-metrics{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:0;
+  margin:0;
+  padding:0;
+  border-bottom:1px solid var(--border);
+  background:var(--panel);
+}
+.sales-workspace.operations-workspace .object-finance-metrics .metric{
+  min-height:92px;
+  margin:0;
+  padding:13px 16px 12px;
+  display:grid;
+  grid-template-rows:18px 32px 18px;
+  align-content:center;
+  gap:2px;
+  border:0;
+  border-right:1px solid var(--border);
+  border-radius:0;
+  background:transparent;
+}
+.sales-workspace.operations-workspace .object-finance-metrics .metric:last-child{border-right:0}
+.sales-workspace.operations-workspace .object-finance-metrics .metric>span{
+  display:flex;
+  align-items:center;
+  margin:0;
+  color:var(--muted);
+  font-size:11px;
+  line-height:18px;
+  font-weight:600;
+}
+.sales-workspace.operations-workspace .object-finance-metrics .metric strong{
+  display:flex;
+  align-items:center;
+  margin:0;
+  font-size:24px;
+  line-height:32px;
+  font-weight:680;
+  letter-spacing:-.025em;
+  font-variant-numeric:tabular-nums;
+}
+.sales-workspace.operations-workspace .object-finance-metrics .metric small{
+  display:flex;
+  align-items:center;
+  margin:0;
+  color:var(--muted);
+  font-size:10px;
+  line-height:18px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.sales-workspace.operations-workspace .object-payment-history-table th,
+.sales-workspace.operations-workspace .object-payment-history-table td{
+  vertical-align:middle;
+}
+.sales-workspace.operations-workspace .object-payment-history-table tbody tr{
+  min-height:48px;
+}
+.sales-workspace.operations-workspace .object-finance-reconciliation{
+  min-height:26px;
+  padding:3px 7px;
+  display:inline-flex;
+  align-items:center;
+  border:1px solid var(--border);
+  border-radius:5px;
+  background:var(--panel-2);
+  color:var(--muted);
+  font-size:10.5px;
+  font-weight:600;
+  line-height:1.2;
+  white-space:nowrap;
+}
+.sales-workspace.operations-workspace .object-finance-reconciliation.is-confirmed{
+  border-color:color-mix(in srgb,var(--good) 22%,var(--border));
+  background:color-mix(in srgb,var(--good) 5%,var(--panel));
+  color:color-mix(in srgb,var(--good) 58%,var(--text));
+}
+.sales-workspace.operations-workspace .object-finance-reconciliation.is-pending{
+  border-color:color-mix(in srgb,var(--warn) 20%,var(--border));
+  background:color-mix(in srgb,var(--warn) 4%,var(--panel));
+  color:color-mix(in srgb,var(--warn) 58%,var(--text));
+}
+.sales-workspace.operations-workspace .object-finance-reconciliation.is-conflict{
+  border-color:color-mix(in srgb,var(--bad) 18%,var(--border));
+  background:color-mix(in srgb,var(--bad) 4%,var(--panel));
+  color:color-mix(in srgb,var(--bad) 58%,var(--text));
+}
+.sales-workspace.operations-workspace .object-finance-muted{color:var(--muted)}
+.sales-workspace.operations-workspace .object-reconcile-actions .button{
+  min-height:28px;
+  height:28px;
+  padding:0 7px;
+  border-color:transparent;
+  background:transparent;
+  color:var(--muted);
+  font-size:10px;
+}
+.sales-workspace.operations-workspace .object-reconcile-actions .button:hover{
+  border-color:var(--border);
+  background:var(--panel-2);
+  color:var(--text);
+}
+.sales-workspace.operations-workspace .object-reconcile-actions .object-finance-conflict-action{
+  color:color-mix(in srgb,var(--bad) 48%,var(--muted));
+}
+.sales-workspace.operations-workspace .object-payment-history-table td:last-child{
+  width:150px;
+}
+
+@media(max-width:1000px){
+  .sales-workspace.operations-workspace .object-finance-metrics{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .sales-workspace.operations-workspace .object-finance-metrics .metric:nth-child(2n){border-right:0}
+  .sales-workspace.operations-workspace .object-finance-metrics .metric:nth-child(-n+2){border-bottom:1px solid var(--border)}
+}
+@media(max-width:620px){
+  .sales-workspace.operations-workspace .object-finance-metrics{grid-template-columns:1fr}
+  .sales-workspace.operations-workspace .object-finance-metrics .metric:nth-child(n){
+    border-right:0;
+    border-bottom:1px solid var(--border);
+  }
+  .sales-workspace.operations-workspace .object-finance-metrics .metric:last-child{border-bottom:0}
+}
