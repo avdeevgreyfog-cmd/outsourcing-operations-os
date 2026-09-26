@@ -234,8 +234,20 @@ function WorkerTable({
   rows:WorkerRow[];today:string;showSpecialty?:boolean;canEdit:boolean;canOffboard:boolean;canManageAssets:boolean;busy:string;
   onDocuments:(row:WorkerRow,status:string)=>void;onAction:(row:WorkerRow,mode:"transfer"|"exit")=>void;
 }){
-  const [menuWorkerId,setMenuWorkerId]=useState<string|null>(null);
-  return <div className="request-table-wrap"><table className="data-table object-workforce-table object-workforce-table-v2"><thead><tr><th>Сотрудник</th><th>Телефон</th>{showSpecialty&&<th>Специальность</th>}<th>График</th><th>Сегодня · {shortDate(today)}</th><th>Ставка</th><th>Документы</th><th>Обеспечение</th>{(canEdit||canOffboard)&&<th aria-label="Действия"></th>}</tr></thead><tbody>{rows.map(row=>{
+  const [menu,setMenu]=useState<{workerId:string;left:number;top:number}|null>(null);
+  function toggleMenu(row:WorkerRow,event:React.MouseEvent<HTMLButtonElement>){
+    if(menu?.workerId===row.id){setMenu(null);return;}
+    const rect=event.currentTarget.getBoundingClientRect();
+    const width=220;
+    const height=132;
+    const gap=6;
+    const left=Math.max(8,Math.min(window.innerWidth-width-8,rect.right-width));
+    const below=rect.bottom+gap;
+    const top=below+height<=window.innerHeight-8?below:Math.max(8,rect.top-height-gap);
+    setMenu({workerId:row.id,left,top});
+  }
+  const menuWorker=menu?rows.find(row=>row.id===menu.workerId)??null:null;
+  return <><div className="request-table-wrap"><table className="data-table object-workforce-table object-workforce-table-v2"><thead><tr><th>Сотрудник</th><th>Телефон</th>{showSpecialty&&<th>Специальность</th>}<th>График</th><th>Сегодня · {shortDate(today)}</th><th>Ставка</th><th>Документы</th><th>Обеспечение</th>{(canEdit||canOffboard)&&<th aria-label="Действия"></th>}</tr></thead><tbody>{rows.map(row=>{
     const objectState=workerObjectState(row,today);const day=workerTodayStatus(row,today);const adaptation=adaptationLabel(row,today);
     return <tr key={row.id}>
       <td><Link className="cell-title" href={`/workers/${row.id}`}>{row.fullName}</Link>{row.plannedExitDate?<span className="cell-sub object-worker-planned-change is-exit">Завершение работы · до {formatDate(row.plannedExitDate)}</span>:row.plannedTransferDate?<span className="cell-sub object-worker-planned-change">Перевод {formatDate(row.plannedTransferDate)} → {row.plannedTransferObject??row.plannedTransferSpecialty??"новое назначение"}</span>:adaptation&&<span className="cell-sub object-worker-adaptation">{adaptation}</span>}</td>
@@ -246,9 +258,17 @@ function WorkerTable({
       <td className="num"><WorkerRate row={row}/></td>
       <td><div className="object-worker-doc-editor"><select value={row.employmentDocumentsStatus??"not_received"} disabled={!canEdit||busy===`docs:${row.id}`} onChange={event=>void onDocuments(row,event.target.value)}>{Object.entries(documentLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><Link href={`/workers/${row.id}?tab=assignments`}>Карточка</Link></div></td>
       <td><WorkerAssets row={row} canManageAssets={canManageAssets}/></td>
-      {(canEdit||canOffboard)&&<td className="object-worker-actions-cell"><div className={"object-worker-actions"+(menuWorkerId===row.id?" is-open":"")}><button type="button" className="icon-button" aria-label={`Действия: ${row.fullName}`} aria-expanded={menuWorkerId===row.id} onClick={()=>setMenuWorkerId(current=>current===row.id?null:row.id)}><MoreHorizontal size={16}/></button>{menuWorkerId===row.id&&<div>{canEdit&&<button type="button" onClick={()=>{setMenuWorkerId(null);onAction(row,"transfer")}}><ArrowRight size={14}/> Перевести</button>}{canOffboard&&<button type="button" className="danger" onClick={()=>{setMenuWorkerId(null);onAction(row,"exit")}}><LogOut size={14}/> Завершение работы</button>}<Link href={`/workers/${row.id}`}>Открыть карточку</Link></div>}</div></td>}
+      {(canEdit||canOffboard)&&<td className="object-worker-actions-cell"><div className={"object-worker-actions"+(menu?.workerId===row.id?" is-open":"")}><button type="button" className="icon-button" aria-label={`Действия: ${row.fullName}`} aria-expanded={menu?.workerId===row.id} onClick={event=>toggleMenu(row,event)}><MoreHorizontal size={16}/></button></div></td>}
     </tr>;
-  })}</tbody></table></div>;
+  })}</tbody></table></div>
+  {menu&&menuWorker&&<Portal><div className="object-worker-actions-layer" onMouseDown={event=>{if(event.currentTarget===event.target)setMenu(null)}}>
+    <div className="object-worker-actions-popover" style={{left:menu.left,top:menu.top}}>
+      {canEdit&&<button type="button" onClick={()=>{setMenu(null);onAction(menuWorker,"transfer")}}><ArrowRight size={14}/> Перевести</button>}
+      {canOffboard&&<button type="button" className="danger" onClick={()=>{setMenu(null);onAction(menuWorker,"exit")}}><LogOut size={14}/> Завершение работы</button>}
+      <Link href={`/workers/${menuWorker.id}`} onClick={()=>setMenu(null)}>Открыть карточку</Link>
+    </div>
+  </div></Portal>}
+  </>;
 }
 
 function WorkerAssets({row,canManageAssets}:{row:WorkerRow;canManageAssets:boolean}){
