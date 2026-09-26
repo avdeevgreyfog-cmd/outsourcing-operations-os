@@ -3376,3 +3376,23 @@ button.sales-funnel-step:active{transform:translateY(1px)}
     justify-items:start;
   }
 }
+
+
+/* Object header tabs: one vertical rhythm for text and counters. */
+.sales-workspace.operations-workspace .object-pilot-header .object-primary-nav .entity-tabs{
+  height:44px;
+  align-items:stretch;
+}
+.sales-workspace.operations-workspace .object-pilot-header .object-primary-nav .entity-tabs a{
+  height:44px;
+  min-height:44px;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  line-height:1;
+}
+.sales-workspace.operations-workspace .object-pilot-header .object-primary-nav .entity-tabs a span{
+  flex:0 0 auto;
+  margin:0;
+}
