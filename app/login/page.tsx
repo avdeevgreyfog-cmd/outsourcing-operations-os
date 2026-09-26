@@ -6,7 +6,7 @@ import { isDemoMode } from "@/lib/demo/mode";
 
 export default async function LoginPage(){
   const actor=await getCurrentActor();
-  if(actor) redirect("/");
+  if(actor&&!actor.demo) redirect("/");
   return <main className="login-shell">
     <div className="login-panel">
       <div className="brand brand-login"><span className="brand-mark"><Image src="/operis-symbol.svg" alt="" width={24} height={24} priority/></span><div><strong>OPERIS</strong><small>Операционная система аутсорсинга</small></div></div>
