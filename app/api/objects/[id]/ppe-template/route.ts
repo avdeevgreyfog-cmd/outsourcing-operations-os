@@ -5,7 +5,7 @@ import { AccessDeniedError,requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
-const schema=z.object({specialtyId:z.string().uuid(),items:z.array(z.object({itemId:z.string().uuid(),quantity:z.number().positive().max(100),sizeSource:z.enum(["none","clothing","shoe","manual"]).default("none"),variant:z.string().trim().max(120).default("")})).max(100)});
+const schema=z.object({specialtyId:z.string().uuid(),items:z.array(z.object({itemId:z.string().uuid(),quantity:z.number().positive().max(1000),sizeSource:z.enum(["none","clothing","shoe","manual"]).default("none"),variant:z.string().trim().max(120).default(""),replacementCycleDays:z.number().int().min(1).max(3650).nullable().optional()})).max(100)});
 
 export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -22,18 +22,18 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
       const [specialty]=await tx<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE id=${body.specialtyId}::uuid AND active`;
       if(!specialty)throw new Error("Специальность не найдена");
       const itemIds=[...new Set(body.items.map(item=>item.itemId))];
-      if(itemIds.length){const valid=await tx<Array<{id:string}>>`SELECT id FROM inventory_items WHERE id=ANY(${itemIds}::uuid[]) AND active AND category IN ('workwear','ppe')`;if(valid.length!==itemIds.length)throw new Error("В шаблоне есть недоступная позиция");}
+      if(itemIds.length){const valid=await tx<Array<{id:string}>>`SELECT id FROM inventory_items WHERE id=ANY(${itemIds}::uuid[]) AND active AND category IN ('workwear','ppe','tool','equipment','other')`;if(valid.length!==itemIds.length)throw new Error("В норме есть недоступная или расходная позиция");}
       let [template]=await tx<Array<{id:string}>>`SELECT id FROM object_ppe_templates WHERE object_id=${id}::uuid AND specialty_id=${body.specialtyId}::uuid AND active FOR UPDATE`;
       if(!template){[template]=await tx<Array<{id:string}>>`INSERT INTO object_ppe_templates(organization_id,object_id,specialty_id,name,created_by_user_id,updated_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.specialtyId}::uuid,${`Комплект: ${specialty.name}`},${actor.userId}::uuid,${actor.userId}::uuid) RETURNING id`;}
       await tx`DELETE FROM object_ppe_template_items WHERE template_id=${template.id}::uuid`;
-      for(const item of body.items){await tx`INSERT INTO object_ppe_template_items(organization_id,template_id,item_id,quantity,size_source,variant) VALUES(${actor.organizationId}::uuid,${template.id}::uuid,${item.itemId}::uuid,${item.quantity},${item.sizeSource},${item.variant})`;}
+      for(const item of body.items){await tx`INSERT INTO object_ppe_template_items(organization_id,template_id,item_id,quantity,size_source,variant,replacement_cycle_days) VALUES(${actor.organizationId}::uuid,${template.id}::uuid,${item.itemId}::uuid,${item.quantity},${item.sizeSource},${item.variant},${item.replacementCycleDays??null})`;}
       await tx`UPDATE object_ppe_templates SET updated_by_user_id=${actor.userId}::uuid,updated_at=now() WHERE id=${template.id}::uuid`;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,'ppe_template_updated',${`Обновлён комплект СИЗ: ${specialty.name}`},${tx.json({templateId:template.id,specialtyId:body.specialtyId,itemCount:body.items.length})})`;
       return {ok:true,id:template.id};
     }));
     return NextResponse.json(result);
   }catch(error){
-    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте шаблон комплекта",issues:error.issues},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте норму обеспечения",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось сохранить комплект"},{status:500});
   }
