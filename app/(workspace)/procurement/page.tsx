@@ -5,7 +5,7 @@ import { SupplyRequestsWorkspace } from "@/components/SupplyRequestsWorkspace";
 import { getInventorySnapshot, getOperationsReferenceData, listSupplyRequests } from "@/lib/operations/service";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 
-export default async function ProcurementPage({searchParams}:{searchParams:Promise<{item?:string;location?:string;object?:string;create?:string}>}){
+export default async function ProcurementPage({searchParams}:{searchParams:Promise<{item?:string;location?:string;object?:string;quantity?:string;create?:string}>}){
   const actor=await requireActor();
   const params=isGithubPagesDemo()?{}:await searchParams;
   const [rows,options,inventory]=await Promise.all([
@@ -15,6 +15,6 @@ export default async function ProcurementPage({searchParams}:{searchParams:Promi
   ]);
   return <>
     <PageHeader eyebrow="Операции → Обеспечение" title="Заявки на обеспечение" subtitle="Закупки, оплаты, компенсации и услуги с привязкой к объекту, запасу и сроку потребности." breadcrumbs={[{label:"Операции"},{label:"Обеспечение"},{label:"Заявки на обеспечение"}]}/>
-    <SupplyRequestsWorkspace rows={rows} options={options} inventory={inventory} canManage={hasCapability(actor.access,"procurement.manage")} demo={actor.demo} initialItemId={params.item??null} initialLocationId={params.location??null} initialObjectId={params.object??null} openInitially={params.create==="1"}/>
+    <SupplyRequestsWorkspace rows={rows} options={options} inventory={inventory} canManage={hasCapability(actor.access,"procurement.manage")} demo={actor.demo} initialItemId={params.item??null} initialLocationId={params.location??null} initialObjectId={params.object??null} initialQuantity={params.quantity??null} openInitially={params.create==="1"}/>
   </>;
 }
