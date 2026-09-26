@@ -81,8 +81,8 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   }
 
   async function persistCell(workerId:string,day:number,value:string,segment:Segment,quiet=false){
-    const row=rows.find(item=>item.workerId===workerId);
     const date=dateString(data.month,day);
+    const row=rows.find(item=>item.workerId===workerId&&rowCoversDate(item,date));
     if(!canEditFact||!row||row.rowKind==="candidate"||isAfterEnd(row,date))return false;
     const key=`${workerId}:${day}:${segment}`;
     if(!quiet){setSaving(key);setMessage("")}
@@ -91,7 +91,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось сохранить");
       const normalized=normalizeCell(value);
-      setRows(current=>current.map(item=>item.workerId!==workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalized}}));
+      setRows(current=>current.map(item=>item.workerId!==workerId||!rowCoversDate(item,date)?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalized}}));
       if(!quiet)setMessage("Изменение сохранено");
       return true;
     }catch(error){
@@ -189,11 +189,11 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       </div>
     </div>
 
-    <details className={`timesheet-legend timesheet-legend-top timesheet-legend-collapsible ${pilot?"timesheet-legend-collapsible-forced":""}`}><summary>Обозначения табеля</summary><div><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div></details>
-    <div className={`timesheet-legend timesheet-legend-top timesheet-legend-classic ${pilot?"timesheet-legend-classic-hidden":""}`}><strong>Обозначения</strong><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Ставки применяются по дате. Предыдущая ставка показывается серым.</span>}</div>
+    <details className={`timesheet-legend timesheet-legend-top timesheet-legend-collapsible ${pilot?"timesheet-legend-collapsible-forced":""}`}><summary>Обозначения табеля</summary><div><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">При смене специальности или ставки сотрудник показывается отдельной строкой с даты новых условий.</span>}</div></details>
+    <div className={`timesheet-legend timesheet-legend-top timesheet-legend-classic ${pilot?"timesheet-legend-classic-hidden":""}`}><strong>Обозначения</strong><span><b>11</b> фактические часы</span><span><b>П</b> план</span><span><b>?</b> вышел, часы не закрыты</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span><b>Б</b> больничный</span><span><b>НВ</b> прогул / невыход</span><span><b>УВ</b> работа завершена</span>{view==="internal"&&sensitive&&<span className="timesheet-legend-note">Новые условия работы идут отдельной строкой с даты изменения.</span>}</div>
 
     <div className="timesheet-summary-strip">
-      <div><span>Сотрудники</span><strong>{rows.filter(row=>row.rowKind!=="candidate").length}</strong></div>
+      <div><span>Сотрудники</span><strong>{new Set(rows.filter(row=>row.rowKind!=="candidate").map(row=>row.workerId)).size}</strong></div>
       <div><span>Дневные</span><strong>{totals.dayShifts} смен</strong><small>{totals.dayHours} ч</small></div>
       <div><span>Ночные</span><strong>{totals.nightShifts} смен</strong><small>{totals.nightHours} ч</small></div>
       <div className={totals.noShows?"is-attention":""}><span>Прогулы</span><strong>{totals.noShows}</strong><small>{totals.noShows?"требуют проверки":"нет"}</small></div>
@@ -246,7 +246,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
               const shiftCount=days.filter(day=>numericCell(cells?.[String(day)])>0).length;
               const segmentAccrued=calculateSegmentAccrued(row,segment,days,data.month);
               const first=index===0,last=index===segments.length-1;
-              return <tr key={`${row.workerId}:${segment}`} className={[
+              return <tr key={`${row.rowId??row.workerId}:${segment}`} className={[
                 row.rowKind==="candidate"?"timesheet-candidate-row":"",
                 first?"timesheet-worker-start":"",
                 last?"timesheet-worker-end":"",
@@ -275,7 +275,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   ].filter(Boolean).join(" ");
                   return <td key={day} className={classes}>
                     {editable
-                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onKeyDown={handleCellKeyDown} onFocus={event=>event.currentTarget.select()} onChange={event=>setRows(current=>current.map(item=>item.workerId!==row.workerId?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
+                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onKeyDown={handleCellKeyDown} onFocus={event=>event.currentTarget.select()} onChange={event=>setRows(current=>current.map(item=>(item.rowId??item.workerId)!==(row.rowId??row.workerId)?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
                       :stateCode??""}
                   </td>;
                 })}
@@ -344,7 +344,7 @@ function EmployeeIdentity({row}:{row:TimesheetWorkerRow}){
   return <div className="timesheet-worker-identity">
     <strong>{row.name}</strong>
     <span>{current?.specialty??row.specialty??(row.rowKind==="candidate"?"Кандидат":"Без специальности")}</span>
-    {history.length>1&&history.slice(0,-1).map(item=><small key={item.effectiveFrom+`${item.specialty}`}>{item.specialty??"Без специальности"} · до {item.effectiveTo?shortDate(item.effectiveTo):"—"}</small>)}
+    {row.conditionSegment&&row.effectiveFrom&&<small>Условия {shortDate(row.effectiveFrom)}–{row.effectiveTo?shortDate(row.effectiveTo):"далее"}</small>}
     {row.rowKind==="candidate"&&<small>Кандидат · план первого выхода</small>}
   </div>;
 }
@@ -360,6 +360,7 @@ function RateHistory({row,segment,month}:{row:TimesheetWorkerRow;segment:Segment
     return <span key={rate.kind+rate.effectiveFrom} className={last?"current":"previous"}><b>{formatRate(rate,row.plannedHours)}</b><small>{ratePeriodLabel(rate,month)}</small></span>;
   })}</div>;
 }
+function rowCoversDate(row:TimesheetWorkerRow,date:string){return (!row.effectiveFrom||date>=row.effectiveFrom)&&(!row.effectiveTo||date<=row.effectiveTo)}
 function rowNeedsAttention(row:TimesheetWorkerRow,days:number[],month:string,todayIso:string){
   return days.some(day=>{
     const date=dateString(month,day);if(date>todayIso)return false;
