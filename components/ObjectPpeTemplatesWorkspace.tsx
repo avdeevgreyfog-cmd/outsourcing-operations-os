@@ -20,12 +20,7 @@ export function ObjectPpeTemplatesWorkspace({
   demo:boolean;
 }){
   const normItems=useMemo(()=>inventoryItems.filter(item=>item.category!=="consumable").sort((a,b)=>a.name.localeCompare(b.name,"ru")),[inventoryItems]);
-  const options=useMemo(()=>{
-    const map=new Map<string,string>();
-    for(const item of specialties)map.set(item.id,item.name);
-    for(const item of templates)map.set(item.specialtyId,item.specialty);
-    return [...map].map(([id,name])=>({id,name})).sort((a,b)=>a.name.localeCompare(b.name,"ru"));
-  },[specialties,templates]);
+  const options=useMemo(()=>specialties.slice().sort((a,b)=>a.name.localeCompare(b.name,"ru")),[specialties]);
   const first=options[0]?.id??"";
   const [specialtyId,setSpecialtyId]=useState(first);
   const [draft,setDraft]=useState<DraftRow[]>(()=>draftFromTemplate(templates.find(item=>item.specialtyId===first)));
@@ -34,6 +29,7 @@ export function ObjectPpeTemplatesWorkspace({
   const [message,setMessage]=useState("");
 
   const currentName=options.find(item=>item.id===specialtyId)?.name??"Специальность";
+  const currentTemplate=templates.find(item=>item.specialtyId===specialtyId);
   const available=normItems.filter(item=>!draft.some(row=>row.itemId===item.id));
 
   function chooseSpecialty(value:string){
@@ -73,6 +69,10 @@ export function ObjectPpeTemplatesWorkspace({
 
   if(!options.length)return <div className="empty-inline">Сначала добавьте специальности на объекте.</div>;
   return <div className="object-ppe-workspace object-supply-norms">
+    <div className="object-supply-norm-toolbar">
+      <label><span>Специальность на объекте</span><select value={specialtyId} onChange={event=>chooseSpecialty(event.target.value)}>{options.map(option=><option key={option.id} value={option.id}>{option.name}</option>)}</select></label>
+      <div className="object-supply-norm-source"><strong>{currentTemplate?.source==="object"?"Норма объекта":currentTemplate?.source==="global"?"Базовая норма":"Норма не задана"}</strong><span>{currentTemplate?.source==="object"?"Локальное переопределение для этого объекта.":currentTemplate?.source==="global"?"Подтянута из общего контура обеспечения. Сохранение здесь создаст локальное переопределение.":"Сначала можно задать базовую норму в общем обеспечении или настроить её прямо здесь."}</span></div>
+    </div>
     <aside className="object-ppe-template-list">
       {options.map(option=>{
         const template=templates.find(item=>item.specialtyId===option.id);
