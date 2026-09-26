@@ -85,10 +85,12 @@ function CandidateCard({row,date,shift,canFeedback,busy,onDate,onShift,onAction}
   const problem=row.stage==="no_show"||row.workflow?.firstShiftOutcome==="no_show";
   const needsContact=row.workflow?.managerInterviewState==="pending";
   const agreed=row.stage==="first_shift"&&!problem;
-  return <article className={`object-candidate-card ${requiresManagerAction(row)?"needs-action":""}`}>
+  const managerAction=requiresManagerAction(row);
+  return <article className={`object-candidate-card ${managerAction?"needs-action":""}`}>
     <Link href={`/candidates/${row.candidateId}`}>{row.fullName||"Новый кандидат"}</Link>
     <span>{row.need}</span>
-    {row.phone&&<a className="object-candidate-phone" href={`tel:${row.phone.replace(/[^+\d]/g,"")}`}>{row.phone} · Позвонить</a>}
+    {!managerAction&&<small>{row.owner?`Подбор: ${row.owner}`:row.stageLabel}</small>}
+    {managerAction&&row.phone&&<a className="object-candidate-phone" href={`tel:${row.phone.replace(/[^+\d]/g,"")}`}>{row.phone} · Позвонить</a>}
     {needsContact&&<strong className="object-candidate-action-label">Нужно связаться</strong>}
     {agreed&&<><strong>Выход {row.plannedStartDate?formatDate(row.plannedStartDate):"не назначен"}</strong><small>{shiftLabels[row.plannedShiftKind??shift]??"Смена не указана"}</small></>}
     {problem&&<strong className="object-candidate-action-label">Не вышел · нужна обратная связь</strong>}
