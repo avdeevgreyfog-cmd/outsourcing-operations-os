@@ -1,6 +1,5 @@
-/* OPERIS visual mode v2.
-   Loaded last and scoped by html[data-operis-ui="new"].
-   The classic UI remains untouched underneath this layer. */
+/* OPERIS current visual baseline.
+   The application shell always enables html[data-operis-ui="new"]; this is the only supported interface mode. */
 
 :root[data-operis-ui="new"]{
   --sidebar-w:248px;
@@ -41,33 +40,6 @@
 :root[data-operis-ui="new"] .topbar-context{font-size:13px}
 :root[data-operis-ui="new"] .topbar-actions{gap:7px}
 :root[data-operis-ui="new"] .icon-button{width:34px;height:34px}
-
-/* Global A/B control */
-.visual-mode-toggle{
-  display:flex;
-  align-items:center;
-  padding:2px;
-  border:1px solid var(--border);
-  border-radius:7px;
-  background:var(--panel-2);
-}
-.visual-mode-toggle button{
-  height:28px;
-  padding:0 8px;
-  border:0;
-  border-radius:5px;
-  background:transparent;
-  color:var(--muted);
-  font-size:11px;
-  font-weight:600;
-  cursor:pointer;
-}
-.visual-mode-toggle button.active{
-  background:var(--panel);
-  color:var(--text);
-  box-shadow:inset 0 0 0 1px var(--border),0 1px 2px rgba(20,30,38,.05);
-}
-.visual-mode-toggle-skeleton{width:128px;height:34px}
 
 /* Sidebar: same information architecture, calmer and more legible. */
 :root[data-operis-ui="new"] .sidebar{
@@ -445,12 +417,8 @@
 /* Responsive */
 @media(max-width:1180px){
   :root[data-operis-ui="new"] .page-wrap{padding-inline:20px}
-  :root[data-operis-ui="new"] .visual-mode-toggle button{padding-inline:6px}
 }
 @media(max-width:900px){
-  :root[data-operis-ui="new"] .visual-mode-toggle button{font-size:0;width:30px;padding:0}
-  :root[data-operis-ui="new"] .visual-mode-toggle button:first-child::after{content:"К";font-size:11px}
-  :root[data-operis-ui="new"] .visual-mode-toggle button:last-child::after{content:"Н";font-size:11px}
   :root[data-operis-ui="new"] .metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:760px){
