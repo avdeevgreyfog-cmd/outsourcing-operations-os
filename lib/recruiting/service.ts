@@ -156,6 +156,9 @@ export type CandidateDirectoryRow = {
   applicationsCount:number;
   activeApplications:number;
   workerId:string|null;
+  formerWorkerExitReasonCode:string|null;
+  formerWorkerExitReason:string|null;
+  formerWorkerExitDate:string|null;
   updatedAt:string;
 };
 
@@ -597,7 +600,7 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
         id,fullName:first.fullName,phone:first.phone,city:first.city,preferredChannel:first.preferredChannel,preferredContact:preferredContact??first.phone,
         source:first.source,status:worker?"worker":active.length?"active":reserve?"reserve":completed?"completed":"candidate",
         latestNeed:first.need,latestObject:first.object,latestStage:first.stage,latestStageLabel:first.stageLabel,owner:first.owner,
-        applicationsCount:related.length,activeApplications:active.length,workerId:worker?`demo-worker-${id}`:null,updatedAt:first.updatedAt??first.createdAt??"",
+        applicationsCount:related.length,activeApplications:active.length,workerId:worker?`demo-worker-${id}`:null,formerWorkerExitReasonCode:null,formerWorkerExitReason:null,formerWorkerExitDate:null,updatedAt:first.updatedAt??first.createdAt??"",
       } satisfies CandidateDirectoryRow;
     });
   }
@@ -608,13 +611,14 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
     }>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.city,c.preferred_channel "preferredChannel",
         COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.organization_id "organizationId",c.created_by_user_id "createdByUserId",
-        COALESCE(latest.owner_user_id,c.current_recruiter_user_id) "ownerUserId",latest.manager_user_id "managerUserId",latest.object_id "objectId",
+        CASE WHEN c.status='available' THEN c.current_recruiter_user_id ELSE COALESCE(latest.owner_user_id,c.current_recruiter_user_id) END "ownerUserId",latest.manager_user_id "managerUserId",latest.object_id "objectId",
         COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
         ARRAY[latest.owner_user_id::text,latest.manager_user_id::text,c.current_recruiter_user_id::text,c.original_recruiter_user_id::text]
           || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=latest.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL) "assigneeUserIds",
         COALESCE(n.title,s.name) "latestNeed",o.name "latestObject",latest.stage "rawStage",
         owner.display_name owner,count_apps.cnt::int "applicationsCount",count_apps.active::int "activeApplications",
-        wp.id "workerId",c.status "rawStatus",c.updated_at::text "updatedAt",
+        wp.id "workerId",exit_info.reason_code "formerWorkerExitReasonCode",exit_info.reason "formerWorkerExitReason",exit_info.effective_date::text "formerWorkerExitDate",
+        c.status "rawStatus",c.updated_at::text "updatedAt",
         CASE
           WHEN wp.id IS NOT NULL AND wp.status='active' THEN 'worker'
           WHEN c.status='available' THEN 'available'
@@ -642,8 +646,14 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
       LEFT JOIN needs n ON n.id=latest.need_id
       LEFT JOIN specialties s ON s.id=n.specialty_id
       LEFT JOIN objects o ON o.id=latest.object_id
-      LEFT JOIN app_users owner ON owner.id=latest.owner_user_id
+      LEFT JOIN app_users owner ON owner.id=CASE WHEN c.status='available' THEN c.current_recruiter_user_id ELSE COALESCE(latest.owner_user_id,c.current_recruiter_user_id) END
       LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
+      LEFT JOIN LATERAL (
+        SELECT ep.reason_code,ep.reason,ep.effective_date
+        FROM worker_exit_processes ep
+        WHERE ep.worker_id=wp.id AND ep.status='completed'
+        ORDER BY ep.effective_date DESC,ep.completed_at DESC NULLS LAST LIMIT 1
+      ) exit_info ON true
       ORDER BY c.updated_at DESC
     `;
     return rows.filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
