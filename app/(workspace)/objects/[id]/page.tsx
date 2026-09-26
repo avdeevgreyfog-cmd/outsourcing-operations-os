@@ -109,6 +109,11 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectLaunchTasks=launchTasks.filter(row=>row.objectId===id);
   const objectIncidents=incidents.filter(row=>row.objectId===id);
   const objectForecast=forecast.filter(row=>row.objectId===id);
+  const objectSpecialtyNames=new Set([
+    ...objectForecast.map(row=>row.specialty),
+    ...objectWorkers.map(row=>row.specialty).filter((value):value is string=>Boolean(value)),
+  ]);
+  const objectSupplySpecialties=workforceOptions.specialties.filter(row=>objectSpecialtyNames.has(row.name));
   const objectBalances=inventory.balances.filter(row=>row.objectId===id);
   const objectHousing=housing.sites.filter(row=>row.objectId===id);
   const objectSupplyRequests=supplyRequests.filter(row=>row.objectId===id);
@@ -305,7 +310,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       balances={objectBalances}
       inventoryItems={inventory.items}
       templates={ppeTemplates}
-      specialties={workforceOptions.specialties}
+      specialties={objectSupplySpecialties}
       housing={objectHousing}
       requests={objectSupplyRequests}
       canAssets={canAssets}
