@@ -21,6 +21,10 @@ test("beta company fixture covers all operating modules",()=>{
   assert.equal(demo.needs.length,21);
   assert.equal(demo.candidates.length,50);
   assert.equal(demo.workers.length,44);
+  const repeatCandidate=demo.candidates.find(row=>row.formerWorkerAvailable);
+  assert.ok(repeatCandidate,"beta candidates must include a former worker for repeat recruiting");
+  assert.equal(repeatCandidate.formerWorkerExitReasonCode,"project_end");
+  assert.match(repeatCandidate.formerWorkerExitDate,/^2026-\d{2}-\d{2}$/);
   assert.equal(demo.clientContacts.length,10);
   assert.equal(demo.objectContactAssignments.length,10);
   for(const client of demo.clients){
