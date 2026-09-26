@@ -140,7 +140,13 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const projectedSurplus=Math.max(forecastAvailable-effectiveForecastCovered,0);
   const plannedExitCount=objectForecast.reduce((sum,row)=>sum+row.plannedExits,0);
   const todayIso=new Date().toISOString().slice(0,10);
+  const nextSevenEnd=addDaysIso(todayIso,7);
   const horizonEnd=addDaysIso(todayIso,30);
+  const readyStarts7=objectCandidates.filter(row=>row.plannedStartDate&&row.plannedStartDate>=todayIso&&row.plannedStartDate<=nextSevenEnd&&["preparation","first_shift"].includes(row.stage)).length;
+  const unreconciledObjectPayments=objectPayments.filter(row=>row.status==="paid"&&row.reconciliationStatus==="unreconciled"&&Number(row.amount||0)>0);
+  const unreconciledObjectAmount=unreconciledObjectPayments.reduce((sum,row)=>sum+Number(row.amount||0),0);
+  const documentAttentionCount=objectDocuments.filter(row=>row.status==="needs_update"||(row.status!=="archived"&&row.expiresAt!=null&&row.expiresAt<=addDaysIso(todayIso,30))).length;
+  const upcomingShiftRows=objectShifts.filter(row=>(row.dateIso??"")>=todayIso&&(row.dateIso??"")<=nextSevenEnd).slice(0,6);
   const upcomingAbsences=objectWorkers
     .filter(row=>row.absenceFrom&&["confirmed","tentative"].includes(row.absenceStatus??"")&&row.absenceFrom<=horizonEnd&&(!row.absenceTo||row.absenceTo>=todayIso))
     .sort((a,b)=>(a.absenceFrom??"").localeCompare(b.absenceFrom??""));
@@ -189,53 +195,59 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     </div>
 
     {panel("overview",<>
-      <div className="metrics-grid object-operations-metrics">
-        <Metric label="Работает / требуется" value={working+" / "+required}/>
-        <Metric label="Дефицит сейчас" value={currentDeficit} tone={currentDeficit?"warn":"good"}/>
-        <Metric label="Смена сегодня" value={todayAssigned+" / "+todayDemand} note={todayDemand?"назначено к плану":"смена не задана"} tone={todayDemand>todayAssigned?"warn":"good"}/>
-        <Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/>
-        <Metric label="Через 30 дней" value={effectiveForecastCovered+" / "+required} note={projectedDeficit?`дефицит по позициям ${projectedDeficit}${projectedSurplus?` · доступно ${forecastAvailable}`:""}`:forecastAvailable>working?`план покрыт · доступно ${forecastAvailable}`:"план покрыт"} tone={projectedDeficit?"warn":"good"}/>
+      <div className="metrics-grid object-operations-metrics object-overview-metrics">
+        <Metric label="Работает / требуется" value={working+" / "+required} note={currentDeficit?`дефицит ${currentDeficit}`:"план закрыт"} tone={currentDeficit?"warn":"good"}/>
+        <Metric label="Смена сегодня" value={todayAssigned+" / "+todayDemand} note={todayDemand?(noShows?`невыходов ${noShows}`:"по плану"):"смена не задана"} tone={todayDemand>todayAssigned||noShows?"warn":"good"}/>
+        <Metric label="Готовы к выходу · 7 дней" value={readyStarts7} note={readyStarts7?"согласованные ближайшие выходы":"выходов не запланировано"}/>
+        <Metric label="Через 30 дней" value={effectiveForecastCovered+" / "+required} note={projectedDeficit?`прогнозный дефицит ${projectedDeficit}`:"план покрыт"} tone={projectedDeficit?"warn":"good"}/>
       </div>
-      <div className="workspace-grid object-overview-grid">
-        <div>
-          <Section title="Требует внимания" note="То, что влияет на выходы, численность и работу объекта">
-            <div className="stack-list">
-              {projectedDeficit>0&&<div className="stack-item"><div><strong className="priority-critical">Прогнозный дефицит персонала</strong><small>{projectedDeficit} человек на горизонте 30 дней · по позициям закрыто {effectiveForecastCovered} из {required}{projectedSurplus?` · всего доступно ${forecastAvailable}`:""}</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Комплектация</Link></div>}
-              {upcomingAbsences.length>0&&<div className="stack-item"><div><strong>Ближайшие отсутствия сотрудников</strong><small>{upcomingAbsences.length} · ближайшее: {upcomingAbsences[0].fullName} · {absenceWindow(upcomingAbsences[0])}</small></div><Link className="button" href={"/objects/"+id+"?tab=workforce"}>Персонал</Link></div>}
-              {plannedExitCount>0&&<div className="stack-item"><div><strong>Запланировано завершение работы</strong><small>{plannedExitCount} сотрудников на горизонте 30 дней</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Проверить план</Link></div>}
-              {objectShifts.filter(row=>row.deficit>0).slice(0,3).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.specialty}</strong><small>На смену назначено {row.assigned} из {row.demand}</small></div><Status tone="warn">−{row.deficit}</Status></div>)}
-              {noShows>0&&<div className="stack-item"><div><strong className="priority-critical">Невыходы на смену</strong><small>Сегодня зафиксировано {noShows}</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Разобрать</Link></div>}
+
+      <div className="workspace-grid object-overview-grid object-overview-grid-v2">
+        <div className="object-overview-main">
+          <Section title="Требует внимания" note="События, которые требуют действия менеджера объекта">
+            <div className="stack-list object-overview-attention">
+              {noShows>0&&<div className="stack-item is-critical"><div><strong>Невыходы на смену</strong><small>Сегодня зафиксировано {noShows}</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Разобрать</Link></div>}
+              {objectShifts.filter(row=>row.deficit>0).slice(0,2).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {shiftKindLabel(row.kind)} · {row.specialty}</strong><small>Назначено {row.assigned} из {row.demand} · не хватает {row.deficit}</small></div><Link className="button" href={"/objects/"+id+"?tab=shifts"}>Смены</Link></div>)}
+              {projectedDeficit>0&&<div className="stack-item"><div><strong>Прогнозный дефицит персонала</strong><small>{projectedDeficit} человек на горизонте 30 дней · закрыто {effectiveForecastCovered} из {required}</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Комплектация</Link></div>}
+              {unreconciledObjectPayments.length>0&&<div className="stack-item"><div><strong>Выплаты ожидают сверки</strong><small>{unreconciledObjectPayments.length} · {rub(unreconciledObjectAmount)}</small></div><Link className="button" href={"/objects/"+id+"?tab=finance"}>Финансы</Link></div>}
+              {documentAttentionCount>0&&<div className="stack-item"><div><strong>Документы требуют внимания</strong><small>{documentAttentionCount} документов нужно проверить или обновить</small></div><Link className="button" href={"/objects/"+id+"?tab=documents"}>Документы</Link></div>}
               {openIncidents>0&&<div className="stack-item"><div><strong>Открытые инциденты</strong><small>{openIncidents} требуют контроля</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Инциденты</Link></div>}
-              {lowStock.slice(0,2).map(row=><div className="stack-item" key={row.locationId+row.itemId+row.variant}><div><strong>Заканчивается {row.item}</strong><small>{row.location} · остаток {row.quantity} {row.unit} · минимум {row.minQuantity}</small></div><Link className="button" href={"/assets?object="+id}>Запасы</Link></div>)}
-              {showLaunch&&launchBlockers.slice(0,2).map(row=><div className="stack-item" key={row.id}><div><strong>Блокер запуска: {row.title}</strong><small>{row.owner} · прогресс {row.progress}%</small></div><Link className="button" href={"/objects/"+id+"?tab=launch"}>Запуск</Link></div>)}
-              {!projectedDeficit&&!upcomingAbsences.length&&!plannedExitCount&&!objectShifts.some(row=>row.deficit>0)&&!noShows&&!openIncidents&&!lowStock.length&&(!showLaunch||!launchBlockers.length)&&<div className="empty-inline">Операционных исключений, требующих действия, нет</div>}
+              {lowStock.slice(0,2).map(row=><div className="stack-item" key={row.locationId+row.itemId+row.variant}><div><strong>Заканчивается {row.item}</strong><small>{row.location} · остаток {row.quantity} {row.unit} · минимум {row.minQuantity}</small></div><Link className="button" href={"/objects/"+id+"?tab=supply"}>Обеспечение</Link></div>)}
+              {upcomingAbsences.length>0&&<div className="stack-item"><div><strong>Ближайшее отсутствие сотрудника</strong><small>{upcomingAbsences[0].fullName} · {absenceWindow(upcomingAbsences[0])}</small></div><Link className="button" href={"/objects/"+id+"?tab=workforce"}>Персонал</Link></div>}
+              {showLaunch&&launchBlockers.slice(0,1).map(row=><div className="stack-item" key={row.id}><div><strong>Блокер запуска: {row.title}</strong><small>{row.owner} · прогресс {row.progress}%</small></div><Link className="button" href={"/objects/"+id+"?tab=launch"}>Запуск</Link></div>)}
+              {!projectedDeficit&&!upcomingAbsences.length&&!objectShifts.some(row=>row.deficit>0)&&!noShows&&!openIncidents&&!lowStock.length&&!unreconciledObjectPayments.length&&!documentAttentionCount&&(!showLaunch||!launchBlockers.length)&&<div className="empty-inline">Операционных исключений, требующих действия, нет</div>}
             </div>
           </Section>
-          <Section title="Ближайшие смены" note="План и обеспеченность ближайших смен объекта"><ShiftTable rows={objectShifts.slice(0,5)}/>{!objectShifts.length&&<Empty title="Смен нет" text="На доступном горизонте смены не запланированы."/>}</Section>
+
+          <Section title="Ближайшие смены" note="План и обеспеченность на ближайшие 7 дней">
+            <ShiftTable rows={upcomingShiftRows}/>
+            {!upcomingShiftRows.length&&<Empty title="Смен нет" text="На ближайшие 7 дней смены не запланированы."/>}
+          </Section>
         </div>
-        <div>
-          <Section title="Ближайшие изменения персонала" note="Межвахта, отпуск, больничный и другие запланированные отсутствия на 30 дней">
-            <div className="stack-list">
-              {upcomingAbsences.slice(0,6).map(row=><div className="stack-item" key={row.id}><div><Link className="cell-title" href={"/workers/"+row.id}>{row.fullName}</Link><small>{row.specialty??"Специальность не указана"} · {absenceWindow(row)}</small></div><Status tone={row.absenceStatus==="confirmed"?"info":"neutral"}>{absenceTypeLabel(row.absenceType)}</Status></div>)}
-              {!upcomingAbsences.length&&<div className="empty-inline">Запланированных отсутствий на ближайшие 30 дней нет</div>}
+
+        <div className="object-overview-side">
+          <Section title="Сегодня и ближайшие 7 дней" note="Что изменится в работе объекта">
+            <div className="object-overview-timeline">
+              {upcomingShiftRows.slice(0,4).map(row=><div key={row.id}><span>{row.date}</span><div><strong>{shiftKindLabel(row.kind)} · {row.specialty}</strong><small>{row.time} · назначено {row.assigned} из {row.demand}{row.deficit?` · дефицит ${row.deficit}`:""}</small></div></div>)}
+              {objectCandidates.filter(row=>row.plannedStartDate&&row.plannedStartDate>=todayIso&&row.plannedStartDate<=nextSevenEnd&&["preparation","first_shift"].includes(row.stage)).slice(0,3).map(row=><div key={row.applicationId}><span>{shortDateRu(row.plannedStartDate!)}</span><div><strong>Выход: {row.fullName}</strong><small>{row.need}{row.plannedShiftKind?` · ${shiftKindLabel(row.plannedShiftKind)}`:""}</small></div></div>)}
+              {upcomingAbsences.filter(row=>row.absenceFrom&&row.absenceFrom<=nextSevenEnd).slice(0,2).map(row=><div key={"absence:"+row.id}><span>{row.absenceFrom?shortDateRu(row.absenceFrom):"—"}</span><div><strong>{row.fullName}</strong><small>{absenceWindow(row)}</small></div></div>)}
+              {!upcomingShiftRows.length&&!readyStarts7&&!upcomingAbsences.some(row=>row.absenceFrom&&row.absenceFrom<=nextSevenEnd)&&<div className="empty-inline">На ближайшие 7 дней изменений нет</div>}
             </div>
-            {canWorkers&&<div className="section-actions"><Link className="button" href={"/objects/"+id+"?tab=workforce"}>Персонал объекта</Link></div>}
           </Section>
-          <Section title="Основные контакты" note="Кто отвечает за ежедневные вопросы со стороны заказчика">
-            <div className="stack-list">
-              {objectContacts.assigned.slice(0,4).map(contact=><div className="stack-item" key={contact.assignmentId}><div><strong>{contact.fullName}</strong><small>{contact.position??"Должность не указана"} · {contact.roles.slice(0,2).map(objectContactRoleLabel).join(" · ")}</small></div><span className="object-contact-channel">{objectContactChannel(contact)}</span></div>)}
-              {!objectContacts.assigned.length&&<div className="empty-inline">Контакты заказчика для объекта не назначены</div>}
+
+          <Section title="Состояние объекта" note="Переходите только туда, где есть отклонение">
+            <div className="object-overview-contours">
+              <Link href={"/objects/"+id+"?tab=staffing"}><span>Комплектация</span><strong className={projectedDeficit?"has-attention":""}>{projectedDeficit?`Дефицит ${projectedDeficit}`:"Без отклонений"}</strong></Link>
+              {canTimesheets&&<Link href={"/objects/"+id+"?tab=timesheets"}><span>Табель</span><strong>{objectTimesheet?timesheetStatusLabel(objectTimesheet.status):"Нет табеля"}</strong></Link>}
+              {(canAssets||canHousing||canProcurement)&&<Link href={"/objects/"+id+"?tab=supply"}><span>Обеспечение</span><strong className={lowStock.length||openSupply.length?"has-attention":""}>{lowStock.length?`Ниже минимума ${lowStock.length}`:openSupply.length?`Заявок в работе ${openSupply.length}`:"Без отклонений"}</strong></Link>}
+              {canFinance&&<Link href={"/objects/"+id+"?tab=finance"}><span>Финансы</span><strong className={unreconciledObjectPayments.length?"has-attention":""}>{unreconciledObjectPayments.length?`На сверке ${rub(unreconciledObjectAmount)}`:"Без отклонений"}</strong></Link>}
+              <Link href={"/objects/"+id+"?tab=documents"}><span>Документы</span><strong className={documentAttentionCount?"has-attention":""}>{documentAttentionCount?`Требуют внимания ${documentAttentionCount}`:"Без отклонений"}</strong></Link>
+              <Link href={"/objects/"+id+"?tab=quality"}><span>Инциденты</span><strong className={openIncidents?"has-attention":""}>{openIncidents?`Открыто ${openIncidents}`:"Нет открытых"}</strong></Link>
             </div>
-            <div className="section-actions"><Link className="button" href={"/objects/"+id+"?tab=contacts"}>Все контакты</Link></div>
           </Section>
-          <Section title="Быстрые действия">
-            <div className="object-quick-links">
-              {canNeeds&&<Link href={"/staffing-plan?object="+id}>План комплектации <span>→</span></Link>}
-              {canTimesheets&&<Link href={"/timesheets?object="+id}>Табель объекта <span>→</span></Link>}
-              {canAssets&&<Link href={"/assets?object="+id}>Запасы и имущество <span>→</span></Link>}
-              {canHousing&&<Link href={"/supply/housing?object="+id}>Жильё <span>→</span></Link>}
-              <Link href={"/operations/analytics?object="+id}>Аналитика объекта <span>→</span></Link>
-            </div>
+
+          <Section title="Контакт заказчика">
+            {objectContacts.assigned[0]?<div className="object-overview-contact"><div><strong>{objectContacts.assigned[0].fullName}</strong><span>{objectContacts.assigned[0].position??"Должность не указана"}</span><small>{objectContacts.assigned[0].roles.slice(0,2).map(objectContactRoleLabel).join(" · ")||"Зона ответственности не указана"}</small></div><div><span>{objectContactChannel(objectContacts.assigned[0])}</span><Link href={"/objects/"+id+"?tab=contacts"}>Все контакты</Link></div></div>:<div className="empty-inline">Контакт заказчика не назначен</div>}
           </Section>
         </div>
       </div>
@@ -314,7 +326,7 @@ function ReadinessRow({label,value}:{label:string;value:number}){
   return <div className="readiness-row"><div><strong>{label}</strong><span>{value}%</span></div><div className="progress"><span style={{width:Math.max(0,Math.min(100,value))+"%"}}/></div></div>;
 }
 function ShiftTable({rows}:{rows:Awaited<ReturnType<typeof listShifts>>}){
-  return <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Смена</th><th>Позиция</th><th>План</th><th>Назначено</th><th>Подтверждено</th><th>Резерв</th><th>Дефицит</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td><strong>{row.date} · {row.kind}</strong><span className="cell-sub">{row.time}</span></td><td>{row.specialty}</td><td className="num">{row.demand}</td><td className="num">{row.assigned}</td><td className="num">{row.confirmed??"—"}</td><td className="num">{row.reserve}</td><td className="num"><Status tone={row.deficit?"warn":"good"}>{row.deficit}</Status></td></tr>)}</tbody></table></div>;
+  return <div className="request-table-wrap"><table className="data-table object-overview-shifts"><thead><tr><th>Смена</th><th>Позиция</th><th>План</th><th>Назначено</th><th>Подтверждено</th>Резерв</th><th>Дефицит</th></tr></thead><tbody>{rows.map(row=><tr key={row.id}><td><strong>{row.date} · {shiftKindLabel(row.kind)}</strong><span className="cell-sub">{row.time}</span></td><td>{row.specialty}</td><td className="num">{row.demand}</td><td className="num">{row.assigned}</td><td className="num">{row.confirmed??"—"]</td><td className="num">{row.reserve}</td><td className="num"><span className={"object-shift-deficit"+(row.deficit?" has-deficit":"")}>{row.deficit?`’${row.deficit}`:"0"}</span></td></tr>)}</tbody></table></div>;
 }
 function objectOperationalRisk(base:string|null|undefined,projectedDeficit:number,noShows:number,openIncidents:number){
   const rank:Record<string,number>={normal:0,watch:1,high:2,critical:3};
@@ -324,6 +336,9 @@ function objectOperationalRisk(base:string|null|undefined,projectedDeficit:numbe
   return value;
 }
 function addDaysIso(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
+function shortDateRu(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
+function shiftKindLabel(value:string|null|undefined){return ({day:"День",night:"Ночь",mixed:"День / ночь"} as Record<string,string>)[value??""]??"Смена"}
+function timesheetStatusLabel(value:string|null|undefined){return ({draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"} as Record<string,string>)[value??""]??"Статус не указан"}
 function absenceWindow(row:{absenceType?:string|null;absenceStatus?:string|null;absenceFrom?:string|null;absenceTo?:string|null}){
   if(!row.absenceFrom)return absenceTypeLabel(row.absenceType);
   const from=new Intl.DateTimeFormat("ru-RU").format(new Date(row.absenceFrom+"T00:00:00"));
@@ -331,7 +346,7 @@ function absenceWindow(row:{absenceType?:string|null;absenceStatus?:string|null;
   return absenceTypeLabel(row.absenceType)+" · "+from+(to?"–"+to:"");
 }
 const objectContactRoleLabels:Record<string,string>={operations:"Операционные вопросы",timesheet:"Табель",security:"СБ / пропуска",warehouse_ppe:"Склад / СИЗ",documents:"Документы",finance:"Финансы",approval:"Согласования",contract_signer:"Подписание договора",closing_signer:"Закрывающие",other:"Другое"};
-function objectContactRoleLabel(role:string){return objectContactRoleLabels[role]??role}
+function objectContactRoleLabel(role:string){return objectContactRoleLabels[role]??"Другое"}
 function objectContactChannel(contact:{preferredChannel:string|null;phone:string|null;email:string|null;telegram:string|null;whatsapp:string|null;maxContact:string|null}){
   if(contact.preferredChannel==="telegram"&&contact.telegram)return contact.telegram;
   if(contact.preferredChannel==="whatsapp"&&contact.whatsapp)return contact.whatsapp;
