@@ -3,7 +3,7 @@ import { db, hasDatabase } from "@/lib/db/client";
 import { isDemoMode } from "@/lib/demo/mode";
 
 const PERSONAL_ORG_ID="00000000-0000-4000-8000-000000000002";
-const PERSONAL_USER_ID="10000000-0000-4000-8000-000000000101";
+const PERSONAL_MEMBERSHIP_ID="50000000-0000-4000-8000-000000000101";
 
 export async function GET(){
   const databaseConfigured=hasDatabase();
@@ -26,7 +26,7 @@ export async function GET(){
             JOIN organization_memberships m ON m.organization_id=o.id AND m.status='active'
             JOIN app_users u ON u.id=m.user_id AND u.is_active=true
             WHERE o.id=${PERSONAL_ORG_ID}::uuid
-              AND u.id=${PERSONAL_USER_ID}::uuid
+              AND m.id=${PERSONAL_MEMBERSHIP_ID}::uuid
           ) ready,
           EXISTS(
             SELECT 1
@@ -34,7 +34,7 @@ export async function GET(){
             JOIN organization_memberships m ON m.organization_id=o.id AND m.status='active'
             JOIN app_users u ON u.id=m.user_id AND u.is_active=true
             WHERE o.id=${PERSONAL_ORG_ID}::uuid
-              AND u.id=${PERSONAL_USER_ID}::uuid
+              AND m.id=${PERSONAL_MEMBERSHIP_ID}::uuid
               AND u.password_hash IS NOT NULL
           ) "passwordSet"
       `;
