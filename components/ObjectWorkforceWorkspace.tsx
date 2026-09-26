@@ -234,6 +234,7 @@ function WorkerTable({
   rows:WorkerRow[];today:string;showSpecialty?:boolean;canEdit:boolean;canOffboard:boolean;canManageAssets:boolean;busy:string;
   onDocuments:(row:WorkerRow,status:string)=>void;onAction:(row:WorkerRow,mode:"transfer"|"exit")=>void;
 }){
+  const [menuWorkerId,setMenuWorkerId]=useState<string|null>(null);
   return <div className="request-table-wrap"><table className="data-table object-workforce-table object-workforce-table-v2"><thead><tr><th>Сотрудник</th><th>Телефон</th>{showSpecialty&&<th>Специальность</th>}<th>График</th><th>Сегодня · {shortDate(today)}</th><th>Ставка</th><th>Документы</th><th>Обеспечение</th>{(canEdit||canOffboard)&&<th aria-label="Действия"></th>}</tr></thead><tbody>{rows.map(row=>{
     const objectState=workerObjectState(row,today);const day=workerTodayStatus(row,today);const adaptation=adaptationLabel(row,today);
     return <tr key={row.id}>
@@ -245,7 +246,7 @@ function WorkerTable({
       <td className="num"><WorkerRate row={row}/></td>
       <td><div className="object-worker-doc-editor"><select value={row.employmentDocumentsStatus??"not_received"} disabled={!canEdit||busy===`docs:${row.id}`} onChange={event=>void onDocuments(row,event.target.value)}>{Object.entries(documentLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><Link href={`/workers/${row.id}?tab=assignments`}>Карточка</Link></div></td>
       <td><WorkerAssets row={row} canManageAssets={canManageAssets}/></td>
-      {(canEdit||canOffboard)&&<td className="object-worker-actions-cell"><details className="object-worker-actions"><summary className="icon-button" aria-label={`Действия: ${row.fullName}`}><MoreHorizontal size={16}/></summary><div>{canEdit&&<button type="button" onClick={()=>onAction(row,"transfer")}><ArrowRight size={14}/> Перевести</button>}{canOffboard&&<button type="button" className="danger" onClick={()=>onAction(row,"exit")}><LogOut size={14}/> Завершение работы</button>}<Link href={`/workers/${row.id}`}>Открыть карточку</Link></div></details></td>}
+      {(canEdit||canOffboard)&&<td className="object-worker-actions-cell"><div className={"object-worker-actions"+(menuWorkerId===row.id?" is-open":"")}><button type="button" className="icon-button" aria-label={`Действия: ${row.fullName}`} aria-expanded={menuWorkerId===row.id} onClick={()=>setMenuWorkerId(current=>current===row.id?null:row.id)}><MoreHorizontal size={16}/></button>{menuWorkerId===row.id&&<div>{canEdit&&<button type="button" onClick={()=>{setMenuWorkerId(null);onAction(row,"transfer")}}><ArrowRight size={14}/> Перевести</button>}{canOffboard&&<button type="button" className="danger" onClick={()=>{setMenuWorkerId(null);onAction(row,"exit")}}><LogOut size={14}/> Завершение работы</button>}<Link href={`/workers/${row.id}`}>Открыть карточку</Link></div>}</div></td>}
     </tr>;
   })}</tbody></table></div>;
 }
