@@ -80,7 +80,7 @@ export type InventorySnapshot = {
   balances:InventoryBalanceRow[];
 };
 
-export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string};
+export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string;replacementCycleDays:number|null};
 export type ObjectPpeTemplateRow={id:string;objectId:string;specialtyId:string;specialty:string;name:string;items:ObjectPpeTemplateItemRow[]};
 
 export async function listObjectPpeTemplates(actor:Actor,objectId:string):Promise<ObjectPpeTemplateRow[]>{
@@ -88,12 +88,12 @@ export async function listObjectPpeTemplates(actor:Actor,objectId:string):Promis
   if(actor.demo){
     const object=demo.objects.find(row=>row.id===objectId&&canReadRow(actor.access,"assets.read",row,actor));if(!object)return[];
     const specialties=[...new Set(demo.workers.filter(w=>w.objectId===objectId).map(w=>w.specialty).filter(Boolean))];
-    return specialties.map((name,index)=>({id:`demo-ppe-${index}`,objectId,specialtyId:`demo-specialty-${index+1}`,specialty:name??"Специальность",name:"Основной комплект",items:[{itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:""},{itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:""},{itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:""}]}));
+    return specialties.map((name,index)=>({id:`demo-ppe-${index}`,objectId,specialtyId:`demo-specialty-${index+1}`,specialty:name??"Специальность",name:"Основной комплект",items:[{itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:"",replacementCycleDays:180},{itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:"",replacementCycleDays:365},{itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:"",replacementCycleDays:null}]}));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [scope]=await sql<Array<{organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds" FROM objects o WHERE o.id=${objectId}::uuid`;
     if(!scope||!canReadRow(actor.access,"assets.read",scope,actor))return[];
-    return sql<ObjectPpeTemplateRow[]>`SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items FROM object_ppe_templates t JOIN specialties s ON s.id=t.specialty_id LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id LEFT JOIN inventory_items i ON i.id=ti.item_id WHERE t.object_id=${objectId}::uuid AND t.active GROUP BY t.id,s.name ORDER BY s.name`;
+    return sql<ObjectPpeTemplateRow[]>`SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,'replacementCycleDays',ti.replacement_cycle_days) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items FROM object_ppe_templates t JOIN specialties s ON s.id=t.specialty_id LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id LEFT JOIN inventory_items i ON i.id=ti.item_id WHERE t.object_id=${objectId}::uuid AND t.active GROUP BY t.id,s.name ORDER BY s.name`;
   });
 }
 
