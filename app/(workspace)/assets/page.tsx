@@ -11,7 +11,7 @@ export default async function Assets({searchParams}:{searchParams:Promise<{worke
   const [snapshot,options,workerContext,templates]=await Promise.all([getInventorySnapshot(actor),getOperationsReferenceData(actor,"assets.read"),params.worker?getWorkerOffboardingContext(actor,params.worker):Promise.resolve(null),listGlobalPpeTemplates(actor)]);
   const initialHolding=params.action==="return"?workerContext?.outstandingAssets[0]:null;
   return <>
-    <PageHeader eyebrow="Операции → Обеспечение" title="Запасы и имущество" subtitle="Распределённые места хранения, выдача сотрудникам, перемещения, возвраты и списания." breadcrumbs={[{label:"Операции"},{label:"Обеспечение"},{label:"Запасы и имущество"}]}/>
+    <PageHeader eyebrow="Операции → Обеспечение" title="Запасы и имущество" subtitle="Запасы, движения имущества и базовые нормы выдачи по специальностям." breadcrumbs={[{label:"Операции"},{label:"Обеспечение"},{label:"Запасы и имущество"}]}/>
     <SupplyAssetsWorkspace snapshot={snapshot} options={options} templates={templates} canManage={hasCapability(actor.access,"assets.manage")} demo={actor.demo} initialWorkerId={params.worker??null} initialAction={params.action??null} initialItemId={initialHolding?.itemId??null} initialVariant={initialHolding?.variant??null} initialObjectId={params.object??null}/>
   </>;
 }
