@@ -380,11 +380,13 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
       {id:"demo-item-boots",name:"Ботинки рабочие",code:"BOOT",category:"workwear",unit:"пар",returnable:true,tracksVariant:true},
       {id:"demo-item-jacket",name:"Куртка рабочая",code:"JACKET",category:"workwear",unit:"шт",returnable:true,tracksVariant:true},
       {id:"demo-item-helmet",name:"Каска",code:"HELMET",category:"ppe",unit:"шт",returnable:true,tracksVariant:false},
+      {id:"demo-item-gloves",name:"Перчатки рабочие",code:"GLOVES",category:"consumable",unit:"пар",returnable:false,tracksVariant:false},
     ];
     const balances:InventoryBalanceRow[]=[
       {...items[0],itemId:items[0].id,item:items[0].name,variant:"43",locationId:locations[0].id,location:locations[0].name,locationKind:locations[0].kind,objectId:locations[0].objectId,ownerUserId:locations[0].ownerUserId,assigneeUserIds:locations[0].assigneeUserIds,quantity:3,minQuantity:2},
       {...items[1],itemId:items[1].id,item:items[1].name,variant:"52",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:4,minQuantity:3},
       {...items[2],itemId:items[2].id,item:items[2].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:6,minQuantity:5},
+      {...items[3],itemId:items[3].id,item:items[3].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:80,minQuantity:100},
     ];
     return {locations,items,balances};
   }
