@@ -60,9 +60,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canPnl=hasCapability(actor.access,"finance.pnl.read");
   const canAccruals=hasCapability(actor.access,"finance.worker_accrual.read");
   const canPayments=hasCapability(actor.access,"finance.payments.read");
-  const canConfirmDaily=hasCapability(actor.access,"finance.daily_payment.confirm");
-  const canRecordPayment=hasCapability(actor.access,"finance.object_payment.record");
-  const canFinanceAdjust=hasCapability(actor.access,"finance.worker_accrual.edit");
+  const canConfirmDaily=hasCapability(actor.access,"finance.daily_payment.confirm")&&canReadRow(actor.access,"finance.daily_payment.confirm",object,actor);
+  const canRecordPayment=hasCapability(actor.access,"finance.object_payment.record")&&canReadRow(actor.access,"finance.object_payment.record",object,actor);
+  const canFinanceAdjust=hasCapability(actor.access,"finance.worker_accrual.edit")&&canReadRow(actor.access,"finance.worker_accrual.edit",object,actor);
   const canEditWorkers=hasCapability(actor.access,"worker.edit");
   const canOffboard=hasCapability(actor.access,"worker.offboarding.manage")&&canReadRow(actor.access,"worker.offboarding.manage",object,actor);
   const canManageAssets=hasCapability(actor.access,"assets.manage")&&canReadRow(actor.access,"assets.manage",object,actor);
