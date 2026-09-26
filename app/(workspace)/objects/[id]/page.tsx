@@ -13,7 +13,7 @@ import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsC
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
-import { ObjectPpeTemplatesWorkspace } from "@/components/ObjectPpeTemplatesWorkspace";
+import { ObjectSupplyWorkspace } from "@/components/ObjectSupplyWorkspace";
 import { ObjectShiftsWorkspace } from "@/components/ObjectShiftsWorkspace";
 import { ObjectStaffingWorkspace } from "@/components/ObjectStaffingWorkspace";
 import { ObjectFinanceWorkspace } from "@/components/ObjectFinanceWorkspace";
@@ -299,20 +299,21 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       :<div className="object-module-shell"><div className="object-module-head"><div><h2>Табели</h2><p>Фактические выходы, часы, отклонения, начисления и маршрут согласования.</p></div></div>{objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canApproveClient={hasCapability(actor.access,"time.timesheet.approve_client")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded pilot/>:<Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/>}</div>
     )}
 
-    {panel("supply",<>
-      <div className="metrics-grid">
-        <Metric label="Мест проживания" value={objectHousing.reduce((sum,row)=>sum+row.capacity,0)}/>
-        <Metric label="Занято" value={objectHousing.reduce((sum,row)=>sum+row.occupied,0)}/>
-        <Metric label="Позиции ниже минимума" value={lowStock.length} tone={lowStock.length?"warn":"good"}/>
-        <Metric label="Открытые заявки" value={openSupply.length} tone={openSupply.length?"warn":undefined}/>
-      </div>
-      <div className="workspace-grid">
-        {canHousing&&<Section title="Жильё"><div className="stack-list">{objectHousing.map(row=><div className="stack-item" key={row.id}><div><strong>{row.name}</strong><small>{row.occupied} занято · {row.available} свободно · {rub(row.monthlyForecast)}/мес</small></div><Status tone={row.available>0?"good":"warn"}>{row.capacity} мест</Status></div>)}</div>{!objectHousing.length&&<div className="empty-inline">Жильё к объекту не привязано</div>}<div className="section-actions"><Link className="button" href={"/supply/housing?object="+id}>Открыть жильё</Link></div></Section>}
-        {canAssets&&<Section title="Запасы на объекте"><div className="stack-list">{objectBalances.filter(row=>row.minQuantity>0).slice(0,8).map(row=><div className="stack-item" key={row.locationId+row.itemId+row.variant}><div><strong>{row.item}{row.variant?" · "+row.variant:""}</strong><small>{row.location} · минимум {row.minQuantity}</small></div><Status tone={row.quantity<=row.minQuantity?"warn":"good"}>{row.quantity} {row.unit}</Status></div>)}</div>{!objectBalances.length&&<div className="empty-inline">Остатки на объекте не заведены</div>}<div className="section-actions"><Link className="button" href={"/assets?object="+id}>Открыть запасы</Link></div></Section>}
-      </div>
-      {canAssets&&<Section title="Комплекты СИЗ" note="Состав комплекта задаётся по специальности. Факт выдачи остаётся в карточке сотрудника и движениях имущества."><ObjectPpeTemplatesWorkspace objectId={id} templates={ppeTemplates} inventoryItems={inventory.items} specialties={workforceOptions.specialties} canManage={canManageAssets} demo={actor.demo}/></Section>}
-      {canProcurement&&<Section title="Заявки на обеспечение"><div className="request-table-wrap"><table className="data-table"><thead><tr><th>Заявка</th><th>Тип</th><th>Количество</th><th>Сумма</th><th>Статус</th></tr></thead><tbody>{objectSupplyRequests.slice(0,10).map(row=><tr key={row.id}><td className="cell-title">{row.title}</td><td>{row.requestType==="purchase"?"Закупка":row.requestType==="payment"?"Оплата":row.requestType==="compensation"?"Компенсация":"Услуга"}</td><td className="num">{row.quantity==null?"—":row.quantity+" "+(row.unit??"")}</td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td><Status tone={row.status==="closed"?"good":row.status==="rejected"?"bad":"info"}>{row.status==="submitted"?"Подана":row.status==="approved"?"Согласована":row.status==="in_progress"?"В работе":row.status==="received"?"Исполнено":row.status==="closed"?"Закрыта":row.status==="rejected"?"Отклонена":row.status}</Status></td></tr>)}</tbody></table></div><div className="section-actions"><Link className="button primary" href={"/procurement?object="+id}>Заявки на обеспечение</Link></div></Section>}
-    </>)}
+    {panel("supply",<ObjectSupplyWorkspace
+      objectId={id}
+      workers={objectWorkers}
+      balances={objectBalances}
+      inventoryItems={inventory.items}
+      templates={ppeTemplates}
+      specialties={workforceOptions.specialties}
+      housing={objectHousing}
+      requests={objectSupplyRequests}
+      canAssets={canAssets}
+      canHousing={canHousing}
+      canProcurement={canProcurement}
+      canManageAssets={canManageAssets}
+      demo={actor.demo}
+    />)}
 
     {panel("quality",<>
       <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
