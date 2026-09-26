@@ -409,14 +409,18 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
         SELECT count(*)::int required_count,
           count(*) FILTER (WHERE COALESCE(issued.qty,0)>=ti.quantity)::int issued_count,
           array_agg(i.name ORDER BY i.name) FILTER (WHERE COALESCE(issued.qty,0)<ti.quantity) missing_names
-        FROM object_ppe_templates t
-        JOIN object_ppe_template_items ti ON ti.template_id=t.id
+        FROM (
+          SELECT t.id FROM object_ppe_templates t
+          WHERE t.specialty_id=woa.specialty_id AND t.active AND (t.object_id=woa.object_id OR t.object_id IS NULL)
+          ORDER BY (t.object_id=woa.object_id) DESC,t.updated_at DESC,t.created_at DESC
+          LIMIT 1
+        ) effective_template
+        JOIN object_ppe_template_items ti ON ti.template_id=effective_template.id
         JOIN inventory_items i ON i.id=ti.item_id
         LEFT JOIN LATERAL (
           SELECT sum(CASE WHEN m.movement_type='issue' THEN m.quantity WHEN m.movement_type='return' THEN -m.quantity WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity ELSE 0 END)::numeric qty
           FROM inventory_movements m WHERE m.worker_id=w.id AND m.item_id=ti.item_id AND (ti.variant='' OR m.variant=ti.variant)
         ) issued ON true
-        WHERE t.object_id=woa.object_id AND t.specialty_id=woa.specialty_id AND t.active
       ) ppe ON true
       LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.object_id=woa.object_id OR x.object_id IS NULL) AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY (x.object_id=woa.object_id) DESC,x.effective_from DESC LIMIT 1) wr ON true
       LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.object_id=woa.object_id OR x.object_id IS NULL) AND x.day_night='any' AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY (x.object_id=woa.object_id) DESC,x.effective_from DESC LIMIT 1) wr_any ON true
