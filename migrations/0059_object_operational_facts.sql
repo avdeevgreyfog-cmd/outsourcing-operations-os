@@ -23,12 +23,10 @@ CREATE TABLE IF NOT EXISTS object_operational_facts (
 ALTER TABLE object_operational_facts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE object_operational_facts FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS tenant_isolation ON object_operational_facts;
 CREATE POLICY tenant_isolation ON object_operational_facts
   USING (organization_id=app_current_organization_id())
   WITH CHECK (organization_id=app_current_organization_id());
 
-DROP TRIGGER IF EXISTS audit_object_operational_facts ON object_operational_facts;
 CREATE TRIGGER audit_object_operational_facts
 AFTER INSERT OR UPDATE OR DELETE ON object_operational_facts
 FOR EACH ROW EXECUTE FUNCTION audit_row_change();
