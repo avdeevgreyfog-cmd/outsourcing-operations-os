@@ -6,13 +6,14 @@ import { useRouter } from "next/navigation";
 import type { WorkerRow } from "@/lib/data/service";
 import type { StaffingForecastRow } from "@/lib/operations/service";
 import type { RecruitingApplicationRow } from "@/lib/recruiting/service";
+import type { ObjectOperationalFactRow } from "@/lib/operations/object-facts";
 import { activeAbsence } from "@/lib/operations/workforce-status";
 
 type Lane="new"|"work"|"preparation"|"first_shift"|"problem";
 const laneLabels:Record<Lane,string>={new:"Новые",work:"В работе",preparation:"Готовятся",first_shift:"Выход согласован",problem:"Требуют решения"};
 const shiftLabels:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь"};
 
-export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,today,canEditNeed,canFeedback,demo}:{objectId:string;forecast:StaffingForecastRow[];applications:RecruitingApplicationRow[];workers:WorkerRow[];today:string;canEditNeed:boolean;canFeedback:boolean;demo:boolean}){
+export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,facts,today,canEditNeed,canFeedback,demo}:{objectId:string;forecast:StaffingForecastRow[];applications:RecruitingApplicationRow[];workers:WorkerRow[];facts:ObjectOperationalFactRow[];today:string;canEditNeed:boolean;canFeedback:boolean;demo:boolean}){
   const router=useRouter();
   const [needRows,setNeedRows]=useState(forecast);
   const [rows,setRows]=useState(applications);
@@ -31,6 +32,7 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
     problem:active.filter(row=>row.stage==="no_show"||row.workflow?.firstShiftOutcome==="no_show"||row.workflow?.managerInterviewState==="pending"),
   }),[active]);
   const actionCount=active.filter(requiresManagerAction).length;
+  const recruitingFacts=facts.filter(row=>row.audiences.includes("recruiting"));
 
   function setNeedDraft(row:StaffingForecastRow,value:number|string){const next=Math.max(1,Number(value)||1);setNeedDrafts(current=>({...current,[row.specialtyId]:String(next)}));}
   async function saveNeed(row:StaffingForecastRow){
@@ -66,6 +68,11 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
       <div className="metric"><span>Кандидатов в работе</span><strong>{active.length}</strong></div>
       <div className="metric"><span>Нужно действие менеджера</span><strong>{actionCount}</strong></div>
     </div>
+
+    <section className="section section-flush object-recruiting-brief">
+      <div className="section-head"><div><h2>Условия объекта для подбора</h2><p>Подтверждённые на объекте данные. Они обновляются из чек-листа выезда и доступны всем, кто работает с этим объектом.</p></div></div>
+      {recruitingFacts.length?<div className="object-recruiting-facts">{recruitingFacts.map(row=><article className={row.status==="issue"?"is-issue":""} key={row.id}><span>{row.section}</span><strong>{row.label}</strong><p>{row.value}</p><small>{row.confirmedBy?`Подтвердил: ${row.confirmedBy}`:"Источник: выезд на объект"}{row.status==="issue"?" · есть проблема":""}</small></article>)}</div>:<div className="empty-inline">Подтверждённых условий для подбора пока нет. Они появятся после заполнения выезда на объект.</div>}
+    </section>
 
     <section className="section section-flush">
       <div className="section-head"><div><h2>Потребность по специальностям</h2><p>Здесь меняется реальная потребность объекта; изменение сразу уходит в подбор и историю.</p></div></div>
