@@ -11,12 +11,6 @@ function run(command,args){
   });
 }
 
+// Builds must be side-effect free. Database migrations are a separate release step.
 await run(process.platform==="win32"?"npx.cmd":"npx",["next","build"]);
-
-const shouldMigrate=process.env.VERCEL_ENV==="production" && Boolean(process.env.DATABASE_URL);
-if(shouldMigrate){
-  console.log("Production build passed. Applying pending database migrations...");
-  await run(process.execPath,["scripts/migrate.mjs"]);
-}else{
-  console.log("Skipping production database migrations outside Vercel production.");
-}
+console.log("Build complete. Database migrations were not executed.");
