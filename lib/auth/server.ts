@@ -179,22 +179,23 @@ export async function getCurrentActor(options: ActorOptions = {}): Promise<Actor
   });
 }
 
-async function getRealSessionOrganization(): Promise<WorkspaceOption | null> {
-  if (!hasDatabase()) return null;
+async function getRealSessionOrganizations(): Promise<WorkspaceOption[]> {
+  if (!hasDatabase()) return [];
   const store = await cookies();
   const raw = store.get(SESSION_COOKIE)?.value;
-  if (!raw) return null;
+  if (!raw) return [];
   try {
-    const [row] = await db()<{ id: string; name: string; slug: string }[]>`
-      SELECT o.id,o.name,o.slug
+    const rows = await db()<{ id: string; name: string; slug: string }[]>\`
+      SELECT DISTINCT o.id,o.name,o.slug
       FROM sessions s
-      JOIN organizations o ON o.id=s.organization_id
+      JOIN organization_memberships m ON m.user_id=s.user_id AND m.status='active'
+      JOIN organizations o ON o.id=m.organization_id
       WHERE s.token_hash=${hashSessionToken(raw)} AND s.expires_at>now()
-      LIMIT 1
-    `;
-    return row ? { key: row.id, id: row.id, name: row.name, slug: row.slug, kind: "tenant" } : null;
+      ORDER BY o.name
+    \`;
+    return rows.map((row) => ({ key: row.id, id: row.id, name: row.name, slug: row.slug, kind: "tenant" as const }));
   } catch {
-    return null;
+    return [];
   }
 }
 
@@ -212,17 +213,18 @@ export async function getWorkspaceContext(actor: Actor): Promise<WorkspaceContex
     organizations.push({ key: "demo", id: null, name: "Демо-организация", slug: "operis-demo", kind: "demo" });
   }
 
-  const realOrganization = actor.demo
-    ? await getRealSessionOrganization()
-    : {
-        key: actor.organizationId,
-        id: actor.organizationId,
-        name: actor.organizationName ?? "Моя организация",
-        slug: actor.organizationSlug ?? "sergey-work",
-        kind: "tenant" as const,
-      };
-  if (realOrganization && !organizations.some((item) => item.key === realOrganization.key)) {
-    organizations.push(realOrganization);
+  const realOrganizations = await getRealSessionOrganizations();
+  if (!actor.demo && !realOrganizations.some((item) => item.key === actor.organizationId)) {
+    realOrganizations.push({
+      key: actor.organizationId,
+      id: actor.organizationId,
+      name: actor.organizationName ?? "Моя организация",
+      slug: actor.organizationSlug ?? "sergey-work",
+      kind: "tenant" as const,
+    });
+  }
+  for (const organization of realOrganizations) {
+    if (!organizations.some((item) => item.key === organization.key)) organizations.push(organization);
   }
 
   let previewOptions: WorkspaceContext["previewOptions"] = [];
@@ -268,7 +270,7 @@ export async function getWorkspaceContext(actor: Actor): Promise<WorkspaceContex
     previewOptions,
     previewTarget: actor.accessPreview ? `${actor.accessPreview.targetType}:${actor.accessPreview.targetId}` : null,
     actualRoleName: actor.baseRoleName ?? actor.roleName,
-    hasRealSession: Boolean(realOrganization),
+    hasRealSession: realOrganizations.length > 0,
   };
 }
 
