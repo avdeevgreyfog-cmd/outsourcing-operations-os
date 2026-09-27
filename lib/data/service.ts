@@ -249,7 +249,7 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
       LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(n.count_required),0)::int required
-        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
+        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')
       ) needs ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT a.worker_id)::int working
@@ -633,7 +633,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
     `:[];
     const needPlanRows=await sql<Array<{date:string;required:number}>>`
       SELECT d.day::date::text date,
-        COALESCE(sum(history.count_required) FILTER (WHERE history.status NOT IN ('cancelled','archived')),0)::int required
+        COALESCE(sum(history.count_required) FILTER (WHERE history.status NOT IN ('cancelled','archived','closed')),0)::int required
       FROM generate_series(${periodStart}::date,${periodEnd}::date,interval '1 day') d(day)
       LEFT JOIN LATERAL (
         SELECT nv.count_required,nv.status
