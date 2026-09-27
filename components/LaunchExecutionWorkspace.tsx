@@ -356,7 +356,7 @@ export function LaunchExecutionWorkspace({
   function openQuestionSettings(item?:SiteVisitChecklistItem){
     setQuestionEditor({
       id:item?.id??null,
-      section:item?.section??visitSection||"Прочее",
+      section:(item?.section??visitSection)||"Прочее",
       label:item?.label??"",
       category:item?.category??"operations",
       answerKind:item?.answerKind??"text",
@@ -431,11 +431,19 @@ export function LaunchExecutionWorkspace({
     finally{setBusy(false);}
   }
 
-  const groupedChecklist=useMemo(()=>{
-    const groups=new Map<string,SiteVisitChecklistItem[]>();
-    for(const item of visitEditor?.checklist??[])groups.set(item.section,[...(groups.get(item.section)??[]),item]);
-    return [...groups.entries()];
+  const visitSections=useMemo(()=>{
+    const sections:string[]=[];
+    for(const item of visitEditor?.checklist??[])if(!sections.includes(item.section))sections.push(item.section);
+    return sections;
   },[visitEditor]);
+  const activeVisitSection=visitSection||visitSections[0]||"";
+  const editorVisitItems=useMemo(()=>(visitEditor?.checklist??[]).filter(item=>{
+    if(item.section!==activeVisitSection)return false;
+    if(item.hidden&&!visitShowHidden)return false;
+    if(visitFilter==="pending"&&!(item.status==="pending"||item.status==="issue"))return false;
+    if(visitFilter==="issues"&&item.status!=="issue")return false;
+    return true;
+  }),[visitEditor,activeVisitSection,visitShowHidden,visitFilter]);
 
   return <section className="launch-detail-workspace">
     <header className="launch-detail-head">
