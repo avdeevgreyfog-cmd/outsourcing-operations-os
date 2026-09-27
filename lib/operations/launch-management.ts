@@ -3,7 +3,7 @@ import { requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
-import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
+import { defaultPrimarySiteVisitChecklist, mergePrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 import type { SiteVisitChecklistItem } from "@/lib/operations/launch-checklist";
 export type { SiteVisitChecklistItem, SiteVisitChecklistStatus } from "@/lib/operations/launch-checklist";
 
@@ -115,7 +115,10 @@ export async function listLaunchSiteVisits(actor:Actor):Promise<LaunchSiteVisitR
       LEFT JOIN app_users u ON u.id=v.owner_user_id
       ORDER BY v.scheduled_date NULLS LAST,v.created_at
     `;
-    return rows.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor));
+    return rows.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor)).map(row=>({
+      ...row,
+      checklist:row.visitType==="primary"?mergePrimarySiteVisitChecklist(row.checklist):row.checklist,
+    }));
   });
 }
 
