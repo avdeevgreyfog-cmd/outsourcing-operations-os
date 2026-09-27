@@ -1,10 +1,8 @@
 "use client";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { WorkspaceContext } from "@/lib/access/types";
 
 export function WorkspaceContextControls({ context, demo }: { context: WorkspaceContext; demo: boolean }) {
-  const router = useRouter();
   const [busy,setBusy] = useState(false);
 
   async function changeWorkspace(value:string){
@@ -17,8 +15,7 @@ export function WorkspaceContextControls({ context, demo }: { context: Workspace
     });
     setBusy(false);
     if(!response.ok) return;
-    router.push("/");
-    router.refresh();
+    window.location.assign(value==="demo"?"/demo":"/work");
   }
 
   async function changePreview(value:string){
@@ -30,8 +27,7 @@ export function WorkspaceContextControls({ context, demo }: { context: Workspace
     });
     setBusy(false);
     if(!response.ok) return;
-    router.push("/");
-    router.refresh();
+    window.location.assign("/?_operis_reload="+Date.now());
   }
 
   const accessTemplates=context.previewOptions.filter((item)=>item.targetType==="role_template");
