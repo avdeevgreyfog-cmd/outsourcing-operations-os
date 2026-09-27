@@ -5,7 +5,7 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root=fileURLToPath(new URL("../migrations/",import.meta.url));
-const historicalAllowlist=new Set(["0053_clean_personal_workspace.sql"]);
+const historicalAllowlist=new Set(["0052_personal_workspace_owner_repair.sql","0053_clean_personal_workspace.sql"]);
 const protectedIdentifiers=[
   "00000000-0000-4000-8000-000000000002",
   "sergey-work",
