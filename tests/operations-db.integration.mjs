@@ -310,13 +310,39 @@ try{
   `;
   assert.ok(audited[0].count>=7,"operations mutations must be present in system audit");
 
-  await sql.unsafe("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='operations_test_runtime') THEN CREATE ROLE operations_test_runtime NOLOGIN; END IF; END $$");
+  const customerOrg="00000000-0000-4000-8000-000000000002";
+  const customerOwner="10000000-0000-4000-8000-000000000101";
+  const customerRegion=randomUUID();
+  const customerClient=randomUUID();
+  const customerObject=randomUUID();
+  await sql`
+    INSERT INTO regions(id,organization_id,code,name)
+    VALUES(${customerRegion}::uuid,${customerOrg}::uuid,${"TEST-"+customerRegion.slice(0,8)},'Tenant isolation region')
+  `;
+  await sql`
+    INSERT INTO client_companies(id,organization_id,name,status,owner_user_id,created_by_user_id,region_id)
+    VALUES(${customerClient}::uuid,${customerOrg}::uuid,'Tenant isolation client','active',${customerOwner}::uuid,${customerOwner}::uuid,${customerRegion}::uuid)
+  `;
+  await sql`
+    INSERT INTO objects(id,organization_id,client_company_id,name,code,status,region_id,owner_user_id,created_by_user_id)
+    VALUES(${customerObject}::uuid,${customerOrg}::uuid,${customerClient}::uuid,'Tenant isolation object',${"ISO-"+customerObject.slice(0,8)},'active',${customerRegion}::uuid,${customerOwner}::uuid,${customerOwner}::uuid)
+  `;
+
+  await sql.unsafe("DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='operations_test_runtime') THEN CREATE ROLE operations_test_runtime NOLOGIN; END IF; END $");
   await sql.unsafe("GRANT USAGE ON SCHEMA public TO operations_test_runtime; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO operations_test_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO operations_test_runtime");
   await sql.begin(async tx=>{
     await tx.unsafe("SET LOCAL ROLE operations_test_runtime");
     await tx`SELECT set_config('app.organization_id',${org},true),set_config('app.user_id',${director},true)`;
     const visible=await tx`SELECT DISTINCT organization_id FROM supply_requests`;
     assert.deepEqual(visible.map(row=>row.organization_id),[org]);
+    const hiddenCustomerObject=await tx`SELECT id FROM objects WHERE id=${customerObject}::uuid`;
+    assert.equal(hiddenCustomerObject.length,0,"a different customer's object must be invisible in the active tenant");
+
+    await tx`SELECT set_config('app.organization_id',${customerOrg},true),set_config('app.user_id',${customerOwner},true)`;
+    const visibleCustomerObject=await tx`SELECT id FROM objects WHERE id=${customerObject}::uuid`;
+    assert.equal(visibleCustomerObject.length,1,"the customer's object must be visible inside its own tenant");
+    const hiddenDemoObject=await tx`SELECT id FROM objects WHERE id=${object.id}::uuid`;
+    assert.equal(hiddenDemoObject.length,0,"demo/company-one object must be invisible inside another customer's tenant");
   });
 
   console.log("Operations PostgreSQL integration passed: worker lifecycle, distributed stock, return/writeoff, housing, supply approval, audit and tenant isolation.");
