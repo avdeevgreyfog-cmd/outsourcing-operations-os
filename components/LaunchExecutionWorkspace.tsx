@@ -136,7 +136,31 @@ export function LaunchExecutionWorkspace({
     });
   },[localWaves,objectApplications]);
 
-  const nextWave=waveRows.find(row=>row.targetDate>=todayIso()&&row.status!=="cancelled")??waveRows.at(-1)??null;
+  const nextWave=waveRows.find(row=>row.targetDate>=todayIso()&&row.status!=="cancelled")??(waveRows.length?waveRows[waveRows.length-1]:null);
+  const ganttRows=useMemo(()=>{
+    const taskRows=[...localTasks];
+    const staffingRows:LaunchTaskRow[]=localWaves.filter(wave=>wave.status!=="cancelled").map(wave=>({
+      id:"wave:"+wave.id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,object:plan.object,
+      title:`${wave.name} · +${wave.plannedCount} чел.`,level:0,owner:"Подбор",
+      start:formatShort(wave.targetDate),end:formatShort(wave.targetDate),startDate:wave.targetDate,endDate:wave.targetDate,
+      baselineStart:null,baselineEnd:null,baselineStartDate:null,baselineEndDate:null,progress:wave.status==="completed"?100:0,
+      status:wave.status==="completed"?"done":wave.status==="in_progress"?"in_progress":"planned",risk:"normal",milestone:true,critical:false,
+      blocksLaunch:false,category:"staffing",taskKind:"staffing_wave",dependencyIds:[],assigneeUserIds:plan.assigneeUserIds,
+    }));
+    const visitRows:LaunchTaskRow[]=localVisits.filter(visit=>visit.status!=="cancelled"&&visit.scheduledDate).map(visit=>({
+      id:"visit:"+visit.id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,object:plan.object,
+      title:visit.visitType==="primary"?"Первичный выезд на объект":"Контрольный выезд",level:0,owner:visit.owner??plan.ownerName??"—",
+      start:formatShort(visit.scheduledDate),end:formatShort(visit.scheduledDate),startDate:visit.scheduledDate,endDate:visit.scheduledDate,
+      baselineStart:null,baselineEnd:null,baselineStartDate:null,baselineEndDate:null,progress:visit.status==="completed"?100:visit.status==="in_progress"?50:0,
+      status:visit.status==="completed"?"done":visit.status==="in_progress"?"in_progress":"planned",risk:"normal",milestone:true,critical:visit.visitType==="primary"&&visit.status!=="completed",
+      blocksLaunch:visit.visitType==="primary"&&visit.status!=="completed",category:"operations",taskKind:"site_visit",dependencyIds:[],assigneeUserIds:plan.assigneeUserIds,
+    }));
+    return [...taskRows,...staffingRows,...visitRows].sort((a,b)=>{
+      const ac=categoryOrder.indexOf(a.category??"other");const bc=categoryOrder.indexOf(b.category??"other");
+      return (ac===-1?999:ac)-(bc===-1?999:bc)||(a.startDate??"").localeCompare(b.startDate??"");
+    });
+  },[localTasks,localWaves,localVisits,plan.id,plan.objectId,plan.object,plan.organizationId,plan.ownerName,plan.assigneeUserIds]);
+
   const staffingGap=nextWave?.gap??Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
   const siteVisitBlocker=Boolean(primaryVisit&&primaryVisit.status!=="completed");
   const launchBlocked=blockingTasks.length>0||visitStats.issues>0||staffingGap>0||siteVisitBlocker;
@@ -388,7 +412,15 @@ export function LaunchExecutionWorkspace({
         <div className="launch-plan-toolbar-meta"><span>{unfinished.length} незавершённых</span><span>{blockingTasks.length} блокируют / требуют контроля</span></div>
         {canEdit&&<button className="button" onClick={()=>setTaskEditor(taskDraft(null,localPlan.targetDate))}><Plus size={14}/> Задача</button>}
       </div>
-      {planView==="gantt"?<LaunchGantt rows={localTasks}/>:<div className="request-table-wrap launch-plan-table-wrap"><table className="data-table launch-plan-table">
+      {planView==="gantt"?<LaunchGantt rows={ganttRows} categoryLabels={categoryLabels} onSelectTask={canEdit?(row=>{
+        if(row.taskKind==="staffing_wave"){
+          const id=row.id.slice("wave:".length);const wave=localWaves.find(item=>item.id===id);if(wave)setWaveEditor(waveDraft(wave,localPlan.targetDate));return;
+        }
+        if(row.taskKind==="site_visit"){
+          const id=row.id.slice("visit:".length);const visit=localVisits.find(item=>item.id===id);if(visit)openVisit(visit);return;
+        }
+        setTaskEditor(taskDraft(row,localPlan.targetDate));
+      }):undefined}/>:<div className="request-table-wrap launch-plan-table-wrap"><table className="data-table launch-plan-table">
         <thead><tr><th>Направление / задача</th><th>Ответственный</th><th>Срок</th><th>Прогресс</th><th>Состояние</th></tr></thead>
         <tbody>{[...localTasks].sort((a,b)=>categoryOrder.indexOf(a.category??"other")-categoryOrder.indexOf(b.category??"other")||(a.startDate??"").localeCompare(b.startDate??"")).map(row=><tr key={row.id} onDoubleClick={()=>canEdit&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>
           <td><span className="launch-task-category">{categoryLabels[row.category??"other"]??"Прочее"}</span><button type="button" className="launch-task-link" onClick={()=>canEdit&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>{row.title}</button>{row.blocksLaunch&&<small>Блокирует запуск</small>}</td>
