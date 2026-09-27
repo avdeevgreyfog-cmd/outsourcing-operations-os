@@ -82,7 +82,7 @@ jobs:
             if [ "$attempt" = "40" ]; then cat /tmp/operis-ci-server.log; exit 1; fi
             sleep 1
           done
-          CI_SMOKE_BASE_URL=http://127.0.0.1:3100 node scripts/verify-ci-workspace-smoke.mjs
+          CI_SMOKE_BASE_URL=http://127.0.0.1:3100 node scripts/verify-ci-workspace-smoke.mjs || { echo "----- OPERIS server log -----"; cat /tmp/operis-ci-server.log; exit 1; }
 
 
   pages-demo:
