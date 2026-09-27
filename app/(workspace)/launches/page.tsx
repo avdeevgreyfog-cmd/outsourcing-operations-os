@@ -119,6 +119,6 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
       </table>{!summaries.length&&<div className="empty-inline">{scope==="archive"?"Завершённых запусков пока нет":"Активных планов запуска нет"}</div>}</div>
     </section>
 
-    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} forecast={selectedForecast} assignees={assignees} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
+    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} forecast={selectedForecast} assignees={assignees} recruitingVisible={canReadRecruiting} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
   </div>;
 }

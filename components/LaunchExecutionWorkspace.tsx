@@ -84,7 +84,7 @@ function uniqueCandidates(rows:RecruitingApplicationRow[]){
 }
 
 export function LaunchExecutionWorkspace({
-  plan,tasks,waves,visits,analytics,applications,forecast,assignees,canEdit,demo,initialTab="summary",
+  plan,tasks,waves,visits,analytics,applications,forecast,assignees,recruitingVisible,canEdit,demo,initialTab="summary",
 }:{
   plan:LaunchPlanRow;
   tasks:LaunchTaskRow[];
@@ -94,6 +94,7 @@ export function LaunchExecutionWorkspace({
   applications:RecruitingApplicationRow[];
   forecast:StaffingForecastRow[];
   assignees:LaunchAssigneeOption[];
+  recruitingVisible:boolean;
   canEdit:boolean;
   demo:boolean;
   initialTab?:LaunchTab;
@@ -139,16 +140,16 @@ export function LaunchExecutionWorkspace({
       cumulativeBySpecialty.set(key,cumulative);
       const specialtyForecast=wave.specialtyId?forecast.find(item=>item.specialtyId===wave.specialtyId):null;
       const source=wave.needId?objectApplications.filter(row=>row.needId===wave.needId):specialtyForecast?objectApplications.filter(row=>specialtyForecast.needIds.includes(row.needId)):objectApplications;
-      const ready=source.filter(row=>{
-        if(!readyStages.has(row.stage))return false;
+      const ready=recruitingVisible?source.filter(row=>{
+        if(!readyStages.has(row.stage)||Boolean(row.actualStartAt))return false;
         const readyDate=row.plannedArrivalAt?String(row.plannedArrivalAt).slice(0,10):row.plannedStartDate;
         return !readyDate||readyDate<=wave.targetDate;
-      }).length;
-      const arrived=source.filter(row=>Boolean(row.plannedArrivalAt)&&String(row.plannedArrivalAt).slice(0,10)<=wave.targetDate).length;
-      const started=source.filter(row=>Boolean(row.actualStartAt)&&String(row.actualStartAt).slice(0,10)<=wave.targetDate).length;
+      }).length:Number(specialtyForecast?.preparing??0);
+      const arrived=recruitingVisible?source.filter(row=>Boolean(row.plannedArrivalAt)&&String(row.plannedArrivalAt).slice(0,10)<=wave.targetDate).length:0;
+      const started=recruitingVisible?source.filter(row=>Boolean(row.actualStartAt)&&String(row.actualStartAt).slice(0,10)<=wave.targetDate).length:Number(specialtyForecast?.working??0);
       return {...wave,cumulative,ready,arrived,started,gap:Math.max(cumulative-ready,0),surplus:Math.max(ready-cumulative,0)};
     });
-  },[localWaves,objectApplications,forecast]);
+  },[localWaves,objectApplications,forecast,recruitingVisible]);
 
   const nextWave=waveRows.find(row=>row.targetDate>=todayIso()&&row.status!=="cancelled")??(waveRows.length?waveRows[waveRows.length-1]:null);
   const ganttRows=useMemo(()=>{
@@ -176,7 +177,12 @@ export function LaunchExecutionWorkspace({
   },[localTasks,localWaves,localVisits,plan.id,plan.objectId,plan.object,plan.organizationId,plan.ownerName,plan.assigneeUserIds]);
 
   const staffingGap=forecast.length
-    ?forecast.reduce((sum,row)=>sum+Math.max(Number(row.required)-Number(row.working)-Number(row.preparing),0),0)
+    ?forecast.reduce((sum,row)=>{
+      const ready=recruitingVisible
+        ?new Set(objectApplications.filter(item=>row.needIds.includes(item.needId)&&readyStages.has(item.stage)&&!item.actualStartAt).map(item=>item.candidateId)).size
+        :Number(row.preparing);
+      return sum+Math.max(Number(row.required)-Number(row.working)-ready,0);
+    },0)
     :Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
   const nextWaveGap=nextWave?.gap??staffingGap;
   const siteVisitBlocker=!primaryVisit||primaryVisit.status!=="completed";
