@@ -61,6 +61,7 @@ try {
   const org2 = randomUUID();
   const org2User = randomUUID();
   const org2Member = randomUUID();
+  const org2SharedMember = randomUUID();
   const org2RoleTemplate = randomUUID();
   const org2Unit = randomUUID();
   const org2Region = randomUUID();
@@ -70,6 +71,10 @@ try {
   await sql`INSERT INTO app_users(id,display_name,email) VALUES(${org2User}::uuid,'Tenant B User',${`${org2User}@test.local`})`;
   await sql`INSERT INTO role_templates(id,organization_id,code,name) VALUES(${org2RoleTemplate}::uuid,${org2}::uuid,'manager','Manager')`;
   await sql`INSERT INTO organization_memberships(id,organization_id,user_id,role_template_id) VALUES(${org2Member}::uuid,${org2}::uuid,${org2User}::uuid,${org2RoleTemplate}::uuid)`;
+  await sql`INSERT INTO organization_memberships(id,organization_id,user_id,role_template_id) VALUES(${org2SharedMember}::uuid,${org2}::uuid,${user1}::uuid,${org2RoleTemplate}::uuid)`;
+  const sharedMemberships=await sql`SELECT organization_id::text organization_id FROM organization_memberships WHERE user_id=${user1}::uuid AND status='active' ORDER BY organization_id`;
+  assert.ok(sharedMemberships.some(row=>row.organization_id===org1),"shared user must retain access to tenant A");
+  assert.ok(sharedMemberships.some(row=>row.organization_id===org2),"shared user must be able to belong to tenant B");
   await sql`INSERT INTO regions(id,organization_id,code,name) VALUES(${org2Region}::uuid,${org2}::uuid,'T2','Tenant B Region')`;
   await sql`INSERT INTO positions(id,organization_id,code,name) VALUES(${org2Profile}::uuid,${org2}::uuid,'profile','Tenant B Profile')`;
   await sql`INSERT INTO process_roles(id,organization_id,code,name) VALUES(${org2Role}::uuid,${org2}::uuid,'role','Tenant B Role')`;
@@ -167,14 +172,33 @@ try {
   assert.equal(fallback[0]?.membership_id, member1);
   assert.equal(fallback[0]?.is_fallback, true);
 
-  await sql.unsafe("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='organization_test_runtime') THEN CREATE ROLE organization_test_runtime NOLOGIN; END IF; END $$");
+  const tenantACandidate=randomUUID();
+  const tenantBCandidate=randomUUID();
+  await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
+  await sql`INSERT INTO candidates(id,organization_id,full_name,status,created_by_user_id) VALUES(${tenantACandidate}::uuid,${org1}::uuid,'Tenant A isolation candidate','active',${user1}::uuid)`;
+  await sql`SELECT set_config('app.organization_id',${org2},false),set_config('app.user_id',${org2User},false)`;
+  await sql`INSERT INTO candidates(id,organization_id,full_name,status,created_by_user_id) VALUES(${tenantBCandidate}::uuid,${org2}::uuid,'Tenant B isolation candidate','active',${org2User}::uuid)`;
+  await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
+
+  await sql.unsafe("DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='organization_test_runtime') THEN CREATE ROLE organization_test_runtime NOLOGIN; END IF; END $");
   await sql.unsafe("GRANT USAGE ON SCHEMA public TO organization_test_runtime; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO organization_test_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO organization_test_runtime");
   await sql.begin(async (tx) => {
     await tx.unsafe("SET LOCAL ROLE organization_test_runtime");
     await tx`SELECT set_config('app.organization_id',${org1},true),set_config('app.user_id',${user1},true)`;
     const visible = await tx`SELECT DISTINCT organization_id FROM organization_units`;
     assert.deepEqual(visible.map((row) => row.organization_id), [org1]);
+    const candidateVisibility=await tx`SELECT id::text id,organization_id::text organization_id FROM candidates WHERE id IN (${tenantACandidate}::uuid,${tenantBCandidate}::uuid) ORDER BY id`;
+    assert.deepEqual(candidateVisibility.map(row=>row.organization_id),[org1],"tenant A runtime must not read tenant B candidates");
   });
+  await assert.rejects(
+    () => sql.begin(async (tx) => {
+      await tx.unsafe("SET LOCAL ROLE organization_test_runtime");
+      await tx`SELECT set_config('app.organization_id',${org1},true),set_config('app.user_id',${user1},true)`;
+      await tx`INSERT INTO candidates(organization_id,full_name,status,created_by_user_id) VALUES(${org2}::uuid,'Cross tenant candidate','active',${user1}::uuid)`;
+    }),
+    (error) => /row-level security/.test(error?.message ?? ""),
+    "tenant A runtime must not create tenant B business rows",
+  );
   await assert.rejects(
     () => sql.begin(async (tx) => {
       await tx.unsafe("SET LOCAL ROLE organization_test_runtime");
