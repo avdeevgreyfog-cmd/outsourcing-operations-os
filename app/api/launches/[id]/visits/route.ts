@@ -4,7 +4,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
-import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-management";
+import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 
 const schema=z.object({
   scheduledDate:z.string().date(),
