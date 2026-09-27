@@ -1,0 +1,89 @@
+name: Staging Smoke
+
+on:
+  push:
+    branches: [beta]
+  workflow_dispatch:
+
+jobs:
+  staging-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: staging
+    env:
+      BASE_URL: ${{ vars.STAGING_BASE_URL }}
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check staging configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BASE_URL" || { echo "::error::STAGING_BASE_URL repository variable is required."; exit 1; }
+          test -n "$PRODUCTION_BASE_URL" || { echo "::error::PRODUCTION_BASE_URL repository variable is required."; exit 1; }
+          test -n "$AUTOMATION_BYPASS_SECRET" || { echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET staging secret is required."; exit 1; }
+
+      - name: Wait for staging deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            code="$(curl -sS -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -o /tmp/status.json -w '%{http_code}' "$BASE_URL/api/system/status" || true)"
+            deployed_sha="$(node -e "try{const s=require('/tmp/status.json');process.stdout.write(s.deploymentSha||'')}catch{}" 2>/dev/null || true)"
+            if [ "$code" = "200" ] && grep -q '"ok":true' /tmp/status.json && [ "$deployed_sha" = "$GITHUB_SHA" ]; then
+              cat /tmp/status.json
+              exit 0
+            fi
+            echo "attempt=$attempt status=$code deployed_sha=$deployed_sha expected_sha=$GITHUB_SHA"
+            sleep 10
+          done
+          echo "Beta commit did not become active in staging in time."
+          cat /tmp/status.json 2>/dev/null || true
+          exit 1
+
+      - name: Verify staging database boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          production_code="$(curl -sS -o /tmp/production-status.json -w '%{http_code}' "$PRODUCTION_BASE_URL/api/system/status")"
+          test "$production_code" = "200"
+          expected_schema="$(find migrations -maxdepth 1 -type f -name '[0-8][0-9][0-9][0-9]_*.sql' -printf '%f\n' | sort | tail -n 1)"
+          EXPECTED_SCHEMA="$expected_schema" node - <<'NODE'
+          const fs=require("node:fs");
+          const staging=JSON.parse(fs.readFileSync("/tmp/status.json","utf8"));
+          const production=JSON.parse(fs.readFileSync("/tmp/production-status.json","utf8"));
+          if(staging.ok!==true)throw new Error("staging runtime is unhealthy");
+          if(staging.databaseConfigured!==true)throw new Error("staging DATABASE_URL is not configured");
+          if(!staging.databaseIdentity)throw new Error("staging database identity is unavailable");
+          if(staging.schemaVersion!==process.env.EXPECTED_SCHEMA){
+            throw new Error(`staging schema is not current; expected=${process.env.EXPECTED_SCHEMA} active=${staging.schemaVersion??"unknown"}`);
+          }
+          if(staging.environment!=="staging"){
+            throw new Error(`staging deployment must report APP_ENVIRONMENT=staging; got ${staging.environment??"unknown"}`);
+          }
+          if(production.ok!==true)throw new Error("production runtime is unhealthy");
+          if(production.databaseConfigured!==true)throw new Error("production DATABASE_URL is not configured");
+          if(production.schemaVersion!==process.env.EXPECTED_SCHEMA){
+            throw new Error(`production schema is not current; expected=${process.env.EXPECTED_SCHEMA} active=${production.schemaVersion??"unknown"}`);
+          }
+          if(production.environment!=null&&production.environment!=="production"){
+            throw new Error(`production deployment reports an invalid environment: ${production.environment}`);
+          }
+          if(production.databaseIdentity!=null&&staging.databaseIdentity===production.databaseIdentity){
+            throw new Error("staging and production resolve to the same PostgreSQL database");
+          }
+          if(production.environment==null||production.databaseIdentity==null){
+            console.log("::notice::Production is still on the main status contract; production-smoke will require environment and database identity after promotion.");
+          }
+          NODE
+
+      - name: Verify public entry surfaces
+        shell: bash
+        run: |
+          set -euo pipefail
+          login_code="$(curl -sS -L -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -o /tmp/login.html -w '%{http_code}' "$BASE_URL/login")"
+          test "$login_code" = "200"
+          demo_code="$(curl -sS -L -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -H 'Cookie: oo_workspace_mode=demo; oo_demo_role=director' -o /tmp/demo.html -w '%{http_code}' "$BASE_URL/")"
+          test "$demo_code" = "200"
