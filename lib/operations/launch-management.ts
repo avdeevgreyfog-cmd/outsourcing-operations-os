@@ -148,7 +148,7 @@ export async function listLaunchSiteVisits(actor:Actor):Promise<LaunchSiteVisitR
     return plans.slice(0,1).map(plan=>({
       id:plan.id+"-visit-1",organizationId:actor.organizationId,launchId:plan.id,objectId:plan.objectId,visitType:"primary" as const,
       scheduledDate:addDays(plan.targetDate,-10),ownerUserId:plan.ownerUserId,owner:plan.ownerName,status:"planned" as const,
-      checklist:defaultPrimarySiteVisitChecklist(),notes:null,completdAt:null,
+      checklist:defaultPrimarySiteVisitChecklist(),notes:null,completedAt:null,
     }));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
