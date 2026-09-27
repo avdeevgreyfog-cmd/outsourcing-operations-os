@@ -185,14 +185,14 @@ async function getRealSessionOrganizations(): Promise<WorkspaceOption[]> {
   const raw = store.get(SESSION_COOKIE)?.value;
   if (!raw) return [];
   try {
-    const rows = await db()<{ id: string; name: string; slug: string }[]>\`
+    const rows = await db()<{ id: string; name: string; slug: string }[]>`
       SELECT DISTINCT o.id,o.name,o.slug
       FROM sessions s
       JOIN organization_memberships m ON m.user_id=s.user_id AND m.status='active'
       JOIN organizations o ON o.id=m.organization_id
       WHERE s.token_hash=${hashSessionToken(raw)} AND s.expires_at>now()
       ORDER BY o.name
-    \`;
+    `;
     return rows.map((row) => ({ key: row.id, id: row.id, name: row.name, slug: row.slug, kind: "tenant" as const }));
   } catch {
     return [];
