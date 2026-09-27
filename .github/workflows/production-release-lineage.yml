@@ -1,0 +1,23 @@
+name: Production Release Lineage
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  require-beta-lineage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Require production commit to exist on beta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin beta
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/beta || {
+            echo "::error::Production commit $GITHUB_SHA is not present on beta. Promote beta instead of committing directly to main."
+            exit 1
+          }
