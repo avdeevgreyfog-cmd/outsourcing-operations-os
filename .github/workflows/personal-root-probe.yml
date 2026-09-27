@@ -1,0 +1,18 @@
+name: Temporary Personal Root Probe
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Probe authenticated personal root
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS -D /tmp/headers "https://outsourcing-operations-os-g942.vercel.app/api/system/personal-root-probe" -o /tmp/body
+          cat /tmp/headers
+          cat /tmp/body
