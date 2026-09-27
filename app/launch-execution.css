@@ -186,3 +186,42 @@
   :root[data-operis-ui="new"] .launch-checklist-item select,:root[data-operis-ui="new"] .launch-checklist-item input,:root[data-operis-ui="new"] .launch-checklist-item textarea{height:auto;min-height:38px}
   :root[data-operis-ui="new"] .launch-checklist-item textarea{min-height:60px}
 }
+
+
+:root[data-operis-ui="new"] .launch-plan-view .gantt-group-row{
+  min-height:32px;
+  display:grid;
+  grid-template-columns:320px 1fr;
+  align-items:center;
+  border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);
+  background:var(--panel-2);
+}
+:root[data-operis-ui="new"] .launch-plan-view .gantt-group-row>strong{
+  padding:7px 12px;
+  color:var(--muted);
+  font-size:10.5px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:.045em;
+}
+:root[data-operis-ui="new"] .launch-plan-view .gantt-group-row>span{
+  height:100%;
+  border-left:1px solid var(--border);
+}
+:root[data-operis-ui="new"] .launch-plan-view .gantt-wave-row .gantt-task-name strong{
+  color:var(--text);
+}
+:root[data-operis-ui="new"] .launch-plan-view .gantt-wave-row .gantt-task-name small,
+:root[data-operis-ui="new"] .launch-plan-view .gantt-visit-row .gantt-task-name small{
+  color:var(--muted);
+}
+:root[data-operis-ui="new"] .launch-plan-view .gantt-milestone.wave{
+  border-color:var(--accent);
+  background:var(--accent);
+}
+@media(max-width:780px){
+  :root[data-operis-ui="new"] .launch-plan-view .gantt-group-row{
+    grid-template-columns:250px 1fr;
+  }
+}
