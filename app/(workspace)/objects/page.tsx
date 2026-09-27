@@ -32,17 +32,17 @@ export default async function Objects(){
   const required=analytics.reduce((sum,row)=>sum+row.required,0);
   const working=analytics.reduce((sum,row)=>sum+row.working,0);
   const deficit=Math.max(required-working,0);
-  const risky=enhancedRows.filter(row=>["high","critical"].includes(row.risk??"")).length;
-  return <>
+  const attention=enhancedRows.filter(row=>Boolean(row.attentionReasons?.length)).length;
+  return <div className="object-portfolio-page">
     <PageHeader eyebrow="Операции → Управление объектами" title="Объекты" subtitle="Портфель объектов: юридические лица, ответственные, комплектация и объяснимые операционные сигналы." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Объекты"}]}/>
-    <div className="metrics-grid">
+    <div className="metrics-grid object-portfolio-metrics">
       <Metric label="Объекты в контуре" value={rows.length}/>
       <Metric label="Сотрудников на объектах" value={working}/>
-      <Metric label="Нужно найти" value={deficit} tone={deficit?"warn":"good"}/>
-      <Metric label="Высокий риск" value={risky} tone={risky?"bad":"good"}/>
+      <Metric label="Нужно найти" value={deficit}/>
+      <Metric label="Требуют внимания" value={attention}/>
     </div>
     <ObjectPortfolioWorkspace objects={enhancedRows} analytics={analytics} options={options} canCreate={canCreate} demo={actor.demo}/>
-  </>;
+  </div>;
 }
 
 function objectRisk(required:number,working:number,projectedDeficit:number,noShows:number,openIncidents:number,unassignedNeeds:number){

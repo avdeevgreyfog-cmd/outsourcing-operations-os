@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import type { ObjectRow } from "@/lib/data/service";
 import type { OperationsAnalyticsRow } from "@/lib/operations/service";
 import type { ObjectManagementOptions } from "@/lib/operations/object-management";
-import { Status } from "@/components/UI";
 
 const statusLabels:Record<string,string>={prelaunch:"Подготовка",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
@@ -96,7 +95,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         <select value={region} onChange={e=>setRegion(e.target.value)}><option value="">Все регионы</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <select value={legalEntity} onChange={e=>setLegalEntity(e.target.value)}><option value="">Все юрлица</option>{legalEntities.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <select value={manager} onChange={e=>setManager(e.target.value)}><option value="">Все менеджеры</option>{managers.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Весь подбор</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select>
+        <select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Все рекрутеры</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
         <label className={"object-attention-filter"+(attentionOnly?" active":"")}><input type="checkbox" checked={attentionOnly} onChange={e=>setAttentionOnly(e.target.checked)}/>Требует внимания</label>
         {hasFilters&&<button className="button" onClick={reset}>Сбросить</button>}
@@ -107,7 +106,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
     <div className="object-portfolio-results"><span>Показано {filtered.length} из {localRows.length}</span>{attentionOnly&&<span>Только объекты с рабочими сигналами</span>}</div>
     <section className="section section-flush">
       <div className="request-table-wrap"><table className="data-table object-portfolio-table">
-        <thead><tr><th>Объект</th><th>Клиент</th><th>Наше юрлицо</th><th>Локация</th><th>Менеджер объекта</th><th>Подбор</th><th>Статус</th><th>Комплектация</th><th>Старт</th><th>Риск</th></tr></thead>
+        <thead><tr><th>Объект</th><th>Клиент</th><th>Наше юрлицо</th><th>Локация</th><th>Менеджер объекта</th><th>Подбор</th><th>Статус</th><th>Комплектация</th><th>Старт</th><th>Внимание</th></tr></thead>
         <tbody>{filtered.map(row=>{
           const fact=analyticsByObject.get(row.id);
           const working=fact?.working??row.filled;
@@ -121,10 +120,10 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
             <td><span className="object-location">{row.address??row.region}</span>{row.address&&row.address!==row.region&&<span className="cell-sub">{row.region}</span>}</td>
             <td><PeopleCell primary={row.ownerName??fact?.manager??null} additional={row.additionalManagers??[]} empty="Не назначен"/></td>
             <td><RecruitingCell row={row}/></td>
-            <td><Status tone={row.status==="active"?"good":row.status==="paused"?"warn":"info"}>{statusLabels[row.status]??"В работе"}</Status></td>
-            <td><div className={"object-staffing-cell"+(required?"":" is-empty")}>{required?<><div><strong>{working} из {required}</strong><span>{coverage}%</span></div><div className="progress"><span style={{width:coverage+"%"}}/></div><small className={deficit?"priority-critical":""}>{deficit?`Найти ещё ${deficit}`:"План закрыт"}</small></>:<><strong>План не задан</strong><small>Укажите потребность объекта</small></>}</div></td>
+            <td><ObjectStatus status={row.status}/></td>
+            <td><div className={"object-staffing-cell"+(required?"":" is-empty")}>{required?<><div><strong>{working} из {required}</strong><span>{coverage}%</span></div><div className="progress"><span style={{width:coverage+"%"}}/></div><small className={deficit?"object-staffing-deficit":""}>{deficit?`Нужно ещё ${deficit}`:"План закрыт"}</small></>:<><strong>План не задан</strong><small>Укажите потребность объекта</small></>}</div></td>
             <td>{row.targetStart??"—"}</td>
-            <td><RiskCell row={row}/></td>
+            <td><AttentionCell row={row}/></td>
           </tr>
         })}</tbody>
       </table>{!filtered.length&&<div className="empty-inline">По выбранным фильтрам объектов нет</div>}</div>
@@ -161,13 +160,32 @@ function RecruitingCell({row}:{row:ObjectRow}){
   const fixed=row.recruitingTeam??[];
   if(row.recruitingMode==="object_team"&&fixed.length)return <div className="object-recruiting-cell" title={fixed.map(item=>item.name).join(", ")}><div><strong>{fixed[0].name}</strong>{fixed.length>1&&<span>+{fixed.length-1}</span>}</div><small>Закреплённая команда</small>{row.unassignedNeedCount? <em>{row.unassignedNeedCount} без распределения</em>:null}</div>;
   if(active.length)return <div className="object-recruiting-cell" title={active.map(item=>item.name).join(", ")}><div><strong>{active[0].name}</strong>{active.length>1&&<span>+{active.length-1}</span>}</div><small>По активным потребностям</small>{row.unassignedNeedCount? <em>{row.unassignedNeedCount} без ответственного</em>:null}</div>;
-  if(row.unassignedNeedCount)return <div className="object-recruiting-cell"><strong className="priority-critical">Не распределено</strong><small>{row.unassignedNeedCount} потребн.</small></div>;
+  if(row.unassignedNeedCount)return <div className="object-recruiting-cell"><strong className="object-recruiting-alert">Не распределено</strong><small>{row.unassignedNeedCount} потребн.</small></div>;
   return <div className="object-recruiting-cell"><strong>По правилам компании</strong><small>Новые потребности маршрутизируются автоматически</small></div>;
 }
 
-function RiskCell({row}:{row:ObjectRow}){
+function ObjectStatus({status}:{status:string}){
+  return <span className="object-status">{statusLabels[status]??"В работе"}</span>;
+}
+
+function AttentionCell({row}:{row:ObjectRow}){
+  const signals=row.attentionReasons??[];
   const reasons=row.riskReasons??[];
-  const label=riskLabels[row.risk??"normal"]??"Контроль";
-  const title=reasons.length?`${label}: ${reasons.map(reason=>`${reason.label} — ${reason.detail}`).join("; ")}`:`${label}: операционных сигналов нет`;
-  return <div className="object-risk-cell"><button type="button" className="object-risk-trigger" title={title} aria-label={`Риск: ${label}. Показать причины`}><Status tone={row.risk==="critical"?"bad":row.risk==="high"||row.risk==="watch"?"warn":"good"}>{label}</Status></button><div className="object-risk-popover" role="tooltip"><strong>{label} риск</strong>{reasons.length?<ul>{reasons.map(reason=><li key={reason.code}><b>{reason.label}</b><span>{reason.detail}</span></li>)}</ul>:<span>Операционных сигналов, повышающих риск, сейчас нет.</span>}{row.attentionReasons?.some(reason=>reason==="План численности не задан")&&<small>План численности не задан — это рабочий сигнал, но сам по себе он не повышает операционный риск.</small>}</div></div>;
+  if(!signals.length&&!reasons.length)return <span className="object-attention-clear">Нет сигналов</span>;
+
+  const primary=signals[0]??reasons[0]?.label??"Требует внимания";
+  const extra=Math.max(signals.length-1,0);
+  const level=riskLabels[row.risk??"normal"]??"Контроль";
+  const title=[...signals,...reasons.map(reason=>`${reason.label}: ${reason.detail}`)].join("; ");
+
+  return <div className="object-risk-cell">
+    <button type="button" className="object-attention-trigger" title={title} aria-label={`Требует внимания: ${title}`}>
+      <span>{primary}</span>{extra>0&&<b>+{extra}</b>}
+    </button>
+    <div className="object-risk-popover" role="tooltip">
+      <strong>Что требует внимания</strong>
+      {signals.length?<ul>{signals.map((signal,index)=><li key={signal+index}><span>{signal}</span></li>)}</ul>:null}
+      {reasons.length?<small>Уровень операционного контроля: {level.toLocaleLowerCase("ru")}.</small>:null}
+    </div>
+  </div>;
 }
