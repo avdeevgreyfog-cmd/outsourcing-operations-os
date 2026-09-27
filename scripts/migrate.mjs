@@ -25,7 +25,7 @@ for (const filename of files) {
   if (exists) continue;
   const body = await fs.readFile(path.join(dir, filename), "utf8");
 
-  const destructive=/\\b(?:DELETE\\s+FROM|TRUNCATE(?:\\s+TABLE)?|DROP\\s+(?:TABLE|SCHEMA))\\b/i.test(body);
+  const destructive=/\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|SCHEMA))\b/i.test(body);
   if(destructive && process.env.ALLOW_PROTECTED_TENANT_DESTRUCTIVE_MIGRATION!=="1"){
     const protectedTenants=await sql`
       SELECT id::text id,slug
