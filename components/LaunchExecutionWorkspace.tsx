@@ -12,10 +12,9 @@ import type {
   LaunchPlanRow,
   LaunchSiteVisitRow,
   LaunchStaffingWaveRow,
-  SiteVisitChecklistItem,
-  SiteVisitChecklistStatus,
 } from "@/lib/operations/launch-management";
-import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-management";
+import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
+import type { SiteVisitChecklistItem, SiteVisitChecklistStatus } from "@/lib/operations/launch-checklist";
 
 type LaunchTab="summary"|"plan"|"staffing"|"issues";
 type PlanView="gantt"|"table";
