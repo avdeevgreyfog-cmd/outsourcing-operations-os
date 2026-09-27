@@ -28,9 +28,9 @@ try{
     HAVING NOT pc.relrowsecurity OR count(pp.policyname)=0
     ORDER BY tt.table_name
   `;
-  assert.deepEqual(
-    tenantRlsRows,
-    [],
+  assert.equal(
+    tenantRlsRows.length,
+    0,
     "Every tenant table with organization_id must enable RLS and define at least one tenant policy",
   );
 
