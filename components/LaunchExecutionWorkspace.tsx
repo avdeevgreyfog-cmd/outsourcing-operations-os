@@ -707,16 +707,54 @@ export function LaunchExecutionWorkspace({
       <div className="wide launch-editor-actions"><button className="button primary" disabled={busy} onClick={()=>void saveWave()}>Сохранить волну</button></div>
     </div></aside></>}
 
-    {visitEditor&&<><div className="drawer-backdrop" onClick={()=>setVisitEditor(null)}/><aside className="drawer launch-visit-drawer"><button className="icon-button drawer-close" onClick={()=>setVisitEditor(null)}><X size={17}/></button><span className="eyebrow">Выезд на объект</span><h2>Первичный чек-лист</h2><fieldset className="launch-visit-fieldset" disabled={!editable}><div className="launch-visit-meta"><label>Дата выезда<input type="date" value={visitEditor.scheduledDate} onChange={e=>setVisitEditor({...visitEditor,scheduledDate:e.target.value})}/></label><div><span>Уточнено</span><strong>{visitEditor.checklist.filter(item=>item.status==="confirmed").length} / {visitEditor.checklist.filter(item=>item.status!=="na").length}</strong></div><div><span>Проблемы</span><strong>{visitEditor.checklist.filter(item=>item.status==="issue").length}</strong></div></div>
-      <div className="launch-visit-sections">{groupedChecklist.map(([section,items])=><section key={section}><header><h3>{section}</h3><span>{items.filter(item=>item.status==="confirmed").length} / {items.filter(item=>item.status!=="na").length}</span></header><div>{items.map(item=><article className={"launch-checklist-item status-"+item.status} key={item.id}>
-        <div className="launch-checklist-question"><strong>{item.label}</strong>{item.required&&<small>Обязательный вопрос</small>}{item.blocksLaunch&&<small>Может блокировать запуск</small>}</div>
-        <select value={item.status} onChange={e=>changeChecklistItem(item.id,{status:e.target.value as SiteVisitChecklistStatus})}>{Object.entries(visitStatusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
-        <input value={item.value} onChange={e=>changeChecklistItem(item.id,{value:e.target.value})} placeholder="Ответ / фактические данные"/>
-        <textarea value={item.note} onChange={e=>changeChecklistItem(item.id,{note:e.target.value})} placeholder="Комментарий, что нужно сделать дальше"/>
-      </article>)}</div></section>)}</div>
+    {visitEditor&&<><div className="drawer-backdrop" onClick={()=>{setVisitEditor(null);setQuestionEditor(null)}}/><aside className="drawer launch-visit-drawer"><button className="icon-button drawer-close" onClick={()=>{setVisitEditor(null);setQuestionEditor(null)}}><X size={17}/></button><span className="eyebrow">Выезд на объект</span><h2>Рабочая шпаргалка</h2><p className="launch-visit-intro">Пройдите вопросы по разделам. Подтверждённые ответы сразу становятся данными объекта и, где отмечено, доступны подбору.</p><fieldset className="launch-visit-fieldset" disabled={!editable}><div className="launch-visit-meta"><label>Дата выезда<input type="date" value={visitEditor.scheduledDate} onChange={e=>setVisitEditor({...visitEditor,scheduledDate:e.target.value})}/></label><div><span>Уточнено</span><strong>{visitEditor.checklist.filter(item=>!item.hidden&&item.status==="confirmed").length} / {visitEditor.checklist.filter(item=>!item.hidden&&item.status!=="na").length}</strong></div><div><span>Проблемы</span><strong>{visitEditor.checklist.filter(item=>!item.hidden&&item.status==="issue").length}</strong></div></div>
+      <div className="launch-visit-editor-layout">
+        <nav className="launch-visit-editor-nav">
+          <div className="launch-visit-filter">
+            <button type="button" className={visitFilter==="all"?"active":""} onClick={()=>setVisitFilter("all")}>Все</button>
+            <button type="button" className={visitFilter==="pending"?"active":""} onClick={()=>setVisitFilter("pending")}>Осталось</button>
+            <button type="button" className={visitFilter==="issues"?"active":""} onClick={()=>setVisitFilter("issues")}>Проблемы</button>
+          </div>
+          <div className="launch-visit-section-nav">{visitSections.map(section=>{
+            const rows=visitEditor.checklist.filter(item=>item.section===section&&!item.hidden);
+            const unresolved=rows.filter(item=>item.required&&item.status==="pending").length;
+            const issues=rows.filter(item=>item.status==="issue").length;
+            return <button type="button" key={section} className={activeVisitSection===section?"active":""} onClick={()=>setVisitSection(section)}><span>{section}</span><small>{issues?issues+" проблем":unresolved?unresolved+" осталось":rows.filter(item=>item.status==="confirmed").length+" / "+rows.filter(item=>item.status!=="na").length}</small></button>
+          })}</div>
+          <button type="button" className="launch-hidden-toggle" onClick={()=>setVisitShowHidden(value=>!value)}>{visitShowHidden?"Скрыть отключённые":"Показать скрытые"} · {visitEditor.checklist.filter(item=>item.hidden).length}</button>
+        </nav>
+        <div className="launch-visit-question-pane">
+          <header><div><span>Раздел</span><h3>{activeVisitSection||"Вопросы"}</h3></div>{editable&&<button type="button" className="button" onClick={()=>openQuestionSettings()}><Plus size={14}/> Вопрос</button>}</header>
+          <div className="launch-visit-question-list">{editorVisitItems.map(item=><article className={"launch-checklist-item launch-checklist-item-v2 status-"+item.status+(item.hidden?" is-hidden":"")} key={item.id}>
+            <div className="launch-checklist-question-head"><div><strong>{item.label}</strong><div>{item.required&&<small>Обязательный</small>}{item.blocksLaunch&&<small>Блокирует запуск</small>}{item.audiences.includes("recruiting")&&<small>Для подбора</small>}{item.custom&&<small>Свой вопрос</small>}</div></div>{editable&&<div className="launch-question-actions">{item.hidden?<button type="button" onClick={()=>restoreQuestion(item)}>Вернуть</button>:<><button type="button" onClick={()=>openQuestionSettings(item)}>Настроить</button><button type="button" onClick={()=>hideQuestion(item)}>Скрыть</button></>}</div>}</div>
+            {!item.hidden&&<>
+              <div className="launch-answer-status">{(Object.entries(visitStatusLabels) as Array<[SiteVisitChecklistStatus,string]>).map(([key,label])=><button type="button" key={key} className={item.status===key?"active status-"+key:""} onClick={()=>changeChecklistItem(item.id,{status:key})}>{label}</button>)}</div>
+              <label className="launch-answer-field"><span>Ответ</span>{item.answerKind==="textarea"
+                ?<textarea value={item.value} onChange={e=>setChecklistValue(item,e.target.value)} placeholder="Фактические данные с объекта"/>
+                :item.answerKind==="boolean"
+                  ?<select value={item.value} onChange={e=>setChecklistValue(item,e.target.value)}><option value="">Не выбрано</option><option value="Да">Да</option><option value="Нет">Нет</option></select>
+                  :<input type={item.answerKind==="number"?"number":item.answerKind==="time"?"time":"text"} value={item.value} onChange={e=>setChecklistValue(item,e.target.value)} placeholder="Ответ / фактические данные"/>}</label>
+              <label className="launch-answer-field launch-answer-note"><span>Комментарий / следующее действие</span><textarea value={item.note} onChange={e=>changeChecklistItem(item.id,{note:e.target.value})} placeholder="Что ещё уточнить или сделать"/></label>
+            </>}
+          </article>)}
+          {!editorVisitItems.length&&<div className="launch-empty-positive">В этом разделе нет вопросов для выбранного фильтра.</div>}</div>
+        </div>
+      </div>
       <label className="launch-visit-notes">Общие заметки<textarea value={visitEditor.notes} onChange={e=>setVisitEditor({...visitEditor,notes:e.target.value})}/></label></fieldset>
       {editable&&<div className="launch-visit-actions"><button className="button" disabled={busy} onClick={()=>void saveVisit(false)}>Сохранить</button><button className="button primary" disabled={busy} onClick={()=>void saveVisit(true)}>Завершить выезд</button></div>}
-      <p className="launch-visit-hint">При завершении пункты с проблемами и обязательные неуточнённые вопросы автоматически превращаются в задачи плана запуска.</p>
+      <p className="launch-visit-hint">Ответ вводится один раз: после сохранения опубликованные пункты обновляют общую базу условий объекта. Проблемы и обязательные неуточнённые вопросы при завершении становятся задачами плана.</p>
     </aside></>}
+
+    {questionEditor&&visitEditor&&<><div className="drawer-backdrop launch-question-backdrop" onClick={()=>setQuestionEditor(null)}/><aside className="drawer launch-question-drawer"><button className="icon-button drawer-close" onClick={()=>setQuestionEditor(null)}><X size={17}/></button><span className="eyebrow">Чек-лист выезда</span><h2>{questionEditor.id?"Настройка вопроса":"Новый вопрос"}</h2><div className="launch-editor-form">
+      <label>Раздел<input value={questionEditor.section} onChange={e=>setQuestionEditor({...questionEditor,section:e.target.value})} placeholder="Например, Доступ"/></label>
+      <label>Тип ответа<select value={questionEditor.answerKind} onChange={e=>setQuestionEditor({...questionEditor,answerKind:e.target.value as SiteVisitAnswerKind})}><option value="text">Короткий текст</option><option value="textarea">Развёрнутый ответ</option><option value="number">Число</option><option value="time">Время</option><option value="boolean">Да / Нет</option></select></label>
+      <label className="wide">Вопрос<textarea value={questionEditor.label} onChange={e=>setQuestionEditor({...questionEditor,label:e.target.value})} placeholder="Что нужно уточнить на объекте?"/></label>
+      <label>Направление<select value={questionEditor.category} onChange={e=>setQuestionEditor({...questionEditor,category:e.target.value})}>{categoryOrder.map(key=><option key={key} value={key}>{categoryLabels[key]}</option>)}</select></label>
+      <label className="launch-check wide"><input type="checkbox" checked={questionEditor.required} onChange={e=>setQuestionEditor({...questionEditor,required:e.target.checked})}/><span>Обязательный вопрос</span></label>
+      <label className="launch-check wide"><input type="checkbox" checked={questionEditor.blocksLaunch} onChange={e=>setQuestionEditor({...questionEditor,blocksLaunch:e.target.checked})}/><span>Нерешённая проблема по этому вопросу может блокировать запуск</span></label>
+      <label className="launch-check wide"><input type="checkbox" checked={questionEditor.shareRecruiting} onChange={e=>setQuestionEditor({...questionEditor,shareRecruiting:e.target.checked})}/><span>Передавать подтверждённый ответ в информацию для подбора</span></label>
+      <div className="wide launch-editor-actions"><button className="button" onClick={()=>setQuestionEditor(null)}>Отмена</button><button className="button primary" onClick={saveQuestionSettings}>Сохранить вопрос</button></div>
+    </div></aside></>}
+
   </section>;
 }
