@@ -40,6 +40,23 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE launch_id=${id}::uuid AND visit_type='primary' AND status NOT IN ('completed','cancelled')
         `;
         if((visit?.count??0)>0)throw new Error("Запуск заблокирован: первичный выезд на объект не завершён");
+        const [staffing]=await tx<Array<{required:number;working:number;preparing:number}>>`
+          SELECT
+            COALESCE((SELECT sum(n.count_required)::int FROM needs n
+              WHERE n.object_id=${scope.objectId}::uuid AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')),0)::int required,
+            COALESCE((SELECT count(DISTINCT woa.worker_id)::int
+              FROM worker_object_assignments woa
+              JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
+              WHERE woa.object_id=${scope.objectId}::uuid
+                AND woa.effective_from<=current_date AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)),0)::int working,
+            COALESCE((SELECT count(DISTINCT ca.candidate_id)::int
+              FROM candidate_applications ca
+              WHERE ca.object_id=${scope.objectId}::uuid
+                AND ca.stage IN ('preparation','first_shift')
+                AND ca.actual_start_at IS NULL),0)::int preparing
+        `;
+        const staffingGap=Math.max((staffing?.required??0)-(staffing?.working??0)-(staffing?.preparing??0),0);
+        if(staffingGap>0)throw new Error(`Запуск заблокирован: не хватает подготовленного персонала — ${staffingGap}`);
       }
       if(body.phase==="completed"&&scope.phase!=="active")throw new Error("Завершить можно только запуск, который находится в фазе запуска / стабилизации");
 
@@ -69,7 +86,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       }
       if(body.phase==="active"){
         await tx`UPDATE objects SET status='launch',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
-        await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND task_kind='milestone' AND lower(title) IN ('первый выход','старт объекта')`;
+        await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND task_kind='milestone' AND lower(title) IN ('готовность к первому выходу','первый выход','старт объекта')`;
       }
       if(body.phase==="completed"){
         await tx`UPDATE objects SET status='active',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
