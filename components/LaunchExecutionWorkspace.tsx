@@ -597,6 +597,10 @@ export function LaunchExecutionWorkspace({
           <header><div><h3>Условия вывода с объекта</h3><p>Данные из первичного выезда, которые нужно учитывать при планировании волн.</p></div>{primaryVisit&&<button type="button" className="launch-text-action" onClick={()=>openVisit(primaryVisit)}>Открыть чек-лист</button>}</header>
           <div className="launch-rule-list">{outputRules.map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
         </section>
+        <section className="launch-card launch-output-rules">
+          <header><div><h3>Информация для подбора</h3><p>Подтверждённые данные из общей базы объекта. Подборщикам не нужно повторно уточнять их у менеджера.</p></div></header>
+          {recruitingFacts.length?<div className="launch-recruiting-facts">{recruitingFacts.map(row=><div className={row.status==="issue"?"is-issue":""} key={row.id}><span>{row.section}</span><strong>{row.label}</strong><p>{row.value}</p></div>)}</div>:<div className="empty-inline">Заполните вопросы выезда, отмеченные «Передавать в подбор».</div>}
+        </section>
       </div>
     </div>}
 
