@@ -1,0 +1,43 @@
+name: Production Database Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_destructive:
+        description: "Allow destructive migration after backup/review"
+        required: true
+        default: false
+        type: boolean
+      allow_protected_tenants:
+        description: "Allow destructive migration while persistent customer tenants exist"
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      ALLOW_DESTRUCTIVE_MIGRATION: ${{ inputs.allow_destructive && '1' || '0' }}
+      ALLOW_PROTECTED_TENANT_DESTRUCTIVE_MIGRATION: ${{ inputs.allow_protected_tenants && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --no-audit --no-fund
+      - name: Validate release source
+        run: |
+          npm test
+          npm run typecheck
+          npm run lint
+          npm run build
+      - name: Require production database secret
+        run: |
+          test -n "$DATABASE_URL" || { echo "PRODUCTION_DATABASE_URL is not configured in the protected production environment"; exit 1; }
+      - name: Apply pending production migrations
+        run: npm run db:migrate
