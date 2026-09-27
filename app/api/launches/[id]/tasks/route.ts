@@ -10,6 +10,9 @@ const schema=z.object({
   category:z.string().trim().min(1).max(40).default("other"),
   startDate:z.string().date(),
   endDate:z.string().date(),
+  progress:z.number().min(0).max(100).default(0),
+  status:z.enum(["planned","in_progress","blocked","done","cancelled"]).default("planned"),
+  risk:z.enum(["normal","watch","high","critical"]).default("normal"),
   milestone:z.boolean().default(false),
   blocksLaunch:z.boolean().default(false),
 });
@@ -30,7 +33,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,category,task_kind,blocks_launch,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.title},${scope.ownerUserId}::uuid,${body.startDate}::date,${body.endDate}::date,${body.startDate}::date,${body.endDate}::date,0,'planned','normal',${body.milestone},${body.blocksLaunch},${body.category},${body.milestone?"milestone":"task"},${body.blocksLaunch},${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.title},${scope.ownerUserId}::uuid,${body.startDate}::date,${body.endDate}::date,${body.startDate}::date,${body.endDate}::date,${body.progress},${body.status},${body.risk},${body.milestone},${body.blocksLaunch},${body.category},${body.milestone?"milestone":"task"},${body.blocksLaunch},${actor.userId}::uuid)
         RETURNING id
       `;
       return row;

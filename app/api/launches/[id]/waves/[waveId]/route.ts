@@ -9,6 +9,7 @@ const schema=z.object({
   name:z.string().trim().min(2).max(120).optional(),
   targetDate:z.string().date().optional(),
   plannedCount:z.number().int().min(1).max(10000).optional(),
+  specialtyId:z.string().uuid().nullable().optional(),
   note:z.string().trim().max(1000).nullable().optional(),
   status:z.enum(["planned","in_progress","completed","cancelled"]).optional(),
 });
@@ -27,11 +28,16 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
         WHERE w.id=${waveId}::uuid AND l.id=${id}::uuid
       `;
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
+      if(body.specialtyId){
+        const [specialty]=await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${body.specialtyId}::uuid`;
+        if(!specialty)throw new Error("Специальность недоступна");
+      }
       const [row]=await tx<Array<{id:string}>>`
         UPDATE launch_staffing_waves SET
           name=COALESCE(${body.name??null},name),
           target_date=COALESCE(${body.targetDate??null}::date,target_date),
           planned_count=COALESCE(${body.plannedCount??null}::int,planned_count),
+          specialty_id=CASE WHEN ${body.specialtyId===undefined} THEN specialty_id ELSE ${body.specialtyId??null}::uuid END,
           note=CASE WHEN ${body.note===undefined} THEN note ELSE ${body.note??null} END,
           status=COALESCE(${body.status??null},status),
           updated_at=now()

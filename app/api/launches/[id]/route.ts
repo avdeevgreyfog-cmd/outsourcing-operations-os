@@ -19,13 +19,30 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     if(actor.demo)return NextResponse.json({error:"В демо изменения плана применяются только локально"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [scope]=await tx<Array<{id:string;organizationId:string;objectId:string;ownerUserId:string|null;regionId:string;clientId:string;assigneeUserIds:string[];targetDate:string;phase:string}>>`
+      const [scope]=await tx<Array<{id:string;organizationId:string;objectId:string;ownerUserId:string|null;regionId:string;clientId:string;assigneeUserIds:string[];targetDate:string;phase:string;contractGate:string|null}>>`
         SELECT l.id,l.organization_id "organizationId",l.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
-          o.client_company_id "clientId",l.target_date::text "targetDate",l.phase,
+          o.client_company_id "clientId",l.target_date::text "targetDate",l.phase,ct.launch_gate "contractGate",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-        FROM launches l JOIN objects o ON o.id=l.object_id WHERE l.id=${id}::uuid FOR UPDATE
+        FROM launches l JOIN objects o ON o.id=l.object_id
+        LEFT JOIN contracts ct ON ct.id=o.contract_id
+        WHERE l.id=${id}::uuid FOR UPDATE
       `;
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
+      if((body.phase==="ready"||body.phase==="active")){
+        if(scope.contractGate==="blocked")throw new Error("Запуск заблокирован: договор ещё не подписан и нет согласованного исключения");
+        const [blocking]=await tx<Array<{count:number}>>`
+          SELECT count(*)::int count FROM launch_tasks
+          WHERE launch_id=${id}::uuid AND blocks_launch AND status NOT IN ('done','cancelled')
+        `;
+        if((blocking?.count??0)>0)throw new Error(`Запуск заблокирован: не закрыто обязательных задач — ${blocking.count}`);
+        const [visit]=await tx<Array<{count:number}>>`
+          SELECT count(*)::int count FROM launch_site_visits
+          WHERE launch_id=${id}::uuid AND visit_type='primary' AND status NOT IN ('completed','cancelled')
+        `;
+        if((visit?.count??0)>0)throw new Error("Запуск заблокирован: первичный выезд на объект не завершён");
+      }
+      if(body.phase==="completed"&&scope.phase!=="active")throw new Error("Завершить можно только запуск, который находится в фазе запуска / стабилизации");
+
       const nextTarget=body.targetDate??scope.targetDate;
       if(body.targetDate&&body.targetDate!==scope.targetDate&&body.shiftLinked){
         const [deltaRow]=await tx<Array<{days:number}>>`SELECT (${body.targetDate}::date-${scope.targetDate}::date)::int days`;

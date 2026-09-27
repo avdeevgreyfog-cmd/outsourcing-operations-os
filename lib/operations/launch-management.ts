@@ -11,7 +11,7 @@ export type LaunchPlanRow={
   id:string;organizationId:string;objectId:string;object:string;clientId:string;client:string;regionId:string;
   ownerUserId:string|null;ownerName:string|null;assigneeUserIds:string[];
   targetDate:string;forecastDate:string|null;phase:"preparation"|"ready"|"active"|"completed"|"cancelled";
-  progress:number;risk:string;stabilizationDays:number;
+  progress:number;risk:string;stabilizationDays:number;contractId:string|null;contractStatus:string|null;contractGate:"blocked"|"ready"|"exception"|null;
 };
 
 export type LaunchStaffingWaveRow={
@@ -43,7 +43,7 @@ export async function listLaunchPlans(actor:Actor):Promise<LaunchPlanRow[]>{
       const target=isoFromShort((object as {targetStartDate?:string;targetStart?:string}).targetStartDate??(object as {targetStart?:string}).targetStart)??"2026-10-01";
       const progress=tasks.length?Math.round(tasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/tasks.length):0;
       const ownerName=(object as {ownerName?:string}).ownerName??null;
-      return {id:`demo-launch-${index+1}`,organizationId:actor.organizationId,objectId,object:object.name,clientId:object.clientId,client:object.client,regionId:object.regionId,ownerUserId:object.ownerUserId??null,ownerName,assigneeUserIds:object.assigneeUserIds??[],targetDate:target,forecastDate:target,phase:progress>=100?"completed":"preparation",progress,risk:object.risk??"normal",stabilizationDays:7};
+      return {id:`demo-launch-${index+1}`,organizationId:actor.organizationId,objectId,object:object.name,clientId:object.clientId,client:object.client,regionId:object.regionId,ownerUserId:object.ownerUserId??null,ownerName,assigneeUserIds:object.assigneeUserIds??[],targetDate:target,forecastDate:target,phase:progress>=100?"completed":"preparation",progress,risk:object.risk??"normal",stabilizationDays:7,contractId:null,contractStatus:"signed",contractGate:"ready"};
     });
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
@@ -51,9 +51,11 @@ export async function listLaunchPlans(actor:Actor):Promise<LaunchPlanRow[]>{
       SELECT l.id,l.organization_id "organizationId",l.object_id "objectId",o.name object,o.client_company_id "clientId",c.name client,
         o.region_id "regionId",o.owner_user_id "ownerUserId",u.display_name "ownerName",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds",
-        l.target_date::text "targetDate",l.forecast_date::text "forecastDate",l.phase,l.progress_pct::int progress,l.risk_level risk,l.stabilization_days "stabilizationDays"
+        l.target_date::text "targetDate",l.forecast_date::text "forecastDate",l.phase,l.progress_pct::int progress,l.risk_level risk,l.stabilization_days "stabilizationDays",
+        ct.id "contractId",ct.status "contractStatus",ct.launch_gate "contractGate"
       FROM launches l JOIN objects o ON o.id=l.object_id JOIN client_companies c ON c.id=o.client_company_id
       LEFT JOIN app_users u ON u.id=o.owner_user_id
+      LEFT JOIN contracts ct ON ct.id=o.contract_id
       ORDER BY CASE WHEN l.phase IN ('completed','cancelled') THEN 1 ELSE 0 END,l.target_date,o.name
     `;
     return rows.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor));

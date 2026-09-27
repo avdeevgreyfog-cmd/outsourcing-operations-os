@@ -4,6 +4,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 
 const schema=z.object({name:z.string().trim().min(2).max(240).optional(),code:z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).optional(),legalEntityId:z.string().uuid().optional()});
 
@@ -86,14 +87,17 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         RETURNING id,target_date::text "targetDate"
       `;
       await tx`
-        INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,created_by_user_id)
+        INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,category,task_kind,blocks_launch,created_by_user_id)
         VALUES
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача проекта в запуск',${ownerUserId}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,true,${actor.userId}::uuid),
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Договорная готовность',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,${actor.userId}::uuid),
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Комплектация персоналом',${needOwnerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,${actor.userId}::uuid),
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Логистика и обеспечение',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,false,${actor.userId}::uuid),
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,true,${actor.userId}::uuid),
-          (${actor.organizationId}::uuid,${launch.id}::uuid,'Старт объекта',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),0,'planned','normal',true,true,${actor.userId}::uuid)
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача проекта в запуск',${ownerUserId}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,false,'other','task',false,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Договорная готовность',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,'contracts','task',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Уточнить порядок доступа и вывода сотрудников',${ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-7),current_date,GREATEST(current_date,${launch.targetDate}::date-7),0,'planned','watch',false,true,'access','task',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Комплектация персоналом',${needOwnerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'staffing','task',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'СИЗ, форма и инструмент готовы',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'supply','task',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Подготовить графики и учёт рабочего времени',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'operations','task',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,true,'operations','milestone',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Первый выход',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date),0,'planned','normal',true,true,'operations','milestone',true,${actor.userId}::uuid),
+          (${actor.organizationId}::uuid,${launch.id}::uuid,'Стабилизация запуска',${ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date+7),GREATEST(current_date,${launch.targetDate}::date),GREATEST(current_date,${launch.targetDate}::date+7),0,'planned','normal',false,false,'operations','task',false,${actor.userId}::uuid)
       `;
       await tx`
         INSERT INTO launch_task_dependencies(organization_id,predecessor_task_id,successor_task_id,dependency_type,created_by_user_id)
@@ -101,20 +105,45 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM launch_tasks p JOIN launch_tasks s ON s.launch_id=p.launch_id
         WHERE p.launch_id=${launch.id}::uuid AND (p.title,s.title) IN (
           ('Передача проекта в запуск','Договорная готовность'),
+          ('Передача проекта в запуск','Уточнить порядок доступа и вывода сотрудников'),
           ('Передача проекта в запуск','Комплектация персоналом'),
-          ('Передача проекта в запуск','Логистика и обеспечение'),
+          ('Передача проекта в запуск','СИЗ, форма и инструмент готовы'),
+          ('Передача проекта в запуск','Подготовить графики и учёт рабочего времени'),
           ('Договорная готовность','Готовность к первому выходу'),
+          ('Уточнить порядок доступа и вывода сотрудников','Готовность к первому выходу'),
           ('Комплектация персоналом','Готовность к первому выходу'),
-          ('Логистика и обеспечение','Готовность к первому выходу'),
-          ('Готовность к первому выходу','Старт объекта')
+          ('СИЗ, форма и инструмент готовы','Готовность к первому выходу'),
+          ('Подготовить графики и учёт рабочего времени','Готовность к первому выходу'),
+          ('Готовность к первому выходу','Первый выход'),
+          ('Первый выход','Стабилизация запуска')
         )
       `;
-      const needs=await tx<Array<{id:string;countRequired:number}>>`
+      const needs=await tx<Array<{id:string;countRequired:number;specialtyId:string}>>`
         INSERT INTO needs(organization_id,object_id,source_request_role_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,created_by_user_id)
         SELECT rr.organization_id,${object.id}::uuid,rr.id,rr.specialty_id,rr.count_required,0,GREATEST(current_date,COALESCE(${source.startDate??null}::date,current_date+14)-3),'open',${needOwnerUserId}::uuid,${actor.userId}::uuid
         FROM request_roles rr WHERE rr.request_id=${source.requestId}::uuid
-        RETURNING id,count_required "countRequired"
+        RETURNING id,count_required "countRequired",specialty_id "specialtyId"
       `;
+      await tx`
+        INSERT INTO launch_site_visits(organization_id,launch_id,visit_type,scheduled_date,owner_user_id,status,checklist_json,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,'primary',GREATEST(current_date,${launch.targetDate}::date-10),${ownerUserId}::uuid,'planned',${tx.json(defaultPrimarySiteVisitChecklist())},${actor.userId}::uuid)
+      `;
+      for(const need of needs){
+        const total=Math.max(1,Number(need.countRequired||1));
+        const waveCount=total<=4?1:total<=10?2:3;
+        const base=Math.floor(total/waveCount);
+        const extra=total%waveCount;
+        for(let index=0;index<waveCount;index++){
+          const plannedCount=base+(index<extra?1:0);
+          const offset=waveCount===1?0:Math.round(-14+(14*index/(waveCount-1)));
+          const name=waveCount===1?"Полный состав":index===waveCount-1?"Полный состав":`Волна ${index+1}`;
+          await tx`
+            INSERT INTO launch_staffing_waves(organization_id,launch_id,name,target_date,planned_count,specialty_id,note,status,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,${name},GREATEST(current_date,${launch.targetDate}::date+${offset}::int),${plannedCount},${need.specialtyId}::uuid,'Базовый план вывода, можно изменить','planned',${actor.userId}::uuid)
+          `;
+        }
+      }
+
       await tx`
         INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,pricing_snapshot,effective_from,created_by_user_id)
         SELECT ${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,rr.specialty_id,cs.id,

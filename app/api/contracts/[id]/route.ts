@@ -102,16 +102,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
         await tx`UPDATE contract_versions SET status='signed',signed_by_user_id=${actor.userId}::uuid,signed_at=now() WHERE id=${contract.currentVersionId}::uuid`;
         await tx`UPDATE contracts SET status='signed',signed_at=now(),launch_gate='ready',updated_at=now() WHERE id=${id}::uuid`;
         if (contract.objectId) {
-          await tx`UPDATE objects SET status='launch',contract_id=${id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
-          await tx`UPDATE launches SET phase='ready' WHERE object_id=${contract.objectId}::uuid`;
+          await tx`UPDATE objects SET contract_id=${id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
         }
         await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
       } else if (body.action === "launch_exception") {
         if (contract.status === "signed") throw new Error("Договор уже подписан; исключение не требуется");
         await tx`UPDATE contracts SET launch_gate='exception',launch_exception_reason=${body.reason},launch_exception_by_user_id=${actor.userId}::uuid,launch_exception_at=now(),updated_at=now() WHERE id=${id}::uuid`;
         if (contract.objectId) {
-          await tx`UPDATE objects SET status='launch',contract_id=${id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
-          await tx`UPDATE launches SET phase='ready' WHERE object_id=${contract.objectId}::uuid`;
+          await tx`UPDATE objects SET contract_id=${id}::uuid,updated_at=now() WHERE id=${contract.objectId}::uuid`;
         }
         await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
       } else if (body.action === "terminate") {
