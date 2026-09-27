@@ -34,7 +34,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     }));
     return NextResponse.json(result,{status:201});
   }catch(error){
-    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры выезда",issues:error.isssues},{status:400});
+    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры выезда",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось создать выезд"},{status:500});
   }
