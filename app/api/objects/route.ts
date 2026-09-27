@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
+import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 
 const schema=z.object({
   name:z.string().trim().min(2).max(240),
@@ -119,13 +120,20 @@ export async function POST(request:Request){
           RETURNING id,target_date::text "targetDate"
         `;
         await tx`
-          INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,created_by_user_id)
+          INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,category,task_kind,blocks_launch,created_by_user_id)
           VALUES
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача объекта в запуск',${body.ownerUserId}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Создать потребности и план комплектации',${body.ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Логистика и обеспечение',${body.ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-1),current_date,GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,false,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Старт объекта',${body.ownerUserId}::uuid,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,0,'planned','normal',true,true,${actor.userId}::uuid)
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача объекта в запуск',${body.ownerUserId}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,false,'other','task',false,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Уточнить порядок доступа и вывода сотрудников',${body.ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-7),current_date,GREATEST(current_date,${launch.targetDate}::date-7),0,'planned','watch',false,true,'access','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Создать потребности и план комплектации',${body.ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,'staffing','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'СИЗ, форма и инструмент готовы',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'supply','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Подготовить графики и учёт рабочего времени',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'operations','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,true,'operations','milestone',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Первый выход',${body.ownerUserId}::uuid,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,0,'planned','normal',true,true,'operations','milestone',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Стабилизация запуска',${body.ownerUserId}::uuid,${launch.targetDate}::date,${launch.targetDate}::date+7,${launch.targetDate}::date,${launch.targetDate}::date+7,0,'planned','normal',false,false,'operations','task',false,${actor.userId}::uuid)
+        `;
+        await tx`
+          INSERT INTO launch_site_visits(organization_id,launch_id,visit_type,scheduled_date,owner_user_id,status,checklist_json,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,'primary',GREATEST(current_date,${launch.targetDate}::date-10),${body.ownerUserId}::uuid,'planned',${tx.json(defaultPrimarySiteVisitChecklist())},${actor.userId}::uuid)
         `;
       }
       await tx`
