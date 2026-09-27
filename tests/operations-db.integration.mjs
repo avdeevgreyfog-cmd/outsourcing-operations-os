@@ -18,20 +18,38 @@ try{
         AND c.column_name='organization_id'
         AND t.table_type='BASE TABLE'
         AND c.table_name<>'sessions'
+    ),
+    policies AS (
+      SELECT tablename,
+        count(*)::int policy_count,
+        bool_or(
+          COALESCE(qual,'') ILIKE '%app_current_organization_id()%'
+          AND COALESCE(with_check,qual,'') ILIKE '%app_current_organization_id()%'
+        ) tenant_policy
+      FROM pg_policies
+      WHERE schemaname='public'
+      GROUP BY tablename
     )
-    SELECT tt.table_name,pc.relrowsecurity rls_enabled,count(pp.policyname)::int policy_count
+    SELECT tt.table_name,
+      pc.relrowsecurity rls_enabled,
+      pc.relforcerowsecurity rls_forced,
+      COALESCE(p.policy_count,0)::int policy_count,
+      COALESCE(p.tenant_policy,false) tenant_policy
     FROM tenant_tables tt
     JOIN pg_class pc ON pc.relname=tt.table_name
     JOIN pg_namespace pn ON pn.oid=pc.relnamespace AND pn.nspname='public'
-    LEFT JOIN pg_policies pp ON pp.schemaname='public' AND pp.tablename=tt.table_name
-    GROUP BY tt.table_name,pc.relrowsecurity
-    HAVING NOT pc.relrowsecurity OR count(pp.policyname)=0
+    LEFT JOIN policies p ON p.tablename=tt.table_name
+    WHERE NOT pc.relrowsecurity
+       OR NOT pc.relforcerowsecurity
+       OR COALESCE(p.policy_count,0)=0
+       OR NOT COALESCE(p.tenant_policy,false)
     ORDER BY tt.table_name
   `;
+  if(tenantRlsRows.length)console.error("Tenant RLS violations:",JSON.stringify(tenantRlsRows,null,2));
   assert.equal(
     tenantRlsRows.length,
     0,
-    "Every tenant table with organization_id must enable RLS and define at least one tenant policy",
+    "Every tenant table with organization_id must FORCE RLS and define a policy bound to app_current_organization_id() for reads and writes",
   );
 
   const migrations=await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
