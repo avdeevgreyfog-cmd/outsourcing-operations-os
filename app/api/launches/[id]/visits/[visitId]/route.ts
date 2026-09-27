@@ -52,7 +52,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
         WHERE id=${visitId}::uuid AND launch_id=${id}::uuid
       `;
       if(completed){
-        const items=checklist.filter((item:any)=>item&&typeof item==="object"&&(item.status==="issue"||(item.required&&item.status==="pending")));
+        const items=checklist.filter((item)=>item.status==="issue"||(item.required&&item.status==="pending"));
         for(const item of items){
           const prefix=item.status==="issue"?"Решить":"Уточнить";
           const title=`${prefix}: ${String(item.label)}`.slice(0,240);
