@@ -15,6 +15,11 @@ const checklistItem=z.object({
   note:z.string(),
   category:z.string().min(1),
   blocksLaunch:z.boolean(),
+  answerKind:z.enum(["text","textarea","number","time","boolean"]).default("text"),
+  hidden:z.boolean().default(false),
+  custom:z.boolean().default(false),
+  factKey:z.string().max(180).nullable().optional().default(null),
+  audiences:z.array(z.enum(["operations","recruiting","management"])).max(3).default(["operations"]),
 });
 const schema=z.object({
   scheduledDate:z.string().date().nullable().optional(),
@@ -51,8 +56,40 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
           updated_at=now()
         WHERE id=${visitId}::uuid AND launch_id=${id}::uuid
       `;
+
+      for(const item of checklist){
+        const factKey=typeof item.factKey==="string"&&item.factKey.trim()?item.factKey.trim():null;
+        if(!factKey)continue;
+        const value=String(item.value??"").trim();
+        const publish=!item.hidden&&Boolean(value)&&(item.status==="confirmed"||item.status==="issue");
+        if(!publish){
+          await tx`
+            DELETE FROM object_operational_facts
+            WHERE object_id=${scope.objectId}::uuid AND fact_key=${factKey}
+              AND source_kind='site_visit' AND source_id=${visitId}::uuid
+          `;
+          continue;
+        }
+        const audiences=Array.isArray(item.audiences)&&item.audiences.length?item.audiences:["operations"];
+        await tx`
+          INSERT INTO object_operational_facts(
+            organization_id,object_id,fact_key,section,label,value_text,status,category,audiences,
+            source_kind,source_id,confirmed_by_user_id,confirmed_at
+          )
+          VALUES(
+            ${actor.organizationId}::uuid,${scope.objectId}::uuid,${factKey},${String(item.section)},${String(item.label)},${value},
+            ${item.status==="issue"?"issue":"confirmed"},${String(item.category||"operations")},${audiences}::text[],
+            'site_visit',${visitId}::uuid,${actor.userId}::uuid,now()
+          )
+          ON CONFLICT(object_id,fact_key) DO UPDATE SET
+            section=EXCLUDED.section,label=EXCLUDED.label,value_text=EXCLUDED.value_text,status=EXCLUDED.status,
+            category=EXCLUDED.category,audiences=EXCLUDED.audiences,source_kind=EXCLUDED.source_kind,source_id=EXCLUDED.source_id,
+            confirmed_by_user_id=EXCLUDED.confirmed_by_user_id,confirmed_at=EXCLUDED.confirmed_at,updated_at=now()
+        `;
+      }
+
       if(completed){
-        const items=checklist.filter((item)=>item.status==="issue"||(item.required&&item.status==="pending"));
+        const items=checklist.filter((item)=>!item.hidden&&(item.status==="issue"||(item.required&&item.status==="pending")));
         for(const item of items){
           const prefix=item.status==="issue"?"Решить":"Уточнить";
           const title=`${prefix}: ${String(item.label)}`.slice(0,240);
