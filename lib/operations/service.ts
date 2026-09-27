@@ -225,7 +225,7 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
       LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(n.count_required),0)::int required
-        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
+        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')
       ) needs ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT woa.worker_id)::int working
@@ -839,7 +839,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       WITH demand AS (
         SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required,array_agg(n.id ORDER BY n.created_at) need_ids,count(*)::int need_count
         FROM needs n
-        WHERE n.object_id IS NOT NULL AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
+        WHERE n.object_id IS NOT NULL AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')
         GROUP BY n.object_id,n.specialty_id
       )
       SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
