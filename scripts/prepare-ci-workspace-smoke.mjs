@@ -82,7 +82,6 @@ try{
   await sql`
     INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,overtime_hours,planned_shift_kind,source)
     VALUES(${org}::uuid,${worker}::uuid,${object}::uuid,current_date-interval '1 day',true,'WORK',11,11,0,0,'day','import')
-    ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET time_code='WORK',fact_hours=11,day_hours=11,night_hours=0
   `;
   await sql`
     INSERT INTO worker_accruals(id,organization_id,worker_id,object_id,period_start,period_end,base_amount,premium_amount,adjustment_amount,total_amount,status,created_by_user_id)
