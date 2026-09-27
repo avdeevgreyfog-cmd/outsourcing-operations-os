@@ -46,10 +46,21 @@ export function defaultPrimarySiteVisitChecklist():SiteVisitChecklistItem[]{
     checklist("ppe-first-day","СИЗ и форма","Можно ли первый день выйти в своей одежде",false,"supply",false),
     checklist("ppe-issue","СИЗ и форма","Где и кто выдаёт СИЗ / форму",false,"supply",false),
 
+    checklist("infra-changing","Быт и инфраструктура","Есть ли раздевалка, шкафчики и место хранения вещей",false,"supply",false),
+    checklist("infra-wc","Быт и инфраструктура","Где туалет, вода и место для приёма пищи",false,"operations",false),
+    checklist("infra-parking","Быт и инфраструктура","Где парковаться сотрудникам и служебному транспорту",false,"transport",false),
+    checklist("infra-photo","Быт и инфраструктура","Можно ли делать фото / видео на объекте и какие есть ограничения",false,"access",false),
+
     checklist("time-confirm","Учёт времени","Кто подтверждает выход сотрудника",true,"operations",true),
     checklist("time-source","Учёт времени","Источник факта: турникет / табель / мастер",true,"operations",true),
     checklist("time-deadline","Учёт времени","Когда заказчик передаёт / подтверждает табель",true,"operations",false),
     checklist("time-overtime","Учёт времени","Кто подтверждает переработки и замены",false,"operations",false),
+    checklist("time-reporting","Учёт времени","Кому, в каком формате и к какому времени отправлять ежедневную отчётность",true,"operations",false),
+
+    checklist("quality-acceptance","Качество и ответственность","По каким критериям заказчик принимает работу смены",true,"operations",false),
+    checklist("quality-violations","Качество и ответственность","Какие нарушения считаются критичными и как фиксируются",true,"operations",false),
+    checklist("quality-penalties","Качество и ответственность","Есть ли штрафы / удержания и кто подтверждает основание",false,"operations",false),
+    checklist("quality-replacement","Качество и ответственность","Как согласуется срочная замена сотрудника",true,"staffing",false),
 
     checklist("staff-plan","Потребность","Плановая численность по позициям и сменам",true,"staffing",true),
     checklist("staff-minimum","Потребность","Минимальный состав для первого запуска",true,"staffing",true),
@@ -57,6 +68,18 @@ export function defaultPrimarySiteVisitChecklist():SiteVisitChecklistItem[]{
     checklist("staff-restrictions","Потребность","Ограничения: опыт, допуски, гражданство и другие требования",true,"staffing",false),
 
     checklist("contacts-night","Контакты","Контакт дневной и ночной смены",true,"operations",true),
+    checklist("contacts-channel","Контакты","Основной канал связи: чат / телефон / почта и кто должен быть в нём",true,"operations",false),
     checklist("contacts-escalation","Контакты","Кому эскалировать проблемы запуска",true,"operations",true),
+    checklist("contacts-response","Контакты","Кто принимает решение при невыходе, конфликте или остановке работ",true,"operations",true),
   ];
+}
+
+
+export function mergePrimarySiteVisitChecklist(saved:SiteVisitChecklistItem[]|null|undefined):SiteVisitChecklistItem[]{
+  const defaults=defaultPrimarySiteVisitChecklist();
+  const savedById=new Map((saved??[]).map(item=>[item.id,item]));
+  return defaults.map(item=>{
+    const existing=savedById.get(item.id);
+    return existing?{...item,...existing,id:item.id,section:item.section,label:item.label,category:item.category,required:item.required,blocksLaunch:item.blocksLaunch}:item;
+  });
 }
