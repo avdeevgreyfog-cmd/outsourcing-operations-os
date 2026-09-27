@@ -40,23 +40,23 @@
 }
 
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar-row{
-  margin-bottom:8px;
+  margin-bottom:6px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:8px;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar-row .object-portfolio-toolbar{
   min-width:0;
   margin:0;
-  flex:1 1 1050px;
+  flex:1 1 auto;
   display:flex;
   align-items:center;
   gap:7px;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
 }
-:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar input,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar input:not([type="checkbox"]),
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar select{
   height:38px;
   min-height:38px;
@@ -66,67 +66,78 @@
   background:var(--panel);
   font-size:13px;
 }
-:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar input{
-  min-width:280px;
-  flex:1 1 300px;
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar input:not([type="checkbox"]){
+  min-width:220px;
+  flex:1 1 280px;
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar select{
-  width:145px;
-  min-width:132px;
-  flex:0 1 145px;
+  width:128px;
+  min-width:112px;
+  flex:0 1 128px;
 }
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar select:nth-of-type(3),
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar select:nth-of-type(4){
-  width:150px;
-  flex-basis:150px;
+  width:140px;
+  flex-basis:140px;
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-attention-filter{
-  min-height:38px;
-  padding:0 10px;
+  min-height:28px;
+  padding:0;
   display:inline-flex;
   align-items:center;
   gap:7px;
-  flex:0 0 auto;
-  border:1px solid var(--border);
-  border-radius:6px;
-  background:var(--panel);
+  border:0;
+  background:transparent;
   color:var(--muted);
-  font-size:13px;
+  font-size:12px;
   white-space:nowrap;
+  cursor:pointer;
 }
-:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-attention-filter:hover{
-  border-color:var(--border-strong);
-  color:var(--text);
-}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-attention-filter:hover,
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-attention-filter.active{
-  border-color:var(--border-strong);
-  background:var(--panel-2);
   color:var(--text);
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-attention-filter input{
-  min-height:auto;
-  accent-color:var(--text);
-}
-:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar>.button{
-  min-height:38px;
-  border-color:var(--border);
-  color:var(--muted);
-}
-:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar>.button:hover{
-  border-color:var(--border-strong);
-  color:var(--text);
+  width:15px!important;
+  height:15px!important;
+  min-width:15px!important;
+  min-height:15px!important;
+  margin:0;
+  padding:0!important;
+  flex:0 0 15px!important;
+  accent-color:var(--accent);
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-create-button{
   min-height:38px;
   flex:0 0 auto;
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-results{
-  min-height:22px;
-  margin:0 0 7px;
+  min-height:30px;
+  margin:0 0 6px;
   display:flex;
   align-items:center;
+  justify-content:space-between;
   gap:12px;
   color:var(--muted);
   font-size:12px;
+}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-result-actions{
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-filter-reset{
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--muted);
+  font:inherit;
+  cursor:pointer;
+}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-filter-reset:hover{
+  color:var(--text);
+  text-decoration:underline;
+  text-underline-offset:3px;
 }
 
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .section.section-flush{
@@ -232,17 +243,14 @@
 }
 
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-status{
-  min-height:24px;
-  padding:2px 7px;
-  display:inline-flex;
-  align-items:center;
-  border:1px solid var(--border);
-  border-radius:5px;
-  background:var(--panel-2);
-  color:var(--muted);
-  font-size:12px;
-  font-weight:600;
-  line-height:1.25;
+  display:inline;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:var(--text);
+  font-size:12.5px;
+  font-weight:560;
+  line-height:1.35;
   white-space:nowrap;
 }
 
@@ -264,7 +272,7 @@
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-staffing-cell .progress>span{
   border-radius:2px;
-  background:var(--muted);
+  background:var(--accent);
 }
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-staffing-cell small,
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-staffing-deficit{
@@ -342,12 +350,25 @@
   line-height:1.4;
 }
 
-@media(max-width:900px){
+@media(max-width:1280px){
   :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar-row{
     align-items:stretch;
+    flex-wrap:wrap;
+  }
+  :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-toolbar-row .object-portfolio-toolbar{
+    flex-wrap:wrap;
   }
   :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-create-button{
     margin-left:auto;
+  }
+}
+@media(max-width:900px){
+  :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-results{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-result-actions{
+    flex-wrap:wrap;
   }
   :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .request-table-wrap{
     max-height:none;

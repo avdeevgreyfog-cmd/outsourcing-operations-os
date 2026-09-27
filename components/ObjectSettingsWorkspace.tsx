@@ -74,7 +74,7 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         <label>Наше юрлицо{canAssign?<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select>:<input value={object.legalEntity??"Не указано"} disabled/>}</label>
         <label className="wide">Адрес<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Адрес объекта"/></label>
         <label>Плановая дата старта<input type="date" value={targetStartDate} onChange={e=>setTargetStartDate(e.target.value)}/></label>
-        <label>Статус<select value={status} onChange={e=>setStatus(e.target.value)}>{statusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label>Статус объекта<select value={status} onChange={e=>setStatus(e.target.value)}>{statusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><small>Статус меняется здесь и применяется после сохранения настроек.</small></label>
       </div>
     </Section>
 

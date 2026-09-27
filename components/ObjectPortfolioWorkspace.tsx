@@ -97,13 +97,17 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         <select value={manager} onChange={e=>setManager(e.target.value)}><option value="">Все менеджеры</option>{managers.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Все рекрутеры</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
-        <label className={"object-attention-filter"+(attentionOnly?" active":"")}><input type="checkbox" checked={attentionOnly} onChange={e=>setAttentionOnly(e.target.checked)}/>Требует внимания</label>
-        {hasFilters&&<button className="button" onClick={reset}>Сбросить</button>}
       </div>
       {canCreate&&<button className="button primary object-create-button" onClick={()=>{setError("");setCreateOpen(true)}}>+ Добавить объект</button>}
     </div>
 
-    <div className="object-portfolio-results"><span>Показано {filtered.length} из {localRows.length}</span>{attentionOnly&&<span>Только объекты с рабочими сигналами</span>}</div>
+    <div className="object-portfolio-results">
+      <span>Показано {filtered.length} из {localRows.length}</span>
+      <div className="object-portfolio-result-actions">
+        <label className={"object-attention-filter"+(attentionOnly?" active":"")}><input type="checkbox" checked={attentionOnly} onChange={e=>setAttentionOnly(e.target.checked)}/>Только требующие внимания</label>
+        {hasFilters&&<button className="object-filter-reset" onClick={reset}>Сбросить фильтры</button>}
+      </div>
+    </div>
     <section className="section section-flush">
       <div className="request-table-wrap"><table className="data-table object-portfolio-table">
         <thead><tr><th>Объект</th><th>Клиент</th><th>Наше юрлицо</th><th>Локация</th><th>Менеджер объекта</th><th>Подбор</th><th>Статус</th><th>Комплектация</th><th>Старт</th><th>Внимание</th></tr></thead>
