@@ -1,0 +1,26 @@
+name: Personal Workspace Health
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wait for production and verify personal workspace
+        shell: bash
+        env:
+          BASE_URL: https://outsourcing-operations-os-g942.vercel.app
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            status="$(curl -sS "$BASE_URL/api/system/status" || true)"
+            sha="$(printf '%s' "$status" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).deploymentSha||"")}catch{}})')"
+            if [ "$sha" = "$GITHUB_SHA" ]; then break; fi
+            sleep 10
+          done
+          body="$(curl -sS -w '\nHTTP=%{http_code}\n' "$BASE_URL/api/system/personal-workspace-health")"
+          printf '%s\n' "$body"
+          printf '%s' "$body" | grep -q '"ok":true'
