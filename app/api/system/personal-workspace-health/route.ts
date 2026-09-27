@@ -1,7 +1,8 @@
+import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import type { Actor } from "@/lib/access/types";
 import { loadEffectiveAccess } from "@/lib/access/server";
-import { withTenant } from "@/lib/db/client";
+import { db, withTenant } from "@/lib/db/client";
 import { getWorkspaceContext } from "@/lib/auth/server";
 import { getCommandCenter } from "@/lib/data/service";
 import { hasCapability } from "@/lib/core/access.mjs";
@@ -10,7 +11,7 @@ const ORG="00000000-0000-4000-8000-000000000002";
 const USER="10000000-0000-4000-8000-000000000101";
 const MEMBERSHIP="50000000-0000-4000-8000-000000000101";
 
-export async function GET(){
+export async function GET(request:Request){
   const stages:Record<string,unknown>={};
   try{
     const actor=await withTenant(ORG,USER,async(tx)=>{
@@ -77,6 +78,36 @@ export async function GET(){
       ok:true,objects:center.objects.length,tasks:center.tasks.length,needs:center.needs.length,
       candidates:center.candidates.length,requests:center.requests.length,finance:center.finance.length,
     };
+
+    const raw=crypto.randomBytes(32).toString("base64url");
+    const tokenHash=crypto.createHash("sha256").update(raw).digest("hex");
+    const sql=db();
+    await sql`
+      INSERT INTO sessions(organization_id,user_id,token_hash,expires_at)
+      VALUES(${ORG}::uuid,${USER}::uuid,${tokenHash},now()+interval '5 minutes')
+    `;
+    try{
+      const origin=new URL(request.url).origin;
+      const workResponse=await fetch(new URL("/work",origin),{
+        headers:{cookie:`oo_session=${raw}`},redirect:"manual",cache:"no-store",
+      });
+      stages.workEntry={
+        status:workResponse.status,
+        location:workResponse.headers.get("location"),
+      };
+      const rootResponse=await fetch(new URL("/",origin),{
+        headers:{cookie:`oo_session=${raw}`},redirect:"manual",cache:"no-store",
+      });
+      const rootBody=await rootResponse.text();
+      stages.authenticatedRoot={
+        status:rootResponse.status,
+        hasErrorText:rootBody.includes("This page couldn"),
+        hasOperis:rootBody.includes("OPERIS"),
+        length:rootBody.length,
+      };
+    }finally{
+      await sql`DELETE FROM sessions WHERE token_hash=${tokenHash}`;
+    }
     return NextResponse.json({ok:true,stages});
   }catch(error){
     const message=error instanceof Error?error.message:String(error);
