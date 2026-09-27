@@ -23,7 +23,7 @@ type TaskDraft={
   id:string|null;title:string;category:string;ownerUserId:string;startDate:string;endDate:string;progress:number;
   status:string;risk:string;milestone:boolean;blocksLaunch:boolean;dependencyIds:string[];
 };
-type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;status:string;note:string};
+type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;status:"planned"|"in_progress"|"completed"|"cancelled";note:string};
 type VisitDraft={id:string|null;scheduledDate:string;status:string;checklist:SiteVisitChecklistItem[];notes:string};
 
 const categoryLabels:Record<string,string>={
@@ -539,7 +539,7 @@ export function LaunchExecutionWorkspace({
       <label>Дата вывода<input type="date" value={waveEditor.targetDate} onChange={e=>setWaveEditor({...waveEditor,targetDate:e.target.value})}/></label>
       <label>Количество новых сотрудников<input type="number" min="1" value={waveEditor.plannedCount} onChange={e=>setWaveEditor({...waveEditor,plannedCount:Number(e.target.value||1)})}/></label>
       <label className="wide">Специальность<select value={waveEditor.specialtyId} onChange={e=>setWaveEditor({...waveEditor,specialtyId:e.target.value})}><option value="">Все позиции / общий вывод</option>{forecast.map(item=><option key={item.specialtyId} value={item.specialtyId}>{item.specialty} · план {item.required}</option>)}</select></label>
-      {waveEditor.id&&<label className="wide">Состояние волны<select value={waveEditor.status} onChange={e=>setWaveEditor({...waveEditor,status:e.target.value})}><option value="planned">Запланирована</option><option value="in_progress">В работе</option><option value="completed">Выполнена</option><option value="cancelled">Отменена</option></select></label>}
+      {waveEditor.id&&<label className="wide">Состояние волны<select value={waveEditor.status} onChange={e=>setWaveEditor({...waveEditor,status:e.target.value as WaveDraft["status"]})}><option value="planned">Запланирована</option><option value="in_progress">В работе</option><option value="completed">Выполнена</option><option value="cancelled">Отменена</option></select></label>}
       <label className="wide">Комментарий<textarea value={waveEditor.note} onChange={e=>setWaveEditor({...waveEditor,note:e.target.value})} placeholder="Состав волны, ограничения заказчика, приоритетные позиции"/></label>
       <div className="wide launch-editor-actions"><button className="button primary" disabled={busy} onClick={()=>void saveWave()}>Сохранить волну</button></div>
     </div></aside></>}
