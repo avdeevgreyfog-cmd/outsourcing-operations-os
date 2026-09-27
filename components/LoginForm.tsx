@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 const demoRoles=[["director","Директор"],["sales","Менеджер по продажам"],["regional","Региональный менеджер"],["object","Менеджер объекта"],["recruiter","Рекрутер"],["economist","Экономист"],["finance","Финансист"]] as const;
 
@@ -10,15 +9,13 @@ function persistDemoRole(role:string){
 }
 
 export function LoginForm({demo}:{demo:boolean}){
-  const router=useRouter();
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
 
   function demoLogin(role:string){
     setBusy(true);
     persistDemoRole(role);
-    router.push("/");
-    router.refresh();
+    window.location.assign("/");
   }
 
   async function submit(event:React.FormEvent<HTMLFormElement>){
@@ -33,8 +30,7 @@ export function LoginForm({demo}:{demo:boolean}){
       setBusy(false);
       return;
     }
-    router.push("/");
-    router.refresh();
+    window.location.replace("/");
   }
 
   return <div className="login-form-wrap">

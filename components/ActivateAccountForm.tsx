@@ -1,9 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 
 export function ActivateAccountForm({ token }: { token: string }) {
-  const router = useRouter();
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -30,8 +28,7 @@ export function ActivateAccountForm({ token }: { token: string }) {
       setError(body.error??"Не удалось активировать аккаунт.");
       return;
     }
-    router.push("/");
-    router.refresh();
+    window.location.replace("/");
   }
 
   return <form onSubmit={submit} className="activate-form">

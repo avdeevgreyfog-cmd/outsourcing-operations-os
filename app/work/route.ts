@@ -2,7 +2,10 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { ACCESS_PREVIEW_COOKIE, DEMO_COOKIE, SESSION_COOKIE, WORKSPACE_MODE_COOKIE } from "@/lib/auth/server";
 
+export const dynamic="force-dynamic";
+
 function clearDemoState(response:NextResponse){
+  response.headers.set("Cache-Control","no-store, max-age=0");
   response.cookies.set(WORKSPACE_MODE_COOKIE,"",{httpOnly:true,sameSite:"lax",path:"/",maxAge:0});
   response.cookies.set(DEMO_COOKIE,"",{httpOnly:false,sameSite:"lax",path:"/",maxAge:0});
   response.cookies.set(ACCESS_PREVIEW_COOKIE,"",{httpOnly:true,sameSite:"lax",path:"/",maxAge:0});
