@@ -75,30 +75,35 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canProcurement=hasCapability(actor.access,"procurement.read");
   const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
   const canAssignObject=hasCapability(actor.access,"operations.object.assign");
-  const objectManagementOptions=canEditObject?await getObjectManagementOptions(actor,{includeAssignments:canAssignObject}):null;
-  const objectHistory=await listObjectHistory(actor,id,100);
+  const objectManagementOptions=canEditObject
+    ?await safeObjectLoad(id,"object-management",()=>getObjectManagementOptions(actor,{includeAssignments:canAssignObject}),null)
+    :null;
+  const objectHistory=await safeObjectLoad(id,"object-history",()=>listObjectHistory(actor,id,100),[]);
 
+  // The object shell is a control surface over many independent modules. One optional
+  // module must never take the entire object page down. Keep the object identity
+  // critical, but contain downstream loader failures and report their module name.
   const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,ppeTemplates,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions,workforceOptions]=await Promise.all([
-    canWorkers?listWorkers(actor):Promise.resolve([]),
-    canShifts?listShifts(actor):Promise.resolve([]),
-    canPnl?listFinance(actor):Promise.resolve([]),
-    canAccruals?listAccruals(actor):Promise.resolve([]),
-    canPayments?listPayments(actor):Promise.resolve([]),
-    canPayments?listDailyPaymentProgress(actor,id):Promise.resolve([]),
-    listObjectDocuments(actor,id),
-    canAssets?listObjectPpeTemplates(actor,id):Promise.resolve([]),
-    canRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
-    listLaunchTasks(actor),
-    listIncidents(actor),
-    listOperationsAnalytics(actor),
-    canNeeds?listStaffingForecast(actor,30):Promise.resolve([]),
-    canAssets?getInventorySnapshot(actor):Promise.resolve({locations:[],items:[],balances:[]}),
-    canHousing?getHousingSnapshot(actor):Promise.resolve({sites:[],stays:[]}),
-    canProcurement?listSupplyRequests(actor):Promise.resolve([]),
-    getObjectContacts(actor,id),
-    canTimesheets?getTimesheet(actor,{objectId:id,month:month??null}):Promise.resolve(null),
-    canTimesheets?getOperationsReferenceData(actor,"time.timesheet.read",{includeWorkers:false,includeSpecialties:false}):Promise.resolve({objects:[],specialties:[],workers:[]}),
-    (canWorkers||canAssets)?getOperationsReferenceData(actor,canWorkers?"worker.read":"assets.read",{includeWorkers:false,includeSpecialties:true}):Promise.resolve({objects:[],specialties:[],workers:[]}),
+    canWorkers?safeObjectLoad(id,"workers",()=>listWorkers(actor),[]):Promise.resolve([]),
+    canShifts?safeObjectLoad(id,"shifts",()=>listShifts(actor),[]):Promise.resolve([]),
+    canPnl?safeObjectLoad(id,"finance",()=>listFinance(actor),[]):Promise.resolve([]),
+    canAccruals?safeObjectLoad(id,"accruals",()=>listAccruals(actor),[]):Promise.resolve([]),
+    canPayments?safeObjectLoad(id,"payments",()=>listPayments(actor),[]):Promise.resolve([]),
+    canPayments?safeObjectLoad(id,"daily-payments",()=>listDailyPaymentProgress(actor,id),[]):Promise.resolve([]),
+    safeObjectLoad(id,"documents",()=>listObjectDocuments(actor,id),[]),
+    canAssets?safeObjectLoad(id,"ppe",()=>listObjectPpeTemplates(actor,id),[]):Promise.resolve([]),
+    canRecruiting?safeObjectLoad(id,"recruiting",()=>listRecruitingApplications(actor),[]):Promise.resolve([]),
+    safeObjectLoad(id,"launches",()=>listLaunchTasks(actor),[]),
+    safeObjectLoad(id,"incidents",()=>listIncidents(actor),[]),
+    safeObjectLoad(id,"analytics",()=>listOperationsAnalytics(actor),[]),
+    canNeeds?safeObjectLoad(id,"staffing-forecast",()=>listStaffingForecast(actor,30),[]):Promise.resolve([]),
+    canAssets?safeObjectLoad(id,"inventory",()=>getInventorySnapshot(actor),{locations:[],items:[],balances:[]}):Promise.resolve({locations:[],items:[],balances:[]}),
+    canHousing?safeObjectLoad(id,"housing",()=>getHousingSnapshot(actor),{sites:[],stays:[]}):Promise.resolve({sites:[],stays:[]}),
+    canProcurement?safeObjectLoad(id,"supply-requests",()=>listSupplyRequests(actor),[]):Promise.resolve([]),
+    safeObjectLoad(id,"contacts",()=>getObjectContacts(actor,id),{assigned:[],contacts:[]}),
+    canTimesheets?safeObjectLoad(id,"timesheet",()=>getTimesheet(actor,{objectId:id,month:month??null}),null):Promise.resolve(null),
+    canTimesheets?safeObjectLoad(id,"timesheet-options",()=>getOperationsReferenceData(actor,"time.timesheet.read",{includeWorkers:false,includeSpecialties:false}),{objects:[],specialties:[],workers:[]}):Promise.resolve({objects:[],specialties:[],workers:[]}),
+    (canWorkers||canAssets)?safeObjectLoad(id,"workforce-options",()=>getOperationsReferenceData(actor,canWorkers?"worker.read":"assets.read",{includeWorkers:false,includeSpecialties:true}),{objects:[],specialties:[],workers:[]}):Promise.resolve({objects:[],specialties:[],workers:[]}),
   ]);
 
   const objectWorkers=workers.filter(row=>row.objectId===id);
@@ -119,7 +124,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objFinance=finance.find(row=>row.objectId===id)??null;
   const objectAccruals=accruals.filter(row=>row.objectId===id);
   const objectPayments=payments.filter(row=>row.objectId===id);
-  const objectContracts=hasCapability(actor.access,"contract.read")?(await listContracts(actor)).filter(row=>row.objectId===id):[];
+  const objectContracts=hasCapability(actor.access,"contract.read")
+    ?(await safeObjectLoad(id,"contracts",()=>listContracts(actor),[])).filter(row=>row.objectId===id)
+    :[];
   const linkedObjectDocuments=[...(object.sourceRequestId?[{id:"request:"+object.sourceRequestId,label:"Исходная заявка",meta:"Коммерческий контур",href:"/requests/"+object.sourceRequestId}]:[]),...(object.sourceProposalId?[{id:"proposal:"+object.sourceProposalId,label:"Согласованное коммерческое предложение",meta:"Коммерческий контур",href:"/proposals/"+object.sourceProposalId}]:[]),...objectContracts.map(row=>({id:"contract:"+row.id,label:row.number?`Договор № ${row.number}`:row.title,meta:row.status==="signed"?"Подписан":"Договорной контур",href:"/contracts/"+row.id}))];
 
   const projectedAvailable=objectForecast.reduce((sum,row)=>sum+row.projectedAvailable,0);
@@ -320,6 +327,19 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   return staticDemo
     ?<StaticDemoQueryTabsController enabled defaultTab="overview" className={workspaceClass}>{workspaceContent}</StaticDemoQueryTabsController>
     :<div className={workspaceClass}>{workspaceContent}</div>;
+}
+
+async function safeObjectLoad<T>(objectId:string,module:string,load:()=>Promise<T>,fallback:T):Promise<T>{
+  try{return await load()}
+  catch(error){
+    console.error("[object-workspace] module load failed",{
+      objectId,
+      module,
+      error:error instanceof Error?error.message:String(error),
+      stack:error instanceof Error?error.stack:undefined,
+    });
+    return fallback;
+  }
 }
 
 function ReadinessRow({label,value}:{label:string;value:number}){
