@@ -328,7 +328,7 @@ try{
     VALUES(${customerObject}::uuid,${customerOrg}::uuid,${customerClient}::uuid,'Tenant isolation object',${"ISO-"+customerObject.slice(0,8)},'active',${customerRegion}::uuid,${customerOwner}::uuid,${customerOwner}::uuid)
   `;
 
-  await sql.unsafe("DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='operations_test_runtime') THEN CREATE ROLE operations_test_runtime NOLOGIN; END IF; END $");
+  await sql.unsafe("CREATE ROLE operations_test_runtime NOLOGIN");
   await sql.unsafe("GRANT USAGE ON SCHEMA public TO operations_test_runtime; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO operations_test_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO operations_test_runtime");
   await sql.begin(async tx=>{
     await tx.unsafe("SET LOCAL ROLE operations_test_runtime");
