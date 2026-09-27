@@ -52,7 +52,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId);
     const fact=analytics.find(row=>row.objectId===plan.objectId);
     const taskBlockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked")).length;
-    const visitBlocker=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="completed"&&item.status!=="cancelled");
+    const visitBlocker=!visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status==="completed");
     const nextTask=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&row.endDate).sort((a,b)=>(a.endDate??"").localeCompare(b.endDate??""))[0]??null;
     const sortedWaves=[...planWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate));
     const latestWave=sortedWaves.length?sortedWaves[sortedWaves.length-1]:undefined;
@@ -73,8 +73,9 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
 
   const upcoming=plans.filter(row=>!["completed","cancelled"].includes(row.phase)&&daysTo(row.targetDate)>=0&&daysTo(row.targetDate)<=14).length;
   const allBlockers=plans.reduce((sum,plan)=>{
+    if(["completed","cancelled"].includes(plan.phase))return sum;
     const taskCount=tasks.filter(row=>((row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId))&&row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked")).length;
-    const visitCount=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="completed"&&item.status!=="cancelled")?1:0;
+    const visitCount=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status==="completed")?0:1;
     const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId).filter(row=>row.status!=="cancelled");
     const fact=analytics.find(row=>row.objectId===plan.objectId);
     const staffingPlan=planWaves.length?planWaves.reduce((total,row)=>total+row.plannedCount,0):(fact?.required??0);

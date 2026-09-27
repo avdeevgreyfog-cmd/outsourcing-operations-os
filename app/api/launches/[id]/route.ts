@@ -37,9 +37,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         if((blocking?.count??0)>0)throw new Error(`Запуск заблокирован: не закрыто обязательных задач — ${blocking.count}`);
         const [visit]=await tx<Array<{count:number}>>`
           SELECT count(*)::int count FROM launch_site_visits
-          WHERE launch_id=${id}::uuid AND visit_type='primary' AND status NOT IN ('completed','cancelled')
+          WHERE launch_id=${id}::uuid AND visit_type='primary' AND status='completed'
         `;
-        if((visit?.count??0)>0)throw new Error("Запуск заблокирован: первичный выезд на объект не завершён");
+        if((visit?.count??0)===0)throw new Error("Запуск заблокирован: первичный выезд на объект не завершён");
         const [staffing]=await tx<Array<{required:number;working:number;preparing:number}>>`
           SELECT
             COALESCE((SELECT sum(n.count_required)::int FROM needs n

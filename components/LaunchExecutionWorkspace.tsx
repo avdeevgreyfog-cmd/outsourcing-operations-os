@@ -176,7 +176,7 @@ export function LaunchExecutionWorkspace({
   },[localTasks,localWaves,localVisits,plan.id,plan.objectId,plan.object,plan.organizationId,plan.ownerName,plan.assigneeUserIds]);
 
   const staffingGap=nextWave?.gap??Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
-  const siteVisitBlocker=Boolean(primaryVisit&&primaryVisit.status!=="completed");
+  const siteVisitBlocker=!primaryVisit||primaryVisit.status!=="completed";
   const visitIssueBlocker=Boolean(primaryVisit?.checklist.some(item=>item.status==="issue"&&item.blocksLaunch));
   const contractBlocked=localPlan.contractGate==="blocked";
   const launchBlocked=contractBlocked||blockingTasks.length>0||visitIssueBlocker||staffingGap>0||siteVisitBlocker;
@@ -185,7 +185,7 @@ export function LaunchExecutionWorkspace({
     const taskScore=activeTasks.length?Math.round(activeTasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/activeTasks.length):0;
     const staffingRequired=analytics?.required??0;
     const staffingReady=staffingRequired?Math.min(100,Math.round(((analytics?.working??0)+(analytics?.preparing??0))/staffingRequired*100)):100;
-    const visitScore=primaryVisit?visitStats.percent:100;
+    const visitScore=primaryVisit?visitStats.percent:0;
     return Math.round(taskScore*.45+staffingReady*.4+visitScore*.15);
   },[activeTasks,analytics,primaryVisit,visitStats.percent]);
 
@@ -399,7 +399,10 @@ export function LaunchExecutionWorkspace({
           <div className="launch-action-list">
             {contractBlocked&&<div className="launch-action-static"><div><strong>Договор не даёт допуск к запуску</strong><small>Нужно подписать договор либо оформить согласованное исключение.</small></div></div>}
             {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><div><strong>Не хватает {staffingGap} чел. к {nextWave?formatDate(nextWave.targetDate):"ближайшей контрольной точке"}</strong><small>План комплектования отстаёт от контрольной точки</small></div><ChevronRight size={16}/></button>}
-            {siteVisitBlocker&&primaryVisit&&<button type="button" onClick={()=>openVisit(primaryVisit)}><div><strong>Первичный выезд не завершён</strong><small>{primaryVisit.scheduledDate?"План "+formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · осталось уточнить {visitStats.unresolvedRequired}</small></div><ChevronRight size={16}/></button>}
+            {siteVisitBlocker&&(primaryVisit
+              ?<button type="button" onClick={()=>openVisit(primaryVisit)}><div><strong>Первичный выезд не завершён</strong><small>{primaryVisit.scheduledDate?"План "+formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · осталось уточнить {visitStats.unresolvedRequired}</small></div><ChevronRight size={16}/></button>
+              :editable?<button type="button" onClick={()=>void createVisit()}><div><strong>Первичный выезд не запланирован</strong><small>Перед запуском нужно пройти чек-лист условий площадки.</small></div><ChevronRight size={16}/></button>
+              :<div className="launch-action-static"><div><strong>Первичный выезд не зафиксирован</strong><small>В архивном плане нет завершённого выезда.</small></div></div>)}
             {attentionTasks.slice(0,5).map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
             {!launchBlocked&&<div className="launch-empty-positive">Критических препятствий к запуску не зафиксировано.</div>}
           </div>
