@@ -14,11 +14,14 @@ function clearDemoState(response:NextResponse){
   return response;
 }
 
-export async function GET(request:Request){
+export async function GET(){
   const store=await cookies();
   const hasSession=Boolean(store.get(SESSION_COOKIE)?.value);
-  const target=new URL(hasSession?"/":"/login",request.url);
-  if(hasSession) target.searchParams.set("_operis_reload",Date.now().toString());
-  else target.searchParams.set("force","work");
-  return clearDemoState(NextResponse.redirect(target));
+  const target=hasSession
+    ? "/?_operis_reload="+Date.now()
+    : "/login?force=work&_operis_reload="+Date.now();
+  const safeTarget=JSON.stringify(target);
+  const html="<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"robots\" content=\"noindex\"><title>OPERIS</title></head><body style=\"font-family:system-ui,sans-serif;padding:40px\"><p>Открываем рабочую организацию…</p><script>window.location.replace("+safeTarget+");<\/script><noscript><a href=\""+target+"\">Продолжить</a></noscript></body></html>";
+  const response=new NextResponse(html,{status:200,headers:{"Content-Type":"text/html; charset=utf-8"}});
+  return clearDemoState(response);
 }
