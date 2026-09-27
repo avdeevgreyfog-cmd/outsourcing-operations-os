@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { listLaunchTasks } from "@/lib/data/service";
-import { listOperationsAnalytics } from "@/lib/operations/service";
+import { listOperationsAnalytics, listStaffingForecast } from "@/lib/operations/service";
 import { listRecruitingApplications } from "@/lib/recruiting/service";
 import { listLaunchPlans, listLaunchSiteVisits, listLaunchStaffingWaves } from "@/lib/operations/launch-management";
 import { Metric, PageHeader } from "@/components/UI";
@@ -23,14 +23,16 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
   const params=isGithubPagesDemo()?{}:await searchParams;
   const canEdit=hasCapability(actor.access,"operations.object.edit");
   const canReadRecruiting=hasCapability(actor.access,"recruiting.candidate.read");
+  const canReadNeeds=hasCapability(actor.access,"operations.need.read");
 
-  const [plans,tasks,analytics,waves,visits,applications]=await Promise.all([
+  const [plans,tasks,analytics,waves,visits,applications,forecast]=await Promise.all([
     listLaunchPlans(actor),
     listLaunchTasks(actor),
     listOperationsAnalytics(actor),
     listLaunchStaffingWaves(actor),
     listLaunchSiteVisits(actor),
     canReadRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
+    canReadNeeds?listStaffingForecast(actor,30):Promise.resolve([]),
   ]);
 
   const scope=params.scope==="archive"?"archive":"active";
@@ -42,6 +44,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
   const selectedVisits=selectedPlan?visits.filter(row=>row.launchId===selectedPlan.id||row.objectId===selectedPlan.objectId):[];
   const selectedAnalytics=selectedPlan?analytics.find(row=>row.objectId===selectedPlan.objectId)??null:null;
   const selectedApplications=selectedPlan?applications.filter(row=>row.objectId===selectedPlan.objectId):[];
+  const selectedForecast=selectedPlan?forecast.filter(row=>row.objectId===selectedPlan.objectId):[];
 
   const summaries=visiblePlans.map(plan=>{
     const rows=tasks.filter(row=>(row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId));
@@ -96,6 +99,6 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
       </table>{!summaries.length&&<div className="empty-inline">{scope==="archive"?"Завершённых запусков пока нет":"Активных планов запуска нет"}</div>}</div>
     </section>
 
-    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
+    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} forecast={selectedForecast} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
   </div>;
 }

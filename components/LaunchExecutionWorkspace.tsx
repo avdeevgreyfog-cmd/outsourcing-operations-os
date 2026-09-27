@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronRight, ClipboardCheck, Plus, X } from "lucide-react";
 import { LaunchGantt } from "@/components/LaunchGantt";
 import type { LaunchTaskRow } from "@/lib/data/service";
-import type { OperationsAnalyticsRow } from "@/lib/operations/service";
+import type { OperationsAnalyticsRow, StaffingForecastRow } from "@/lib/operations/service";
 import type { RecruitingApplicationRow } from "@/lib/recruiting/service";
 import type {
   LaunchPlanRow,
@@ -22,7 +22,7 @@ type TaskDraft={
   id:string|null;title:string;category:string;startDate:string;endDate:string;progress:number;
   status:string;risk:string;milestone:boolean;blocksLaunch:boolean;
 };
-type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;note:string};
+type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;note:string};
 type VisitDraft={id:string|null;scheduledDate:string;status:string;checklist:SiteVisitChecklistItem[];notes:string};
 
 const categoryLabels:Record<string,string>={
@@ -70,7 +70,7 @@ function taskDraft(task?:LaunchTaskRow|null,target?:string):TaskDraft{
   };
 }
 function waveDraft(wave?:LaunchStaffingWaveRow|null,target?:string):WaveDraft{
-  return {id:wave?.id??null,name:wave?.name??"",targetDate:wave?.targetDate??target??todayIso(),plannedCount:Number(wave?.plannedCount??1),note:wave?.note??""};
+  return {id:wave?.id??null,name:wave?.name??"",targetDate:wave?.targetDate??target??todayIso(),plannedCount:Number(wave?.plannedCount??1),specialtyId:wave?.specialtyId??"",note:wave?.note??""};
 }
 function uniqueCandidates(rows:RecruitingApplicationRow[]){
   const map=new Map<string,RecruitingApplicationRow>();
@@ -82,7 +82,7 @@ function uniqueCandidates(rows:RecruitingApplicationRow[]){
 }
 
 export function LaunchExecutionWorkspace({
-  plan,tasks,waves,visits,analytics,applications,canEdit,demo,initialTab="summary",
+  plan,tasks,waves,visits,analytics,applications,forecast,canEdit,demo,initialTab="summary",
 }:{
   plan:LaunchPlanRow;
   tasks:LaunchTaskRow[];
@@ -90,6 +90,7 @@ export function LaunchExecutionWorkspace({
   visits:LaunchSiteVisitRow[];
   analytics:OperationsAnalyticsRow|null;
   applications:RecruitingApplicationRow[];
+  forecast:StaffingForecastRow[];
   canEdit:boolean;
   demo:boolean;
   initialTab?:LaunchTab;
@@ -110,6 +111,7 @@ export function LaunchExecutionWorkspace({
   const [shiftLinked,setShiftLinked]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  const editable=canEdit&&!["completed","cancelled"].includes(localPlan.phase);
 
   const activeTasks=useMemo(()=>localTasks.filter(row=>row.status!=="cancelled"),[localTasks]);
   const unfinished=useMemo(()=>activeTasks.filter(row=>row.status!=="done"),[activeTasks]);
@@ -126,15 +128,23 @@ export function LaunchExecutionWorkspace({
 
   const objectApplications=useMemo(()=>uniqueCandidates(applications.filter(row=>row.objectId===plan.objectId)),[applications,plan.objectId]);
   const waveRows=useMemo(()=>{
-    const sorted=[...localWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate));
-    return sorted.map((wave,index)=>{
-      const cumulative=sorted.slice(0,index+1).reduce((sum,row)=>sum+row.plannedCount,0);
-      const ready=objectApplications.filter(row=>readyStages.has(row.stage)&&(!row.plannedStartDate||row.plannedStartDate<=wave.targetDate)).length;
-      const arrived=objectApplications.filter(row=>Boolean(row.plannedArrivalAt)&&String(row.plannedArrivalAt).slice(0,10)<=wave.targetDate).length;
-      const started=objectApplications.filter(row=>Boolean(row.actualStartAt)&&String(row.actualStartAt).slice(0,10)<=wave.targetDate).length;
+    const cumulativeBySpecialty=new Map<string,number>();
+    return [...localWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate)).map(wave=>{
+      const key=wave.specialtyId??"all";
+      const cumulative=(cumulativeBySpecialty.get(key)??0)+wave.plannedCount;
+      cumulativeBySpecialty.set(key,cumulative);
+      const specialtyForecast=wave.specialtyId?forecast.find(item=>item.specialtyId===wave.specialtyId):null;
+      const source=specialtyForecast?objectApplications.filter(row=>specialtyForecast.needIds.includes(row.needId)):objectApplications;
+      const ready=source.filter(row=>{
+        if(!readyStages.has(row.stage))return false;
+        const readyDate=row.plannedArrivalAt?String(row.plannedArrivalAt).slice(0,10):row.plannedStartDate;
+        return !readyDate||readyDate<=wave.targetDate;
+      }).length;
+      const arrived=source.filter(row=>Boolean(row.plannedArrivalAt)&&String(row.plannedArrivalAt).slice(0,10)<=wave.targetDate).length;
+      const started=source.filter(row=>Boolean(row.actualStartAt)&&String(row.actualStartAt).slice(0,10)<=wave.targetDate).length;
       return {...wave,cumulative,ready,arrived,started,gap:Math.max(cumulative-ready,0)};
     });
-  },[localWaves,objectApplications]);
+  },[localWaves,objectApplications,forecast]);
 
   const nextWave=waveRows.find(row=>row.targetDate>=todayIso()&&row.status!=="cancelled")??(waveRows.length?waveRows[waveRows.length-1]:null);
   const ganttRows=useMemo(()=>{
@@ -163,7 +173,8 @@ export function LaunchExecutionWorkspace({
 
   const staffingGap=nextWave?.gap??Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
   const siteVisitBlocker=Boolean(primaryVisit&&primaryVisit.status!=="completed");
-  const launchBlocked=blockingTasks.length>0||visitStats.issues>0||staffingGap>0||siteVisitBlocker;
+  const contractBlocked=localPlan.contractGate==="blocked";
+  const launchBlocked=contractBlocked||blockingTasks.length>0||visitStats.issues>0||staffingGap>0||siteVisitBlocker;
 
   const readiness=useMemo(()=>{
     const taskScore=activeTasks.length?Math.round(activeTasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/activeTasks.length):0;
@@ -188,6 +199,13 @@ export function LaunchExecutionWorkspace({
     .slice(0,6),[unfinished]);
 
   const visitIssues=useMemo(()=>(primaryVisit?.checklist??[]).filter(item=>item.status==="issue"||(primaryVisit?.status==="completed"&&item.required&&item.status==="pending")),[primaryVisit]);
+  const visitAnswer=(id:string)=>primaryVisit?.checklist.find(item=>item.id===id)?.value?.trim()||"Не уточнено";
+  const outputRules=[
+    ["Допустимые дни вывода",visitAnswer("access-days")],
+    ["Максимум новичков за один вывод",visitAnswer("access-limit")],
+    ["Минимальный состав первого запуска",visitAnswer("staff-minimum")],
+    ["Во сколько быть на объекте",visitAnswer("schedule-arrival")],
+  ];
 
   async function request(url:string,options:RequestInit){
     const response=await fetch(url,options);
@@ -255,14 +273,16 @@ export function LaunchExecutionWorkspace({
     try{
       setBusy(true);setError("");
       if(!waveEditor.name.trim())throw new Error("Укажите название волны");
-      const payload={name:waveEditor.name.trim(),targetDate:waveEditor.targetDate,plannedCount:Number(waveEditor.plannedCount),note:waveEditor.note||null};
+      const payload={name:waveEditor.name.trim(),targetDate:waveEditor.targetDate,plannedCount:Number(waveEditor.plannedCount),specialtyId:waveEditor.specialtyId||null,note:waveEditor.note||null};
       if(waveEditor.id){
         if(!demo)await request("/api/launches/"+plan.id+"/waves/"+waveEditor.id,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-        setLocalWaves(current=>current.map(row=>row.id===waveEditor.id?{...row,...payload}:row));
+        const specialty=forecast.find(item=>item.specialtyId===payload.specialtyId)?.specialty??null;
+        setLocalWaves(current=>current.map(row=>row.id===waveEditor.id?{...row,...payload,specialty}:row));
       }else{
         let id="demo-wave-"+Date.now();
         if(!demo){const json=await request("/api/launches/"+plan.id+"/waves",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});id=json.id??id;}
-        setLocalWaves(current=>[...current,{id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,name:payload.name,targetDate:payload.targetDate,plannedCount:payload.plannedCount,specialtyId:null,specialty:null,note:payload.note,status:"planned"}]);
+        const specialty=forecast.find(item=>item.specialtyId===payload.specialtyId)?.specialty??null;
+        setLocalWaves(current=>[...current,{id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,name:payload.name,targetDate:payload.targetDate,plannedCount:payload.plannedCount,specialtyId:payload.specialtyId,specialty,note:payload.note,status:"planned"}]);
       }
       setWaveEditor(null);
       if(!demo)router.refresh();
@@ -334,11 +354,12 @@ export function LaunchExecutionWorkspace({
         <div><span>Дата запуска</span><strong>{formatDate(localPlan.targetDate)}</strong><small>{targetLabel(localPlan.targetDate)}</small></div>
         <div><span>Готовность</span><strong>{readiness}%</strong><small>{launchBlocked?"есть препятствия":"критических препятствий нет"}</small></div>
         <div><span>Фаза</span><strong>{phaseLabels[localPlan.phase]??localPlan.phase}</strong><small>{localPlan.phase==="active"?"стабилизация "+localPlan.stabilizationDays+" дн.":"управляется планом"}</small></div>
+        <div><span>Допуск</span><strong>{localPlan.contractGate==="blocked"?"Договор не готов":localPlan.contractGate==="exception"?"По исключению":"Разрешён"}</strong><small>{localPlan.contractStatus==="signed"?"договор подписан":localPlan.contractGate==="exception"?"согласовано исключение":"контроль договора"}</small></div>
       </div>
-      {canEdit&&<div className="launch-head-actions">
+      {editable&&<div className="launch-head-actions">
         <button className="button" onClick={()=>setPlanEditor(true)}>Настроить план</button>
         {localPlan.phase==="preparation"&&!launchBlocked&&<button className="button" onClick={()=>void changePhase("ready")}>Готов к запуску</button>}
-        {["preparation","ready"].includes(localPlan.phase)&&<button className="button primary" onClick={()=>void changePhase("active")}>Начать запуск</button>}
+        {["preparation","ready"].includes(localPlan.phase)&&<button className="button primary" disabled={launchBlocked||busy} onClick={()=>void changePhase("active")}>Начать запуск</button>}
         {localPlan.phase==="active"&&<button className="button primary" onClick={()=>void changePhase("completed")}>Завершить запуск</button>}
       </div>}
     </header>
@@ -357,8 +378,9 @@ export function LaunchExecutionWorkspace({
     {tab==="summary"&&<div className="launch-summary-layout">
       <div className="launch-summary-main">
         <section className="launch-card launch-critical-card">
-          <header><div><h3>Критично сейчас</h3><p>То, что влияет на ближайший вывод и дату запуска.</p></div><span>{blockingTasks.length+(staffingGap>0?1:0)+(siteVisitBlocker?1:0)}</span></header>
+          <header><div><h3>Критично сейчас</h3><p>То, что влияет на ближайший вывод и дату запуска.</p></div><span>{blockingTasks.length+(staffingGap>0?1:0)+(siteVisitBlocker?1:0)+(contractBlocked?1:0)}</span></header>
           <div className="launch-action-list">
+            {contractBlocked&&<div className="launch-action-static"><div><strong>Договор не даёт допуск к запуску</strong><small>Нужно подписать договор либо оформить согласованное исключение.</small></div></div>}
             {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><div><strong>Не хватает {staffingGap} чел. к {nextWave?formatDate(nextWave.targetDate):"ближайшей контрольной точке"}</strong><small>План комплектования отстаёт от контрольной точки</small></div><ChevronRight size={16}/></button>}
             {siteVisitBlocker&&primaryVisit&&<button type="button" onClick={()=>openVisit(primaryVisit)}><div><strong>Первичный выезд не завершён</strong><small>{primaryVisit.scheduledDate?"План "+formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · осталось уточнить {visitStats.unresolvedRequired}</small></div><ChevronRight size={16}/></button>}
             {blockingTasks.slice(0,5).map(row=><button type="button" key={row.id} onClick={()=>setTaskEditor(taskDraft(row,localPlan.targetDate))}><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
@@ -410,9 +432,9 @@ export function LaunchExecutionWorkspace({
       <div className="launch-plan-toolbar">
         <div className="segmented"><button className={planView==="gantt"?"active":""} onClick={()=>setPlanView("gantt")}>Gantt</button><button className={planView==="table"?"active":""} onClick={()=>setPlanView("table")}>Таблица</button></div>
         <div className="launch-plan-toolbar-meta"><span>{unfinished.length} незавершённых</span><span>{blockingTasks.length} блокируют / требуют контроля</span></div>
-        {canEdit&&<button className="button" onClick={()=>setTaskEditor(taskDraft(null,localPlan.targetDate))}><Plus size={14}/> Задача</button>}
+        {editable&&<button className="button" onClick={()=>setTaskEditor(taskDraft(null,localPlan.targetDate))}><Plus size={14}/> Задача</button>}
       </div>
-      {planView==="gantt"?<LaunchGantt rows={ganttRows} categoryLabels={categoryLabels} onSelectTask={canEdit?(row=>{
+      {planView==="gantt"?<LaunchGantt rows={ganttRows} categoryLabels={categoryLabels} onSelectTask={editable?(row=>{
         if(row.taskKind==="staffing_wave"){
           const id=row.id.slice("wave:".length);const wave=localWaves.find(item=>item.id===id);if(wave)setWaveEditor(waveDraft(wave,localPlan.targetDate));return;
         }
@@ -423,7 +445,7 @@ export function LaunchExecutionWorkspace({
       }):undefined}/>:<div className="request-table-wrap launch-plan-table-wrap"><table className="data-table launch-plan-table">
         <thead><tr><th>Направление / задача</th><th>Ответственный</th><th>Срок</th><th>Прогресс</th><th>Состояние</th></tr></thead>
         <tbody>{[...localTasks].sort((a,b)=>categoryOrder.indexOf(a.category??"other")-categoryOrder.indexOf(b.category??"other")||(a.startDate??"").localeCompare(b.startDate??"")).map(row=><tr key={row.id} onDoubleClick={()=>canEdit&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>
-          <td><span className="launch-task-category">{categoryLabels[row.category??"other"]??"Прочее"}</span><button type="button" className="launch-task-link" onClick={()=>canEdit&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>{row.title}</button>{row.blocksLaunch&&<small>Блокирует запуск</small>}</td>
+          <td><span className="launch-task-category">{categoryLabels[row.category??"other"]??"Прочее"}</span><button type="button" className="launch-task-link" onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>{row.title}</button>{row.blocksLaunch&&<small>Блокирует запуск</small>}</td>
           <td>{row.owner}</td><td>{row.startDate?formatShort(row.startDate):row.start} – {row.endDate?formatShort(row.endDate):row.end}</td>
           <td><div className="launch-table-progress"><div className="progress"><span style={{width:Math.min(100,Number(row.progress))+"%"}}/></div><span>{row.progress}%</span></div></td>
           <td><span className={"launch-state-text "+(row.status==="blocked"?"is-problem":"")}>{taskStatusLabels[row.status]??row.status}</span></td>
@@ -433,11 +455,11 @@ export function LaunchExecutionWorkspace({
 
     {tab==="staffing"&&<div className="launch-staffing-view">
       <section className="launch-card">
-        <header><div><h3>План вывода персонала</h3><p>Каждая волна задаёт контрольную дату и количество новых сотрудников, которых нужно подготовить к выводу.</p></div>{canEdit&&<button className="button" onClick={()=>setWaveEditor(waveDraft(null,localPlan.targetDate))}><Plus size={14}/> Добавить волну</button>}</header>
+        <header><div><h3>План вывода персонала</h3><p>Каждая волна задаёт контрольную дату и количество новых сотрудников, которых нужно подготовить к выводу.</p></div>{editable&&<button className="button" onClick={()=>setWaveEditor(waveDraft(null,localPlan.targetDate))}><Plus size={14}/> Добавить волну</button>}</header>
         <div className="request-table-wrap"><table className="data-table launch-wave-table">
           <thead><tr><th>Волна</th><th>Дата</th><th>+ План</th><th>План накопительно</th><th>Готовы</th><th>Прибыло</th><th>Вышло</th><th>Отклонение</th></tr></thead>
           <tbody>{waveRows.map(row=><tr key={row.id}>
-            <td><button type="button" className="launch-task-link" onClick={()=>canEdit&&setWaveEditor(waveDraft(row,localPlan.targetDate))}>{row.name}</button>{row.specialty&&<small>{row.specialty}</small>}</td>
+            <td><button type="button" className="launch-task-link" onClick={()=>editable&&setWaveEditor(waveDraft(row,localPlan.targetDate))}>{row.name}</button>{row.specialty&&<small>{row.specialty}</small>}</td>
             <td>{formatDate(row.targetDate)}</td><td className="num">{row.plannedCount}</td><td className="num">{row.cumulative}</td><td className="num">{row.ready}</td><td className="num">{row.arrived}</td><td className="num">{row.started}</td>
             <td><span className={row.gap>0?"launch-wave-gap":""}>{row.gap>0?"−"+row.gap:"по плану"}</span></td>
           </tr>)}</tbody>
@@ -463,13 +485,18 @@ export function LaunchExecutionWorkspace({
             <div><span>Не хватает</span><strong>{analytics?.deficit??0}</strong></div>
           </div>
         </section>
+        <section className="launch-card launch-output-rules">
+          <header><div><h3>Условия вывода с объекта</h3><p>Данные из первичного выезда, которые нужно учитывать при планировании волн.</p></div>{primaryVisit&&<button type="button" className="launch-text-action" onClick={()=>openVisit(primaryVisit)}>Открыть чек-лист</button>}</header>
+          <div className="launch-rule-list">{outputRules.map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+        </section>
       </div>
     </div>}
 
     {tab==="issues"&&<div className="launch-issues-view">
       <section className="launch-card">
-        <header><div><h3>Проблемы и блокеры</h3><p>Конкретные причины, которые могут сдвинуть запуск или следующую волну персонала.</p></div><span>{blockingTasks.length+visitIssues.length+(staffingGap>0?1:0)}</span></header>
+        <header><div><h3>Проблемы и блокеры</h3><p>Конкретные причины, которые могут сдвинуть запуск или следующую волну персонала.</p></div><span>{blockingTasks.length+visitIssues.length+(staffingGap>0?1:0)+(contractBlocked?1:0)}</span></header>
         <div className="launch-issue-list">
+          {contractBlocked&&<div className="launch-issue-static"><span className="launch-issue-source">Договор</span><div><strong>Нет допуска к запуску</strong><small>Договор не подписан и исключение не согласовано.</small></div></div>}
           {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><span className="launch-issue-source">Персонал</span><div><strong>Дефицит {staffingGap} чел. к контрольной точке</strong><small>{nextWave?formatDate(nextWave.targetDate):"Текущий план комплектования"} · перейти к волнам вывода</small></div><ChevronRight size={16}/></button>}
           {visitIssues.map(item=><button type="button" key={item.id} onClick={()=>primaryVisit&&openVisit(primaryVisit)}><span className="launch-issue-source">Выезд</span><div><strong>{item.label}</strong><small>{item.status==="issue"?"Зафиксирована проблема":"Вопрос остался без ответа"}{item.blocksLaunch?" · блокирует запуск":""}</small></div><ChevronRight size={16}/></button>)}
           {blockingTasks.map(row=><button type="button" key={row.id} onClick={()=>setTaskEditor(taskDraft(row,localPlan.targetDate))}><span className="launch-issue-source">{categoryLabels[row.category??"other"]??"План"}</span><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
@@ -502,6 +529,7 @@ export function LaunchExecutionWorkspace({
       <label className="wide">Название<input value={waveEditor.name} onChange={e=>setWaveEditor({...waveEditor,name:e.target.value})} placeholder="Например, Первая волна"/></label>
       <label>Дата вывода<input type="date" value={waveEditor.targetDate} onChange={e=>setWaveEditor({...waveEditor,targetDate:e.target.value})}/></label>
       <label>Количество новых сотрудников<input type="number" min="1" value={waveEditor.plannedCount} onChange={e=>setWaveEditor({...waveEditor,plannedCount:Number(e.target.value||1)})}/></label>
+      <label className="wide">Специальность<select value={waveEditor.specialtyId} onChange={e=>setWaveEditor({...waveEditor,specialtyId:e.target.value})}><option value="">Все позиции / общий вывод</option>{forecast.map(item=><option key={item.specialtyId} value={item.specialtyId}>{item.specialty} · план {item.required}</option>)}</select></label>
       <label className="wide">Комментарий<textarea value={waveEditor.note} onChange={e=>setWaveEditor({...waveEditor,note:e.target.value})} placeholder="Состав волны, ограничения заказчика, приоритетные позиции"/></label>
       <div className="wide launch-editor-actions"><button className="button primary" disabled={busy} onClick={()=>void saveWave()}>Сохранить волну</button></div>
     </div></aside></>}
