@@ -703,6 +703,9 @@ export const objects = [
       "10000000-0000-4000-8000-000000000003"
     ],
     "targetStart": "03.09",
+    "targetStartDate": "2026-09-03",
+    "actualStartDate": "2026-09-03",
+    "actualEndDate": null,
     "coverage": 44,
     "required": 18,
     "filled": 8,
@@ -734,6 +737,9 @@ export const objects = [
       "10000000-0000-4000-8000-000000000003"
     ],
     "targetStart": "16.09",
+    "targetStartDate": "2026-09-16",
+    "actualStartDate": "2026-09-16",
+    "actualEndDate": null,
     "coverage": 75,
     "required": 12,
     "filled": 9,
@@ -764,6 +770,9 @@ export const objects = [
       "10000000-0000-4000-8000-000000000003"
     ],
     "targetStart": "25.03",
+    "targetStartDate": "2026-03-25",
+    "actualStartDate": "2026-03-25",
+    "actualEndDate": null,
     "coverage": 61,
     "required": 18,
     "filled": 11,
@@ -794,6 +803,9 @@ export const objects = [
       "10000000-0000-4000-8000-000000000003"
     ],
     "targetStart": "08.07",
+    "targetStartDate": "2026-07-08",
+    "actualStartDate": "2026-07-08",
+    "actualEndDate": null,
     "coverage": 64,
     "required": 14,
     "filled": 9,
@@ -824,6 +836,9 @@ export const objects = [
       "10000000-0000-4000-8000-000000000003"
     ],
     "targetStart": "07.08",
+    "targetStartDate": "2026-08-07",
+    "actualStartDate": "2026-08-07",
+    "actualEndDate": null,
     "coverage": 70,
     "required": 10,
     "filled": 7,

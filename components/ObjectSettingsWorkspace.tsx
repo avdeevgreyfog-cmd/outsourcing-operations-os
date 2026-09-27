@@ -16,7 +16,9 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   const [name,setName]=useState(object.name);
   const [legalEntityId,setLegalEntityId]=useState(object.legalEntityId??options.legalEntities.find(item=>item.primary)?.id??"");
   const [address,setAddress]=useState(object.address??"");
-  const [targetStartDate,setTargetStartDate]=useState(toInputDate(object.targetStart??null));
+  const [targetStartDate,setTargetStartDate]=useState(object.targetStartDate??toInputDate(object.targetStart??null));
+  const [actualStartDate,setActualStartDate]=useState(object.actualStartDate??"");
+  const [actualEndDate,setActualEndDate]=useState(object.actualEndDate??"");
   const [status,setStatus]=useState(object.status);
   const [ownerUserId,setOwnerUserId]=useState(object.ownerUserId??"");
   const [additionalManagers,setAdditionalManagers]=useState<string[]>(()=>{const allowed=new Set(options.managers.map(item=>item.id));return (object.additionalManagers??[]).map(item=>item.userId).filter(id=>allowed.has(id));});
@@ -37,6 +39,12 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   const visibleAdditional=useMemo(()=>additionalManagers.filter(id=>id!==ownerUserId),[additionalManagers,ownerUserId]);
 
   function toggle(list:string[],set:(value:string[])=>void,id:string){set(list.includes(id)?list.filter(value=>value!==id):[...list,id]);}
+  function changeStatus(next:string){
+    setStatus(next);
+    if(["active","paused","completed","archived"].includes(next)&&!actualStartDate)setActualStartDate(todayIso());
+    if(["completed","archived"].includes(next)&&!actualEndDate)setActualEndDate(todayIso());
+    if(["prelaunch","launch","active","paused"].includes(next)&&["completed","archived"].includes(status))setActualEndDate("");
+  }
 
   async function save(){
     try{
@@ -49,8 +57,9 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         return;
       }
       if((scheduleWorkDays&&!scheduleRestDays)||(!scheduleWorkDays&&scheduleRestDays))throw new Error("Для графика укажите и рабочие, и выходные дни");
+      if(actualStartDate&&actualEndDate&&actualEndDate<actualStartDate)throw new Error("Дата завершения не может быть раньше даты начала работы");
       const payload={
-        name,address:address||null,targetStartDate:targetStartDate||null,status,
+        name,address:address||null,targetStartDate:targetStartDate||null,actualStartDate:actualStartDate||null,actualEndDate:actualEndDate||null,status,
         defaultTransitionDays:Number(transitionDays||7),
         defaultDailyPaymentShifts:Number(dailyPaymentShifts||0),
         defaultScheduleWorkDays:scheduleWorkDays?Number(scheduleWorkDays):null,
@@ -73,8 +82,10 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         <label>Название объекта<input value={name} onChange={e=>setName(e.target.value)}/></label>
         <label>Наше юрлицо{canAssign?<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select>:<input value={object.legalEntity??"Не указано"} disabled/>}</label>
         <label className="wide">Адрес<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Адрес объекта"/></label>
-        <label>Плановая дата старта<input type="date" value={targetStartDate} onChange={e=>setTargetStartDate(e.target.value)}/></label>
-        <label>Статус объекта<select value={status} onChange={e=>setStatus(e.target.value)}>{statusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><small>Статус меняется здесь и применяется после сохранения настроек.</small></label>
+        <label>Плановая дата запуска<input type="date" value={targetStartDate} onChange={e=>setTargetStartDate(e.target.value)}/><small>Используется на этапах подготовки и запуска.</small></label>
+        <label>Статус объекта<select value={status} onChange={e=>changeStatus(e.target.value)}>{statusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><small>Статус меняется здесь и применяется после сохранения настроек.</small></label>
+        {["active","paused","completed","archived"].includes(status)&&<label>Фактическая дата начала работы<input type="date" value={actualStartDate} onChange={e=>setActualStartDate(e.target.value)}/><small>От этой даты считается период работы объекта.</small></label>}
+        {["completed","archived"].includes(status)&&<label>Дата завершения работы<input type="date" value={actualEndDate} onChange={e=>setActualEndDate(e.target.value)}/><small>Фиксирует итоговый период работы объекта.</small></label>}
       </div>
     </Section>
 
@@ -119,5 +130,7 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
     <div className="object-settings-actions"><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy?"Сохраняю…":"Сохранить настройки"}</button>{error&&<span className="form-error">{error}</span>}{saved&&<span className="object-settings-success">{saved}</span>}</div>
   </div>;
 }
+
+function todayIso(){return new Date().toISOString().slice(0,10)}
 
 function toInputDate(value:string|null){if(!value)return"";if(/^\\d{4}-\\d{2}-\\d{2}$/.test(value))return value;const match=value.match(/^(\\d{2})\\.(\\d{2})(?:\\.(\\d{4}))?$/);if(!match)return"";return `${match[3]??new Date().getFullYear()}-${match[2]}-${match[1]}`;}

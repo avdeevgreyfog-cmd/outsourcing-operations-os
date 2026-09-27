@@ -9,12 +9,12 @@ import type { ObjectManagementOptions } from "@/lib/operations/object-management
 
 const statusLabels:Record<string,string>={prelaunch:"Подготовка",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
-type CreateForm={name:string;code:string;clientId:string;legalEntityId:string;regionId:string;address:string;targetStartDate:string;ownerUserId:string;additionalManagerUserIds:string[];recruitingMode:"company_rules"|"object_team";recruiterUserIds:string[];status:"prelaunch"|"active"};
+type CreateForm={name:string;code:string;clientId:string;legalEntityId:string;regionId:string;address:string;targetStartDate:string;actualStartDate:string;ownerUserId:string;additionalManagerUserIds:string[];recruitingMode:"company_rules"|"object_team";recruiterUserIds:string[];status:"prelaunch"|"active"};
 
 function initialForm(options:ObjectManagementOptions):CreateForm{
   return {
     name:"",code:"",clientId:options.clients[0]?.id??"",legalEntityId:options.legalEntities.find(item=>item.primary)?.id??options.legalEntities[0]?.id??"",
-    regionId:options.regions[0]?.id??"",address:"",targetStartDate:"",ownerUserId:options.managers[0]?.id??"",additionalManagerUserIds:[],
+    regionId:options.regions[0]?.id??"",address:"",targetStartDate:"",actualStartDate:todayIso(),ownerUserId:options.managers[0]?.id??"",additionalManagerUserIds:[],
     recruitingMode:"company_rules",recruiterUserIds:[],status:"active",
   };
 }
@@ -60,6 +60,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
     try{
       setBusy(true);setError("");
       if(!form.name.trim())throw new Error("Укажите название объекта");
+      if(form.status==="active"&&!form.actualStartDate)throw new Error("Укажите фактическую дату начала работы");
       if(!form.clientId||!form.legalEntityId||!form.regionId||!form.ownerUserId)throw new Error("Заполните клиента, юрлицо, регион и основного менеджера");
       if(form.recruitingMode==="object_team"&&!form.recruiterUserIds.length)throw new Error("Выберите закреплённую команду подбора");
       if(demo){
@@ -73,14 +74,15 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         setLocalRows(current=>[{
           id,objectId:id,organizationId:"demo",name:form.name.trim(),code:form.code.trim()||`OBJ-${String(current.length+1).padStart(3,"0")}`,
           client:client?.name??"Клиент",clientId:form.clientId,status:form.status,region:regionOption?.name??"Регион",regionId:form.regionId,address:form.address||null,
-          legalEntityId:form.legalEntityId,legalEntity:entity?.shortName??entity?.name??null,targetStart:form.targetStartDate||null,
+          legalEntityId:form.legalEntityId,legalEntity:entity?.shortName??entity?.name??null,targetStart:form.targetStartDate?formatShortDate(form.targetStartDate):null,targetStartDate:form.targetStartDate||null,
+          actualStartDate:form.status==="active"?form.actualStartDate:null,actualEndDate:null,
           ownerUserId:form.ownerUserId,ownerName:owner?.name??null,additionalManagers:additional,recruitingMode:form.recruitingMode,recruitingTeam:fixedRecruiters,
           activeRecruiters:[],unassignedNeedCount:0,assigneeUserIds:[form.ownerUserId,...form.additionalManagerUserIds,...form.recruiterUserIds],
           coverage:0,required:0,filled:0,deficit:0,risk:"normal",riskReasons:[],attentionReasons:["План численности не задан"],
         },...current]);
         setCreateOpen(false);setForm(initialForm(options));return;
       }
-      const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,code:form.code||null,address:form.address||null,targetStartDate:form.targetStartDate||null})});
+      const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,code:form.code||null,address:form.address||null,targetStartDate:form.targetStartDate||null,actualStartDate:form.status==="active"?form.actualStartDate:null})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось создать объект");
       setCreateOpen(false);router.push(`/objects/${json.id}`);router.refresh();
@@ -110,7 +112,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
     </div>
     <section className="section section-flush">
       <div className="request-table-wrap"><table className="data-table object-portfolio-table">
-        <thead><tr><th>Объект</th><th>Клиент</th><th>Наше юрлицо</th><th>Локация</th><th>Менеджер объекта</th><th>Подбор</th><th>Статус</th><th>Комплектация</th><th>Старт</th><th>Внимание</th></tr></thead>
+        <thead><tr><th>Объект</th><th>Клиент</th><th>Наше юрлицо</th><th>Локация</th><th>Менеджер объекта</th><th>Подбор</th><th>Статус</th><th>Комплектация</th><th>Период</th><th>Внимание</th></tr></thead>
         <tbody>{filtered.map(row=>{
           const fact=analyticsByObject.get(row.id);
           const working=fact?.working??row.filled;
@@ -126,7 +128,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
             <td><RecruitingCell row={row}/></td>
             <td><ObjectStatus status={row.status}/></td>
             <td><div className={"object-staffing-cell"+(required?"":" is-empty")}>{required?<><div><strong>{working} из {required}</strong><span>{coverage}%</span></div><div className="progress"><span style={{width:coverage+"%"}}/></div><small className={deficit?"object-staffing-deficit":""}>{deficit?`Нужно ещё ${deficit}`:"План закрыт"}</small></>:<><strong>План не задан</strong><small>Укажите потребность объекта</small></>}</div></td>
-            <td>{row.targetStart??"—"}</td>
+            <td><PeriodCell row={row}/></td>
             <td><AttentionCell row={row}/></td>
           </tr>
         })}</tbody>
@@ -141,8 +143,8 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         <label>Регион<select value={form.regionId} onChange={e=>setForm({...form,regionId:e.target.value})}><option value="">Выберите регион</option>{options.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Основной менеджер<select value={form.ownerUserId} onChange={e=>setForm({...form,ownerUserId:e.target.value,additionalManagerUserIds:form.additionalManagerUserIds.filter(id=>id!==e.target.value)})}><option value="">Выберите менеджера</option>{options.managers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="wide">Адрес<input value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></label>
-        <label>Дата старта<input type="date" value={form.targetStartDate} onChange={e=>setForm({...form,targetStartDate:e.target.value})}/></label>
-        <label>Состояние<select value={form.status} onChange={e=>setForm({...form,status:e.target.value as CreateForm["status"]})}><option value="active">Уже действует</option><option value="prelaunch">Подготовка к запуску</option></select></label>
+        {form.status==="active"?<label>Фактическая дата начала<input type="date" value={form.actualStartDate} onChange={e=>setForm({...form,actualStartDate:e.target.value})}/></label>:<label>Плановая дата запуска<input type="date" value={form.targetStartDate} onChange={e=>setForm({...form,targetStartDate:e.target.value})}/></label>}
+        <label>Состояние<select value={form.status} onChange={e=>setForm({...form,status:e.target.value as CreateForm["status"],actualStartDate:e.target.value==="active"?(form.actualStartDate||todayIso()):form.actualStartDate})}><option value="active">Уже действует</option><option value="prelaunch">Подготовка к запуску</option></select></label>
         <label>Код объекта<input value={form.code} onChange={e=>setForm({...form,code:e.target.value})} placeholder="Автоматически"/></label>
         <div className="wide object-assignment-picker"><span>Дополнительные менеджеры</span><div>{options.managers.filter(item=>item.id!==form.ownerUserId).map(item=><label key={item.id}><input type="checkbox" checked={form.additionalManagerUserIds.includes(item.id)} onChange={()=>toggle(form.additionalManagerUserIds,"additionalManagerUserIds",item.id)}/><span>{item.name}</span></label>)}</div></div>
         <label className="wide">Маршрутизация подбора<select value={form.recruitingMode} onChange={e=>setForm({...form,recruitingMode:e.target.value as CreateForm["recruitingMode"]})}><option value="company_rules">По правилам компании</option><option value="object_team">Закреплённая команда объекта</option></select></label>
@@ -168,6 +170,57 @@ function RecruitingCell({row}:{row:ObjectRow}){
   return <div className="object-recruiting-cell"><strong>По правилам компании</strong><small>Новые потребности маршрутизируются автоматически</small></div>;
 }
 
+function PeriodCell({row}:{row:ObjectRow}){
+  const target=row.targetStartDate??null;
+  const actual=row.actualStartDate??null;
+  const ended=row.actualEndDate??null;
+  if(row.status==="prelaunch"||row.status==="launch"){
+    if(!target)return <div className="object-period-cell is-empty"><strong>Дата не указана</strong><small>план запуска</small></div>;
+    return <div className="object-period-cell"><strong>{formatShortDate(target)}</strong><small>{relativeDateLabel(target)}</small></div>;
+  }
+  if(actual){
+    const end=(row.status==="completed"||row.status==="archived")?ended:todayIso();
+    const secondary=(row.status==="completed"||row.status==="archived")
+      ?ended?`${formatShortDate(actual)} – ${formatShortDate(ended)}`:`с ${formatShortDate(actual)} · нет даты завершения`
+      :`с ${formatShortDate(actual)}`;
+    return <div className="object-period-cell"><strong>{end?durationLabel(actual,end):"Период"}</strong><small>{secondary}</small></div>;
+  }
+  return <div className="object-period-cell is-empty"><strong>Не указан</strong><small>дата начала работы</small></div>;
+}
+
+function todayIso(){return new Date().toISOString().slice(0,10)}
+
+function parseIso(value:string){
+  const [year,month,day]=value.split("-").map(Number);
+  return new Date(Date.UTC(year,month-1,day));
+}
+
+function formatShortDate(value:string){
+  const date=parseIso(value);
+  return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}).format(date);
+}
+
+function relativeDateLabel(value:string){
+  const day=24*60*60*1000;
+  const diff=Math.round((parseIso(value).getTime()-parseIso(todayIso()).getTime())/day);
+  if(diff===0)return "сегодня";
+  return diff>0?`через ${diff} дн.`:`${Math.abs(diff)} дн. назад`;
+}
+
+function durationLabel(from:string,to:string){
+  const start=parseIso(from);const end=parseIso(to);
+  if(end<start)return "—";
+  let months=(end.getUTCFullYear()-start.getUTCFullYear())*12+(end.getUTCMonth()-start.getUTCMonth());
+  if(end.getUTCDate()<start.getUTCDate())months-=1;
+  if(months>=12){
+    const years=Math.floor(months/12);const rest=months%12;
+    return rest?`${years} г. ${rest} мес.`:`${years} г.`;
+  }
+  if(months>=1)return `${months} мес.`;
+  const days=Math.max(0,Math.floor((end.getTime()-start.getTime())/(24*60*60*1000)));
+  return `${days} дн.`;
+}
+
 function ObjectStatus({status}:{status:string}){
   return <span className="object-status">{statusLabels[status]??"В работе"}</span>;
 }
@@ -183,7 +236,7 @@ function AttentionCell({row}:{row:ObjectRow}){
   const title=[...signals,...reasons.map(reason=>`${reason.label}: ${reason.detail}`)].join("; ");
 
   return <div className="object-risk-cell">
-    <button type="button" className="object-attention-trigger" title={title} aria-label={`Требует внимания: ${title}`}>
+    <button type="button" className="object-attention-trigger" aria-label={`Требует внимания: ${title}`}>
       <span>{primary}</span>{extra>0&&<b>+{extra}</b>}
     </button>
     <div className="object-risk-popover" role="tooltip">

@@ -11,6 +11,8 @@ const schema=z.object({
   legalEntityId:z.string().uuid().optional(),
   address:z.string().trim().max(500).nullable().optional(),
   targetStartDate:z.string().date().nullable().optional(),
+  actualStartDate:z.string().date().nullable().optional(),
+  actualEndDate:z.string().date().nullable().optional(),
   status:z.enum(["prelaunch","launch","active","paused","completed","archived"]).optional(),
   ownerUserId:z.string().uuid().optional(),
   additionalManagerUserIds:z.array(z.string().uuid()).max(20).optional(),
@@ -32,6 +34,7 @@ const schema=z.object({
 type ObjectScope={
   organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string;
   legalEntityId:string|null;recruitingMode:"company_rules"|"object_team";name:string;status:string;assigneeUserIds:string[];
+  actualStartDate:string|null;actualEndDate:string|null;
   defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed";ppeTaskEnabled:boolean;ppeTaskDueDays:number|null;
 };
 
@@ -39,6 +42,7 @@ async function getScope(tx:Sql,organizationId:string,id:string):Promise<ObjectSc
   const [row]=await tx<Array<ObjectScope>>`
     SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
       o.client_company_id "clientId",o.legal_entity_id "legalEntityId",o.recruiting_routing_mode "recruitingMode",o.name,o.status,
+      o.actual_start_date::text "actualStartDate",o.actual_end_date::text "actualEndDate",
       o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",
       o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
       o.ppe_task_enabled "ppeTaskEnabled",o.ppe_task_due_days "ppeTaskDueDays",
@@ -97,6 +101,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         const [legalEntity]=await tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND active`;
         if(!legalEntity)throw new Error("Юридическое лицо недоступно");
       }
+
+      const nextStatus=body.status??current.status;
+      const nextActualStart=body.actualStartDate===undefined?current.actualStartDate:body.actualStartDate;
+      const nextActualEnd=body.actualEndDate===undefined?current.actualEndDate:body.actualEndDate;
+      if(body.status!==undefined&&body.status!==current.status&&["active","paused"].includes(body.status)&&!nextActualStart)throw new Error("Укажите фактическую дату начала работы");
+      if(body.status!==undefined&&body.status!==current.status&&["completed","archived"].includes(body.status)&&(!nextActualStart||!nextActualEnd))throw new Error("Для завершения объекта укажите даты начала и завершения работы");
+      if(nextActualStart&&nextActualEnd&&nextActualEnd<nextActualStart)throw new Error("Дата завершения не может быть раньше даты начала работы");
 
       const nextOwner=body.ownerUserId??current.ownerUserId;
       if(!nextOwner)throw new Error("У объекта должен быть основной менеджер");
@@ -166,7 +177,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           legal_entity_id=COALESCE(${body.legalEntityId??null}::uuid,legal_entity_id),
           address_text=CASE WHEN ${body.address===undefined} THEN address_text ELSE ${body.address??null} END,
           target_start_date=CASE WHEN ${body.targetStartDate===undefined} THEN target_start_date ELSE ${body.targetStartDate??null}::date END,
-          status=COALESCE(${body.status??null},status),
+          actual_start_date=CASE WHEN ${body.actualStartDate===undefined} THEN actual_start_date ELSE ${body.actualStartDate??null}::date END,
+          actual_end_date=CASE WHEN ${body.actualEndDate===undefined} THEN actual_end_date ELSE ${body.actualEndDate??null}::date END,
+          status=${nextStatus},
           recruiting_routing_mode=${nextRecruitingMode},
           default_transition_days=COALESCE(${body.defaultTransitionDays??null}::int,default_transition_days),
           default_daily_payment_shifts=COALESCE(${body.defaultDailyPaymentShifts??null}::int,default_daily_payment_shifts),
@@ -183,15 +196,16 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       await syncAssignments(tx,actor.organizationId,id,"additional_manager",nextAdditional,actor.userId);
       await syncAssignments(tx,actor.organizationId,id,"recruiter",nextRecruiters,actor.userId);
 
+      const statusChanged=nextStatus!==current.status;
       const changes={
-        ownerChanged,
+        ownerChanged,statusChanged,previousStatus:current.status,
         previousOwnerUserId:current.ownerUserId,
         ownerUserId:nextOwner,
         additionalManagerUserIds:nextAdditional,
         recruitingMode:nextRecruitingMode,
         recruiterUserIds:nextRecruiters,
         legalEntityId:body.legalEntityId??current.legalEntityId,
-        status:body.status??current.status,
+        status:nextStatus,actualStartDate:nextActualStart,actualEndDate:nextActualEnd,
         defaultTransitionDays:body.defaultTransitionDays??current.defaultTransitionDays,
         defaultDailyPaymentShifts:body.defaultDailyPaymentShifts??current.defaultDailyPaymentShifts,
         defaultScheduleWorkDays:body.defaultScheduleWorkDays===undefined?current.defaultScheduleWorkDays:body.defaultScheduleWorkDays,
@@ -204,8 +218,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(
           ${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,
-          ${ownerChanged?"manager_handover":"settings_updated"},
-          ${ownerChanged?"Изменён основной менеджер объекта":"Обновлены настройки объекта"},
+          ${ownerChanged?"manager_handover":statusChanged?"status_changed":"settings_updated"},
+          ${ownerChanged?"Изменён основной менеджер объекта":statusChanged?`Статус объекта изменён: ${current.status} → ${nextStatus}`:"Обновлены настройки объекта"},
           ${tx.json(changes)}
         )
       `;

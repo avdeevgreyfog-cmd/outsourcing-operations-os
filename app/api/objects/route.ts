@@ -12,6 +12,7 @@ const schema=z.object({
   regionId:z.string().uuid(),
   address:z.string().trim().max(500).nullable().optional(),
   targetStartDate:z.string().date().nullable().optional(),
+  actualStartDate:z.string().date().nullable().optional(),
   ownerUserId:z.string().uuid(),
   additionalManagerUserIds:z.array(z.string().uuid()).max(20).default([]),
   recruitingMode:z.enum(["company_rules","object_team"]).default("company_rules"),
@@ -20,6 +21,7 @@ const schema=z.object({
 }).superRefine((value,ctx)=>{
   if(value.additionalManagerUserIds.includes(value.ownerUserId))ctx.addIssue({code:"custom",path:["additionalManagerUserIds"],message:"Основной менеджер не должен дублироваться в дополнительных"});
   if(value.recruitingMode==="object_team"&&value.recruiterUserIds.length===0)ctx.addIssue({code:"custom",path:["recruiterUserIds"],message:"Для закреплённой команды выберите хотя бы одного сотрудника подбора"});
+  if(value.status==="active"&&!value.actualStartDate)ctx.addIssue({code:"custom",path:["actualStartDate"],message:"Для действующего объекта укажите фактическую дату начала работы"});
 });
 
 export async function POST(request:Request){
@@ -83,12 +85,12 @@ export async function POST(request:Request){
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`
         INSERT INTO objects(
-          organization_id,client_company_id,legal_entity_id,name,code,status,region_id,address_text,target_start_date,
+          organization_id,client_company_id,legal_entity_id,name,code,status,region_id,address_text,target_start_date,actual_start_date,
           owner_user_id,recruiting_routing_mode,created_by_user_id
         )
         VALUES(
           ${actor.organizationId}::uuid,${body.clientId}::uuid,${body.legalEntityId}::uuid,${body.name},${generatedCode},${body.status},
-          ${body.regionId}::uuid,${body.address??null},${body.targetStartDate??null}::date,${body.ownerUserId}::uuid,${body.recruitingMode},${actor.userId}::uuid
+          ${body.regionId}::uuid,${body.address??null},${body.targetStartDate??null}::date,${body.actualStartDate??null}::date,${body.ownerUserId}::uuid,${body.recruitingMode},${actor.userId}::uuid
         )
         RETURNING id,name,code
       `;
