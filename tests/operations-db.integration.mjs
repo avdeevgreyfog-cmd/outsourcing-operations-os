@@ -8,6 +8,32 @@ const org="00000000-0000-4000-8000-000000000001";
 const director="10000000-0000-4000-8000-000000000001";
 
 try{
+  const tenantRlsRows=await sql`
+    WITH tenant_tables AS (
+      SELECT DISTINCT c.table_name
+      FROM information_schema.columns c
+      JOIN information_schema.tables t
+        ON t.table_schema=c.table_schema AND t.table_name=c.table_name
+      WHERE c.table_schema='public'
+        AND c.column_name='organization_id'
+        AND t.table_type='BASE TABLE'
+        AND c.table_name<>'sessions'
+    )
+    SELECT tt.table_name,pc.relrowsecurity rls_enabled,count(pp.policyname)::int policy_count
+    FROM tenant_tables tt
+    JOIN pg_class pc ON pc.relname=tt.table_name
+    JOIN pg_namespace pn ON pn.oid=pc.relnamespace AND pn.nspname='public'
+    LEFT JOIN pg_policies pp ON pp.schemaname='public' AND pp.tablename=tt.table_name
+    GROUP BY tt.table_name,pc.relrowsecurity
+    HAVING NOT pc.relrowsecurity OR count(pp.policyname)=0
+    ORDER BY tt.table_name
+  `;
+  assert.deepEqual(
+    tenantRlsRows,
+    [],
+    "Every tenant table with organization_id must enable RLS and define at least one tenant policy",
+  );
+
   const migrations=await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
   assert.ok(migrations.some(row=>row.filename==="0034_operations_workforce_core.sql"),"operations workforce migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0035_operations_offboarding_and_supply_approval.sql"),"offboarding/supply approval migration must be applied");
