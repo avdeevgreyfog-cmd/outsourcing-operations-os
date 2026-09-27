@@ -51,12 +51,13 @@ export function LaunchGantt({
   };
   const width=(start?:string|null,end?:string|null)=>Math.max(1,pos(end)-pos(start)+100/timeline.span);
   const open=(task:LaunchTaskRow)=>onSelectTask?onSelectTask(task):setSelected(task);
+  const selectedDependencies=selected?.dependencyIds.map(id=>rows.find(row=>row.id===id)?.title).filter((value):value is string=>Boolean(value))??[];
 
   return <>
     <div className="gantt-summary">
       <Metric label="Задачи" value={progressRows.length} note="в текущем плане"/>
       <Metric label="Общий прогресс" value={progress+"%"}/>
-      <Metric label="Критические блокеры" value={critical} tone={critical?"bad":"good"}/>
+      <Metric label="Блокирующие задачи" value={critical} tone={critical?"bad":"good"}/>
       <Metric label="Контрольные точки" value={milestones}/>
       <Metric label="Отклонения от baseline" value={baselineChanges} tone={baselineChanges?"warn":undefined}/>
     </div>
@@ -84,8 +85,8 @@ export function LaunchGantt({
         </Fragment>;
       })}
       {!rows.length&&<div className="empty-inline">В выбранном плане пока нет задач</div>}
-      <div className="gantt-legend"><span><i className="baseline"/> Исходный план</span><span><i className="normal"/> Текущий план</span><span><i className="critical"/> Критический путь</span><span><i className="today"/> Сегодня</span></div>
+      <div className="gantt-legend"><span><i className="baseline"/> Исходный план</span><span><i className="normal"/> Текущий план</span><span><i className="critical"/> Блокирующая задача</span><span><i className="today"/> Сегодня</span></div>
     </section>
-    {selected&&<><div className="drawer-backdrop" onClick={()=>setSelected(null)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={()=>setSelected(null)} aria-label="Закрыть"><X size={17}/></button><div className="eyebrow">Задача запуска · {selected.object}</div><h2>{selected.title}</h2><Status tone={selected.risk==="high"||selected.risk==="critical"?"warn":selected.status==="done"?"good":"info"}>{taskStatusLabels[selected.status]??"В работе"}</Status><div className="drawer-content"><KeyValue label="Ответственный" value={selected.owner}/><KeyValue label="Текущий план" value={selected.start+"–"+selected.end}/><KeyValue label="Исходный план" value={(selected.baselineStart??"—")+"–"+(selected.baselineEnd??"—")}/><KeyValue label="Прогресс" value={selected.progress+"%"}/><KeyValue label="Риск" value={riskLabels[selected.risk]??"Контроль"}/><KeyValue label="Критический путь" value={selected.critical?"Да":"Нет"}/><KeyValue label="Зависимости" value={selected.dependencyIds.length||"Нет"}/></div></aside></>}
+    {selected&&<><div className="drawer-backdrop" onClick={()=>setSelected(null)}/><aside className="drawer"><button className="icon-button drawer-close" onClick={()=>setSelected(null)} aria-label="Закрыть"><X size={17}/></button><div className="eyebrow">Задача запуска · {selected.object}</div><h2>{selected.title}</h2><Status tone={selected.risk==="high"||selected.risk==="critical"?"warn":selected.status==="done"?"good":"info"}>{taskStatusLabels[selected.status]??"В работе"}</Status><div className="drawer-content"><KeyValue label="Ответственный" value={selected.owner}/><KeyValue label="Текущий план" value={selected.start+"–"+selected.end}/><KeyValue label="Исходный план" value={(selected.baselineStart??"—")+"–"+(selected.baselineEnd??"—")}/><KeyValue label="Прогресс" value={selected.progress+"%"}/><KeyValue label="Риск" value={riskLabels[selected.risk]??"Контроль"}/><KeyValue label="Блокирует запуск" value={selected.blocksLaunch||selected.critical?"Да":"Нет"}/><KeyValue label="Зависит от" value={selectedDependencies.length?selectedDependencies.join(", "):"Нет"}/></div></aside></>}
   </>;
 }
