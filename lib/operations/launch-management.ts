@@ -16,7 +16,7 @@ export type LaunchPlanRow={
 
 export type LaunchStaffingWaveRow={
   id:string;organizationId:string;launchId:string;objectId:string;name:string;targetDate:string;plannedCount:number;
-  specialtyId:string|null;specialty:string|null;note:string|null;status:"planned"|"in_progress"|"completed"|"cancelled";
+  specialtyId:string|null;specialty:string|null;needId:string|null;note:string|null;status:"planned"|"in_progress"|"completed"|"cancelled";
 };
 
 export type LaunchAssigneeOption={id:string;name:string};
@@ -75,15 +75,15 @@ export async function listLaunchStaffingWaves(actor:Actor):Promise<LaunchStaffin
       if(!total)return [];
       const first=Math.ceil(total/2);
       return [
-        {id:plan.id+"-wave-1",organizationId:actor.organizationId,launchId:plan.id,objectId:plan.objectId,name:"Первая волна",targetDate:addDays(plan.targetDate,-7),plannedCount:first,specialtyId:null,specialty:null,note:"Базовый план, можно изменить",status:"planned" as const},
-        {id:plan.id+"-wave-2",organizationId:actor.organizationId,launchId:plan.id,objectId:plan.objectId,name:"Полный состав",targetDate:plan.targetDate,plannedCount:Math.max(total-first,1),specialtyId:null,specialty:null,note:null,status:"planned" as const},
+        {id:plan.id+"-wave-1",organizationId:actor.organizationId,launchId:plan.id,objectId:plan.objectId,name:"Первая волна",targetDate:addDays(plan.targetDate,-7),plannedCount:first,specialtyId:null,specialty:null,needId:null,note:"Базовый план, можно изменить",status:"planned" as const},
+        {id:plan.id+"-wave-2",organizationId:actor.organizationId,launchId:plan.id,objectId:plan.objectId,name:"Полный состав",targetDate:plan.targetDate,plannedCount:Math.max(total-first,1),specialtyId:null,specialty:null,needId:null,note:null,status:"planned" as const},
       ];
     });
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<Array<LaunchStaffingWaveRow & {ownerUserId:string|null;regionId:string;clientId:string;assigneeUserIds:string[]}>>`
       SELECT w.id,w.organization_id "organizationId",w.launch_id "launchId",l.object_id "objectId",w.name,w.target_date::text "targetDate",
-        w.planned_count "plannedCount",w.specialty_id "specialtyId",s.name specialty,w.note,w.status,
+        w.planned_count "plannedCount",w.specialty_id "specialtyId",s.name specialty,w.need_id "needId",w.note,w.status,
         o.owner_user_id "ownerUserId",o.region_id "regionId",o.client_company_id "clientId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM launch_staffing_waves w JOIN launches l ON l.id=w.launch_id JOIN objects o ON o.id=l.object_id

@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS launch_staffing_waves (
   target_date date NOT NULL,
   planned_count integer NOT NULL CHECK (planned_count > 0),
   specialty_id uuid REFERENCES specialties(id),
+  need_id uuid REFERENCES needs(id),
   note text,
   status text NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','in_progress','completed','cancelled')),
   created_by_user_id uuid NOT NULL REFERENCES app_users(id),
@@ -64,6 +65,9 @@ CREATE TABLE IF NOT EXISTS launch_site_visits (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE launch_staffing_waves
+  ADD COLUMN IF NOT EXISTS need_id uuid REFERENCES needs(id);
 
 ALTER TABLE launch_staffing_waves ENABLE ROW LEVEL SECURITY;
 ALTER TABLE launch_staffing_waves FORCE ROW LEVEL SECURITY;
@@ -88,6 +92,8 @@ FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 
 CREATE INDEX IF NOT EXISTS idx_launch_staffing_waves_launch_date
   ON launch_staffing_waves(organization_id,launch_id,target_date);
+CREATE INDEX IF NOT EXISTS idx_launch_staffing_waves_need
+  ON launch_staffing_waves(organization_id,need_id,target_date) WHERE need_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_launch_site_visits_launch_date
   ON launch_site_visits(organization_id,launch_id,scheduled_date);
 CREATE INDEX IF NOT EXISTS idx_launch_tasks_category

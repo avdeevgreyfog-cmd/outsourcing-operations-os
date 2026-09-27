@@ -4,6 +4,8 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
+function addDaysIso(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
+
 const schema = z.object({
   title: z.string().trim().min(2).max(240),
   specialtyId: z.string().uuid(),
@@ -141,6 +143,30 @@ export async function POST(request: Request) {
         INSERT INTO need_quantity_changes(organization_id,need_id,old_count,new_count,delta,reason,changed_by_user_id)
         VALUES(${actor.organizationId}::uuid,${need.id}::uuid,NULL,${body.countRequired},${body.countRequired},'Исходный объём потребности',${actor.userId}::uuid)
       `;
+      if(body.objectId){
+        const [launch]=await tx<Array<{id:string;targetDate:string}>>`
+          SELECT id,target_date::text "targetDate" FROM launches
+          WHERE object_id=${body.objectId}::uuid AND phase NOT IN ('completed','cancelled')
+          ORDER BY created_at DESC LIMIT 1
+        `;
+        if(launch){
+          const finalDate=body.deadline&&body.deadline<launch.targetDate?body.deadline:launch.targetDate;
+          const total=body.countRequired;
+          const waveCount=total<=4?1:total<=10?2:3;
+          const base=Math.floor(total/waveCount);
+          const extra=total%waveCount;
+          for(let index=0;index<waveCount;index++){
+            const plannedCount=base+(index<extra?1:0);
+            const offset=waveCount===1?0:Math.round(-14+(14*index/(waveCount-1)));
+            const targetDate=addDaysIso(finalDate,offset);
+            const name=waveCount===1?`Полный состав · ${body.title}`:index===waveCount-1?`Полный состав · ${body.title}`:`Волна ${index+1} · ${body.title}`;
+            await tx`
+              INSERT INTO launch_staffing_waves(organization_id,launch_id,name,target_date,planned_count,specialty_id,need_id,note,status,created_by_user_id)
+              VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,${name},GREATEST(current_date,${targetDate}::date),${plannedCount},${body.specialtyId}::uuid,${need.id}::uuid,'Создано из потребности, можно изменить','planned',${actor.userId}::uuid)
+            `;
+          }
+        }
+      }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${need.id}::uuid,'created',${`Создана потребность: ${body.title}`},${sql.json({sourceKind:body.sourceKind,countRequired:body.countRequired,objectId:body.objectId??null,regionId,recruitingMode,useObjectTeam,assignedRecruiters:objectRecruiters.map(item=>item.userId)})})`;
       return {id:need.id};

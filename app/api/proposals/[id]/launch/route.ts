@@ -138,8 +138,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           const offset=waveCount===1?0:Math.round(-14+(14*index/(waveCount-1)));
           const name=waveCount===1?"Полный состав":index===waveCount-1?"Полный состав":`Волна ${index+1}`;
           await tx`
-            INSERT INTO launch_staffing_waves(organization_id,launch_id,name,target_date,planned_count,specialty_id,note,status,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,${name},GREATEST(current_date,${launch.targetDate}::date+${offset}::int),${plannedCount},${need.specialtyId}::uuid,'Базовый план вывода, можно изменить','planned',${actor.userId}::uuid)
+            INSERT INTO launch_staffing_waves(organization_id,launch_id,name,target_date,planned_count,specialty_id,need_id,note,status,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,${name},GREATEST(current_date,${launch.targetDate}::date+${offset}::int),${plannedCount},${need.specialtyId}::uuid,${need.id}::uuid,'Базовый план вывода, можно изменить','planned',${actor.userId}::uuid)
           `;
         }
       }

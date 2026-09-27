@@ -134,11 +134,11 @@ export function LaunchExecutionWorkspace({
   const waveRows=useMemo(()=>{
     const cumulativeBySpecialty=new Map<string,number>();
     return [...localWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate)).map(wave=>{
-      const key=wave.specialtyId??"all";
+      const key=wave.needId??wave.specialtyId??"all";
       const cumulative=(cumulativeBySpecialty.get(key)??0)+wave.plannedCount;
       cumulativeBySpecialty.set(key,cumulative);
       const specialtyForecast=wave.specialtyId?forecast.find(item=>item.specialtyId===wave.specialtyId):null;
-      const source=specialtyForecast?objectApplications.filter(row=>specialtyForecast.needIds.includes(row.needId)):objectApplications;
+      const source=wave.needId?objectApplications.filter(row=>row.needId===wave.needId):specialtyForecast?objectApplications.filter(row=>specialtyForecast.needIds.includes(row.needId)):objectApplications;
       const ready=source.filter(row=>{
         if(!readyStages.has(row.stage))return false;
         const readyDate=row.plannedArrivalAt?String(row.plannedArrivalAt).slice(0,10):row.plannedStartDate;
@@ -290,7 +290,7 @@ export function LaunchExecutionWorkspace({
         let id="demo-wave-"+Date.now();
         if(!demo){const json=await request("/api/launches/"+plan.id+"/waves",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});id=json.id??id;}
         const specialty=forecast.find(item=>item.specialtyId===payload.specialtyId)?.specialty??null;
-        setLocalWaves(current=>[...current,{id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,name:payload.name,targetDate:payload.targetDate,plannedCount:payload.plannedCount,specialtyId:payload.specialtyId,specialty,note:payload.note,status:"planned"}]);
+        setLocalWaves(current=>[...current,{id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,name:payload.name,targetDate:payload.targetDate,plannedCount:payload.plannedCount,specialtyId:payload.specialtyId,specialty,needId:null,note:payload.note,status:"planned"}]);
       }
       setWaveEditor(null);
       if(!demo)router.refresh();
