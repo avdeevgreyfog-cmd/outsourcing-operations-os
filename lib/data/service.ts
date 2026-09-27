@@ -284,7 +284,7 @@ export async function listCandidates(actor: Actor): Promise<CandidateRow[]> {
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<CandidateRow[]>`
       SELECT c.id,c.organization_id "organizationId",c.full_name "fullName",c.phone,c.source,
-             ca.stage,ca.next_action_at "nextAction",ca.owner_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
+             ca.stage,to_char(ca.next_action_at,'DD.MM HH24:MI') "nextAction",ca.owner_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
              ca.object_id "objectId",o.client_company_id "clientId",o.region_id "regionId",o.name object,s.name need,
              ARRAY[ca.owner_user_id::text] || ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_to IS NULL) "assigneeUserIds"
       FROM candidates c JOIN candidate_applications ca ON ca.candidate_id=c.id JOIN needs n ON n.id=ca.need_id
