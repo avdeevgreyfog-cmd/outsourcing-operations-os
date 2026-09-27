@@ -323,7 +323,13 @@ export function LaunchExecutionWorkspace({
   }
 
   function openVisit(visit:LaunchSiteVisitRow){
-    setVisitEditor({id:visit.id,scheduledDate:visit.scheduledDate??"",status:visit.status,checklist:visit.checklist.map(item=>({...item})),notes:visit.notes??""});
+    const rows=visit.checklist.filter(item=>!item.hidden);
+    const first=(rows.find(item=>item.required&&item.status==="pending")??rows[0])?.section??"";
+    setVisitEditor({id:visit.id,scheduledDate:visit.scheduledDate??"",status:visit.status,checklist:visit.checklist.map(item=>({...item,audiences:[...item.audiences]})),notes:visit.notes??""});
+    setVisitSection(first);
+    setVisitFilter("all");
+    setVisitShowHidden(false);
+    setQuestionEditor(null);
   }
 
   async function createVisit(){
@@ -341,6 +347,62 @@ export function LaunchExecutionWorkspace({
 
   function changeChecklistItem(itemId:string,patch:Partial<SiteVisitChecklistItem>){
     setVisitEditor(current=>current?{...current,checklist:current.checklist.map(item=>item.id===itemId?{...item,...patch}:item)}:current);
+  }
+
+  function setChecklistValue(item:SiteVisitChecklistItem,value:string){
+    changeChecklistItem(item.id,{value,status:value.trim()&&item.status==="pending"?"confirmed":item.status});
+  }
+
+  function openQuestionSettings(item?:SiteVisitChecklistItem){
+    setQuestionEditor({
+      id:item?.id??null,
+      section:item?.section??visitSection||"Прочее",
+      label:item?.label??"",
+      category:item?.category??"operations",
+      answerKind:item?.answerKind??"text",
+      required:item?.required??false,
+      blocksLaunch:item?.blocksLaunch??false,
+      shareRecruiting:item?.audiences.includes("recruiting")??false,
+      hidden:item?.hidden??false,
+    });
+  }
+
+  function saveQuestionSettings(){
+    if(!visitEditor||!questionEditor)return;
+    const label=questionEditor.label.trim();
+    const section=questionEditor.section.trim();
+    if(!label||!section){setError("Укажите раздел и текст вопроса");return;}
+    if(questionEditor.id){
+      const current=visitEditor.checklist.find(item=>item.id===questionEditor.id);
+      if(!current)return;
+      changeChecklistItem(current.id,{
+        label,section,category:questionEditor.category,answerKind:questionEditor.answerKind,
+        required:questionEditor.required,blocksLaunch:questionEditor.blocksLaunch,hidden:false,
+        audiences:["operations",...(questionEditor.shareRecruiting?["recruiting" as const]:[])],
+      });
+      setVisitSection(section);
+    }else{
+      const id="custom-"+crypto.randomUUID();
+      const item:SiteVisitChecklistItem={
+        id,section,label,category:questionEditor.category,answerKind:questionEditor.answerKind,
+        required:questionEditor.required,blocksLaunch:questionEditor.blocksLaunch,status:"pending",value:"",note:"",
+        hidden:false,custom:true,factKey:"custom."+id,
+        audiences:["operations",...(questionEditor.shareRecruiting?["recruiting" as const]:[])],
+      };
+      setVisitEditor(current=>current?{...current,checklist:[...current.checklist,item]}:current);
+      setVisitSection(section);
+    }
+    setQuestionEditor(null);
+    setError("");
+  }
+
+  function hideQuestion(item:SiteVisitChecklistItem){
+    changeChecklistItem(item.id,{hidden:true,status:"na"});
+  }
+
+  function restoreQuestion(item:SiteVisitChecklistItem){
+    changeChecklistItem(item.id,{hidden:false,status:item.status==="na"?"pending":item.status});
+    setVisitSection(item.section);
   }
 
   async function saveVisit(completed=false){
