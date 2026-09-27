@@ -21,7 +21,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
     const {id,waveId}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const [scope]=await tx<Array<{organizationId:string;objectId:string;ownerUserId:string|null;regionId:string;clientId:string;assigneeUserIds:string[]}>>`
-        SELECT l.organization_id "organizationId",l.object_id "objectId",o.owner_user_id "ownerUserId ",o.region_id "regionId",o.client_company_id "clientId",
+        SELECT l.organization_id "organizationId",l.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",o.client_company_id "clientId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
         FROM launch_staffing_waves w JOIN launches l ON l.id=w.launch_id JOIN objects o ON o.id=l.object_id
         WHERE w.id=${waveId}::uuid AND l.id=${id}::uuid
