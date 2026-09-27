@@ -180,7 +180,7 @@ try {
   await sql`INSERT INTO candidates(id,organization_id,full_name,status,created_by_user_id) VALUES(${tenantBCandidate}::uuid,${org2}::uuid,'Tenant B isolation candidate','active',${org2User}::uuid)`;
   await sql`SELECT set_config('app.organization_id',${org1},false),set_config('app.user_id',${user1},false)`;
 
-  await sql.unsafe("DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='organization_test_runtime') THEN CREATE ROLE organization_test_runtime NOLOGIN; END IF; END $");
+  await sql.unsafe("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='organization_test_runtime') THEN CREATE ROLE organization_test_runtime NOLOGIN; END IF; END $$");
   await sql.unsafe("GRANT USAGE ON SCHEMA public TO organization_test_runtime; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO organization_test_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO organization_test_runtime");
   await sql.begin(async (tx) => {
     await tx.unsafe("SET LOCAL ROLE organization_test_runtime");
