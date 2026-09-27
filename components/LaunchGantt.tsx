@@ -52,7 +52,6 @@ export function LaunchGantt({
   const width=(start?:string|null,end?:string|null)=>Math.max(1,pos(end)-pos(start)+100/timeline.span);
   const open=(task:LaunchTaskRow)=>onSelectTask?onSelectTask(task):setSelected(task);
 
-  let previousCategory="";
   return <>
     <div className="gantt-summary">
       <Metric label="Задачи" value={progressRows.length} note="в текущем плане"/>
@@ -63,10 +62,10 @@ export function LaunchGantt({
     </div>
     <section className="section gantt">
       <div className="gantt-head"><div>Структура работ / задача</div><div className="gantt-dates">{timeline.ticks.map((value,index)=><span key={index}>{index%3===0||index===19?label(value):""}</span>)}</div></div>
-      {rows.map(task=>{
+      {rows.map((task,index)=>{
         const category=task.category??"other";
+        const previousCategory=index>0?(rows[index-1].category??"other"):"";
         const showGroup=Boolean(categoryLabels)&&category!==previousCategory;
-        previousCategory=category;
         return <Fragment key={task.id}>
           {showGroup&&<div className="gantt-group-row"><strong>{categoryLabels?.[category]??category}</strong><span/></div>}
           <div className={"gantt-row "+(task.critical?"critical-row ":"")+(task.taskKind==="staffing_wave"?"gantt-wave-row ":"")+(task.taskKind==="site_visit"?"gantt-visit-row ":"")}>
