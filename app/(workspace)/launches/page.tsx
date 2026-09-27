@@ -49,7 +49,8 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     const fact=analytics.find(row=>row.objectId===plan.objectId);
     const blockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
     const nextTask=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&row.endDate).sort((a,b)=>(a.endDate??"").localeCompare(b.endDate??""))[0]??null;
-    const latestWave=[...planWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate)).at(-1);
+    const sortedWaves=[...planWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate));
+    const latestWave=sortedWaves.length?sortedWaves[sortedWaves.length-1]:undefined;
     const staffingPlan=latestWave?planWaves.reduce((sum,row)=>sum+(row.status==="cancelled"?0:row.plannedCount),0):(fact?.required??0);
     const staffingReady=(fact?.working??0)+(fact?.preparing??0);
     const forecastDelta=plan.forecastDate?Math.round((parseDate(plan.forecastDate).getTime()-parseDate(plan.targetDate).getTime())/86_400_000):0;
