@@ -3401,3 +3401,24 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 :root[data-operis-ui="new"] .object-launch-managed-field strong{font-size:12.5px;font-weight:620;color:var(--text)}
 :root[data-operis-ui="new"] .object-launch-managed-field a{font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
 :root[data-operis-ui="new"] .object-launch-managed-field a:hover{text-decoration:underline;text-underline-offset:3px}
+
+
+:root[data-operis-ui="new"] .object-recruiting-brief{margin-bottom:10px}
+:root[data-operis-ui="new"] .object-recruiting-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--border)}
+:root[data-operis-ui="new"] .object-recruiting-facts article{min-height:92px;padding:9px 11px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+:root[data-operis-ui="new"] .object-recruiting-facts article:nth-child(3n){border-right:0}
+:root[data-operis-ui="new"] .object-recruiting-facts article.is-issue{box-shadow:inset 3px 0 0 var(--accent)}
+:root[data-operis-ui="new"] .object-recruiting-facts span,:root[data-operis-ui="new"] .object-recruiting-facts strong,:root[data-operis-ui="new"] .object-recruiting-facts small{display:block}
+:root[data-operis-ui="new"] .object-recruiting-facts span{color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .object-recruiting-facts strong{margin-top:3px;font-size:11px;line-height:1.3}
+:root[data-operis-ui="new"] .object-recruiting-facts p{margin:5px 0 0;font-size:12px;line-height:1.4}
+:root[data-operis-ui="new"] .object-recruiting-facts small{margin-top:6px;color:var(--muted);font-size:9.5px}
+@media(max-width:900px){
+  :root[data-operis-ui="new"] .object-recruiting-facts{grid-template-columns:1fr 1fr}
+  :root[data-operis-ui="new"] .object-recruiting-facts article:nth-child(3n){border-right:1px solid var(--border)}
+  :root[data-operis-ui="new"] .object-recruiting-facts article:nth-child(2n){border-right:0}
+}
+@media(max-width:620px){
+  :root[data-operis-ui="new"] .object-recruiting-facts{grid-template-columns:1fr}
+  :root[data-operis-ui="new"] .object-recruiting-facts article{border-right:0!important}
+}
