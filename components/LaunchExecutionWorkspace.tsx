@@ -118,7 +118,8 @@ export function LaunchExecutionWorkspace({
 
   const activeTasks=useMemo(()=>localTasks.filter(row=>row.status!=="cancelled"),[localTasks]);
   const unfinished=useMemo(()=>activeTasks.filter(row=>row.status!=="done"),[activeTasks]);
-  const blockingTasks=useMemo(()=>unfinished.filter(row=>row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk)),[unfinished]);
+  const blockingTasks=useMemo(()=>unfinished.filter(row=>row.blocksLaunch||row.status==="blocked"),[unfinished]);
+  const attentionTasks=useMemo(()=>unfinished.filter(row=>row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk)),[unfinished]);
   const primaryVisit=localVisits.find(row=>row.visitType==="primary")??null;
   const visitStats=useMemo(()=>{
     const checklist=primaryVisit?.checklist??[];
@@ -176,8 +177,9 @@ export function LaunchExecutionWorkspace({
 
   const staffingGap=nextWave?.gap??Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
   const siteVisitBlocker=Boolean(primaryVisit&&primaryVisit.status!=="completed");
+  const visitIssueBlocker=Boolean(primaryVisit?.checklist.some(item=>item.status==="issue"&&item.blocksLaunch));
   const contractBlocked=localPlan.contractGate==="blocked";
-  const launchBlocked=contractBlocked||blockingTasks.length>0||visitStats.issues>0||staffingGap>0||siteVisitBlocker;
+  const launchBlocked=contractBlocked||blockingTasks.length>0||visitIssueBlocker||staffingGap>0||siteVisitBlocker;
 
   const readiness=useMemo(()=>{
     const taskScore=activeTasks.length?Math.round(activeTasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/activeTasks.length):0;
@@ -358,7 +360,8 @@ export function LaunchExecutionWorkspace({
         {!editable&&["completed","cancelled"].includes(localPlan.phase)&&<span className="launch-readonly-note">Архивный план · только просмотр</span>}
       </div>
       <div className="launch-head-facts">
-        <div><span>Дата запуска</span><strong>{formatDate(localPlan.targetDate)}</strong><small>{targetLabel(localPlan.targetDate)}</small></div>
+        <div><span>Дата запуска</span><strong>{formatDate(localPlan.targetDate)}</strong><small>{localPlan.actualStartDate?"факт "+formatDate(localPlan.actualStartDate):targetLabel(localPlan.targetDate)}</small></div>
+        <div><span>Прогноз</span><strong>{formatDate(localPlan.forecastDate??localPlan.targetDate)}</strong><small>{localPlan.forecastDate&&localPlan.forecastDate>localPlan.targetDate?"есть отклонение":"по плану"}</small></div>
         <div><span>Готовность</span><strong>{readiness}%</strong><small>{launchBlocked?"есть препятствия":"критических препятствий нет"}</small></div>
         <div><span>Фаза</span><strong>{phaseLabels[localPlan.phase]??localPlan.phase}</strong><small>{localPlan.phase==="active"?"стабилизация "+localPlan.stabilizationDays+" дн.":"управляется планом"}</small></div>
         <div><span>Допуск</span><strong>{localPlan.contractGate==="blocked"?"Договор не готов":localPlan.contractGate==="exception"?"По исключению":"Разрешён"}</strong><small>{localPlan.contractStatus==="signed"?"договор подписан":localPlan.contractGate==="exception"?"согласовано исключение":"контроль договора"}</small></div>
@@ -385,12 +388,12 @@ export function LaunchExecutionWorkspace({
     {tab==="summary"&&<div className="launch-summary-layout">
       <div className="launch-summary-main">
         <section className="launch-card launch-critical-card">
-          <header><div><h3>Критично сейчас</h3><p>То, что влияет на ближайший вывод и дату запуска.</p></div><span>{blockingTasks.length+(staffingGap>0?1:0)+(siteVisitBlocker?1:0)+(contractBlocked?1:0)}</span></header>
+          <header><div><h3>Критично сейчас</h3><p>То, что влияет на ближайший вывод и дату запуска.</p></div><span>{attentionTasks.length+(staffingGap>0?1:0)+(siteVisitBlocker?1:0)+(contractBlocked?1:0)}</span></header>
           <div className="launch-action-list">
             {contractBlocked&&<div className="launch-action-static"><div><strong>Договор не даёт допуск к запуску</strong><small>Нужно подписать договор либо оформить согласованное исключение.</small></div></div>}
             {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><div><strong>Не хватает {staffingGap} чел. к {nextWave?formatDate(nextWave.targetDate):"ближайшей контрольной точке"}</strong><small>План комплектования отстаёт от контрольной точки</small></div><ChevronRight size={16}/></button>}
             {siteVisitBlocker&&primaryVisit&&<button type="button" onClick={()=>openVisit(primaryVisit)}><div><strong>Первичный выезд не завершён</strong><small>{primaryVisit.scheduledDate?"План "+formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · осталось уточнить {visitStats.unresolvedRequired}</small></div><ChevronRight size={16}/></button>}
-            {blockingTasks.slice(0,5).map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
+            {attentionTasks.slice(0,5).map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
             {!launchBlocked&&<div className="launch-empty-positive">Критических препятствий к запуску не зафиксировано.</div>}
           </div>
         </section>
@@ -501,12 +504,12 @@ export function LaunchExecutionWorkspace({
 
     {tab==="issues"&&<div className="launch-issues-view">
       <section className="launch-card">
-        <header><div><h3>Проблемы и блокеры</h3><p>Конкретные причины, которые могут сдвинуть запуск или следующую волну персонала.</p></div><span>{blockingTasks.length+visitIssues.length+(staffingGap>0?1:0)+(contractBlocked?1:0)}</span></header>
+        <header><div><h3>Проблемы и блокеры</h3><p>Конкретные причины, которые могут сдвинуть запуск или следующую волну персонала.</p></div><span>{attentionTasks.length+visitIssues.length+(staffingGap>0?1:0)+(contractBlocked?1:0)}</span></header>
         <div className="launch-issue-list">
           {contractBlocked&&<div className="launch-issue-static"><span className="launch-issue-source">Договор</span><div><strong>Нет допуска к запуску</strong><small>Договор не подписан и исключение не согласовано.</small></div></div>}
           {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><span className="launch-issue-source">Персонал</span><div><strong>Дефицит {staffingGap} чел. к контрольной точке</strong><small>{nextWave?formatDate(nextWave.targetDate):"Текущий план комплектования"} · перейти к волнам вывода</small></div><ChevronRight size={16}/></button>}
           {visitIssues.map(item=><button type="button" key={item.id} onClick={()=>primaryVisit&&openVisit(primaryVisit)}><span className="launch-issue-source">Выезд</span><div><strong>{item.label}</strong><small>{item.status==="issue"?"Зафиксирована проблема":"Вопрос остался без ответа"}{item.blocksLaunch?" · блокирует запуск":""}</small></div><ChevronRight size={16}/></button>)}
-          {blockingTasks.map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><span className="launch-issue-source">{categoryLabels[row.category??"other"]??"План"}</span><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
+          {attentionTasks.map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><span className="launch-issue-source">{categoryLabels[row.category??"other"]??"План"}</span><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
           {!launchBlocked&&<div className="launch-empty-positive">Открытых блокеров нет.</div>}
         </div>
       </section>

@@ -1,7 +1,14 @@
 BEGIN;
 
 ALTER TABLE launches
-  ADD COLUMN IF NOT EXISTS stabilization_days integer NOT NULL DEFAULT 7 CHECK (stabilization_days BETWEEN 0 AND 60);
+  ADD COLUMN IF NOT EXISTS stabilization_days integer NOT NULL DEFAULT 7 CHECK (stabilization_days BETWEEN 0 AND 60),
+  ADD COLUMN IF NOT EXISTS actual_start_date date,
+  ADD COLUMN IF NOT EXISTS completed_at timestamptz;
+
+UPDATE launches l
+SET actual_start_date=o.actual_start_date
+FROM objects o
+WHERE o.id=l.object_id AND l.actual_start_date IS NULL AND o.actual_start_date IS NOT NULL;
 
 ALTER TABLE launch_tasks
   ADD COLUMN IF NOT EXISTS category text NOT NULL DEFAULT 'other',

@@ -61,6 +61,12 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           FROM unnest(${dependencies}::uuid[]) dep
         `;
       }
+      await tx`
+        UPDATE launches l SET forecast_date=GREATEST(
+          l.target_date,
+          COALESCE((SELECT max(t.end_date) FROM launch_tasks t WHERE t.launch_id=l.id AND t.blocks_launch AND t.status NOT IN ('done','cancelled')),l.target_date)
+        ) WHERE l.id=${id}::uuid
+      `;
       return row;
     }));
     return NextResponse.json(result,{status:201});

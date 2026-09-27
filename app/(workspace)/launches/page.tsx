@@ -51,7 +51,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     const rows=tasks.filter(row=>(row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId));
     const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId);
     const fact=analytics.find(row=>row.objectId===plan.objectId);
-    const taskBlockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
+    const taskBlockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked")).length;
     const visitBlocker=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="completed"&&item.status!=="cancelled");
     const nextTask=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&row.endDate).sort((a,b)=>(a.endDate??"").localeCompare(b.endDate??""))[0]??null;
     const sortedWaves=[...planWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate));
@@ -73,7 +73,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
 
   const upcoming=plans.filter(row=>!["completed","cancelled"].includes(row.phase)&&daysTo(row.targetDate)>=0&&daysTo(row.targetDate)<=14).length;
   const allBlockers=plans.reduce((sum,plan)=>{
-    const taskCount=tasks.filter(row=>((row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId))&&row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
+    const taskCount=tasks.filter(row=>((row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId))&&row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked")).length;
     const visitCount=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="completed"&&item.status!=="cancelled")?1:0;
     const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId).filter(row=>row.status!=="cancelled");
     const fact=analytics.find(row=>row.objectId===plan.objectId);
@@ -109,7 +109,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
           <td><Link className="cell-title" href={"/launches?scope="+scope+"&object="+plan.objectId}>{plan.object}</Link><span className="cell-sub">{plan.client}</span></td>
           <td>{plan.ownerName??"Не назначен"}</td>
           <td><span className="launch-phase-text">{phaseLabels[plan.phase]??plan.phase}</span></td>
-          <td><strong>{formatDate(plan.targetDate)}</strong>{forecastDelta>0?<span className="cell-sub">прогноз +{forecastDelta} дн.</span>:<span className="cell-sub">{daysTo(plan.targetDate)>=0?"через "+daysTo(plan.targetDate)+" дн.":"дата прошла"}</span>}</td>
+          <td><strong>{formatDate(plan.targetDate)}</strong>{plan.actualStartDate?<span className="cell-sub">факт {formatDate(plan.actualStartDate)}</span>:forecastDelta>0?<span className="cell-sub">прогноз +{forecastDelta} дн.</span>:<span className="cell-sub">{daysTo(plan.targetDate)>=0?"через "+daysTo(plan.targetDate)+" дн.":"дата прошла"}</span>}</td>
           <td><div className="launch-portfolio-progress"><div className="progress"><span style={{width:Math.min(100,readiness)+"%"}}/></div><span>{readiness}%</span></div></td>
           <td><strong>{staffingReady} / {staffingPlan}</strong><span className="cell-sub">{Math.max(staffingPlan-staffingReady,0)?("не хватает "+Math.max(staffingPlan-staffingReady,0)):"по плану"}</span></td>
           <td><span className={blockers?"launch-blocker-count":""}>{blockers||"—"}</span></td>

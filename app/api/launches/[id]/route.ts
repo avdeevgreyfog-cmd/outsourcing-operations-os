@@ -60,7 +60,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         target_date=${nextTarget}::date,
         forecast_date=CASE WHEN forecast_date IS NULL OR forecast_date=${scope.targetDate}::date THEN ${nextTarget}::date ELSE forecast_date END,
         phase=COALESCE(${body.phase??null},phase),
-        stabilization_days=COALESCE(${body.stabilizationDays??null}::int,stabilization_days)
+        stabilization_days=COALESCE(${body.stabilizationDays??null}::int,stabilization_days),
+        actual_start_date=CASE WHEN ${body.phase??null}='active' THEN COALESCE(actual_start_date,current_date) ELSE actual_start_date END,
+        completed_at=CASE WHEN ${body.phase??null}='completed' THEN COALESCE(completed_at,now()) ELSE completed_at END
         WHERE id=${id}::uuid`;
       if(body.phase==="active"){
         await tx`UPDATE objects SET status='launch',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
@@ -70,6 +72,12 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         await tx`UPDATE objects SET status='active',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
         await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND lower(title) LIKE '%стабилиз%'`;
       }
+      await tx`
+        UPDATE launches l SET forecast_date=GREATEST(
+          l.target_date,
+          COALESCE((SELECT max(t.end_date) FROM launch_tasks t WHERE t.launch_id=l.id AND t.blocks_launch AND t.status NOT IN ('done','cancelled')),l.target_date)
+        ) WHERE l.id=${id}::uuid
+      `;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'launch',${id}::uuid,'launch_plan_updated','Обновлён план запуска',${tx.json({targetDate:nextTarget,phase:body.phase??scope.phase,shiftLinked:body.shiftLinked})})`;
       return {id,targetDate:nextTarget,phase:body.phase??scope.phase};
