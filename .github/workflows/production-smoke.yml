@@ -50,10 +50,11 @@ jobs:
           demo_headers="$(mktemp)"
           work_headers="$(mktemp)"
           curl -sS -D "$demo_headers" -o /dev/null "$BASE_URL/demo"
-          curl -sS -D "$work_headers" -o /dev/null "$BASE_URL/work"
+          curl -sS -D "$work_headers" -o /tmp/work.html "$BASE_URL/work"
           grep -qi "^location: $BASE_URL/" "$demo_headers"
           grep -qi 'oo_workspace_mode=demo' "$demo_headers"
-          grep -qi "^location: $BASE_URL/login?force=work" "$work_headers"
+          grep -qi "^HTTP/2 200" "$work_headers"
+          grep -q 'Открываем рабочую организацию' /tmp/work.html
           grep -qi 'oo_workspace_mode=' "$work_headers"
 
       - name: Verify login surface
