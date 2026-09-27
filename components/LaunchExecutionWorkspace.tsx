@@ -15,7 +15,8 @@ import type {
   LaunchStaffingWaveRow,
 } from "@/lib/operations/launch-management";
 import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
-import type { SiteVisitChecklistItem, SiteVisitChecklistStatus } from "@/lib/operations/launch-checklist";
+import type { SiteVisitAnswerKind, SiteVisitChecklistItem, SiteVisitChecklistStatus } from "@/lib/operations/launch-checklist";
+import type { ObjectOperationalFactRow } from "@/lib/operations/object-facts";
 
 type LaunchTab="summary"|"plan"|"staffing"|"visit"|"issues";
 type PlanView="gantt"|"table";
@@ -25,6 +26,8 @@ type TaskDraft={
 };
 type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;status:"planned"|"in_progress"|"completed"|"cancelled";note:string};
 type VisitDraft={id:string|null;scheduledDate:string;status:string;checklist:SiteVisitChecklistItem[];notes:string};
+type VisitFilter="all"|"pending"|"issues";
+type QuestionDraft={id:string|null;section:string;label:string;category:string;answerKind:SiteVisitAnswerKind;required:boolean;blocksLaunch:boolean;shareRecruiting:boolean;hidden:boolean};
 
 const categoryLabels:Record<string,string>={
   contracts:"Договоры и клиент",
@@ -84,7 +87,7 @@ function uniqueCandidates(rows:RecruitingApplicationRow[]){
 }
 
 export function LaunchExecutionWorkspace({
-  plan,tasks,waves,visits,analytics,applications,forecast,assignees,recruitingVisible,canEdit,demo,initialTab="summary",
+  plan,tasks,waves,visits,analytics,applications,forecast,facts,assignees,recruitingVisible,canEdit,demo,initialTab="summary",
 }:{
   plan:LaunchPlanRow;
   tasks:LaunchTaskRow[];
@@ -93,6 +96,7 @@ export function LaunchExecutionWorkspace({
   analytics:OperationsAnalyticsRow|null;
   applications:RecruitingApplicationRow[];
   forecast:StaffingForecastRow[];
+  facts:ObjectOperationalFactRow[];
   assignees:LaunchAssigneeOption[];
   recruitingVisible:boolean;
   canEdit:boolean;
@@ -109,6 +113,10 @@ export function LaunchExecutionWorkspace({
   const [taskEditor,setTaskEditor]=useState<TaskDraft|null>(null);
   const [waveEditor,setWaveEditor]=useState<WaveDraft|null>(null);
   const [visitEditor,setVisitEditor]=useState<VisitDraft|null>(null);
+  const [visitSection,setVisitSection]=useState("");
+  const [visitFilter,setVisitFilter]=useState<VisitFilter>("all");
+  const [visitShowHidden,setVisitShowHidden]=useState(false);
+  const [questionEditor,setQuestionEditor]=useState<QuestionDraft|null>(null);
   const [planEditor,setPlanEditor]=useState(false);
   const [planDate,setPlanDate]=useState(plan.targetDate);
   const [stabilizationDays,setStabilizationDays]=useState(plan.stabilizationDays);
