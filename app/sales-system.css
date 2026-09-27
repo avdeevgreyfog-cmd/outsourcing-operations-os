@@ -3396,3 +3396,8 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   flex:0 0 auto;
   margin:0;
 }
+
+:root[data-operis-ui="new"] .object-launch-managed-field{min-height:38px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--border);border-radius:6px;background:var(--panel-2)}
+:root[data-operis-ui="new"] .object-launch-managed-field strong{font-size:12.5px;font-weight:620;color:var(--text)}
+:root[data-operis-ui="new"] .object-launch-managed-field a{font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
+:root[data-operis-ui="new"] .object-launch-managed-field a:hover{text-decoration:underline;text-underline-offset:3px}

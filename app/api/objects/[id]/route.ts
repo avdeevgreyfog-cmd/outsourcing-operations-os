@@ -102,6 +102,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         if(!legalEntity)throw new Error("Юридическое лицо недоступно");
       }
 
+      if(body.status!==undefined&&body.status!==current.status){
+        const [launch]=await tx<Array<{phase:string}>>`
+          SELECT phase FROM launches WHERE object_id=${id}::uuid ORDER BY created_at DESC LIMIT 1
+        `;
+        if(launch&&(["prelaunch","launch"].includes(current.status)||["prelaunch","launch"].includes(body.status))){
+          throw new Error("Статусы подготовки и запуска управляются из плана запуска объекта");
+        }
+      }
       const nextStatus=body.status??current.status;
       const nextActualStart=body.actualStartDate===undefined?current.actualStartDate:body.actualStartDate;
       const nextActualEnd=body.actualEndDate===undefined?current.actualEndDate:body.actualEndDate;

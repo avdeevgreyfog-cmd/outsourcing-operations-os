@@ -37,6 +37,8 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
 
   const previousOwner=object.ownerUserId&&ownerUserId!==object.ownerUserId?options.managers.find(item=>item.id===object.ownerUserId):null;
   const visibleAdditional=useMemo(()=>additionalManagers.filter(id=>id!==ownerUserId),[additionalManagers,ownerUserId]);
+  const launchManaged=["prelaunch","launch"].includes(object.status);
+  const operationalStatusOptions=statusOptions.filter(([value])=>["active","paused","completed","archived"].includes(value));
 
   function toggle(list:string[],set:(value:string[])=>void,id:string){set(list.includes(id)?list.filter(value=>value!==id):[...list,id]);}
   function changeStatus(next:string){
@@ -82,8 +84,12 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         <label>Название объекта<input value={name} onChange={e=>setName(e.target.value)}/></label>
         <label>Наше юрлицо{canAssign?<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select>:<input value={object.legalEntity??"Не указано"} disabled/>}</label>
         <label className="wide">Адрес<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Адрес объекта"/></label>
-        <label>Плановая дата запуска<input type="date" value={targetStartDate} onChange={e=>setTargetStartDate(e.target.value)}/><small>Используется на этапах подготовки и запуска.</small></label>
-        <label>Статус объекта<select value={status} onChange={e=>changeStatus(e.target.value)}>{statusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><small>Статус меняется здесь и применяется после сохранения настроек.</small></label>
+        {launchManaged
+          ?<label>Плановая дата запуска<div className="object-launch-managed-field"><strong>{targetStartDate?new Intl.DateTimeFormat("ru-RU").format(new Date(targetStartDate+"T00:00:00")):"Не указана"}</strong><Link href={"/launches?object="+object.id}>Открыть план запуска</Link></div><small>На этапе подготовки дата управляется из плана запуска.</small></label>
+          :<label>Плановая дата запуска<input type="date" value={targetStartDate} onChange={e=>setTargetStartDate(e.target.value)}/><small>Историческая плановая дата объекта.</small></label>}
+        {launchManaged
+          ?<label>Статус объекта<div className="object-launch-managed-field"><strong>{statusOptions.find(([value])=>value===status)?.[1]??status}</strong><Link href={"/launches?object="+object.id}>Управлять запуском</Link></div><small>Первый фактический выход переводит объект в «Запуск», завершение стабилизации — в «Активен».</small></label>
+          :<label>Статус объекта<select value={status} onChange={e=>changeStatus(e.target.value)}>{operationalStatusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><small>После завершения запуска здесь доступны операционные статусы объекта.</small></label>}
         {["active","paused","completed","archived"].includes(status)&&<label>Фактическая дата начала работы<input type="date" value={actualStartDate} onChange={e=>setActualStartDate(e.target.value)}/><small>От этой даты считается период работы объекта.</small></label>}
         {["completed","archived"].includes(status)&&<label>Дата завершения работы<input type="date" value={actualEndDate} onChange={e=>setActualEndDate(e.target.value)}/><small>Фиксирует итоговый период работы объекта.</small></label>}
       </div>

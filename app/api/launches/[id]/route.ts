@@ -64,6 +64,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         actual_start_date=CASE WHEN ${body.phase??null}='active' THEN COALESCE(actual_start_date,current_date) ELSE actual_start_date END,
         completed_at=CASE WHEN ${body.phase??null}='completed' THEN COALESCE(completed_at,now()) ELSE completed_at END
         WHERE id=${id}::uuid`;
+      if(body.targetDate&&body.targetDate!==scope.targetDate){
+        await tx`UPDATE objects SET target_start_date=${nextTarget}::date,updated_at=now() WHERE id=${scope.objectId}::uuid`;
+      }
       if(body.phase==="active"){
         await tx`UPDATE objects SET status='launch',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
         await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND task_kind='milestone' AND lower(title) IN ('первый выход','старт объекта')`;
@@ -71,6 +74,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       if(body.phase==="completed"){
         await tx`UPDATE objects SET status='active',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
         await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND lower(title) LIKE '%стабилиз%'`;
+      }
+      if(body.phase==="cancelled"){
+        await tx`UPDATE objects SET status='archived',updated_at=now() WHERE id=${scope.objectId}::uuid`;
       }
       await tx`
         UPDATE launches l SET forecast_date=GREATEST(
