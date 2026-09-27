@@ -24,6 +24,23 @@ for (const filename of files) {
   const [exists] = await sql`SELECT 1 AS ok FROM schema_migrations WHERE filename=${filename}`;
   if (exists) continue;
   const body = await fs.readFile(path.join(dir, filename), "utf8");
+
+  const destructive=/\\b(?:DELETE\\s+FROM|TRUNCATE(?:\\s+TABLE)?|DROP\\s+(?:TABLE|SCHEMA))\\b/i.test(body);
+  if(destructive && process.env.ALLOW_PROTECTED_TENANT_DESTRUCTIVE_MIGRATION!=="1"){
+    const protectedTenants=await sql`
+      SELECT id::text id,slug
+      FROM organizations
+      WHERE settings->>'dataProtection'='persistent'
+    `;
+    const protectedTarget=protectedTenants.find((tenant)=>body.includes(tenant.id)||body.includes(tenant.slug));
+    if(protectedTarget){
+      throw new Error(
+        `Refusing destructive migration ${filename}: it targets persistent workspace ${protectedTarget.slug}. `+
+        "Customer data resets must never run as normal schema migrations."
+      );
+    }
+  }
+
   console.log(`Applying ${filename}`);
   await sql.unsafe(body);
   await sql`INSERT INTO schema_migrations(filename) VALUES (${filename})`;
