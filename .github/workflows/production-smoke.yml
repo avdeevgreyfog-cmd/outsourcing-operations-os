@@ -40,6 +40,10 @@ jobs:
           const status = JSON.parse(fs.readFileSync("/tmp/status.json", "utf8"));
           if (status.ok !== true) throw new Error("runtime status is not healthy");
           if (status.databaseConfigured !== true) throw new Error("DATABASE_URL is not configured in production");
+          if (!status.databaseIdentity) throw new Error("production database identity is unavailable");
+          if (status.environment !== "production") {
+            throw new Error(`production deployment must report APP_ENVIRONMENT=production; got ${status.environment ?? "unknown"}`);
+          }
           if (status.demoAvailable !== true) throw new Error("demo workspace is expected to remain available");
           NODE
 
