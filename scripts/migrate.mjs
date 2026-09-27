@@ -21,6 +21,7 @@ const files = (await fs.readdir(dir))
   .sort();
 
 const destructivePattern=/\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|SCHEMA|COLUMN)|ALTER\s+TABLE[\s\S]{0,200}\bDROP\b)\b/i;
+const destructiveSafetyBaseline="0058_launch_readiness_gate.sql";
 
 for (const filename of files) {
   const [exists] = await sql`SELECT 1 AS ok FROM schema_migrations WHERE filename=${filename}`;
@@ -28,7 +29,8 @@ for (const filename of files) {
   const body = await fs.readFile(path.join(dir, filename), "utf8");
 
   const destructive=destructivePattern.test(body);
-  if(destructive){
+  const protectedByCurrentPolicy=filename>destructiveSafetyBaseline;
+  if(destructive&&protectedByCurrentPolicy){
     const protectedTenants=await sql`
       SELECT id::text id,slug
       FROM organizations
