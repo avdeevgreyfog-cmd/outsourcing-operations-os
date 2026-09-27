@@ -175,7 +175,10 @@ export function LaunchExecutionWorkspace({
     });
   },[localTasks,localWaves,localVisits,plan.id,plan.objectId,plan.object,plan.organizationId,plan.ownerName,plan.assigneeUserIds]);
 
-  const staffingGap=nextWave?.gap??Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
+  const staffingGap=forecast.length
+    ?forecast.reduce((sum,row)=>sum+Math.max(Number(row.required)-Number(row.working)-Number(row.preparing),0),0)
+    :Math.max((analytics?.required??0)-(analytics?.working??0)-(analytics?.preparing??0),0);
+  const nextWaveGap=nextWave?.gap??staffingGap;
   const siteVisitBlocker=!primaryVisit||primaryVisit.status!=="completed";
   const visitIssueBlocker=Boolean(primaryVisit?.checklist.some(item=>item.status==="issue"&&item.blocksLaunch));
   const contractBlocked=localPlan.contractGate==="blocked";
@@ -398,7 +401,7 @@ export function LaunchExecutionWorkspace({
           <header><div><h3>Критично сейчас</h3><p>То, что влияет на ближайший вывод и дату запуска.</p></div><span>{attentionTasks.length+(staffingGap>0?1:0)+(siteVisitBlocker?1:0)+(contractBlocked?1:0)}</span></header>
           <div className="launch-action-list">
             {contractBlocked&&<div className="launch-action-static"><div><strong>Договор не даёт допуск к запуску</strong><small>Нужно подписать договор либо оформить согласованное исключение.</small></div></div>}
-            {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><div><strong>Не хватает {staffingGap} чел. к {nextWave?formatDate(nextWave.targetDate):"ближайшей контрольной точке"}</strong><small>План комплектования отстаёт от контрольной точки</small></div><ChevronRight size={16}/></button>}
+            {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><div><strong>До полной готовности не хватает {staffingGap} чел.</strong><small>{nextWave&&nextWaveGap>0?("Ближайшая волна "+formatDate(nextWave.targetDate)+" · дефицит "+nextWaveGap):"Проверьте комплектование по специальностям"}</small></div><ChevronRight size={16}/></button>}
             {siteVisitBlocker&&(primaryVisit
               ?<button type="button" onClick={()=>openVisit(primaryVisit)}><div><strong>Первичный выезд не завершён</strong><small>{primaryVisit.scheduledDate?"План "+formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · осталось уточнить {visitStats.unresolvedRequired}</small></div><ChevronRight size={16}/></button>
               :editable?<button type="button" onClick={()=>void createVisit()}><div><strong>Первичный выезд не запланирован</strong><small>Перед запуском нужно пройти чек-лист условий площадки.</small></div><ChevronRight size={16}/></button>
@@ -575,7 +578,7 @@ export function LaunchExecutionWorkspace({
         <header><div><h3>Проблемы и блокеры</h3><p>Конкретные причины, которые могут сдвинуть запуск или следующую волну персонала.</p></div><span>{attentionTasks.length+visitIssues.length+(staffingGap>0?1:0)+(contractBlocked?1:0)}</span></header>
         <div className="launch-issue-list">
           {contractBlocked&&<div className="launch-issue-static"><span className="launch-issue-source">Договор</span><div><strong>Нет допуска к запуску</strong><small>Договор не подписан и исключение не согласовано.</small></div></div>}
-          {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><span className="launch-issue-source">Персонал</span><div><strong>Дефицит {staffingGap} чел. к контрольной точке</strong><small>{nextWave?formatDate(nextWave.targetDate):"Текущий план комплектования"} · перейти к волнам вывода</small></div><ChevronRight size={16}/></button>}
+          {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><span className="launch-issue-source">Персонал</span><div><strong>До полной готовности не хватает {staffingGap} чел.</strong><small>{nextWave&&nextWaveGap>0?("Ближайшая волна "+formatDate(nextWave.targetDate)+" · дефицит "+nextWaveGap):"Есть незакрытые позиции по специальностям"} · перейти к волнам вывода</small></div><ChevronRight size={16}/></button>}
           {visitIssues.map(item=><button type="button" key={item.id} onClick={()=>primaryVisit&&openVisit(primaryVisit)}><span className="launch-issue-source">Выезд</span><div><strong>{item.label}</strong><small>{item.status==="issue"?"Зафиксирована проблема":"Вопрос остался без ответа"}{item.blocksLaunch?" · блокирует запуск":""}</small></div><ChevronRight size={16}/></button>)}
           {attentionTasks.map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><span className="launch-issue-source">{categoryLabels[row.category??"other"]??"План"}</span><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
           {!launchBlocked&&<div className="launch-empty-positive">Открытых блокеров нет.</div>}

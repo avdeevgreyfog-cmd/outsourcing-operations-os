@@ -40,23 +40,42 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE launch_id=${id}::uuid AND visit_type='primary' AND status='completed'
         `;
         if((visit?.count??0)===0)throw new Error("Запуск заблокирован: первичный выезд на объект не завершён");
-        const [staffing]=await tx<Array<{required:number;working:number;preparing:number}>>`
-          SELECT
-            COALESCE((SELECT sum(n.count_required)::int FROM needs n
-              WHERE n.object_id=${scope.objectId}::uuid AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')),0)::int required,
-            COALESCE((SELECT count(DISTINCT woa.worker_id)::int
-              FROM worker_object_assignments woa
-              JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
-              WHERE woa.object_id=${scope.objectId}::uuid
-                AND woa.effective_from<=current_date AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)),0)::int working,
-            COALESCE((SELECT count(DISTINCT ca.candidate_id)::int
-              FROM candidate_applications ca
-              WHERE ca.object_id=${scope.objectId}::uuid
-                AND ca.stage IN ('preparation','first_shift')
-                AND ca.actual_start_at IS NULL),0)::int preparing
+        const [staffing]=await tx<Array<{gap:number}>>`
+          WITH demand AS (
+            SELECT n.specialty_id,sum(n.count_required)::int required
+            FROM needs n
+            WHERE n.object_id=${scope.objectId}::uuid
+              AND n.source_kind<>'replacement'
+              AND n.status NOT IN ('cancelled','archived','closed')
+            GROUP BY n.specialty_id
+          ), readiness AS (
+            SELECT d.specialty_id,d.required,
+              COALESCE((
+                SELECT count(DISTINCT woa.worker_id)::int
+                FROM worker_object_assignments woa
+                JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
+                WHERE woa.object_id=${scope.objectId}::uuid
+                  AND woa.specialty_id=d.specialty_id
+                  AND woa.effective_from<=current_date
+                  AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
+              ),0)::int working,
+              COALESCE((
+                SELECT count(DISTINCT ca.candidate_id)::int
+                FROM candidate_applications ca
+                JOIN needs cn ON cn.id=ca.need_id
+                WHERE ca.object_id=${scope.objectId}::uuid
+                  AND cn.object_id=${scope.objectId}::uuid
+                  AND cn.specialty_id=d.specialty_id
+                  AND cn.source_kind<>'replacement'
+                  AND cn.status NOT IN ('cancelled','archived','closed')
+                  AND ca.stage IN ('preparation','first_shift')
+                  AND ca.actual_start_at IS NULL
+              ),0)::int preparing
+            FROM demand d
+          )
+          SELECT COALESCE(sum(GREATEST(required-working-preparing,0)),0)::int gap FROM readiness
         `;
-        const staffingGap=Math.max((staffing?.required??0)-(staffing?.working??0)-(staffing?.preparing??0),0);
-        if(staffingGap>0)throw new Error(`Запуск заблокирован: не хватает подготовленного персонала — ${staffingGap}`);
+        if((staffing?.gap??0)>0)throw new Error(`Запуск заблокирован: не хватает подготовленного персонала — ${staffing.gap}`);
       }
       if(body.phase==="completed"&&scope.phase!=="active")throw new Error("Завершить можно только запуск, который находится в фазе запуска / стабилизации");
 
