@@ -1,7 +1,9 @@
 import postgres from "postgres";
 
 if(!process.env.DATABASE_URL)throw new Error("DATABASE_URL is required");
+if(!process.env.CI_SMOKE_PASSWORD)throw new Error("CI_SMOKE_PASSWORD is required");
 const sql=postgres(process.env.DATABASE_URL,{max:1,prepare:false});
+const password=process.env.CI_SMOKE_PASSWORD;
 
 const org="00000000-0000-4000-8000-000000000002";
 const user="10000000-0000-4000-8000-000000000101";
@@ -12,7 +14,7 @@ const object="b3000000-0000-4000-8000-000000000901";
 try{
   await sql`
     UPDATE app_users
-    SET password_hash=crypt('ci-workspace-pass',gen_salt('bf')),is_active=true
+    SET password_hash=crypt(${password},gen_salt('bf')),is_active=true
     WHERE id=${user}::uuid
   `;
   await sql`
