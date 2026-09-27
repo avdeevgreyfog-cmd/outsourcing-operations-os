@@ -26,3 +26,17 @@ test("new migrations cannot reset a persistent customer workspace",()=>{
     "Persistent customer workspaces must never be targets of destructive schema migrations. Use a demo-only reset path instead.",
   );
 });
+
+
+test("migration runner is fail-closed for destructive changes",()=>{
+  const runner=readFileSync(fileURLToPath(new URL("../scripts/migrate.mjs",import.meta.url)),"utf8");
+  assert.match(runner,/ALLOW_DESTRUCTIVE_MIGRATION/);
+  assert.match(runner,/ALLOW_PROTECTED_TENANT_DESTRUCTIVE_MIGRATION/);
+  assert.match(runner,/persistent customer workspaces exist/);
+  assert.match(runner,/sql\.begin/,"each migration must be recorded atomically with its SQL");
+});
+
+test("application build never runs database migrations",()=>{
+  const build=readFileSync(fileURLToPath(new URL("../scripts/build.mjs",import.meta.url)),"utf8");
+  assert.doesNotMatch(build,/migrate\.mjs|db:migrate/);
+});
