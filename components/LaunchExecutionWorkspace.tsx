@@ -126,9 +126,9 @@ export function LaunchExecutionWorkspace({
 
   const objectApplications=useMemo(()=>uniqueCandidates(applications.filter(row=>row.objectId===plan.objectId)),[applications,plan.objectId]);
   const waveRows=useMemo(()=>{
-    let cumulative=0;
-    return [...localWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate)).map(wave=>{
-      cumulative+=wave.plannedCount;
+    const sorted=[...localWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate));
+    return sorted.map((wave,index)=>{
+      const cumulative=sorted.slice(0,index+1).reduce((sum,row)=>sum+row.plannedCount,0);
       const ready=objectApplications.filter(row=>readyStages.has(row.stage)&&(!row.plannedStartDate||row.plannedStartDate<=wave.targetDate)).length;
       const arrived=objectApplications.filter(row=>Boolean(row.plannedArrivalAt)&&String(row.plannedArrivalAt).slice(0,10)<=wave.targetDate).length;
       const started=objectApplications.filter(row=>Boolean(row.actualStartAt)&&String(row.actualStartAt).slice(0,10)<=wave.targetDate).length;
