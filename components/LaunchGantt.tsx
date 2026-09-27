@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Flag, GitBranch, X } from "lucide-react";
 import { KeyValue, Metric, Status } from "@/components/UI";
 import type { LaunchTaskRow } from "@/lib/data/service";
@@ -18,11 +18,20 @@ function label(date:Date){
   return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(date);
 }
 
-export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
+export function LaunchGantt({
+  rows,
+  onSelectTask,
+  categoryLabels,
+}:{
+  rows:LaunchTaskRow[];
+  onSelectTask?:(task:LaunchTaskRow)=>void;
+  categoryLabels?:Record<string,string>;
+}){
   const [selected,setSelected]=useState<LaunchTaskRow|null>(null);
   const critical=rows.filter(row=>row.critical&&row.status!=="done").length;
   const milestones=rows.filter(row=>row.milestone).length;
-  const progress=rows.length?Math.round(rows.reduce((sum,row)=>sum+Number(row.progress||0),0)/rows.length):0;
+  const progressRows=rows.filter(row=>row.taskKind!=="staffing_wave"&&row.taskKind!=="site_visit");
+  const progress=progressRows.length?Math.round(progressRows.reduce((sum,row)=>sum+Number(row.progress||0),0)/progressRows.length):0;
   const baselineChanges=rows.filter(row=>row.baselineStartDate&&row.baselineEndDate&&(row.baselineStartDate!==row.startDate||row.baselineEndDate!==row.endDate)).length;
 
   const timeline=useMemo(()=>{
@@ -41,10 +50,12 @@ export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
     return Math.max(0,Math.min(100,(date.getTime()-timeline.start.getTime())/(timeline.span*DAY)*100));
   };
   const width=(start?:string|null,end?:string|null)=>Math.max(1,pos(end)-pos(start)+100/timeline.span);
+  const open=(task:LaunchTaskRow)=>onSelectTask?onSelectTask(task):setSelected(task);
 
+  let previousCategory="";
   return <>
     <div className="gantt-summary">
-      <Metric label="Задачи" value={rows.length} note="в текущем плане"/>
+      <Metric label="Задачи" value={progressRows.length} note="в текущем плане"/>
       <Metric label="Общий прогресс" value={progress+"%"}/>
       <Metric label="Критические блокеры" value={critical} tone={critical?"bad":"good"}/>
       <Metric label="Контрольные точки" value={milestones}/>
@@ -52,19 +63,27 @@ export function LaunchGantt({ rows }: { rows: LaunchTaskRow[] }) {
     </div>
     <section className="section gantt">
       <div className="gantt-head"><div>Структура работ / задача</div><div className="gantt-dates">{timeline.ticks.map((value,index)=><span key={index}>{index%3===0||index===19?label(value):""}</span>)}</div></div>
-      {rows.map(task=><div className={"gantt-row "+(task.critical?"critical-row":"")} key={task.id}>
-        <button type="button" className="gantt-task-name" style={{paddingLeft:14+task.level*18}} onClick={()=>setSelected(task)}>
-          {task.milestone?<Flag size={13}/>:task.dependencyIds.length?<GitBranch size={13}/>:<span/>}
-          <span><strong>{task.title}</strong><small>{task.owner} · {task.progress}%</small></span>
-        </button>
-        <div className="gantt-timeline">{timeline.ticks.map((_,index)=><i key={index}/>)}
-          {task.baselineStartDate&&task.baselineEndDate&&!task.milestone&&<span className="gantt-baseline" style={{left:pos(task.baselineStartDate)+"%",width:width(task.baselineStartDate,task.baselineEndDate)+"%"}}/>}
-          {task.milestone
-            ?<button type="button" className="gantt-milestone" style={{left:pos(task.startDate)+"%"}} onClick={()=>setSelected(task)} aria-label={task.title}/>
-            :<button type="button" className={"gantt-bar "+(task.critical?"critical":"")} style={{left:pos(task.startDate)+"%",width:width(task.startDate,task.endDate)+"%"}} onClick={()=>setSelected(task)}><span style={{width:task.progress+"%"}}/><em>{task.progress}%</em></button>}
-          {new Date()>=timeline.start&&new Date()<=timeline.end&&<b className="today-line" style={{left:pos(new Date().toISOString().slice(0,10))+"%"}}/>}
-        </div>
-      </div>)}
+      {rows.map(task=>{
+        const category=task.category??"other";
+        const showGroup=Boolean(categoryLabels)&&category!==previousCategory;
+        previousCategory=category;
+        return <Fragment key={task.id}>
+          {showGroup&&<div className="gantt-group-row"><strong>{categoryLabels?.[category]??category}</strong><span/></div>}
+          <div className={"gantt-row "+(task.critical?"critical-row ":"")+(task.taskKind==="staffing_wave"?"gantt-wave-row ":"")+(task.taskKind==="site_visit"?"gantt-visit-row ":"")}>
+            <button type="button" className="gantt-task-name" style={{paddingLeft:14+task.level*18}} onClick={()=>open(task)}>
+              {task.milestone?<Flag size={13}/>:task.dependencyIds.length?<GitBranch size={13}/>:<span/>}
+              <span><strong>{task.title}</strong><small>{task.owner} · {task.taskKind==="staffing_wave"?"контрольная волна":task.taskKind==="site_visit"?"выезд на объект":task.progress+"%"}</small></span>
+            </button>
+            <div className="gantt-timeline">{timeline.ticks.map((_,index)=><i key={index}/>)}
+              {task.baselineStartDate&&task.baselineEndDate&&!task.milestone&&<span className="gantt-baseline" style={{left:pos(task.baselineStartDate)+"%",width:width(task.baselineStartDate,task.baselineEndDate)+"%"}}/>}
+              {task.milestone
+                ?<button type="button" className={"gantt-milestone "+(task.taskKind==="staffing_wave"?"wave":"")} style={{left:pos(task.startDate)+"%"}} onClick={()=>open(task)} aria-label={task.title}/>
+                :<button type="button" className={"gantt-bar "+(task.critical?"critical":"")} style={{left:pos(task.startDate)+"%",width:width(task.startDate,task.endDate)+"%"}} onClick={()=>open(task)}><span style={{width:task.progress+"%"}}/><em>{task.progress}%</em></button>}
+              {new Date()>=timeline.start&&new Date()<=timeline.end&&<b className="today-line" style={{left:pos(new Date().toISOString().slice(0,10))+"%"}}/>}
+            </div>
+          </div>
+        </Fragment>;
+      })}
       {!rows.length&&<div className="empty-inline">В выбранном плане пока нет задач</div>}
       <div className="gantt-legend"><span><i className="baseline"/> Исходный план</span><span><i className="normal"/> Текущий план</span><span><i className="critical"/> Критический путь</span><span><i className="today"/> Сегодня</span></div>
     </section>
