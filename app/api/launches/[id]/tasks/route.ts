@@ -8,6 +8,7 @@ import { withTenant } from "@/lib/db/client";
 const schema=z.object({
   title:z.string().trim().min(2).max(240),
   category:z.string().trim().min(1).max(40).default("other"),
+  ownerUserId:z.string().uuid().nullable().optional(),
   startDate:z.string().date(),
   endDate:z.string().date(),
   progress:z.number().min(0).max(100).default(0),
@@ -31,9 +32,17 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM launches l JOIN objects o ON o.id=l.object_id WHERE l.id=${id}::uuid
       `;
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
+      const ownerUserId=body.ownerUserId??scope.ownerUserId;
+      if(ownerUserId){
+        const [owner]=await tx<Array<{id:string}>>`
+          SELECT m.user_id id FROM organization_memberships m
+          WHERE m.organization_id=${actor.organizationId}::uuid AND m.user_id=${ownerUserId}::uuid AND m.status='active' LIMIT 1
+        `;
+        if(!owner)throw new Error("Ответственный недоступен");
+      }
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,category,task_kind,blocks_launch,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.title},${scope.ownerUserId}::uuid,${body.startDate}::date,${body.endDate}::date,${body.startDate}::date,${body.endDate}::date,${body.progress},${body.status},${body.risk},${body.milestone},${body.blocksLaunch},${body.category},${body.milestone?"milestone":"task"},${body.blocksLaunch},${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.title},${ownerUserId}::uuid,${body.startDate}::date,${body.endDate}::date,${body.startDate}::date,${body.endDate}::date,${body.progress},${body.status},${body.risk},${body.milestone},${body.blocksLaunch},${body.category},${body.milestone?"milestone":"task"},${body.blocksLaunch},${actor.userId}::uuid)
         RETURNING id
       `;
       return row;

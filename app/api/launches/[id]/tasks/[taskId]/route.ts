@@ -8,6 +8,7 @@ import { withTenant } from "@/lib/db/client";
 const schema=z.object({
   title:z.string().trim().min(2).max(240).optional(),
   category:z.string().trim().min(1).max(40).optional(),
+  ownerUserId:z.string().uuid().nullable().optional(),
   startDate:z.string().date().optional(),
   endDate:z.string().date().optional(),
   progress:z.number().min(0).max(100).optional(),
@@ -33,12 +34,20 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
         FOR UPDATE
       `;
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
+      if(body.ownerUserId){
+        const [owner]=await tx<Array<{id:string}>>`
+          SELECT m.user_id id FROM organization_memberships m
+          WHERE m.organization_id=${actor.organizationId}::uuid AND m.user_id=${body.ownerUserId}::uuid AND m.status='active' LIMIT 1
+        `;
+        if(!owner)throw new Error("Ответственный недоступен");
+      }
       const start=body.startDate??scope.startDate;const end=body.endDate??scope.endDate;
       if(end<start)throw new Error("Дата окончания раньше даты начала");
       const [row]=await tx<Array<{id:string}>>`
         UPDATE launch_tasks SET
           title=COALESCE(${body.title??null},title),
           category=COALESCE(${body.category??null},category),
+          owner_user_id=CASE WHEN ${body.ownerUserId===undefined} THEN owner_user_id ELSE ${body.ownerUserId??null}::uuid END,
           start_date=${start}::date,
           end_date=${end}::date,
           progress_pct=COALESCE(${body.progress??null}::numeric,progress_pct),

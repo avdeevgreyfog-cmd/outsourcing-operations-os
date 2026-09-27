@@ -4,7 +4,7 @@ import { hasCapability } from "@/lib/core/access.mjs";
 import { listLaunchTasks } from "@/lib/data/service";
 import { listOperationsAnalytics, listStaffingForecast } from "@/lib/operations/service";
 import { listRecruitingApplications } from "@/lib/recruiting/service";
-import { listLaunchPlans, listLaunchSiteVisits, listLaunchStaffingWaves } from "@/lib/operations/launch-management";
+import { listLaunchAssignees, listLaunchPlans, listLaunchSiteVisits, listLaunchStaffingWaves } from "@/lib/operations/launch-management";
 import { Metric, PageHeader } from "@/components/UI";
 import { LaunchExecutionWorkspace } from "@/components/LaunchExecutionWorkspace";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
@@ -25,7 +25,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
   const canReadRecruiting=hasCapability(actor.access,"recruiting.candidate.read");
   const canReadNeeds=hasCapability(actor.access,"operations.need.read");
 
-  const [plans,tasks,analytics,waves,visits,applications,forecast]=await Promise.all([
+  const [plans,tasks,analytics,waves,visits,applications,forecast,assignees]=await Promise.all([
     listLaunchPlans(actor),
     listLaunchTasks(actor),
     listOperationsAnalytics(actor),
@@ -33,6 +33,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     listLaunchSiteVisits(actor),
     canReadRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
     canReadNeeds?listStaffingForecast(actor,30):Promise.resolve([]),
+    listLaunchAssignees(actor),
   ]);
 
   const scope=params.scope==="archive"?"archive":"active";
@@ -50,18 +51,29 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     const rows=tasks.filter(row=>(row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId));
     const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId);
     const fact=analytics.find(row=>row.objectId===plan.objectId);
-    const blockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
+    const taskBlockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
+    const visitBlocker=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="completed"&&item.status!=="cancelled");
     const nextTask=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&row.endDate).sort((a,b)=>(a.endDate??"").localeCompare(b.endDate??""))[0]??null;
     const sortedWaves=[...planWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate));
     const latestWave=sortedWaves.length?sortedWaves[sortedWaves.length-1]:undefined;
     const staffingPlan=latestWave?planWaves.reduce((sum,row)=>sum+(row.status==="cancelled"?0:row.plannedCount),0):(fact?.required??0);
     const staffingReady=(fact?.working??0)+(fact?.preparing??0);
+    const staffingGap=Math.max(staffingPlan-staffingReady,0);
+    const blockers=taskBlockers+(plan.contractGate==="blocked"?1:0)+(visitBlocker?1:0)+(staffingGap>0?1:0);
     const forecastDelta=plan.forecastDate?Math.round((parseDate(plan.forecastDate).getTime()-parseDate(plan.targetDate).getTime())/86_400_000):0;
     return {plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta};
   });
 
   const upcoming=plans.filter(row=>!["completed","cancelled"].includes(row.phase)&&daysTo(row.targetDate)>=0&&daysTo(row.targetDate)<=14).length;
-  const allBlockers=plans.reduce((sum,plan)=>sum+tasks.filter(row=>((row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId))&&row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length,0);
+  const allBlockers=plans.reduce((sum,plan)=>{
+    const taskCount=tasks.filter(row=>((row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId))&&row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
+    const visitCount=visits.some(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="completed"&&item.status!=="cancelled")?1:0;
+    const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId).filter(row=>row.status!=="cancelled");
+    const fact=analytics.find(row=>row.objectId===plan.objectId);
+    const staffingPlan=planWaves.length?planWaves.reduce((total,row)=>total+row.plannedCount,0):(fact?.required??0);
+    const staffingReady=(fact?.working??0)+(fact?.preparing??0);
+    return sum+taskCount+visitCount+(plan.contractGate==="blocked"?1:0)+(staffingPlan>staffingReady?1:0);
+  },0);
   const delayed=plans.filter(row=>row.forecastDate&&row.forecastDate>row.targetDate&&!["completed","cancelled"].includes(row.phase)).length;
   const activeCount=plans.filter(row=>!["completed","cancelled"].includes(row.phase)).length;
   const initialTab=(["summary","plan","staffing","issues"].includes(params.tab??"")?params.tab:"summary") as "summary"|"plan"|"staffing"|"issues";
@@ -99,6 +111,6 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
       </table>{!summaries.length&&<div className="empty-inline">{scope==="archive"?"Завершённых запусков пока нет":"Активных планов запуска нет"}</div>}</div>
     </section>
 
-    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} forecast={selectedForecast} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
+    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} forecast={selectedForecast} assignees={assignees} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
   </div>;
 }

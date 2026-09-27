@@ -19,6 +19,8 @@ export type LaunchStaffingWaveRow={
   specialtyId:string|null;specialty:string|null;note:string|null;status:"planned"|"in_progress"|"completed"|"cancelled";
 };
 
+export type LaunchAssigneeOption={id:string;name:string};
+
 export type LaunchSiteVisitRow={
   id:string;organizationId:string;launchId:string;objectId:string;visitType:"primary"|"launch_control"|"audit"|"other";
   scheduledDate:string|null;ownerUserId:string|null;owner:string|null;status:"planned"|"in_progress"|"completed"|"cancelled";
@@ -114,4 +116,23 @@ export async function listLaunchSiteVisits(actor:Actor):Promise<LaunchSiteVisitR
     `;
     return rows.filter(row=>canReadRow(actor.access,"operations.object.read",row,actor));
   });
+}
+
+
+export async function listLaunchAssignees(actor:Actor):Promise<LaunchAssigneeOption[]>{
+  requireCapability(actor,"operations.object.read");
+  if(actor.demo){
+    const source=(demo as unknown as {organizationEmployees?:Array<{userId:string;name:string;status?:string}>}).organizationEmployees??[];
+    if(source.length)return source.filter(item=>item.status!=="inactive").map(item=>({id:item.userId,name:item.name}));
+    const names=new Map<string,string>();
+    for(const row of demo.launchTasks)if(row.ownerUserId&&row.owner)names.set(row.ownerUserId,row.owner);
+    return [...names.entries()].map(([id,name])=>({id,name})).sort((a,b)=>a.name.localeCompare(b.name,"ru"));
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>sql<LaunchAssigneeOption[]>`
+    SELECT DISTINCT m.user_id id,u.display_name name
+    FROM organization_memberships m
+    JOIN app_users u ON u.id=m.user_id
+    WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active'
+    ORDER BY name
+  `);
 }

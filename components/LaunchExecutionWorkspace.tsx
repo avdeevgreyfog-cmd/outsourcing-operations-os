@@ -9,6 +9,7 @@ import type { LaunchTaskRow } from "@/lib/data/service";
 import type { OperationsAnalyticsRow, StaffingForecastRow } from "@/lib/operations/service";
 import type { RecruitingApplicationRow } from "@/lib/recruiting/service";
 import type {
+  LaunchAssigneeOption,
   LaunchPlanRow,
   LaunchSiteVisitRow,
   LaunchStaffingWaveRow,
@@ -19,7 +20,7 @@ import type { SiteVisitChecklistItem, SiteVisitChecklistStatus } from "@/lib/ope
 type LaunchTab="summary"|"plan"|"staffing"|"issues";
 type PlanView="gantt"|"table";
 type TaskDraft={
-  id:string|null;title:string;category:string;startDate:string;endDate:string;progress:number;
+  id:string|null;title:string;category:string;ownerUserId:string;startDate:string;endDate:string;progress:number;
   status:string;risk:string;milestone:boolean;blocksLaunch:boolean;
 };
 type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;note:string};
@@ -62,9 +63,9 @@ function targetLabel(value:string){
   if(days>0)return "через "+days+" дн.";
   return Math.abs(days)+" дн. назад";
 }
-function taskDraft(task?:LaunchTaskRow|null,target?:string):TaskDraft{
+function taskDraft(task?:LaunchTaskRow|null,target?:string,defaultOwnerUserId=""):TaskDraft{
   return {
-    id:task?.id??null,title:task?.title??"",category:task?.category??"operations",
+    id:task?.id??null,title:task?.title??"",category:task?.category??"operations",ownerUserId:task?.ownerUserId??defaultOwnerUserId,
     startDate:task?.startDate??todayIso(),endDate:task?.endDate??target??todayIso(),progress:Number(task?.progress??0),
     status:task?.status??"planned",risk:task?.risk??"normal",milestone:Boolean(task?.milestone),blocksLaunch:Boolean(task?.blocksLaunch??task?.critical),
   };
@@ -82,7 +83,7 @@ function uniqueCandidates(rows:RecruitingApplicationRow[]){
 }
 
 export function LaunchExecutionWorkspace({
-  plan,tasks,waves,visits,analytics,applications,forecast,canEdit,demo,initialTab="summary",
+  plan,tasks,waves,visits,analytics,applications,forecast,assignees,canEdit,demo,initialTab="summary",
 }:{
   plan:LaunchPlanRow;
   tasks:LaunchTaskRow[];
@@ -91,6 +92,7 @@ export function LaunchExecutionWorkspace({
   analytics:OperationsAnalyticsRow|null;
   applications:RecruitingApplicationRow[];
   forecast:StaffingForecastRow[];
+  assignees:LaunchAssigneeOption[];
   canEdit:boolean;
   demo:boolean;
   initialTab?:LaunchTab;
@@ -253,14 +255,15 @@ export function LaunchExecutionWorkspace({
       setBusy(true);setError("");
       if(!taskEditor.title.trim())throw new Error("Укажите название задачи");
       if(taskEditor.endDate<taskEditor.startDate)throw new Error("Дата окончания раньше даты начала");
-      const payload={title:taskEditor.title.trim(),category:taskEditor.category,startDate:taskEditor.startDate,endDate:taskEditor.endDate,progress:taskEditor.progress,status:taskEditor.status,risk:taskEditor.risk,milestone:taskEditor.milestone,blocksLaunch:taskEditor.blocksLaunch};
+      const payload={title:taskEditor.title.trim(),category:taskEditor.category,ownerUserId:taskEditor.ownerUserId||null,startDate:taskEditor.startDate,endDate:taskEditor.endDate,progress:taskEditor.progress,status:taskEditor.status,risk:taskEditor.risk,milestone:taskEditor.milestone,blocksLaunch:taskEditor.blocksLaunch};
       if(taskEditor.id){
         if(!demo)await request("/api/launches/"+plan.id+"/tasks/"+taskEditor.id,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-        setLocalTasks(current=>current.map(row=>row.id===taskEditor.id?{...row,...payload,start:formatShort(payload.startDate),end:formatShort(payload.endDate),critical:payload.blocksLaunch}:row));
+        const owner=assignees.find(item=>item.id===payload.ownerUserId)?.name??"—";
+        setLocalTasks(current=>current.map(row=>row.id===taskEditor.id?{...row,...payload,ownerUserId:payload.ownerUserId??undefined,owner,start:formatShort(payload.startDate),end:formatShort(payload.endDate),critical:payload.blocksLaunch}:row));
       }else{
         let id="demo-task-"+Date.now();
         if(!demo){const json=await request("/api/launches/"+plan.id+"/tasks",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});id=json.id??id;}
-        setLocalTasks(current=>[...current,{id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,object:plan.object,title:payload.title,level:0,owner:plan.ownerName??"—",start:formatShort(payload.startDate),end:formatShort(payload.endDate),startDate:payload.startDate,endDate:payload.endDate,baselineStart:formatShort(payload.startDate),baselineEnd:formatShort(payload.endDate),baselineStartDate:payload.startDate,baselineEndDate:payload.endDate,progress:payload.progress,status:payload.status,risk:payload.risk,milestone:payload.milestone,critical:payload.blocksLaunch,blocksLaunch:payload.blocksLaunch,category:payload.category,taskKind:payload.milestone?"milestone":"task",dependencyIds:[],ownerUserId:plan.ownerUserId??undefined,assigneeUserIds:plan.assigneeUserIds}]);
+        setLocalTasks(current=>[...current,{id,organizationId:plan.organizationId,launchId:plan.id,objectId:plan.objectId,object:plan.object,title:payload.title,level:0,owner:assignees.find(item=>item.id===payload.ownerUserId)?.name??plan.ownerName??"—",start:formatShort(payload.startDate),end:formatShort(payload.endDate),startDate:payload.startDate,endDate:payload.endDate,baselineStart:formatShort(payload.startDate),baselineEnd:formatShort(payload.endDate),baselineStartDate:payload.startDate,baselineEndDate:payload.endDate,progress:payload.progress,status:payload.status,risk:payload.risk,milestone:payload.milestone,critical:payload.blocksLaunch,blocksLaunch:payload.blocksLaunch,category:payload.category,taskKind:payload.milestone?"milestone":"task",dependencyIds:[],ownerUserId:payload.ownerUserId??plan.ownerUserId??undefined,assigneeUserIds:plan.assigneeUserIds}]);
       }
       setTaskEditor(null);
       if(!demo)router.refresh();
@@ -383,7 +386,7 @@ export function LaunchExecutionWorkspace({
             {contractBlocked&&<div className="launch-action-static"><div><strong>Договор не даёт допуск к запуску</strong><small>Нужно подписать договор либо оформить согласованное исключение.</small></div></div>}
             {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><div><strong>Не хватает {staffingGap} чел. к {nextWave?formatDate(nextWave.targetDate):"ближайшей контрольной точке"}</strong><small>План комплектования отстаёт от контрольной точки</small></div><ChevronRight size={16}/></button>}
             {siteVisitBlocker&&primaryVisit&&<button type="button" onClick={()=>openVisit(primaryVisit)}><div><strong>Первичный выезд не завершён</strong><small>{primaryVisit.scheduledDate?"План "+formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · осталось уточнить {visitStats.unresolvedRequired}</small></div><ChevronRight size={16}/></button>}
-            {blockingTasks.slice(0,5).map(row=><button type="button" key={row.id} onClick={()=>setTaskEditor(taskDraft(row,localPlan.targetDate))}><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
+            {blockingTasks.slice(0,5).map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
             {!launchBlocked&&<div className="launch-empty-positive">Критических препятствий к запуску не зафиксировано.</div>}
           </div>
         </section>
@@ -399,7 +402,7 @@ export function LaunchExecutionWorkspace({
         <section className="launch-card">
           <header><div><h3>Следующие контрольные точки</h3><p>Ближайшие задачи и milestones по текущему плану.</p></div></header>
           <div className="launch-milestone-list">
-            {nextActions.map(row=><button type="button" key={row.id} onClick={()=>setTaskEditor(taskDraft(row,localPlan.targetDate))}><span>{row.endDate?formatShort(row.endDate):row.end}</span><div><strong>{row.title}</strong><small>{row.owner} · {taskStatusLabels[row.status]??row.status}</small></div></button>)}
+            {nextActions.map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><span>{row.endDate?formatShort(row.endDate):row.end}</span><div><strong>{row.title}</strong><small>{row.owner} · {taskStatusLabels[row.status]??row.status}</small></div></button>)}
             {!nextActions.length&&<div className="empty-inline">Незавершённых задач нет</div>}
           </div>
         </section>
@@ -423,7 +426,7 @@ export function LaunchExecutionWorkspace({
             <div className="launch-visit-icon"><ClipboardCheck size={20}/></div>
             <div><strong>{primaryVisit.status==="completed"?"Первичный выезд завершён":"Первичный выезд"}</strong><span>{primaryVisit.scheduledDate?formatDate(primaryVisit.scheduledDate):"Дата не назначена"} · {primaryVisit.owner??"без ответственного"}</span><small>{visitStats.done} из {visitStats.total} уточнено · проблем {visitStats.issues}</small></div>
             <ChevronRight size={17}/>
-          </button>:canEdit?<button type="button" className="button launch-create-visit" onClick={()=>void createVisit()}><CalendarDays size={15}/> Запланировать первичный выезд</button>:<div className="empty-inline">Выезд не запланирован</div>}
+          </button>:editable?<button type="button" className="button launch-create-visit" onClick={()=>void createVisit()}><CalendarDays size={15}/> Запланировать первичный выезд</button>:<div className="empty-inline">Выезд не запланирован</div>}
         </section>
       </aside>
     </div>}
@@ -432,7 +435,7 @@ export function LaunchExecutionWorkspace({
       <div className="launch-plan-toolbar">
         <div className="segmented"><button className={planView==="gantt"?"active":""} onClick={()=>setPlanView("gantt")}>Gantt</button><button className={planView==="table"?"active":""} onClick={()=>setPlanView("table")}>Таблица</button></div>
         <div className="launch-plan-toolbar-meta"><span>{unfinished.length} незавершённых</span><span>{blockingTasks.length} блокируют / требуют контроля</span></div>
-        {editable&&<button className="button" onClick={()=>setTaskEditor(taskDraft(null,localPlan.targetDate))}><Plus size={14}/> Задача</button>}
+        {editable&&<button className="button" onClick={()=>editable&&setTaskEditor(taskDraft(null,localPlan.targetDate,plan.ownerUserId??""))}><Plus size={14}/> Задача</button>}
       </div>
       {planView==="gantt"?<LaunchGantt rows={ganttRows} categoryLabels={categoryLabels} onSelectTask={editable?(row=>{
         if(row.taskKind==="staffing_wave"){
@@ -444,7 +447,7 @@ export function LaunchExecutionWorkspace({
         setTaskEditor(taskDraft(row,localPlan.targetDate));
       }):undefined}/>:<div className="request-table-wrap launch-plan-table-wrap"><table className="data-table launch-plan-table">
         <thead><tr><th>Направление / задача</th><th>Ответственный</th><th>Срок</th><th>Прогресс</th><th>Состояние</th></tr></thead>
-        <tbody>{[...localTasks].sort((a,b)=>categoryOrder.indexOf(a.category??"other")-categoryOrder.indexOf(b.category??"other")||(a.startDate??"").localeCompare(b.startDate??"")).map(row=><tr key={row.id} onDoubleClick={()=>canEdit&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>
+        <tbody>{[...localTasks].sort((a,b)=>categoryOrder.indexOf(a.category??"other")-categoryOrder.indexOf(b.category??"other")||(a.startDate??"").localeCompare(b.startDate??"")).map(row=><tr key={row.id} onDoubleClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>
           <td><span className="launch-task-category">{categoryLabels[row.category??"other"]??"Прочее"}</span><button type="button" className="launch-task-link" onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}>{row.title}</button>{row.blocksLaunch&&<small>Блокирует запуск</small>}</td>
           <td>{row.owner}</td><td>{row.startDate?formatShort(row.startDate):row.start} – {row.endDate?formatShort(row.endDate):row.end}</td>
           <td><div className="launch-table-progress"><div className="progress"><span style={{width:Math.min(100,Number(row.progress))+"%"}}/></div><span>{row.progress}%</span></div></td>
@@ -499,7 +502,7 @@ export function LaunchExecutionWorkspace({
           {contractBlocked&&<div className="launch-issue-static"><span className="launch-issue-source">Договор</span><div><strong>Нет допуска к запуску</strong><small>Договор не подписан и исключение не согласовано.</small></div></div>}
           {staffingGap>0&&<button type="button" onClick={()=>setTab("staffing")}><span className="launch-issue-source">Персонал</span><div><strong>Дефицит {staffingGap} чел. к контрольной точке</strong><small>{nextWave?formatDate(nextWave.targetDate):"Текущий план комплектования"} · перейти к волнам вывода</small></div><ChevronRight size={16}/></button>}
           {visitIssues.map(item=><button type="button" key={item.id} onClick={()=>primaryVisit&&openVisit(primaryVisit)}><span className="launch-issue-source">Выезд</span><div><strong>{item.label}</strong><small>{item.status==="issue"?"Зафиксирована проблема":"Вопрос остался без ответа"}{item.blocksLaunch?" · блокирует запуск":""}</small></div><ChevronRight size={16}/></button>)}
-          {blockingTasks.map(row=><button type="button" key={row.id} onClick={()=>setTaskEditor(taskDraft(row,localPlan.targetDate))}><span className="launch-issue-source">{categoryLabels[row.category??"other"]??"План"}</span><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
+          {blockingTasks.map(row=><button type="button" key={row.id} onClick={()=>editable&&setTaskEditor(taskDraft(row,localPlan.targetDate))}><span className="launch-issue-source">{categoryLabels[row.category??"other"]??"План"}</span><div><strong>{row.title}</strong><small>{row.owner} · срок {row.endDate?formatDate(row.endDate):row.end} · {taskStatusLabels[row.status]??row.status}</small></div><ChevronRight size={16}/></button>)}
           {!launchBlocked&&<div className="launch-empty-positive">Открытых блокеров нет.</div>}
         </div>
       </section>
@@ -515,6 +518,7 @@ export function LaunchExecutionWorkspace({
     {taskEditor&&<><div className="drawer-backdrop" onClick={()=>setTaskEditor(null)}/><aside className="drawer launch-editor-drawer"><button className="icon-button drawer-close" onClick={()=>setTaskEditor(null)}><X size={17}/></button><span className="eyebrow">План запуска</span><h2>{taskEditor.id?"Задача":"Новая задача"}</h2><div className="launch-editor-form">
       <label className="wide">Название<input value={taskEditor.title} onChange={e=>setTaskEditor({...taskEditor,title:e.target.value})}/></label>
       <label>Направление<select value={taskEditor.category} onChange={e=>setTaskEditor({...taskEditor,category:e.target.value})}>{categoryOrder.map(key=><option key={key} value={key}>{categoryLabels[key]}</option>)}</select></label>
+      <label>Ответственный<select value={taskEditor.ownerUserId} onChange={e=>setTaskEditor({...taskEditor,ownerUserId:e.target.value})}><option value="">Менеджер объекта</option>{assignees.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label>Состояние<select value={taskEditor.status} onChange={e=>setTaskEditor({...taskEditor,status:e.target.value})}>{Object.entries(taskStatusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
       <label>Начало<input type="date" value={taskEditor.startDate} onChange={e=>setTaskEditor({...taskEditor,startDate:e.target.value})}/></label>
       <label>Окончание<input type="date" value={taskEditor.endDate} onChange={e=>setTaskEditor({...taskEditor,endDate:e.target.value})}/></label>
@@ -534,15 +538,15 @@ export function LaunchExecutionWorkspace({
       <div className="wide launch-editor-actions"><button className="button primary" disabled={busy} onClick={()=>void saveWave()}>Сохранить волну</button></div>
     </div></aside></>}
 
-    {visitEditor&&<><div className="drawer-backdrop" onClick={()=>setVisitEditor(null)}/><aside className="drawer launch-visit-drawer"><button className="icon-button drawer-close" onClick={()=>setVisitEditor(null)}><X size={17}/></button><span className="eyebrow">Выезд на объект</span><h2>Первичный чек-лист</h2><div className="launch-visit-meta"><label>Дата выезда<input type="date" value={visitEditor.scheduledDate} onChange={e=>setVisitEditor({...visitEditor,scheduledDate:e.target.value})}/></label><div><span>Уточнено</span><strong>{visitEditor.checklist.filter(item=>item.status==="confirmed").length} / {visitEditor.checklist.filter(item=>item.status!=="na").length}</strong></div><div><span>Проблемы</span><strong>{visitEditor.checklist.filter(item=>item.status==="issue").length}</strong></div></div>
+    {visitEditor&&<><div className="drawer-backdrop" onClick={()=>setVisitEditor(null)}/><aside className="drawer launch-visit-drawer"><button className="icon-button drawer-close" onClick={()=>setVisitEditor(null)}><X size={17}/></button><span className="eyebrow">Выезд на объект</span><h2>Первичный чек-лист</h2><fieldset className="launch-visit-fieldset" disabled={!editable}><div className="launch-visit-meta"><label>Дата выезда<input type="date" value={visitEditor.scheduledDate} onChange={e=>setVisitEditor({...visitEditor,scheduledDate:e.target.value})}/></label><div><span>Уточнено</span><strong>{visitEditor.checklist.filter(item=>item.status==="confirmed").length} / {visitEditor.checklist.filter(item=>item.status!=="na").length}</strong></div><div><span>Проблемы</span><strong>{visitEditor.checklist.filter(item=>item.status==="issue").length}</strong></div></div>
       <div className="launch-visit-sections">{groupedChecklist.map(([section,items])=><section key={section}><header><h3>{section}</h3><span>{items.filter(item=>item.status==="confirmed").length} / {items.filter(item=>item.status!=="na").length}</span></header><div>{items.map(item=><article className={"launch-checklist-item status-"+item.status} key={item.id}>
         <div className="launch-checklist-question"><strong>{item.label}</strong>{item.required&&<small>Обязательный вопрос</small>}{item.blocksLaunch&&<small>Может блокировать запуск</small>}</div>
         <select value={item.status} onChange={e=>changeChecklistItem(item.id,{status:e.target.value as SiteVisitChecklistStatus})}>{Object.entries(visitStatusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select>
         <input value={item.value} onChange={e=>changeChecklistItem(item.id,{value:e.target.value})} placeholder="Ответ / фактические данные"/>
         <textarea value={item.note} onChange={e=>changeChecklistItem(item.id,{note:e.target.value})} placeholder="Комментарий, что нужно сделать дальше"/>
       </article>)}</div></section>)}</div>
-      <label className="launch-visit-notes">Общие заметки<textarea value={visitEditor.notes} onChange={e=>setVisitEditor({...visitEditor,notes:e.target.value})}/></label>
-      <div className="launch-visit-actions"><button className="button" disabled={busy} onClick={()=>void saveVisit(false)}>Сохранить</button><button className="button primary" disabled={busy} onClick={()=>void saveVisit(true)}>Завершить выезд</button></div>
+      <label className="launch-visit-notes">Общие заметки<textarea value={visitEditor.notes} onChange={e=>setVisitEditor({...visitEditor,notes:e.target.value})}/></label></fieldset>
+      {editable&&<div className="launch-visit-actions"><button className="button" disabled={busy} onClick={()=>void saveVisit(false)}>Сохранить</button><button className="button primary" disabled={busy} onClick={()=>void saveVisit(true)}>Завершить выезд</button></div>}
       <p className="launch-visit-hint">При завершении пункты с проблемами и обязательные неуточнённые вопросы автоматически превращаются в задачи плана запуска.</p>
     </aside></>}
   </section>;

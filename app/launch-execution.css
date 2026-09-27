@@ -253,3 +253,6 @@
   :root[data-operis-ui="new"] .launch-rule-list{grid-template-columns:1fr 1fr}
   :root[data-operis-ui="new"] .launch-rule-list>div:nth-child(2n){border-right:0}
 }
+
+:root[data-operis-ui="new"] .launch-visit-fieldset{min-width:0;margin:0;padding:0;border:0}
+:root[data-operis-ui="new"] .launch-visit-fieldset:disabled{opacity:.92}
