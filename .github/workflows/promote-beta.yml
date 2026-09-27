@@ -1,0 +1,123 @@
+name: Promote Beta to Production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout beta
+        uses: actions/checkout@v6
+        with:
+          ref: beta
+          fetch-depth: 0
+
+      - name: Verify main can fast-forward to beta
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main beta
+          git merge-base --is-ancestor origin/main origin/beta || {
+            echo "main contains commits that are not in beta; reconcile branches before release."
+            exit 1
+          }
+
+      - name: Require live staging release candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$STAGING_BASE_URL" || {
+            echo "::error::STAGING_BASE_URL is not configured. Production promotion requires a live staging deployment."
+            exit 1
+          }
+
+          beta_sha="$(git rev-parse origin/beta)"
+          curl -fsS "$STAGING_BASE_URL/api/system/status" -o /tmp/staging-status.json
+
+          BETA_SHA="$beta_sha" DATABASE_URL="$DATABASE_URL" node - <<'NODE'
+          const crypto=require("node:crypto");
+          const fs=require("node:fs");
+          const staging=JSON.parse(fs.readFileSync("/tmp/staging-status.json","utf8"));
+          const expected=process.env.BETA_SHA;
+          const raw=process.env.DATABASE_URL;
+
+          if(staging.ok!==true)throw new Error("staging runtime is unhealthy");
+          if(staging.deploymentSha!==expected){
+            throw new Error(`staging is not running beta commit ${expected}; active=${staging.deploymentSha??"unknown"}`);
+          }
+          if(staging.databaseConfigured!==true)throw new Error("staging database is not configured");
+          if(!staging.databaseIdentity)throw new Error("staging database identity is unavailable");
+          if(!raw)throw new Error("production database secret is unavailable");
+
+          let identity;
+          try{
+            const url=new URL(raw);
+            const source=`${url.hostname.toLowerCase()}:${url.port||"default"}${url.pathname}`;
+            identity=crypto.createHash("sha256").update(source).digest("hex").slice(0,16);
+          }catch{
+            identity=crypto.createHash("sha256").update(raw.replace(/\/\/[^@]+@/,"//")).digest("hex").slice(0,16);
+          }
+
+          if(staging.databaseIdentity===identity){
+            throw new Error("staging and production point to the same database");
+          }
+          NODE
+
+      - name: Require successful beta CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          beta_sha="$(git rev-parse origin/beta)"
+          success_count="$(gh api             -H 'Accept: application/vnd.github+json'             "/repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$beta_sha&event=push&per_page=100"             --jq '[.workflow_runs[] | select(.name=="CI" and .conclusion=="success")] | length')"
+          test "$success_count" -ge 1 || {
+            echo "::error::No successful CI run exists for beta commit $beta_sha."
+            exit 1
+          }
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Validate release candidate
+        run: |
+          npm install --no-audit --no-fund
+          npm test
+          npm run typecheck
+          npm run lint
+          npm run build
+
+      - name: Require protected production database secret
+        shell: bash
+        run: |
+          test -n "$DATABASE_URL" || {
+            echo "::error::PRODUCTION_DATABASE_URL is not configured in the protected production environment."
+            exit 1
+          }
+
+      - name: Apply safe pending production migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          # migrate.mjs is fail-closed for destructive migrations. A destructive
+          # change must be reviewed and released separately before promotion.
+          npm run db:migrate
+
+      - name: Promote beta commit to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          beta_sha="$(git rev-parse origin/beta)"
+          git push origin "$beta_sha:refs/heads/main"
+          echo "Promoted beta $beta_sha to main."
