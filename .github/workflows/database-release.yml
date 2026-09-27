@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      backup_confirmed:
+        description: "Confirm a verified production database backup exists before destructive changes"
+        required: true
+        default: false
+        type: boolean
 
 jobs:
   migrate:
@@ -39,5 +44,14 @@ jobs:
       - name: Require production database secret
         run: |
           test -n "$DATABASE_URL" || { echo "PRODUCTION_DATABASE_URL is not configured in the protected production environment"; exit 1; }
+      - name: Require backup confirmation for destructive release
+        if: inputs.allow_destructive
+        shell: bash
+        run: |
+          test "${{ inputs.backup_confirmed }}" = "true" || {
+            echo "::error::Destructive production migration requires backup_confirmed=true."
+            exit 1
+          }
+
       - name: Apply pending production migrations
         run: npm run db:migrate
