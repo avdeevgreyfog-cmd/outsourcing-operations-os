@@ -6,6 +6,7 @@ import { requireActor } from "@/lib/auth/server";
 import { getTimesheet,listAccruals,listFinance,listIncidents,listLaunchTasks,listObjects,listPayments,listShifts,listWorkers } from "@/lib/data/service";
 import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperationsReferenceData,listDailyPaymentProgress,listObjectDocuments,listObjectPpeTemplates,listOperationsAnalytics,listStaffingForecast,listSupplyRequests } from "@/lib/operations/service";
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
+import { listObjectOperationalFacts } from "@/lib/operations/object-facts";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { Empty,EntityTabs,Metric,Section,Status } from "@/components/UI";
 import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
@@ -79,6 +80,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     ?await safeObjectLoad(id,"object-management",()=>getObjectManagementOptions(actor,{includeAssignments:canAssignObject}),null)
     :null;
   const objectHistory=await safeObjectLoad(id,"object-history",()=>listObjectHistory(actor,id,100),[]);
+  const objectFacts=await safeObjectLoad(id,"object-facts",()=>listObjectOperationalFacts(actor,id),[]);
 
   // The object shell is a control surface over many independent modules. One optional
   // module must never take the entire object page down. Keep the object identity
@@ -287,7 +289,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </Section>
     </>)}
 
-    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>)}
+    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} facts={objectFacts} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>)}
 
     {panel("workforce",<div className="object-module-shell"><div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} objectId={id} objectName={object.name} objects={workforceOptions.objects} canEdit={canEditWorkers} canOffboard={canOffboard} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</div>)}
 
