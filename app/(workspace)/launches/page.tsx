@@ -60,8 +60,15 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     const staffingReady=(fact?.working??0)+(fact?.preparing??0);
     const staffingGap=Math.max(staffingPlan-staffingReady,0);
     const blockers=taskBlockers+(plan.contractGate==="blocked"?1:0)+(visitBlocker?1:0)+(staffingGap>0?1:0);
+    const taskRows=rows.filter(row=>row.status!=="cancelled");
+    const taskScore=taskRows.length?Math.round(taskRows.reduce((sum,row)=>sum+Number(row.progress||0),0)/taskRows.length):0;
+    const staffingScore=staffingPlan?Math.min(100,Math.round(staffingReady/staffingPlan*100)):100;
+    const primaryVisit=visits.find(item=>(item.launchId===plan.id||item.objectId===plan.objectId)&&item.visitType==="primary"&&item.status!=="cancelled")??null;
+    const applicable=primaryVisit?.checklist.filter(item=>item.status!=="na")??[];
+    const visitScore=primaryVisit?(applicable.length?Math.round(applicable.filter(item=>item.status==="confirmed").length/applicable.length*100):0):100;
+    const readiness=Math.round(taskScore*.45+staffingScore*.4+visitScore*.15);
     const forecastDelta=plan.forecastDate?Math.round((parseDate(plan.forecastDate).getTime()-parseDate(plan.targetDate).getTime())/86_400_000):0;
-    return {plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta};
+    return {plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta,readiness};
   });
 
   const upcoming=plans.filter(row=>!["completed","cancelled"].includes(row.phase)&&daysTo(row.targetDate)>=0&&daysTo(row.targetDate)<=14).length;
@@ -98,12 +105,12 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
     <section className="section section-flush launch-portfolio">
       <div className="request-table-wrap"><table className="data-table launch-portfolio-table">
         <thead><tr><th>Объект</th><th>Менеджер</th><th>Фаза</th><th>Срок запуска</th><th>Готовность</th><th>Персонал</th><th>Блокеры</th><th>Следующий шаг</th></tr></thead>
-        <tbody>{summaries.map(({plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta})=><tr key={plan.id} className={selectedPlan?.id===plan.id?"is-selected":""}>
+        <tbody>{summaries.map(({plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta,readiness})=><tr key={plan.id} className={selectedPlan?.id===plan.id?"is-selected":""}>
           <td><Link className="cell-title" href={"/launches?scope="+scope+"&object="+plan.objectId}>{plan.object}</Link><span className="cell-sub">{plan.client}</span></td>
           <td>{plan.ownerName??"Не назначен"}</td>
           <td><span className="launch-phase-text">{phaseLabels[plan.phase]??plan.phase}</span></td>
           <td><strong>{formatDate(plan.targetDate)}</strong>{forecastDelta>0?<span className="cell-sub">прогноз +{forecastDelta} дн.</span>:<span className="cell-sub">{daysTo(plan.targetDate)>=0?"через "+daysTo(plan.targetDate)+" дн.":"дата прошла"}</span>}</td>
-          <td><div className="launch-portfolio-progress"><div className="progress"><span style={{width:Math.min(100,plan.progress)+"%"}}/></div><span>{plan.progress}%</span></div></td>
+          <td><div className="launch-portfolio-progress"><div className="progress"><span style={{width:Math.min(100,readiness)+"%"}}/></div><span>{readiness}%</span></div></td>
           <td><strong>{staffingReady} / {staffingPlan}</strong><span className="cell-sub">{Math.max(staffingPlan-staffingReady,0)?("не хватает "+Math.max(staffingPlan-staffingReady,0)):"по плану"}</span></td>
           <td><span className={blockers?"launch-blocker-count":""}>{blockers||"—"}</span></td>
           <td>{nextTask?<><strong>{nextTask.title}</strong><span className="cell-sub">{nextTask.endDate?formatDate(nextTask.endDate):nextTask.end}</span></>:<span className="cell-sub">Нет незавершённых задач</span>}</td>

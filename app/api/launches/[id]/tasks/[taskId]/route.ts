@@ -16,6 +16,7 @@ const schema=z.object({
   risk:z.enum(["normal","watch","high","critical"]).optional(),
   milestone:z.boolean().optional(),
   blocksLaunch:z.boolean().optional(),
+  dependencyIds:z.array(z.string().uuid()).max(30).optional(),
 });
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string;taskId:string}>}){
@@ -43,6 +44,33 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
       }
       const start=body.startDate??scope.startDate;const end=body.endDate??scope.endDate;
       if(end<start)throw new Error("Дата окончания раньше даты начала");
+      if(body.dependencyIds!==undefined){
+        const dependencies=[...new Set(body.dependencyIds)];
+        if(dependencies.includes(taskId))throw new Error("Задача не может зависеть сама от себя");
+        if(dependencies.length){
+          const [available]=await tx<Array<{count:number}>>`
+            SELECT count(*)::int count FROM launch_tasks WHERE launch_id=${id}::uuid AND id=ANY(${dependencies}::uuid[])
+          `;
+          if((available?.count??0)!==dependencies.length)throw new Error("Одна из зависимостей недоступна в этом плане запуска");
+          const [cycle]=await tx<Array<{count:number}>>`
+            WITH RECURSIVE downstream(id) AS (
+              SELECT successor_task_id FROM launch_task_dependencies WHERE predecessor_task_id=${taskId}::uuid
+              UNION
+              SELECT d.successor_task_id FROM launch_task_dependencies d JOIN downstream x ON d.predecessor_task_id=x.id
+            )
+            SELECT count(*)::int count FROM downstream WHERE id=ANY(${dependencies}::uuid[])
+          `;
+          if((cycle?.count??0)>0)throw new Error("Такая зависимость создаст цикл в плане запуска");
+        }
+        await tx`DELETE FROM launch_task_dependencies WHERE successor_task_id=${taskId}::uuid`;
+        if(dependencies.length){
+          await tx`
+            INSERT INTO launch_task_dependencies(organization_id,predecessor_task_id,successor_task_id,dependency_type,created_by_user_id)
+            SELECT ${actor.organizationId}::uuid,dep,${taskId}::uuid,'finish_to_start',${actor.userId}::uuid
+            FROM unnest(${dependencies}::uuid[]) dep
+          `;
+        }
+      }
       const [row]=await tx<Array<{id:string}>>`
         UPDATE launch_tasks SET
           title=COALESCE(${body.title??null},title),
@@ -50,7 +78,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
           owner_user_id=CASE WHEN ${body.ownerUserId===undefined} THEN owner_user_id ELSE ${body.ownerUserId??null}::uuid END,
           start_date=${start}::date,
           end_date=${end}::date,
-          progress_pct=COALESCE(${body.progress??null}::numeric,progress_pct),
+          progress_pct=CASE WHEN ${body.status??null}='done' THEN 100 ELSE COALESCE(${body.progress??null}::numeric,progress_pct) END,
           status=COALESCE(${body.status??null},status),
           risk_level=COALESCE(${body.risk??null},risk_level),
           is_milestone=COALESCE(${body.milestone??null}::boolean,is_milestone),

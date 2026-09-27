@@ -16,6 +16,7 @@ const schema=z.object({
   risk:z.enum(["normal","watch","high","critical"]).default("normal"),
   milestone:z.boolean().default(false),
   blocksLaunch:z.boolean().default(false),
+  dependencyIds:z.array(z.string().uuid()).max(30).default([]),
 });
 
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
@@ -40,11 +41,26 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         `;
         if(!owner)throw new Error("Ответственный недоступен");
       }
+      const dependencies=[...new Set(body.dependencyIds)];
+      if(dependencies.length){
+        const [available]=await tx<Array<{count:number}>>`
+          SELECT count(*)::int count FROM launch_tasks WHERE launch_id=${id}::uuid AND id=ANY(${dependencies}::uuid[])
+        `;
+        if((available?.count??0)!==dependencies.length)throw new Error("Одна из зависимостей недоступна в этом плане запуска");
+      }
+      const effectiveProgress=body.status==="done"?100:body.progress;
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,category,task_kind,blocks_launch,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.title},${ownerUserId}::uuid,${body.startDate}::date,${body.endDate}::date,${body.startDate}::date,${body.endDate}::date,${body.progress},${body.status},${body.risk},${body.milestone},${body.blocksLaunch},${body.category},${body.milestone?"milestone":"task"},${body.blocksLaunch},${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.title},${ownerUserId}::uuid,${body.startDate}::date,${body.endDate}::date,${body.startDate}::date,${body.endDate}::date,${effectiveProgress},${body.status},${body.risk},${body.milestone},${body.blocksLaunch},${body.category},${body.milestone?"milestone":"task"},${body.blocksLaunch},${actor.userId}::uuid)
         RETURNING id
       `;
+      if(dependencies.length){
+        await tx`
+          INSERT INTO launch_task_dependencies(organization_id,predecessor_task_id,successor_task_id,dependency_type,created_by_user_id)
+          SELECT ${actor.organizationId}::uuid,dep,${row.id}::uuid,'finish_to_start',${actor.userId}::uuid
+          FROM unnest(${dependencies}::uuid[]) dep
+        `;
+      }
       return row;
     }));
     return NextResponse.json(result,{status:201});

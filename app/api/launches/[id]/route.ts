@@ -64,9 +64,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         WHERE id=${id}::uuid`;
       if(body.phase==="active"){
         await tx`UPDATE objects SET status='launch',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
+        await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND task_kind='milestone' AND lower(title) IN ('первый выход','старт объекта')`;
       }
       if(body.phase==="completed"){
         await tx`UPDATE objects SET status='active',actual_start_date=COALESCE(actual_start_date,current_date),updated_at=now() WHERE id=${scope.objectId}::uuid`;
+        await tx`UPDATE launch_tasks SET status='done',progress_pct=100,updated_at=now() WHERE launch_id=${id}::uuid AND lower(title) LIKE '%стабилиз%'`;
       }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'launch',${id}::uuid,'launch_plan_updated','Обновлён план запуска',${tx.json({targetDate:nextTarget,phase:body.phase??scope.phase,shiftLinked:body.shiftLinked})})`;

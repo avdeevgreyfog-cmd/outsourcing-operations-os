@@ -21,9 +21,9 @@ type LaunchTab="summary"|"plan"|"staffing"|"issues";
 type PlanView="gantt"|"table";
 type TaskDraft={
   id:string|null;title:string;category:string;ownerUserId:string;startDate:string;endDate:string;progress:number;
-  status:string;risk:string;milestone:boolean;blocksLaunch:boolean;
+  status:string;risk:string;milestone:boolean;blocksLaunch:boolean;dependencyIds:string[];
 };
-type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;note:string};
+type WaveDraft={id:string|null;name:string;targetDate:string;plannedCount:number;specialtyId:string;status:string;note:string};
 type VisitDraft={id:string|null;scheduledDate:string;status:string;checklist:SiteVisitChecklistItem[];notes:string};
 
 const categoryLabels:Record<string,string>={
@@ -68,10 +68,11 @@ function taskDraft(task?:LaunchTaskRow|null,target?:string,defaultOwnerUserId=""
     id:task?.id??null,title:task?.title??"",category:task?.category??"operations",ownerUserId:task?.ownerUserId??defaultOwnerUserId,
     startDate:task?.startDate??todayIso(),endDate:task?.endDate??target??todayIso(),progress:Number(task?.progress??0),
     status:task?.status??"planned",risk:task?.risk??"normal",milestone:Boolean(task?.milestone),blocksLaunch:Boolean(task?.blocksLaunch??task?.critical),
+    dependencyIds:[...(task?.dependencyIds??[])],
   };
 }
 function waveDraft(wave?:LaunchStaffingWaveRow|null,target?:string):WaveDraft{
-  return {id:wave?.id??null,name:wave?.name??"",targetDate:wave?.targetDate??target??todayIso(),plannedCount:Number(wave?.plannedCount??1),specialtyId:wave?.specialtyId??"",note:wave?.note??""};
+  return {id:wave?.id??null,name:wave?.name??"",targetDate:wave?.targetDate??target??todayIso(),plannedCount:Number(wave?.plannedCount??1),specialtyId:wave?.specialtyId??"",status:wave?.status??"planned",note:wave?.note??""};
 }
 function uniqueCandidates(rows:RecruitingApplicationRow[]){
   const map=new Map<string,RecruitingApplicationRow>();
@@ -144,7 +145,7 @@ export function LaunchExecutionWorkspace({
       }).length;
       const arrived=source.filter(row=>Boolean(row.plannedArrivalAt)&&String(row.plannedArrivalAt).slice(0,10)<=wave.targetDate).length;
       const started=source.filter(row=>Boolean(row.actualStartAt)&&String(row.actualStartAt).slice(0,10)<=wave.targetDate).length;
-      return {...wave,cumulative,ready,arrived,started,gap:Math.max(cumulative-ready,0)};
+      return {...wave,cumulative,ready,arrived,started,gap:Math.max(cumulative-ready,0),surplus:Math.max(ready-cumulative,0)};
     });
   },[localWaves,objectApplications,forecast]);
 
@@ -255,7 +256,9 @@ export function LaunchExecutionWorkspace({
       setBusy(true);setError("");
       if(!taskEditor.title.trim())throw new Error("Укажите название задачи");
       if(taskEditor.endDate<taskEditor.startDate)throw new Error("Дата окончания раньше даты начала");
-      const payload={title:taskEditor.title.trim(),category:taskEditor.category,ownerUserId:taskEditor.ownerUserId||null,startDate:taskEditor.startDate,endDate:taskEditor.endDate,progress:taskEditor.progress,status:taskEditor.status,risk:taskEditor.risk,milestone:taskEditor.milestone,blocksLaunch:taskEditor.blocksLaunch};
+      const effectiveOwnerUserId=taskEditor.ownerUserId||plan.ownerUserId||null;
+      const effectiveProgress=taskEditor.status==="done"?100:taskEditor.progress;
+      const payload={title:taskEditor.title.trim(),category:taskEditor.category,ownerUserId:effectiveOwnerUserId,startDate:taskEditor.startDate,endDate:taskEditor.endDate,progress:effectiveProgress,status:taskEditor.status,risk:taskEditor.risk,milestone:taskEditor.milestone,blocksLaunch:taskEditor.blocksLaunch,dependencyIds:taskEditor.dependencyIds};
       if(taskEditor.id){
         if(!demo)await request("/api/launches/"+plan.id+"/tasks/"+taskEditor.id,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
         const owner=assignees.find(item=>item.id===payload.ownerUserId)?.name??"—";
@@ -276,7 +279,7 @@ export function LaunchExecutionWorkspace({
     try{
       setBusy(true);setError("");
       if(!waveEditor.name.trim())throw new Error("Укажите название волны");
-      const payload={name:waveEditor.name.trim(),targetDate:waveEditor.targetDate,plannedCount:Number(waveEditor.plannedCount),specialtyId:waveEditor.specialtyId||null,note:waveEditor.note||null};
+      const payload={name:waveEditor.name.trim(),targetDate:waveEditor.targetDate,plannedCount:Number(waveEditor.plannedCount),specialtyId:waveEditor.specialtyId||null,status:waveEditor.status,note:waveEditor.note||null};
       if(waveEditor.id){
         if(!demo)await request("/api/launches/"+plan.id+"/waves/"+waveEditor.id,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
         const specialty=forecast.find(item=>item.specialtyId===payload.specialtyId)?.specialty??null;
@@ -352,6 +355,7 @@ export function LaunchExecutionWorkspace({
         <span className="launch-detail-eyebrow">План запуска</span>
         <h2>{localPlan.object}</h2>
         <p>{localPlan.client} · {localPlan.ownerName??"Ответственный не назначен"}</p>
+        {!editable&&["completed","cancelled"].includes(localPlan.phase)&&<span className="launch-readonly-note">Архивный план · только просмотр</span>}
       </div>
       <div className="launch-head-facts">
         <div><span>Дата запуска</span><strong>{formatDate(localPlan.targetDate)}</strong><small>{targetLabel(localPlan.targetDate)}</small></div>
@@ -464,7 +468,7 @@ export function LaunchExecutionWorkspace({
           <tbody>{waveRows.map(row=><tr key={row.id}>
             <td><button type="button" className="launch-task-link" onClick={()=>editable&&setWaveEditor(waveDraft(row,localPlan.targetDate))}>{row.name}</button>{row.specialty&&<small>{row.specialty}</small>}</td>
             <td>{formatDate(row.targetDate)}</td><td className="num">{row.plannedCount}</td><td className="num">{row.cumulative}</td><td className="num">{row.ready}</td><td className="num">{row.arrived}</td><td className="num">{row.started}</td>
-            <td><span className={row.gap>0?"launch-wave-gap":""}>{row.gap>0?"−"+row.gap:"по плану"}</span></td>
+            <td><span className={row.gap>0?"launch-wave-gap":row.surplus>0?"launch-wave-surplus":""}>{row.gap>0?"−"+row.gap:row.surplus>0?("+"+row.surplus+" готовы раньше"):"по плану"}</span></td>
           </tr>)}</tbody>
         </table>{!waveRows.length&&<div className="empty-inline">Волны вывода ещё не заданы</div>}</div>
       </section>
@@ -524,6 +528,7 @@ export function LaunchExecutionWorkspace({
       <label>Окончание<input type="date" value={taskEditor.endDate} onChange={e=>setTaskEditor({...taskEditor,endDate:e.target.value})}/></label>
       <label>Прогресс, %<input type="number" min="0" max="100" value={taskEditor.progress} onChange={e=>setTaskEditor({...taskEditor,progress:Number(e.target.value||0)})}/></label>
       <label>Риск<select value={taskEditor.risk} onChange={e=>setTaskEditor({...taskEditor,risk:e.target.value})}><option value="normal">Норма</option><option value="watch">Контроль</option><option value="high">Высокий</option><option value="critical">Критический</option></select></label>
+      <div className="wide launch-dependency-editor"><span>Зависит от</span><div>{localTasks.filter(row=>row.id!==taskEditor.id&&row.status!=="cancelled").map(row=><label key={row.id}><input type="checkbox" checked={taskEditor.dependencyIds.includes(row.id)} onChange={e=>setTaskEditor({...taskEditor,dependencyIds:e.target.checked?[...taskEditor.dependencyIds,row.id]:taskEditor.dependencyIds.filter(id=>id!==row.id)})}/><span>{row.title}</span><small>{categoryLabels[row.category??"other"]??"Прочее"}</small></label>)}{!localTasks.some(row=>row.id!==taskEditor.id&&row.status!=="cancelled")&&<small>Других задач пока нет</small>}</div></div>
       <label className="launch-check wide"><input type="checkbox" checked={taskEditor.milestone} onChange={e=>setTaskEditor({...taskEditor,milestone:e.target.checked})}/><span>Контрольная точка / milestone</span></label>
       <label className="launch-check wide"><input type="checkbox" checked={taskEditor.blocksLaunch} onChange={e=>setTaskEditor({...taskEditor,blocksLaunch:e.target.checked})}/><span>Невыполнение блокирует запуск</span></label>
       <div className="wide launch-editor-actions"><button className="button primary" disabled={busy} onClick={()=>void saveTask()}>Сохранить задачу</button></div>
@@ -534,6 +539,7 @@ export function LaunchExecutionWorkspace({
       <label>Дата вывода<input type="date" value={waveEditor.targetDate} onChange={e=>setWaveEditor({...waveEditor,targetDate:e.target.value})}/></label>
       <label>Количество новых сотрудников<input type="number" min="1" value={waveEditor.plannedCount} onChange={e=>setWaveEditor({...waveEditor,plannedCount:Number(e.target.value||1)})}/></label>
       <label className="wide">Специальность<select value={waveEditor.specialtyId} onChange={e=>setWaveEditor({...waveEditor,specialtyId:e.target.value})}><option value="">Все позиции / общий вывод</option>{forecast.map(item=><option key={item.specialtyId} value={item.specialtyId}>{item.specialty} · план {item.required}</option>)}</select></label>
+      {waveEditor.id&&<label className="wide">Состояние волны<select value={waveEditor.status} onChange={e=>setWaveEditor({...waveEditor,status:e.target.value})}><option value="planned">Запланирована</option><option value="in_progress">В работе</option><option value="completed">Выполнена</option><option value="cancelled">Отменена</option></select></label>}
       <label className="wide">Комментарий<textarea value={waveEditor.note} onChange={e=>setWaveEditor({...waveEditor,note:e.target.value})} placeholder="Состав волны, ограничения заказчика, приоритетные позиции"/></label>
       <div className="wide launch-editor-actions"><button className="button primary" disabled={busy} onClick={()=>void saveWave()}>Сохранить волну</button></div>
     </div></aside></>}

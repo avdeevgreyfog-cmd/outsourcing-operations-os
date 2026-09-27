@@ -256,3 +256,15 @@
 
 :root[data-operis-ui="new"] .launch-visit-fieldset{min-width:0;margin:0;padding:0;border:0}
 :root[data-operis-ui="new"] .launch-visit-fieldset:disabled{opacity:.92}
+
+
+:root[data-operis-ui="new"] .launch-dependency-editor{display:grid;gap:5px}
+:root[data-operis-ui="new"] .launch-dependency-editor>span{color:var(--muted);font-size:11.5px}
+:root[data-operis-ui="new"] .launch-dependency-editor>div{max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--panel)}
+:root[data-operis-ui="new"] .launch-dependency-editor>div>label{min-height:38px;padding:6px 8px;display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:7px;border-bottom:1px solid var(--border);cursor:pointer}
+:root[data-operis-ui="new"] .launch-dependency-editor>div>label:last-child{border-bottom:0}
+:root[data-operis-ui="new"] .launch-dependency-editor input{width:15px;height:15px;min-height:auto;accent-color:var(--accent)}
+:root[data-operis-ui="new"] .launch-dependency-editor span{color:var(--text);font-size:11.5px}
+:root[data-operis-ui="new"] .launch-dependency-editor small{color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .launch-wave-surplus{color:var(--muted);font-size:10.5px}
+:root[data-operis-ui="new"] .launch-readonly-note{display:inline-block;margin-top:6px;color:var(--muted);font-size:10.5px;font-weight:600}
