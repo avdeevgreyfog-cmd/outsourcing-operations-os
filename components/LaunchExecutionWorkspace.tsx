@@ -131,7 +131,7 @@ export function LaunchExecutionWorkspace({
   const attentionTasks=useMemo(()=>unfinished.filter(row=>row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk)),[unfinished]);
   const primaryVisit=localVisits.find(row=>row.visitType==="primary")??null;
   const visitStats=useMemo(()=>{
-    const checklist=primaryVisit?.checklist??[];
+    const checklist=(primaryVisit?.checklist??[]).filter(item=>!item.hidden);
     const applicable=checklist.filter(item=>item.status!=="na");
     const done=applicable.filter(item=>item.status==="confirmed").length;
     const issues=applicable.filter(item=>item.status==="issue").length;
@@ -208,7 +208,7 @@ export function LaunchExecutionWorkspace({
 
   const categoryReadiness=useMemo(()=>categoryOrder.map(category=>{
     const rows=activeTasks.filter(row=>(row.category??"other")===category);
-    const visitItems=(primaryVisit?.checklist??[]).filter(item=>item.category===category&&item.status!=="na");
+    const visitItems=(primaryVisit?.checklist??[]).filter(item=>!item.hidden&&item.category===category&&item.status!=="na");
     if(!rows.length&&!visitItems.length)return null;
     const taskValue=rows.length?rows.reduce((sum,row)=>sum+Number(row.progress||0),0)/rows.length:100;
     const visitValue=visitItems.length?visitItems.filter(item=>item.status==="confirmed").length/visitItems.length*100:100;
@@ -220,20 +220,21 @@ export function LaunchExecutionWorkspace({
     .sort((a,b)=>(a.endDate??"").localeCompare(b.endDate??""))
     .slice(0,6),[unfinished]);
 
-  const visitIssues=useMemo(()=>(primaryVisit?.checklist??[]).filter(item=>item.status==="issue"||(primaryVisit?.status==="completed"&&item.required&&item.status==="pending")),[primaryVisit]);
+  const visitIssues=useMemo(()=>(primaryVisit?.checklist??[]).filter(item=>!item.hidden&&(item.status==="issue"||(primaryVisit?.status==="completed"&&item.required&&item.status==="pending"))),[primaryVisit]);
   const primaryVisitGroups=useMemo(()=>{
     const groups=new Map<string,SiteVisitChecklistItem[]>();
-    for(const item of primaryVisit?.checklist??[])groups.set(item.section,[...(groups.get(item.section)??[]),item]);
+    for(const item of (primaryVisit?.checklist??[]).filter(item=>!item.hidden))groups.set(item.section,[...(groups.get(item.section)??[]),item]);
     return [...groups.entries()];
   },[primaryVisit]);
-  const visitPending=(primaryVisit?.checklist??[]).filter(item=>item.required&&item.status==="pending");
-  const visitAnswer=(id:string)=>primaryVisit?.checklist.find(item=>item.id===id)?.value?.trim()||"Не уточнено";
+  const visitPending=(primaryVisit?.checklist??[]).filter(item=>!item.hidden&&item.required&&item.status==="pending");
+  const visitAnswer=(id:string)=>primaryVisit?.checklist.find(item=>item.id===id&&!item.hidden)?.value?.trim()||"Не уточнено";
   const outputRules=[
     ["Допустимые дни вывода",visitAnswer("access-days")],
     ["Максимум новичков за один вывод",visitAnswer("access-limit")],
     ["Минимальный состав первого запуска",visitAnswer("staff-minimum")],
     ["Во сколько быть на объекте",visitAnswer("schedule-arrival")],
   ];
+  const recruitingFacts=facts.filter(row=>row.audiences.includes("recruiting"));
 
   async function request(url:string,options:RequestInit){
     const response=await fetch(url,options);
