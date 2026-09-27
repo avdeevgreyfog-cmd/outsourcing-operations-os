@@ -1,103 +1,100 @@
 import Link from "next/link";
 import { requireActor } from "@/lib/auth/server";
-import { listLaunchTasks, listObjects } from "@/lib/data/service";
+import { hasCapability } from "@/lib/core/access.mjs";
+import { listLaunchTasks } from "@/lib/data/service";
 import { listOperationsAnalytics } from "@/lib/operations/service";
-import { Metric, PageHeader, Section, Status } from "@/components/UI";
-import { LaunchGantt } from "@/components/LaunchGantt";
+import { listRecruitingApplications } from "@/lib/recruiting/service";
+import { listLaunchPlans, listLaunchSiteVisits, listLaunchStaffingWaves } from "@/lib/operations/launch-management";
+import { Metric, PageHeader } from "@/components/UI";
+import { LaunchExecutionWorkspace } from "@/components/LaunchExecutionWorkspace";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 
-const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
-const statusLabels:Record<string,string>={planned:"Подготовка",in_progress:"В работе",blocked:"Заблокировано",done:"Готово",cancelled:"Отменено"};
+const phaseLabels:Record<string,string>={preparation:"Подготовка",ready:"Готов к запуску",active:"Запуск / стабилизация",completed:"Завершён",cancelled:"Отменён"};
 
-export default async function Launches({searchParams}:{searchParams:Promise<{object?:string;view?:string}>}){
+function parseDate(value:string){return new Date(value+"T00:00:00Z")}
+function formatDate(value:string|null|undefined){
+  if(!value)return "—";
+  return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:"UTC"}).format(parseDate(value));
+}
+function daysTo(value:string){return Math.round((parseDate(value).getTime()-parseDate(new Date().toISOString().slice(0,10)).getTime())/86_400_000)}
+
+export default async function Launches({searchParams}:{searchParams:Promise<{object?:string;tab?:string;scope?:string}>}){
   const actor=await requireActor();
   const params=isGithubPagesDemo()?{}:await searchParams;
-  const [rows,objects,analytics]=await Promise.all([listLaunchTasks(actor),listObjects(actor),listOperationsAnalytics(actor)]);
-  const objectIds=[...new Set(rows.map(row=>row.objectId))];
-  const selectedId=(params.object&&objectIds.includes(params.object))?params.object:objectIds[0]??objects[0]?.id;
-  const view=["summary","plan","gantt","risks"].includes(params.view??"")?params.view!:"summary";
-  const selectedRows=rows.filter(row=>row.objectId===selectedId);
-  const selectedObject=objects.find(row=>row.id===selectedId);
-  const selectedAnalytics=analytics.find(row=>row.objectId===selectedId);
-  const summaries=objectIds.map(objectId=>{
-    const tasks=rows.filter(row=>row.objectId===objectId);
-    const object=objects.find(row=>row.id===objectId);
-    const progress=Math.round(tasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/Math.max(tasks.length,1));
-    const critical=tasks.filter(row=>row.status!=="done"&&(row.critical||["high","critical"].includes(row.risk))).length;
-    const meta=tasks[0];
-    const launchProgress=meta?.launchProgress??progress;
-    return {objectId,object:object?.name??meta?.object??"Объект",client:object?.client??"—",target:meta?.launchTarget??object?.targetStart??"—",forecast:meta?.launchForecast??"—",progress:Number(launchProgress),risk:meta?.launchRisk??object?.risk??"normal",critical};
-  });
-  const launchProgress=selectedRows[0]?.launchProgress??(selectedRows.length?Math.round(selectedRows.reduce((sum,row)=>sum+row.progress,0)/selectedRows.length):0);
-  const blockers=selectedRows.filter(row=>row.status==="blocked"||row.status!=="done"&&(row.critical||["high","critical"].includes(row.risk)));
-  const staffingReady=selectedAnalytics?.required?Math.min(100,Math.round(((selectedAnalytics.working+selectedAnalytics.preparing)/selectedAnalytics.required)*100)):100;
-  const operationalReady=selectedAnalytics?.todayDemand?Math.min(100,Math.round(selectedAnalytics.todayAssigned/selectedAnalytics.todayDemand*100)):100;
-  const dimensions=[
-    {label:"План и контрольные задачи",value:Number(launchProgress),tone:Number(launchProgress)>=90?"good":Number(launchProgress)>=70?"info":"warn"},
-    {label:"Комплектация персоналом",value:staffingReady,tone:staffingReady>=90?"good":staffingReady>=70?"info":"warn"},
-    {label:"Операционная готовность смен",value:operationalReady,tone:operationalReady>=90?"good":operationalReady>=70?"info":"warn"},
-    {label:"Критические зависимости",value:blockers.length?Math.max(0,100-blockers.length*15):100,tone:blockers.length?"warn":"good"},
-  ] as const;
-  const readiness=Math.round(dimensions.reduce((sum,row)=>sum+row.value,0)/dimensions.length);
-  const tabs=["summary","plan","gantt","risks"].map(key=>({key,label:key==="summary"?"Сводка":key==="plan"?"План":key==="gantt"?"Gantt":"Риски"}));
+  const canEdit=hasCapability(actor.access,"operations.object.edit");
+  const canReadRecruiting=hasCapability(actor.access,"recruiting.candidate.read");
 
-  return <>
-    <PageHeader eyebrow="Операции → Управление объектами" title="План запусков" subtitle="Подготовка новых объектов, контроль готовности, зависимостей и критических блокеров до выхода на стабильную работу." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"План запусков"}]}/>
-    <div className="metrics-grid">
-      <Metric label="Запуски в контуре" value={summaries.length}/>
-      <Metric label="В работе" value={summaries.filter(row=>row.progress<100).length}/>
-      <Metric label="Критические блокеры" value={summaries.reduce((sum,row)=>sum+row.critical,0)} tone={summaries.some(row=>row.critical)?"bad":"good"}/>
-      <Metric label="Средняя готовность" value={(summaries.length?Math.round(summaries.reduce((sum,row)=>sum+row.progress,0)/summaries.length):0)+"%"}/>
+  const [plans,tasks,analytics,waves,visits,applications]=await Promise.all([
+    listLaunchPlans(actor),
+    listLaunchTasks(actor),
+    listOperationsAnalytics(actor),
+    listLaunchStaffingWaves(actor),
+    listLaunchSiteVisits(actor),
+    canReadRecruiting?listRecruitingApplications(actor):Promise.resolve([]),
+  ]);
+
+  const scope=params.scope==="archive"?"archive":"active";
+  const visiblePlans=plans.filter(row=>scope==="archive"?["completed","cancelled"].includes(row.phase):!["completed","cancelled"].includes(row.phase));
+  const fallback=visiblePlans[0]??plans[0]??null;
+  const selectedPlan=(params.object?plans.find(row=>row.objectId===params.object):null)??fallback;
+  const selectedTasks=selectedPlan?tasks.filter(row=>(row.launchId&&row.launchId===selectedPlan.id)||(!row.launchId&&row.objectId===selectedPlan.objectId)):[];
+  const selectedWaves=selectedPlan?waves.filter(row=>row.launchId===selectedPlan.id||row.objectId===selectedPlan.objectId):[];
+  const selectedVisits=selectedPlan?visits.filter(row=>row.launchId===selectedPlan.id||row.objectId===selectedPlan.objectId):[];
+  const selectedAnalytics=selectedPlan?analytics.find(row=>row.objectId===selectedPlan.objectId)??null:null;
+  const selectedApplications=selectedPlan?applications.filter(row=>row.objectId===selectedPlan.objectId):[];
+
+  const summaries=visiblePlans.map(plan=>{
+    const rows=tasks.filter(row=>(row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId));
+    const planWaves=waves.filter(row=>row.launchId===plan.id||row.objectId===plan.objectId);
+    const fact=analytics.find(row=>row.objectId===plan.objectId);
+    const blockers=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length;
+    const nextTask=rows.filter(row=>row.status!=="done"&&row.status!=="cancelled"&&row.endDate).sort((a,b)=>(a.endDate??"").localeCompare(b.endDate??""))[0]??null;
+    const latestWave=[...planWaves].sort((a,b)=>a.targetDate.localeCompare(b.targetDate)).at(-1);
+    const staffingPlan=latestWave?planWaves.reduce((sum,row)=>sum+(row.status==="cancelled"?0:row.plannedCount),0):(fact?.required??0);
+    const staffingReady=(fact?.working??0)+(fact?.preparing??0);
+    const forecastDelta=plan.forecastDate?Math.round((parseDate(plan.forecastDate).getTime()-parseDate(plan.targetDate).getTime())/86_400_000):0;
+    return {plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta};
+  });
+
+  const upcoming=plans.filter(row=>!["completed","cancelled"].includes(row.phase)&&daysTo(row.targetDate)>=0&&daysTo(row.targetDate)<=14).length;
+  const allBlockers=plans.reduce((sum,plan)=>sum+tasks.filter(row=>((row.launchId&&row.launchId===plan.id)||(!row.launchId&&row.objectId===plan.objectId))&&row.status!=="done"&&row.status!=="cancelled"&&(row.blocksLaunch||row.status==="blocked"||["high","critical"].includes(row.risk))).length,0);
+  const delayed=plans.filter(row=>row.forecastDate&&row.forecastDate>row.targetDate&&!["completed","cancelled"].includes(row.phase)).length;
+  const activeCount=plans.filter(row=>!["completed","cancelled"].includes(row.phase)).length;
+  const initialTab=(["summary","plan","staffing","issues"].includes(params.tab??"")?params.tab:"summary") as "summary"|"plan"|"staffing"|"issues";
+
+  return <div className="launch-execution-page">
+    <PageHeader eyebrow="Операции → Управление объектами" title="План запусков" subtitle="Единый график подготовки объекта: задачи, выезды, обеспечение, волны вывода персонала, блокеры и переход к штатной работе." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"План запусков"}]}/>
+
+    <div className="metrics-grid launch-portfolio-metrics">
+      <Metric label="В подготовке" value={activeCount}/>
+      <Metric label="Ближайшие 14 дней" value={upcoming}/>
+      <Metric label="Открытые блокеры" value={allBlockers}/>
+      <Metric label="С переносом срока" value={delayed}/>
     </div>
 
-    <Section title="Запуски" note="Выберите объект, чтобы открыть его readiness, план задач, Gantt и риски.">
-      <div className="request-table-wrap"><table className="data-table">
-        <thead><tr><th>Объект</th><th>Клиент</th><th>Плановый старт</th><th>Прогноз</th><th>Готовность</th><th>Риск</th><th>Блокеры</th></tr></thead>
-        <tbody>{summaries.map(row=><tr key={row.objectId}>
-          <td><Link className="cell-title" href={"/launches?object="+row.objectId}>{row.object}</Link></td><td>{row.client}</td><td>{row.target}</td><td>{row.forecast}</td>
-          <td><div className="object-coverage"><div className="progress"><span style={{width:Math.min(100,row.progress)+"%"}}/></div><span>{row.progress}%</span></div></td>
-          <td><Status tone={row.risk==="critical"?"bad":row.risk==="high"||row.risk==="watch"?"warn":"good"}>{riskLabels[row.risk]??"Контроль"}</Status></td>
-          <td className="num">{row.critical||"—"}</td>
-        </tr>)}</tbody>
-      </table>{!summaries.length&&<div className="empty-inline">Планы запуска ещё не созданы</div>}</div>
-    </Section>
-
-    {selectedObject&&<section className="section launch-workspace">
-      <div className="section-head">
-        <div><div className="eyebrow">План запуска</div><h2>{selectedObject.name}</h2><p>{selectedObject.client} · плановый старт {selectedRows[0]?.launchTarget??selectedObject.targetStart??"—"}</p></div>
-        <div className="launch-readiness-head"><span>Готовность запуска</span><strong>{readiness}%</strong></div>
+    <div className="launch-portfolio-switch">
+      <div className="entity-tabs">
+        <Link className={scope==="active"?"active":""} href="/launches?scope=active">В работе <span>{activeCount}</span></Link>
+        <Link className={scope==="archive"?"active":""} href="/launches?scope=archive">Архив <span>{plans.length-activeCount}</span></Link>
       </div>
-      <div className="entity-tabs launch-tabs">{tabs.map(item=><Link key={item.key} className={view===item.key?"active":""} href={"/launches?object="+selectedObject.id+"&view="+item.key}>{item.label}</Link>)}</div>
+    </div>
 
-      {view==="summary"&&<div className="launch-summary-grid">
-        <Section title="Готовность по направлениям">
-          <div className="readiness-list">{dimensions.map(item=><div className="readiness-row" key={item.label}><div><strong>{item.label}</strong><span>{item.value}%</span></div><div className="progress"><span style={{width:item.value+"%"}}/></div></div>)}</div>
-        </Section>
-        <Section title="Критические блокеры" note={blockers.length?"Требуют решения до запуска":"Критических блокеров нет"}>
-          <div className="stack-list">{blockers.slice(0,6).map(row=><div className="stack-item" key={row.id}><div><strong>{row.title}</strong><small>{row.owner} · план {row.start}–{row.end}</small></div><Status tone={row.risk==="critical"?"bad":"warn"}>{riskLabels[row.risk]??"Контроль"}</Status></div>)}</div>
-          {!blockers.length&&<div className="empty-inline">Критических блокеров нет</div>}
-        </Section>
-        <Section title="Контрольные точки">
-          <div className="stack-list">{selectedRows.filter(row=>row.milestone).slice(0,8).map(row=><div className="stack-item" key={row.id}><div><strong>{row.title}</strong><small>{row.start} · {row.owner}</small></div><Status tone={row.status==="done"?"good":"info"}>{statusLabels[row.status]??"В работе"}</Status></div>)}</div>
-          {!selectedRows.some(row=>row.milestone)&&<div className="empty-inline">Контрольные точки не заданы</div>}
-        </Section>
-        <Section title="Операционная готовность">
-          <div className="launch-operational-grid launch-operational-grid-content">
-            <div><span>Плановая численность</span><strong>{selectedAnalytics?.required??0}</strong></div>
-            <div><span>Работает</span><strong>{selectedAnalytics?.working??0}</strong></div>
-            <div><span>Готовятся</span><strong>{selectedAnalytics?.preparing??0}</strong></div>
-            <div><span>Дефицит</span><strong>{selectedAnalytics?.deficit??0}</strong></div>
-          </div>
-        </Section>
-      </div>}
+    <section className="section section-flush launch-portfolio">
+      <div className="request-table-wrap"><table className="data-table launch-portfolio-table">
+        <thead><tr><th>Объект</th><th>Менеджер</th><th>Фаза</th><th>Срок запуска</th><th>Готовность</th><th>Персонал</th><th>Блокеры</th><th>Следующий шаг</th></tr></thead>
+        <tbody>{summaries.map(({plan,blockers,nextTask,staffingPlan,staffingReady,forecastDelta})=><tr key={plan.id} className={selectedPlan?.id===plan.id?"is-selected":""}>
+          <td><Link className="cell-title" href={"/launches?scope="+scope+"&object="+plan.objectId}>{plan.object}</Link><span className="cell-sub">{plan.client}</span></td>
+          <td>{plan.ownerName??"Не назначен"}</td>
+          <td><span className="launch-phase-text">{phaseLabels[plan.phase]??plan.phase}</span></td>
+          <td><strong>{formatDate(plan.targetDate)}</strong>{forecastDelta>0?<span className="cell-sub">прогноз +{forecastDelta} дн.</span>:<span className="cell-sub">{daysTo(plan.targetDate)>=0?"через "+daysTo(plan.targetDate)+" дн.":"дата прошла"}</span>}</td>
+          <td><div className="launch-portfolio-progress"><div className="progress"><span style={{width:Math.min(100,plan.progress)+"%"}}/></div><span>{plan.progress}%</span></div></td>
+          <td><strong>{staffingReady} / {staffingPlan}</strong><span className="cell-sub">{Math.max(staffingPlan-staffingReady,0)?("не хватает "+Math.max(staffingPlan-staffingReady,0)):"по плану"}</span></td>
+          <td><span className={blockers?"launch-blocker-count":""}>{blockers||"—"}</span></td>
+          <td>{nextTask?<><strong>{nextTask.title}</strong><span className="cell-sub">{nextTask.endDate?formatDate(nextTask.endDate):nextTask.end}</span></>:<span className="cell-sub">Нет незавершённых задач</span>}</td>
+        </tr>)}</tbody>
+      </table>{!summaries.length&&<div className="empty-inline">{scope==="archive"?"Завершённых запусков пока нет":"Активных планов запуска нет"}</div>}</div>
+    </section>
 
-      {view==="plan"&&<div className="request-table-wrap"><table className="data-table">
-        <thead><tr><th>Задача</th><th>Ответственный</th><th>Baseline</th><th>Текущий план</th><th>Прогресс</th><th>Статус</th><th>Риск</th></tr></thead>
-        <tbody>{selectedRows.map(row=><tr key={row.id}><td className="launch-task-cell" style={{paddingLeft:14+row.level*18}}><strong className="cell-title">{row.title}</strong>{row.critical&&<span className="cell-sub">Критический путь</span>}</td><td>{row.owner}</td><td>{(row.baselineStart??"—")+"–"+(row.baselineEnd??"—")}</td><td>{row.start+"–"+row.end}</td><td className="num">{row.progress}%</td><td><Status tone={row.status==="done"?"good":row.status==="blocked"?"bad":"info"}>{statusLabels[row.status]??"В работе"}</Status></td><td><Status tone={row.risk==="critical"?"bad":row.risk==="high"?"warn":"neutral"}>{riskLabels[row.risk]??"Норма"}</Status></td></tr>)}</tbody>
-      </table></div>}
-
-      {view==="gantt"&&<LaunchGantt rows={selectedRows}/>}
-      {view==="risks"&&<div className="stack-list launch-risk-list">{selectedRows.filter(row=>row.status!=="done"&&row.risk!=="normal").map(row=><div className="stack-item" key={row.id}><div><strong>{row.title}</strong><small>{row.owner} · {row.start}–{row.end} · прогресс {row.progress}%</small></div><Status tone={row.risk==="critical"?"bad":"warn"}>{riskLabels[row.risk]??"Контроль"}</Status></div>)}</div>}
-    </section>}
-  </>;
+    {selectedPlan&&<LaunchExecutionWorkspace plan={selectedPlan} tasks={selectedTasks} waves={selectedWaves} visits={selectedVisits} analytics={selectedAnalytics} applications={selectedApplications} canEdit={canEdit} demo={actor.demo} initialTab={initialTab}/>}
+  </div>;
 }
