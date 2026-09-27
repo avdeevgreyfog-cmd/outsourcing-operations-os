@@ -17,7 +17,7 @@ import type {
 import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 import type { SiteVisitChecklistItem, SiteVisitChecklistStatus } from "@/lib/operations/launch-checklist";
 
-type LaunchTab="summary"|"plan"|"staffing"|"issues";
+type LaunchTab="summary"|"plan"|"staffing"|"visit"|"issues";
 type PlanView="gantt"|"table";
 type TaskDraft={
   id:string|null;title:string;category:string;ownerUserId:string;startDate:string;endDate:string;progress:number;
@@ -204,6 +204,12 @@ export function LaunchExecutionWorkspace({
     .slice(0,6),[unfinished]);
 
   const visitIssues=useMemo(()=>(primaryVisit?.checklist??[]).filter(item=>item.status==="issue"||(primaryVisit?.status==="completed"&&item.required&&item.status==="pending")),[primaryVisit]);
+  const primaryVisitGroups=useMemo(()=>{
+    const groups=new Map<string,SiteVisitChecklistItem[]>();
+    for(const item of primaryVisit?.checklist??[])groups.set(item.section,[...(groups.get(item.section)??[]),item]);
+    return [...groups.entries()];
+  },[primaryVisit]);
+  const visitPending=(primaryVisit?.checklist??[]).filter(item=>item.required&&item.status==="pending");
   const visitAnswer=(id:string)=>primaryVisit?.checklist.find(item=>item.id===id)?.value?.trim()||"Не уточнено";
   const outputRules=[
     ["Допустимые дни вывода",visitAnswer("access-days")],
@@ -381,6 +387,7 @@ export function LaunchExecutionWorkspace({
         ["summary","Сводка"],
         ["plan","План запуска"],
         ["staffing","Персонал"],
+        ["visit","Выезд"],
         ["issues","Проблемы"],
       ] as Array<[LaunchTab,string]>).map(([key,label])=><button type="button" key={key} className={tab===key?"active":""} onClick={()=>setTab(key)}>{label}</button>)}
     </nav>
@@ -500,6 +507,64 @@ export function LaunchExecutionWorkspace({
           <div className="launch-rule-list">{outputRules.map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
         </section>
       </div>
+    </div>}
+
+    {tab==="visit"&&<div className="launch-visit-page">
+      <section className="launch-card launch-visit-overview-card">
+        <header>
+          <div><h3>Выезд на объект</h3><p>Рабочий чек-лист для менеджера или мастера: что уточнено, что осталось спросить и где есть проблема.</p></div>
+          {primaryVisit&&<span className={"launch-visit-status-pill status-"+primaryVisit.status}>{primaryVisit.status==="completed"?"Завершён":primaryVisit.status==="in_progress"?"В работе":"Запланирован"}</span>}
+        </header>
+        {primaryVisit?<div className="launch-visit-overview">
+          <div className="launch-visit-overview-main">
+            <div className="launch-visit-overview-meta">
+              <div><span>Дата</span><strong>{primaryVisit.scheduledDate?formatDate(primaryVisit.scheduledDate):"Не назначена"}</strong></div>
+              <div><span>Ответственный</span><strong>{primaryVisit.owner??localPlan.ownerName??"Не назначен"}</strong></div>
+              <div><span>Уточнено</span><strong>{visitStats.done} / {visitStats.total}</strong></div>
+              <div><span>Проблемы</span><strong>{visitStats.issues}</strong></div>
+            </div>
+            <div className="launch-visit-progress-row">
+              <div className="progress"><span style={{width:visitStats.percent+"%"}}/></div><strong>{visitStats.percent}%</strong>
+            </div>
+          </div>
+          <div className="launch-visit-overview-actions">
+            <button type="button" className="button primary" onClick={()=>openVisit(primaryVisit)}>{editable?"Заполнить чек-лист":"Открыть чек-лист"}</button>
+          </div>
+        </div>:<div className="launch-visit-empty">
+          <ClipboardCheck size={24}/>
+          <div><strong>Первичный выезд ещё не запланирован</strong><span>Создайте выезд, чтобы зафиксировать условия площадки до первого вывода людей.</span></div>
+          {editable&&<button type="button" className="button primary" disabled={busy} onClick={()=>void createVisit()}>Запланировать выезд</button>}
+        </div>}
+      </section>
+
+      {primaryVisit&&<div className="launch-visit-page-grid">
+        <section className="launch-card">
+          <header><div><h3>Что ещё нужно уточнить</h3><p>Обязательные вопросы без ответа.</p></div><span>{visitPending.length}</span></header>
+          <div className="launch-visit-pending-list">
+            {visitPending.map(item=><button type="button" key={item.id} onClick={()=>openVisit(primaryVisit)}><span>{item.section}</span><strong>{item.label}</strong>{item.blocksLaunch&&<small>Блокирует запуск</small>}</button>)}
+            {!visitPending.length&&<div className="launch-empty-positive">Все обязательные вопросы закрыты.</div>}
+          </div>
+        </section>
+        <section className="launch-card">
+          <header><div><h3>Зафиксированные проблемы</h3><p>Вопросы со статусом «Есть проблема».</p></div><span>{visitIssues.filter(item=>item.status==="issue").length}</span></header>
+          <div className="launch-visit-pending-list">
+            {visitIssues.filter(item=>item.status==="issue").map(item=><button type="button" key={item.id} onClick={()=>openVisit(primaryVisit)}><span>{item.section}</span><strong>{item.label}</strong><small>{item.note||item.value||"Нужно определить дальнейшее действие"}{item.blocksLaunch?" · блокирует запуск":""}</small></button>)}
+            {!visitIssues.some(item=>item.status==="issue")&&<div className="launch-empty-positive">Проблем на выезде не зафиксировано.</div>}
+          </div>
+        </section>
+      </div>}
+
+      {primaryVisit&&<section className="launch-card launch-visit-checklist-preview">
+        <header><div><h3>Чек-лист по разделам</h3><p>Короткий просмотр всех вопросов без открытия редактора.</p></div><button type="button" className="launch-text-action" onClick={()=>openVisit(primaryVisit)}>{editable?"Редактировать":"Открыть"}</button></header>
+        <div className="launch-visit-preview-sections">{primaryVisitGroups.map(([section,items])=><section key={section}>
+          <header><strong>{section}</strong><span>{items.filter(item=>item.status==="confirmed").length} / {items.filter(item=>item.status!=="na").length}</span></header>
+          <div>{items.map(item=><div className={"launch-visit-preview-item status-"+item.status} key={item.id}>
+            <span className="launch-visit-preview-state">{visitStatusLabels[item.status]}</span>
+            <strong>{item.label}</strong>
+            <small>{item.value||item.note||"—"}</small>
+          </div>)}</div>
+        </section>)}</div>
+      </section>}
     </div>}
 
     {tab==="issues"&&<div className="launch-issues-view">

@@ -83,7 +83,7 @@ export default async function Launches({searchParams}:{searchParams:Promise<{obj
   },0);
   const delayed=plans.filter(row=>row.forecastDate&&row.forecastDate>row.targetDate&&!["completed","cancelled"].includes(row.phase)).length;
   const activeCount=plans.filter(row=>!["completed","cancelled"].includes(row.phase)).length;
-  const initialTab=(["summary","plan","staffing","issues"].includes(params.tab??"")?params.tab:"summary") as "summary"|"plan"|"staffing"|"issues";
+  const initialTab=(["summary","plan","staffing","visit","issues"].includes(params.tab??"")?params.tab:"summary") as "summary"|"plan"|"staffing"|"visit"|"issues";
 
   return <div className="launch-execution-page">
     <PageHeader eyebrow="Операции → Управление объектами" title="План запусков" subtitle="Единый график подготовки объекта: задачи, выезды, обеспечение, волны вывода персонала, блокеры и переход к штатной работе." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"План запусков"}]}/>

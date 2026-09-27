@@ -268,3 +268,64 @@
 :root[data-operis-ui="new"] .launch-dependency-editor small{color:var(--muted);font-size:9.5px}
 :root[data-operis-ui="new"] .launch-wave-surplus{color:var(--muted);font-size:10.5px}
 :root[data-operis-ui="new"] .launch-readonly-note{display:inline-block;margin-top:6px;color:var(--muted);font-size:10.5px;font-weight:600}
+
+
+:root[data-operis-ui="new"] .launch-visit-page{display:grid;gap:10px}
+:root[data-operis-ui="new"] .launch-visit-overview-card>header{align-items:flex-start}
+:root[data-operis-ui="new"] .launch-visit-status-pill{padding:4px 7px;border:1px solid var(--border);border-radius:999px;font-size:10px;font-weight:650;color:var(--muted);white-space:nowrap}
+:root[data-operis-ui="new"] .launch-visit-status-pill.status-completed{color:var(--text);background:var(--panel-2)}
+:root[data-operis-ui="new"] .launch-visit-overview{display:flex;align-items:stretch;justify-content:space-between;gap:12px;padding:10px 12px}
+:root[data-operis-ui="new"] .launch-visit-overview-main{min-width:0;flex:1}
+:root[data-operis-ui="new"] .launch-visit-overview-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--border);border-radius:6px;overflow:hidden}
+:root[data-operis-ui="new"] .launch-visit-overview-meta>div{padding:7px 9px;border-right:1px solid var(--border)}
+:root[data-operis-ui="new"] .launch-visit-overview-meta>div:last-child{border-right:0}
+:root[data-operis-ui="new"] .launch-visit-overview-meta span,
+:root[data-operis-ui="new"] .launch-visit-overview-meta strong{display:block}
+:root[data-operis-ui="new"] .launch-visit-overview-meta span{color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .launch-visit-overview-meta strong{margin-top:3px;font-size:11.5px}
+:root[data-operis-ui="new"] .launch-visit-progress-row{margin-top:8px;display:grid;grid-template-columns:minmax(0,1fr) 42px;align-items:center;gap:8px}
+:root[data-operis-ui="new"] .launch-visit-progress-row strong{text-align:right;font-size:11px}
+:root[data-operis-ui="new"] .launch-visit-overview-actions{display:flex;align-items:center}
+:root[data-operis-ui="new"] .launch-visit-empty{padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
+:root[data-operis-ui="new"] .launch-visit-empty strong,
+:root[data-operis-ui="new"] .launch-visit-empty span{display:block}
+:root[data-operis-ui="new"] .launch-visit-empty strong{font-size:12.5px}
+:root[data-operis-ui="new"] .launch-visit-empty span{margin-top:3px;color:var(--muted);font-size:10.5px}
+:root[data-operis-ui="new"] .launch-visit-page-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+:root[data-operis-ui="new"] .launch-visit-pending-list{display:grid}
+:root[data-operis-ui="new"] .launch-visit-pending-list>button{min-height:48px;padding:7px 10px;border:0;border-bottom:1px solid var(--border);background:transparent;text-align:left;cursor:pointer}
+:root[data-operis-ui="new"] .launch-visit-pending-list>button:last-child{border-bottom:0}
+:root[data-operis-ui="new"] .launch-visit-pending-list>button:hover{background:var(--panel-2)}
+:root[data-operis-ui="new"] .launch-visit-pending-list span,
+:root[data-operis-ui="new"] .launch-visit-pending-list strong,
+:root[data-operis-ui="new"] .launch-visit-pending-list small{display:block}
+:root[data-operis-ui="new"] .launch-visit-pending-list span{color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .launch-visit-pending-list strong{margin-top:2px;font-size:11.5px}
+:root[data-operis-ui="new"] .launch-visit-pending-list small{margin-top:2px;color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .launch-visit-preview-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+:root[data-operis-ui="new"] .launch-visit-preview-sections>section{border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+:root[data-operis-ui="new"] .launch-visit-preview-sections>section:nth-child(2n){border-right:0}
+:root[data-operis-ui="new"] .launch-visit-preview-sections>section>header{min-height:34px;padding:6px 9px;display:flex;align-items:center;justify-content:space-between;background:var(--panel-2);border-bottom:1px solid var(--border)}
+:root[data-operis-ui="new"] .launch-visit-preview-sections>section>header strong{font-size:10.5px}
+:root[data-operis-ui="new"] .launch-visit-preview-sections>section>header span{color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .launch-visit-preview-item{min-height:44px;padding:6px 9px;display:grid;grid-template-columns:92px minmax(0,1fr);column-gap:8px;align-items:start;border-bottom:1px solid var(--border)}
+:root[data-operis-ui="new"] .launch-visit-preview-item:last-child{border-bottom:0}
+:root[data-operis-ui="new"] .launch-visit-preview-item .launch-visit-preview-state{grid-row:1/3;color:var(--muted);font-size:9.5px}
+:root[data-operis-ui="new"] .launch-visit-preview-item strong{font-size:10.8px;line-height:1.3}
+:root[data-operis-ui="new"] .launch-visit-preview-item small{margin-top:2px;color:var(--muted);font-size:9.5px;line-height:1.3}
+:root[data-operis-ui="new"] .launch-visit-preview-item.status-issue{box-shadow:inset 3px 0 0 var(--accent)}
+@media(max-width:900px){
+  :root[data-operis-ui="new"] .launch-visit-overview{display:grid}
+  :root[data-operis-ui="new"] .launch-visit-overview-meta{grid-template-columns:1fr 1fr}
+  :root[data-operis-ui="new"] .launch-visit-overview-meta>div:nth-child(2n){border-right:0}
+  :root[data-operis-ui="new"] .launch-visit-overview-meta>div:nth-child(-n+2){border-bottom:1px solid var(--border)}
+  :root[data-operis-ui="new"] .launch-visit-overview-actions{justify-content:flex-end}
+  :root[data-operis-ui="new"] .launch-visit-page-grid{grid-template-columns:1fr}
+  :root[data-operis-ui="new"] .launch-visit-preview-sections{grid-template-columns:1fr}
+  :root[data-operis-ui="new"] .launch-visit-preview-sections>section{border-right:0}
+}
+@media(max-width:620px){
+  :root[data-operis-ui="new"] .launch-visit-empty{grid-template-columns:auto 1fr}
+  :root[data-operis-ui="new"] .launch-visit-empty .button{grid-column:1/-1}
+  :root[data-operis-ui="new"] .launch-visit-preview-item{grid-template-columns:78px minmax(0,1fr)}
+}
