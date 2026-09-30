@@ -25,17 +25,16 @@ CREATE INDEX IF NOT EXISTS idx_staffing_plan_targets_scope
 CREATE INDEX IF NOT EXISTS idx_staffing_plan_targets_active
   ON staffing_plan_targets(organization_id,object_id,effective_from,effective_to);
 
-ALTER TABLE staffing_plan_targets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE staffing_plan_targets FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON staffing_plan_targets;
 CREATE POLICY tenant_isolation ON staffing_plan_targets
   USING (organization_id=app_current_organization_id())
   WITH CHECK (organization_id=app_current_organization_id());
 
-DROP TRIGGER IF EXISTS audit_staffing_plan_targets ON staffing_plan_targets;
 CREATE TRIGGER audit_staffing_plan_targets
 AFTER INSERT OR UPDATE OR DELETE ON staffing_plan_targets
 FOR EACH ROW EXECUTE FUNCTION audit_row_change();
+
+ALTER TABLE staffing_plan_targets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staffing_plan_targets FORCE ROW LEVEL SECURITY;
 
 -- Existing installations historically used active non-replacement needs as the
 -- staffing baseline. Preserve those numbers as an initial version without
