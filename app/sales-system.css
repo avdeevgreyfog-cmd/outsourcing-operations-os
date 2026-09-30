@@ -3426,9 +3426,13 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 
 /* Staffing plan portfolio workspace */
 .staffing-plan-workspace{display:grid;gap:14px}
-.staffing-plan-topbar{min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.staffing-plan-views{flex-wrap:wrap}
-.staffing-plan-views button{font-size:12px}
+.staffing-plan-topbar{min-height:43px;display:flex;align-items:stretch;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border)}
+.staffing-plan-tabs,.staffing-plan-subtabs{display:flex;align-items:stretch;gap:18px;max-width:100%;overflow-x:auto;scrollbar-width:thin}
+.staffing-plan-tabs button,.staffing-plan-subtabs button{position:relative;min-height:42px;padding:0;border:0;background:transparent;color:var(--muted);font-size:11.5px;font-weight:550;white-space:nowrap;cursor:pointer}
+.staffing-plan-tabs button::after,.staffing-plan-subtabs button::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:transparent}
+.staffing-plan-tabs button.active,.staffing-plan-subtabs button.active{color:var(--text);font-weight:650}
+.staffing-plan-tabs button.active::after,.staffing-plan-subtabs button.active::after{background:var(--accent)}
+.staffing-plan-tabs button:hover,.staffing-plan-subtabs button:hover{color:var(--text)}
 .staffing-plan-horizon{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}
 .staffing-plan-horizon .segmented a{min-height:29px;padding:0 10px;display:flex;align-items:center;border-radius:5px;color:var(--muted);font-size:11px}
 .staffing-plan-horizon .segmented a.active{background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
@@ -3438,12 +3442,19 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .staffing-plan-search{flex:1;min-width:220px;max-width:360px;display:flex;align-items:center}
 .staffing-plan-search input{width:100%;height:34px;padding:0 10px;border:0;outline:0;background:transparent;color:var(--text);font-size:12px}
 .metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
-.staffing-plan-action-signal{min-height:40px;padding:7px 11px;display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);text-align:left;cursor:pointer}
-.staffing-plan-action-signal span{font-size:11px;font-weight:650}
-.staffing-plan-action-signal strong{min-width:22px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:11px;background:var(--panel-3);font-size:10px;font-variant-numeric:tabular-nums}
-.staffing-plan-action-signal small{margin-left:auto;color:var(--muted);font-size:10px}
-.staffing-plan-action-signal.has-actions{border-left:3px solid var(--warn)}
-.staffing-plan-action-signal.is-clear{opacity:.8}
+.staffing-plan-action-panel{overflow:hidden;border:1px solid var(--border);border-radius:var(--sales-radius);background:var(--panel)}
+.staffing-plan-action-panel.has-actions{border-left:3px solid var(--warn)}
+.staffing-plan-action-panel.is-clear{opacity:.82}
+.staffing-plan-action-panel-head{width:100%;min-height:42px;padding:8px 11px;display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;gap:9px;border:0;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.staffing-plan-action-panel-head:hover{background:var(--panel-2)}
+.staffing-plan-action-panel-title{font-size:11.5px;font-weight:650}
+.staffing-plan-action-panel-head strong{min-width:22px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:5px;background:var(--panel-2);color:var(--text);font-size:10px;font-variant-numeric:tabular-nums}
+.staffing-plan-action-panel.has-actions .staffing-plan-action-panel-head strong{background:var(--warn-bg);color:var(--warn)}
+.staffing-plan-action-panel-head small{justify-self:end;color:var(--muted);font-size:10px;font-weight:450}
+.staffing-plan-action-panel-head svg{color:var(--muted)}
+.staffing-plan-action-panel-body{border-top:1px solid var(--border);background:var(--panel)}
+.staffing-action-table{min-width:980px}
+.staffing-action-table .status{white-space:nowrap}
 .staffing-plan-message{padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);font-size:12px}
 .staffing-plan-object-groups{display:grid;gap:14px}
 .staffing-manager-group{margin:0!important}
@@ -3465,8 +3476,9 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .staffing-plan-editor{display:flex;align-items:center;gap:6px}
 .staffing-plan-editor input{width:64px;height:31px;padding:0 7px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-variant-numeric:tabular-nums}
 .staffing-plan-editor .button{min-height:31px;padding-inline:8px}
-.staffing-funnel-modebar{min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.staffing-funnel-modebar>span{color:var(--muted);font-size:11px}
+.staffing-funnel-modebar{min-height:42px;display:flex;align-items:stretch;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border)}
+.staffing-plan-subtabs button{min-height:41px;font-size:11px}
+.staffing-funnel-modebar>span{align-self:center;color:var(--muted);font-size:10.5px}
 .staffing-funnel-board{display:grid;grid-template-columns:repeat(5,272px);gap:10px;align-items:start;overflow-x:auto;padding-bottom:5px}
 .staffing-funnel-lane{min-height:420px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
 .staffing-funnel-lane>header{height:42px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);font-size:12px;font-weight:700}
@@ -3496,12 +3508,16 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .staffing-plan-flow{padding:11px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-size:11px}
 @media(max-width:1280px){
   .metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .staffing-plan-topbar,.staffing-funnel-modebar{align-items:flex-start;flex-direction:column}
+  .staffing-plan-topbar,.staffing-funnel-modebar{align-items:stretch;flex-direction:column}
+  .staffing-plan-topbar{padding-bottom:8px}
+  .staffing-plan-horizon{justify-content:flex-start}
+  .staffing-funnel-modebar>span{align-self:flex-start;padding-bottom:8px}
 }
 @media(max-width:760px){
   .metrics-grid.staffing-plan-metrics{grid-template-columns:1fr 1fr}
   .staffing-plan-filters select,.staffing-plan-search{width:100%;max-width:none}
   .staffing-manager-head,.staffing-object-detail-head{align-items:flex-start;flex-direction:column}
-  .staffing-plan-action-signal{align-items:flex-start;flex-wrap:wrap}
-  .staffing-plan-action-signal small{width:100%;margin-left:0}
+  .staffing-plan-tabs,.staffing-plan-subtabs{gap:14px}
+  .staffing-plan-action-panel-head{grid-template-columns:auto auto auto}
+  .staffing-plan-action-panel-head small{grid-column:1/-1;justify-self:start}
 }
