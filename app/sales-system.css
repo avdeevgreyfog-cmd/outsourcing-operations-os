@@ -3437,8 +3437,13 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .staffing-plan-filters select{min-width:150px;padding:0 9px;font-size:12px}
 .staffing-plan-search{flex:1;min-width:220px;max-width:360px;display:flex;align-items:center}
 .staffing-plan-search input{width:100%;height:34px;padding:0 10px;border:0;outline:0;background:transparent;color:var(--text);font-size:12px}
-.metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
-.staffing-plan-metrics .metric:nth-child(4){border-right:1px solid var(--border)}
+.metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.staffing-plan-action-signal{min-height:40px;padding:7px 11px;display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);text-align:left;cursor:pointer}
+.staffing-plan-action-signal span{font-size:11px;font-weight:650}
+.staffing-plan-action-signal strong{min-width:22px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:11px;background:var(--panel-3);font-size:10px;font-variant-numeric:tabular-nums}
+.staffing-plan-action-signal small{margin-left:auto;color:var(--muted);font-size:10px}
+.staffing-plan-action-signal.has-actions{border-left:3px solid var(--warn)}
+.staffing-plan-action-signal.is-clear{opacity:.8}
 .staffing-plan-message{padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);font-size:12px}
 .staffing-plan-object-groups{display:grid;gap:14px}
 .staffing-manager-group{margin:0!important}
@@ -3490,13 +3495,13 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .staffing-forecast-table{min-width:1180px}
 .staffing-plan-flow{padding:11px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-size:11px}
 @media(max-width:1280px){
-  .metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .staffing-plan-metrics .metric:nth-child(3){border-right:0}
-  .staffing-plan-metrics .metric:nth-child(4){border-right:1px solid var(--border)}
+  .metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .staffing-plan-topbar,.staffing-funnel-modebar{align-items:flex-start;flex-direction:column}
 }
 @media(max-width:760px){
   .metrics-grid.staffing-plan-metrics{grid-template-columns:1fr 1fr}
   .staffing-plan-filters select,.staffing-plan-search{width:100%;max-width:none}
   .staffing-manager-head,.staffing-object-detail-head{align-items:flex-start;flex-direction:column}
+  .staffing-plan-action-signal{align-items:flex-start;flex-wrap:wrap}
+  .staffing-plan-action-signal small{width:100%;margin-left:0}
 }
