@@ -827,12 +827,12 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       const workers=demo.workers.filter(worker=>worker.objectId===need.objectId&&worker.specialty===need.specialty&&worker.status==="active");
       const working=workers.length;
       const related=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&candidate.need===need.specialty);
-      const preparing=related.filter(candidate=>["documents","clearance","preparation","first_shift"].includes(candidate.stage)&&!candidate.actualStartAt).length;
-      const confirmedStarts=related.filter(candidate=>candidate.stage==="first_shift"&&!candidate.actualStartAt&&Boolean(candidate.plannedStartDate)&&candidate.plannedStartDate!>today&&candidate.plannedStartDate!<=horizonEnd).length;
+      const preparing=related.filter(candidate=>["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
+      const confirmedStarts=related.filter(candidate=>candidate.stage==="first_shift").length;
       const absences=workers.filter(worker=>worker.absenceStatus&&worker.absenceFrom&&worker.absenceFrom<=horizonEnd&&(!worker.absenceTo||worker.absenceTo>=horizonEnd));
       const confirmedAbsences=absences.filter(worker=>worker.absenceStatus==="confirmed").length;
       const tentativeAbsences=absences.filter(worker=>worker.absenceStatus==="tentative").length;
-      const plannedExits=workers.filter(worker=>worker.plannedExitDate&&worker.plannedExitDate>=today&&worker.plannedExitDate<=horizonEnd).length;
+      const plannedExits=0;
       const projectedAvailable=Math.max(working-confirmedAbsences-plannedExits+confirmedStarts,0);
       const row:StaffingForecastRow={
         organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,
