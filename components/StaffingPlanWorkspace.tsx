@@ -310,8 +310,11 @@ export function StaffingPlanWorkspace({
       <div className="metric"><span>Работает сейчас</span><strong>{totals.working}</strong><small>{totals.required?Math.round(totals.working/totals.required*100):0}% от плана</small></div>
       <div className="metric"><span>Подтверждено к выходу</span><strong>{totals.confirmed}</strong><small>учитываются в надёжном прогнозе</small></div>
       <div className="metric tone-warn"><span>Прогнозный дефицит</span><strong>{totals.deficit}</strong><small>на горизонте {horizon} дней</small></div>
-      <div className={"metric "+(totals.action?"tone-bad":"tone-good")}><span>Требуют действия</span><strong>{totals.action}</strong><small>кандидаты, по которым нужен менеджер</small></div>
     </div>
+
+    <button className={"staffing-plan-action-signal "+(totals.action?"has-actions":"is-clear")} onClick={()=>{setView("funnel");setFunnelMode("staffing")}}>
+      <span>Требуют действия менеджера</span><strong>{totals.action}</strong><small>{totals.action?"Открыть общую воронку и разобрать кандидатов":"По кандидатам нет обязательных действий"}</small>
+    </button>
 
     {message&&<div className="staffing-plan-message">{message}</div>}
 
