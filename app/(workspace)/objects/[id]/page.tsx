@@ -56,6 +56,9 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
   const canNeeds=hasCapability(actor.access,"operations.need.read");
   const canEditNeeds=hasCapability(actor.access,"operations.need.edit");
+  const canEditStaffingPlan=hasCapability(actor.access,"operations.staffing_plan.edit")
+    ?canReadRow(actor.access,"operations.staffing_plan.edit",object,actor)
+    :canEditNeeds&&canReadRow(actor.access,"operations.need.edit",object,actor);
   const canWorkers=hasCapability(actor.access,"worker.read");
   const canShifts=hasCapability(actor.access,"operations.shift.read");
   const canPnl=hasCapability(actor.access,"finance.pnl.read");
@@ -289,7 +292,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </Section>
     </>)}
 
-    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} facts={objectFacts} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>)}
+    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} facts={objectFacts} today={todayIso} canEditPlan={canEditStaffingPlan} canFeedback={canEditObject} demo={actor.demo}/>)}
 
     {panel("workforce",<div className="object-module-shell"><div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} objectId={id} objectName={object.name} objects={workforceOptions.objects} canEdit={canEditWorkers} canOffboard={canOffboard} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</div>)}
 

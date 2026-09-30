@@ -3422,3 +3422,81 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   :root[data-operis-ui="new"] .object-recruiting-facts{grid-template-columns:1fr}
   :root[data-operis-ui="new"] .object-recruiting-facts article{border-right:0!important}
 }
+
+
+/* Staffing plan portfolio workspace */
+.staffing-plan-workspace{display:grid;gap:14px}
+.staffing-plan-topbar{min-height:42px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.staffing-plan-views{flex-wrap:wrap}
+.staffing-plan-views button{font-size:12px}
+.staffing-plan-horizon{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px}
+.staffing-plan-horizon .segmented a{min-height:29px;padding:0 10px;display:flex;align-items:center;border-radius:5px;color:var(--muted);font-size:11px}
+.staffing-plan-horizon .segmented a.active{background:var(--panel);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.staffing-plan-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 0;border-block:1px solid var(--border)}
+.staffing-plan-filters select,.staffing-plan-search{min-height:36px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text)}
+.staffing-plan-filters select{min-width:150px;padding:0 9px;font-size:12px}
+.staffing-plan-search{flex:1;min-width:220px;max-width:360px;display:flex;align-items:center}
+.staffing-plan-search input{width:100%;height:34px;padding:0 10px;border:0;outline:0;background:transparent;color:var(--text);font-size:12px}
+.metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
+.staffing-plan-metrics .metric:nth-child(4){border-right:1px solid var(--border)}
+.staffing-plan-message{padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);font-size:12px}
+.staffing-plan-object-groups{display:grid;gap:14px}
+.staffing-manager-group{margin:0!important}
+.staffing-manager-head{min-height:48px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+.staffing-manager-head>div:first-child strong{display:block;font-size:13px}
+.staffing-manager-head>div:first-child span{display:block;margin-top:3px;color:var(--muted);font-size:10px}
+.staffing-manager-head>div:last-child{display:flex;gap:18px;color:var(--muted);font-size:11px}
+.staffing-manager-head b{margin-left:4px;color:var(--text);font-variant-numeric:tabular-nums}
+.staffing-object-table{min-width:1120px}
+.staffing-object-toggle{padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.staffing-object-toggle strong{display:block;font-size:12px}
+.staffing-object-toggle span{display:block;margin-top:3px;color:var(--muted);font-size:10px}
+.staffing-object-detail-row>td{padding:0!important;background:var(--panel-2)!important}
+.staffing-object-detail-head{min-height:54px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border)}
+.staffing-object-detail-head strong{display:block;font-size:12px}
+.staffing-object-detail-head span{display:block;margin-top:3px;color:var(--muted);font-size:10px}
+.staffing-object-detail-head>div:last-child{display:flex;gap:7px}
+.staffing-specialty-detail{min-width:980px;background:var(--panel)}
+.staffing-plan-editor{display:flex;align-items:center;gap:6px}
+.staffing-plan-editor input{width:64px;height:31px;padding:0 7px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);font-variant-numeric:tabular-nums}
+.staffing-plan-editor .button{min-height:31px;padding-inline:8px}
+.staffing-funnel-modebar{min-height:38px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.staffing-funnel-modebar>span{color:var(--muted);font-size:11px}
+.staffing-funnel-board{display:grid;grid-template-columns:repeat(5,272px);gap:10px;align-items:start;overflow-x:auto;padding-bottom:5px}
+.staffing-funnel-lane{min-height:420px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
+.staffing-funnel-lane>header{height:42px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);font-size:12px;font-weight:700}
+.staffing-funnel-lane>header b{min-width:22px;height:22px;padding:0 6px;display:grid;place-items:center;border-radius:11px;background:var(--panel-3);font-size:10px}
+.staffing-funnel-lane>div{display:grid;gap:8px;padding:8px}
+.staffing-funnel-card{padding:11px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.staffing-funnel-card.needs-action{border-left:3px solid var(--warn)}
+.staffing-funnel-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.staffing-funnel-card-head>a:first-child{font-size:12px;font-weight:700}
+.staffing-funnel-card-head>a:last-child{max-width:110px;color:var(--muted);font-size:9px;text-align:right}
+.staffing-funnel-card>strong{display:block;margin-top:6px;font-size:11px}
+.staffing-funnel-card-meta{margin-top:5px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--muted);font-size:9px}
+.staffing-funnel-card-date{margin-top:7px;font-size:10px;font-weight:650}
+.staffing-funnel-task{margin-top:8px;padding:7px;border:1px solid var(--border);border-radius:6px;background:var(--panel-2);display:grid;gap:2px}
+.staffing-funnel-task b{font-size:8px;text-transform:uppercase;color:var(--soft)}
+.staffing-funnel-task span{font-size:10px}
+.staffing-funnel-task small{font-size:9px;color:var(--muted)}
+.staffing-funnel-alert{margin-top:8px;padding:6px 7px;border-radius:5px;background:var(--warn-bg);color:var(--warn);font-size:9px;font-weight:650}
+.staffing-funnel-controls{margin-top:9px;padding-top:8px;border-top:1px solid var(--border);display:grid;gap:7px}
+.staffing-funnel-controls>div:first-child{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.staffing-funnel-controls input,.staffing-funnel-controls select{min-width:0;height:30px;padding:0 6px;border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--text);font-size:9px}
+.staffing-funnel-controls .button{min-height:30px;padding-inline:8px;font-size:9px}
+.staffing-funnel-actions{display:flex!important;grid-template-columns:none!important;flex-wrap:wrap;gap:5px!important}
+.staffing-funnel-empty{min-height:90px;display:grid;place-items:center;color:var(--soft);font-size:10px}
+.staffing-working-table{min-width:1050px}
+.staffing-forecast-table{min-width:1180px}
+.staffing-plan-flow{padding:11px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-size:11px}
+@media(max-width:1280px){
+  .metrics-grid.staffing-plan-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .staffing-plan-metrics .metric:nth-child(3){border-right:0}
+  .staffing-plan-metrics .metric:nth-child(4){border-right:1px solid var(--border)}
+  .staffing-plan-topbar,.staffing-funnel-modebar{align-items:flex-start;flex-direction:column}
+}
+@media(max-width:760px){
+  .metrics-grid.staffing-plan-metrics{grid-template-columns:1fr 1fr}
+  .staffing-plan-filters select,.staffing-plan-search{width:100%;max-width:none}
+  .staffing-manager-head,.staffing-object-detail-head{align-items:flex-start;flex-direction:column}
+}

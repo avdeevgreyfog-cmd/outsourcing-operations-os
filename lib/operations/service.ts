@@ -810,7 +810,8 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
 
 export type StaffingForecastRow={
   organizationId:string;objectId:string;object:string;specialtyId:string;specialty:string;needIds:string[];editableNeedId:string|null;
-  required:number;working:number;preparing:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;replacementNeeds:number;replacementReady:number;
+  planTargetIds:string[];planSource:"target"|"legacy_need";openNeedCount:number;openNeedVolume:number;
+  required:number;working:number;preparing:number;confirmedStarts:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;replacementNeeds:number;replacementReady:number;
   projectedAvailable:number;projectedDeficit:number;ownerUserId:string|null;assigneeUserIds:string[];regionId:string|null;
 };
 
@@ -825,49 +826,122 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       const object=demo.objects.find(row=>row.id===need.objectId);
       const workers=demo.workers.filter(worker=>worker.objectId===need.objectId&&worker.specialty===need.specialty&&worker.status==="active");
       const working=workers.length;
-      const preparing=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&candidate.need===need.specialty&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
-      const absences=workers.filter(worker=>worker.absenceStatus&&worker.absenceFrom&&worker.absenceFrom<=horizonEnd&&(!worker.absenceTo||worker.absenceTo>=today));
+      const related=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&candidate.need===need.specialty);
+      const preparing=related.filter(candidate=>["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
+      const confirmedStarts=related.filter(candidate=>candidate.stage==="first_shift").length;
+      const absences=workers.filter(worker=>worker.absenceStatus&&worker.absenceFrom&&worker.absenceFrom<=horizonEnd&&(!worker.absenceTo||worker.absenceTo>=horizonEnd));
       const confirmedAbsences=absences.filter(worker=>worker.absenceStatus==="confirmed").length;
       const tentativeAbsences=absences.filter(worker=>worker.absenceStatus==="tentative").length;
-      const projectedAvailable=Math.max(working-confirmedAbsences+preparing,0);
-      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,replacementNeeds:0,replacementReady:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
+      const plannedExits=0;
+      const projectedAvailable=Math.max(working-confirmedAbsences-plannedExits+confirmedStarts,0);
+      const row:StaffingForecastRow={
+        organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,
+        specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,
+        planTargetIds:[],planSource:"legacy_need",openNeedCount:1,openNeedVolume:Number(need.required),
+        required:Number(need.required),working,preparing,confirmedStarts,confirmedAbsences,tentativeAbsences,plannedExits,
+        replacementNeeds:0,replacementReady:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),
+        ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null
+      };
       return row;
     }).filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<StaffingForecastRow[]>`
-      WITH demand AS (
-        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required,array_agg(n.id ORDER BY n.created_at) need_ids,count(*)::int need_count
+      WITH ranked_targets AS (
+        SELECT t.*,
+          row_number() OVER (
+            PARTITION BY t.object_id,t.specialty_id,t.shift_kind
+            ORDER BY t.effective_from DESC,t.created_at DESC
+          ) rn
+        FROM staffing_plan_targets t
+        WHERE t.effective_from<=current_date+${horizon}::int
+          AND (t.effective_to IS NULL OR t.effective_to>=current_date+${horizon}::int)
+      ),
+      target_demand AS (
+        SELECT object_id,specialty_id,sum(planned_count)::int required,
+          array_agg(id::text ORDER BY effective_from,created_at) "planTargetIds"
+        FROM ranked_targets WHERE rn=1
+        GROUP BY object_id,specialty_id
+      ),
+      legacy_need_demand AS (
+        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required
         FROM needs n
-        WHERE n.object_id IS NOT NULL AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')
+        WHERE n.object_id IS NOT NULL
+          AND n.source_kind<>'replacement'
+          AND n.status NOT IN ('cancelled','archived','closed')
+          AND NOT EXISTS (
+            SELECT 1 FROM target_demand td
+            WHERE td.object_id=n.object_id AND td.specialty_id=n.specialty_id
+          )
+        GROUP BY n.object_id,n.specialty_id
+      ),
+      demand AS (
+        SELECT object_id,specialty_id,required,"planTargetIds",'target'::text "planSource"
+        FROM target_demand
+        UNION ALL
+        SELECT object_id,specialty_id,required,ARRAY[]::text[] "planTargetIds",'legacy_need'::text "planSource"
+        FROM legacy_need_demand
+      ),
+      need_context AS (
+        SELECT n.object_id,n.specialty_id,
+          array_agg(n.id::text ORDER BY n.created_at) need_ids,
+          count(*)::int need_count,
+          sum(n.count_required)::int need_volume
+        FROM needs n
+        WHERE n.object_id IS NOT NULL
+          AND n.source_kind<>'replacement'
+          AND n.status NOT IN ('cancelled','archived','closed')
         GROUP BY n.object_id,n.specialty_id
       )
       SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
-        d.need_ids::text[] "needIds",CASE WHEN d.need_count=1 THEN d.need_ids[1] ELSE NULL END "editableNeedId",d.required,
+        COALESCE(nc.need_ids,ARRAY[]::text[]) "needIds",
+        CASE WHEN nc.need_count=1 THEN nc.need_ids[1] ELSE NULL END "editableNeedId",
+        d."planTargetIds",d."planSource",
+        COALESCE(nc.need_count,0)::int "openNeedCount",COALESCE(nc.need_volume,0)::int "openNeedVolume",
+        d.required,
         COALESCE(workforce.working,0)::int working,
         COALESCE(incoming.preparing,0)::int preparing,
+        COALESCE(incoming.confirmed,0)::int "confirmedStarts",
         COALESCE(absences.confirmed,0)::int "confirmedAbsences",
         COALESCE(absences.tentative,0)::int "tentativeAbsences",
         COALESCE(exits.planned,0)::int "plannedExits",
         COALESCE(replacements.open_count,0)::int "replacementNeeds",
         COALESCE(replacements.ready_count,0)::int "replacementReady",
-        GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
-        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0),0)::int "projectedDeficit",
+        GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.confirmed,0),0)::int "projectedAvailable",
+        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.confirmed,0),0),0)::int "projectedDeficit",
         o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-      FROM demand d JOIN objects o ON o.id=d.object_id JOIN specialties s ON s.id=d.specialty_id
+      FROM demand d
+      JOIN objects o ON o.id=d.object_id
+      JOIN specialties s ON s.id=d.specialty_id
+      LEFT JOIN need_context nc ON nc.object_id=d.object_id AND nc.specialty_id=d.specialty_id
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT a.worker_id)::int working
-        FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-        WHERE a.object_id=o.id AND a.specialty_id=d.specialty_id AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+        FROM worker_object_assignments a
+        JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+        WHERE a.object_id=o.id AND a.specialty_id=d.specialty_id
+          AND a.effective_from<=current_date
+          AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       ) workforce ON true
       LEFT JOIN LATERAL (
-        SELECT count(DISTINCT ca.candidate_id)::int preparing
+        SELECT
+          count(DISTINCT ca.candidate_id) FILTER (
+            WHERE ca.stage IN ('documents','clearance','preparation','ready','first_shift','started')
+              AND ca.actual_start_at IS NULL
+              AND (
+                ca.stage IN ('preparation','ready','first_shift','started')
+                OR ca.planned_start_date<=current_date+${horizon}::int
+              )
+          )::int preparing,
+          count(DISTINCT ca.candidate_id) FILTER (
+            WHERE ca.stage IN ('first_shift','started')
+              AND ca.actual_start_at IS NULL
+              AND ca.planned_start_date IS NOT NULL
+              AND ca.planned_start_date BETWEEN current_date AND current_date+${horizon}::int
+          )::int confirmed
         FROM candidate_applications ca
         JOIN needs cn ON cn.id=ca.need_id
-        WHERE ca.object_id=o.id AND cn.specialty_id=d.specialty_id AND ca.stage IN ('documents','clearance','preparation','first_shift')
-          AND ca.actual_start_at IS NULL
-          AND ((ca.planned_start_date IS NOT NULL AND ca.planned_start_date<=current_date+${horizon}::int) OR ca.stage IN ('preparation','first_shift'))
+        WHERE ca.object_id=o.id AND cn.specialty_id=d.specialty_id
       ) incoming ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT CASE WHEN ap.status='confirmed' THEN ap.worker_id END)::int confirmed,
@@ -876,9 +950,9 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
         WHERE ap.status IN ('confirmed','tentative')
           AND a.effective_from<=current_date+${horizon}::int
-          AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+          AND (a.effective_to IS NULL OR a.effective_to>=current_date+${horizon}::int)
           AND ap.planned_from<=current_date+${horizon}::int
-          AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
+          AND (ap.planned_to IS NULL OR ap.planned_to>=current_date+${horizon}::int)
       ) absences ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT ep.worker_id)::int planned
@@ -892,7 +966,8 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       LEFT JOIN LATERAL (
         SELECT count(*) FILTER (WHERE n.status NOT IN ('filled','cancelled','archived'))::int open_count,
                count(*) FILTER (WHERE n.status='filled' OR ep.replacement_worker_id IS NOT NULL)::int ready_count
-        FROM needs n LEFT JOIN worker_exit_processes ep ON ep.id=n.replacement_exit_id
+        FROM needs n
+        LEFT JOIN worker_exit_processes ep ON ep.id=n.replacement_exit_id
         WHERE n.object_id=o.id AND n.specialty_id=d.specialty_id AND n.source_kind='replacement'
       ) replacements ON true
       LEFT JOIN LATERAL (
@@ -903,9 +978,9 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
           JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
           WHERE ap.status='confirmed'
             AND a.effective_from<=current_date+${horizon}::int
-            AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+            AND (a.effective_to IS NULL OR a.effective_to>=current_date+${horizon}::int)
             AND ap.planned_from<=current_date+${horizon}::int
-            AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
+            AND (ap.planned_to IS NULL OR ap.planned_to>=current_date+${horizon}::int)
           UNION
           SELECT ep.worker_id
           FROM worker_exit_processes ep

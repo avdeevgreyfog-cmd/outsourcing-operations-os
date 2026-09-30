@@ -31,7 +31,7 @@ export type ReconciliationIssue = { id?:string; difference:number|string; worker
 export type TimesheetSnapshotMeta = { id:string; status:string; version:number; hours:number; comment:string|null; createdAt:string };
 export type TimesheetData = ScopedRow & { objectId:string; object:string; period:string; month:string; periodStart:string; periodEnd:string; clientHours:number; internalHours:number; discrepancy:number; status:string; planByDay:Record<string,number>; rows:TimesheetWorkerRow[]; issue:ReconciliationIssue|null; internalSnapshot:TimesheetSnapshotMeta|null; clientSnapshot:TimesheetSnapshotMeta|null };
 export type FinanceRow = ScopedRow & { id:string; objectId:string; object:string; revenue:number|string; workerCost:number|string; expenses:number|string; contribution:number|string; marginPct:number|string; planMarginPct?:number|string|null; periodStart?:string|null; periodEnd?:string|null };
-export type TaskRow = ScopedRow & { id:string; title:string; status:string; priority:string; due?:string|null; entity?:string|null };
+export type TaskRow = ScopedRow & { id:string; title:string; status:string; priority:string; due?:string|null; entity?:string|null; entityType?:string|null; entityId?:string|null };
 export type AccessUserRow = { id:string; membershipId:string; name:string; email:string|null; role:string; roleCode:string; processRoles:string[]; teams:number; regions:number; scopes:string[]; capabilities:number; systemCapabilities:string[]; isOwner:boolean };
 export type AuditRow = { id:string; createdAt:string; actor:string; action:string; record:string; summary?:string|null };
 export type ProposalRow = ScopedRow & { id:string; requestId:string; request:string; client:string; version:number; status:string; scenarioCount:number; totalValue:number|string; createdAt:string; createdBy:string };
@@ -913,6 +913,7 @@ export async function listTasks(actor: Actor): Promise<TaskRow[]> {
     const rows=await sql<TaskRow[]>`
       SELECT t.id,t.organization_id "organizationId",t.title,t.status,t.priority,t.assignee_user_id "ownerUserId",
         ARRAY[t.assignee_user_id::text] "assigneeUserIds",to_char(t.due_at,'DD.MM HH24:MI') due,
+        t.entity_type "entityType",t.entity_id::text "entityId",
         CASE
           WHEN t.entity_type='candidate_application' THEN trim(concat_ws(' · ',c.full_name,COALESCE(n.title,s.name),o.name))
           WHEN t.entity_type='candidate' THEN COALESCE(c_direct.full_name,'Кандидат')
