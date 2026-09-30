@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { Status } from "@/components/UI";
 import type { TaskRow, WorkerRow } from "@/lib/data/service";
 import type { StaffingForecastRow } from "@/lib/operations/service";
@@ -57,6 +58,13 @@ function shortDate(value:string|null|undefined){
 function requiresManagerAction(row:RecruitingApplicationRow){
   return row.workflow?.managerInterviewState==="pending"||row.stage==="preparation"||row.stage==="first_shift"||row.stage==="no_show";
 }
+function managerActionReason(row:RecruitingApplicationRow){
+  if(row.stage==="no_show"||row.workflow?.firstShiftOutcome==="no_show")return "Невыход — нужна обратная связь";
+  if(row.workflow?.managerInterviewState==="pending")return "Нужно связаться с кандидатом";
+  if(row.stage==="first_shift")return row.plannedStartDate?"Проверить согласованный выход":"Назначить дату выхода";
+  if(row.stage==="preparation")return "Согласовать дату и смену выхода";
+  return "Требуется действие менеджера";
+}
 function classifyCandidate(row:RecruitingApplicationRow):FunnelLane|null{
   if(row.stage==="rejected"||row.stage==="retention_30")return null;
   if(row.stage==="no_show"||row.workflow?.firstShiftOutcome==="no_show"||row.workflow?.managerInterviewState==="pending")return "problem";
@@ -100,6 +108,7 @@ export function StaffingPlanWorkspace({
   const [localRows,setLocalRows]=useState(rows);
   const [localApplications,setLocalApplications]=useState(applications);
   const [expandedObject,setExpandedObject]=useState<string|null>(null);
+  const [actionsOpen,setActionsOpen]=useState(false);
   const [manager,setManager]=useState("all");
   const [objectFilter,setObjectFilter]=useState("all");
   const [specialty,setSpecialty]=useState("all");
@@ -159,13 +168,18 @@ export function StaffingPlanWorkspace({
     ).length;
   };
 
+  const managerActionApplications=useMemo(()=>scopedApplications
+    .filter(requiresManagerAction)
+    .sort((a,b)=>(a.plannedStartDate??"9999").localeCompare(b.plannedStartDate??"9999")||a.fullName.localeCompare(b.fullName,"ru"))
+  ,[scopedApplications]);
+
   const totals=useMemo(()=>({
     required:scopedRows.reduce((sum,row)=>sum+row.required,0),
     working:scopedRows.reduce((sum,row)=>sum+row.working,0),
     confirmed:scopedRows.reduce((sum,row)=>sum+row.confirmedStarts,0),
     deficit:scopedRows.reduce((sum,row)=>sum+row.projectedDeficit,0),
-    action:scopedApplications.filter(requiresManagerAction).length,
-  }),[scopedRows,scopedApplications]);
+    action:managerActionApplications.length,
+  }),[scopedRows,managerActionApplications]);
 
   const objectSummaries=useMemo(()=>scopeObjects.map(object=>{
     const objectRows=scopedRows.filter(row=>row.objectId===object.id);
@@ -274,8 +288,8 @@ export function StaffingPlanWorkspace({
 
   return <div className="staffing-plan-workspace">
     <div className="staffing-plan-topbar">
-      <div className="segmented staffing-plan-views">
-        {(Object.keys(viewLabels) as StaffingView[]).map(key=><button key={key} className={view===key?"active":""} onClick={()=>setView(key)}>{viewLabels[key]}</button>)}
+      <div className="staffing-plan-tabs" role="tablist" aria-label="Представление плана комплектации">
+        {(Object.keys(viewLabels) as StaffingView[]).map(key=><button key={key} role="tab" aria-selected={view===key} className={view===key?"active":""} onClick={()=>setView(key)}>{viewLabels[key]}</button>)}
       </div>
       <div className="staffing-plan-horizon"><span>Горизонт</span><div className="segmented">{[14,30,60,90].map(value=><Link key={value} className={horizon===value?"active":""} href={`/staffing-plan?horizon=${value}&view=${view}`}>{value} дней</Link>)}</div></div>
     </div>
@@ -312,9 +326,33 @@ export function StaffingPlanWorkspace({
       <div className="metric tone-warn"><span>Прогнозный дефицит</span><strong>{totals.deficit}</strong><small>на горизонте {horizon} дней</small></div>
     </div>
 
-    <button className={"staffing-plan-action-signal "+(totals.action?"has-actions":"is-clear")} onClick={()=>{setView("funnel");setFunnelMode("staffing")}}>
-      <span>Требуют действия менеджера</span><strong>{totals.action}</strong><small>{totals.action?"Открыть общую воронку и разобрать кандидатов":"По кандидатам нет обязательных действий"}</small>
-    </button>
+    <section className={"staffing-plan-action-panel "+(totals.action?"has-actions":"is-clear")}>
+      <button
+        type="button"
+        className="staffing-plan-action-panel-head"
+        aria-expanded={actionsOpen}
+        onClick={()=>setActionsOpen(open=>!open)}
+      >
+        <span className="staffing-plan-action-panel-title">Требуют действия менеджера</span>
+        <strong>{totals.action}</strong>
+        <small>{totals.action?"Кандидаты, по которым нужен контроль объекта":"По кандидатам нет обязательных действий"}</small>
+        {actionsOpen?<ChevronUp size={15}/>:<ChevronDown size={15}/>}
+      </button>
+      {actionsOpen&&<div className="staffing-plan-action-panel-body">
+        {managerActionApplications.length?<div className="request-table-wrap"><table className="data-table staffing-action-table">
+          <thead><tr><th>Кандидат</th><th>Объект</th><th>Профессия</th><th>Что требуется</th><th>Выход</th><th>Подбор</th><th></th></tr></thead>
+          <tbody>{managerActionApplications.map(candidate=><tr key={candidate.applicationId}>
+            <td><Link className="cell-title" href={`/candidates/${candidate.candidateId}`}>{candidate.fullName}</Link><span className="cell-sub">{candidate.phone??"Контакт не указан"}</span></td>
+            <td>{candidate.objectId?<Link href={`/objects/${candidate.objectId}?tab=staffing`}>{candidate.object??"Объект"}</Link>:"—"}</td>
+            <td>{candidate.need}</td>
+            <td><Status tone={candidate.stage==="no_show"?"bad":"warn"}>{managerActionReason(candidate)}</Status></td>
+            <td>{candidate.plannedStartDate?formatDate(candidate.plannedStartDate):"—"}</td>
+            <td>{candidate.owner??"Не назначен"}</td>
+            <td><button className="table-link" type="button" onClick={()=>{setView("funnel");setFunnelMode("staffing");setActionsOpen(false)}}>Во воронку</button></td>
+          </tr>)}</tbody>
+        </table></div>:<div className="empty-inline">Дополнительных действий по кандидатам сейчас нет.</div>}
+      </div>}
+    </section>
 
     {message&&<div className="staffing-plan-message">{message}</div>}
 
@@ -358,7 +396,7 @@ export function StaffingPlanWorkspace({
     </div>}
 
     {view==="funnel"&&<>
-      <div className="staffing-funnel-modebar"><div className="segmented">{(["staffing","working","replacements"] as FunnelMode[]).map(mode=><button key={mode} className={funnelMode===mode?"active":""} onClick={()=>setFunnelMode(mode)}>{mode==="staffing"?"Комплектование":mode==="working"?"Работающие":"Замены"}</button>)}</div><span>{funnelMode==="staffing"?"Кандидаты по всем доступным объектам с оперативными действиями менеджера.":funnelMode==="working"?"Текущий состав сотрудников по объектам.":"Плановые выбытия и состояние замены."}</span></div>
+      <div className="staffing-funnel-modebar"><div className="staffing-plan-subtabs" role="tablist" aria-label="Режим воронки">{(["staffing","working","replacements"] as FunnelMode[]).map(mode=><button key={mode} role="tab" aria-selected={funnelMode===mode} className={funnelMode===mode?"active":""} onClick={()=>setFunnelMode(mode)}>{mode==="staffing"?"Комплектование":mode==="working"?"Работающие":"Замены"}</button>)}</div><span>{funnelMode==="staffing"?"Кандидаты по всем доступным объектам с оперативными действиями менеджера.":funnelMode==="working"?"Текущий состав сотрудников по объектам.":"Плановые выбытия и состояние замены."}</span></div>
       {funnelMode==="staffing"&&<div className="staffing-funnel-board">
         {(Object.keys(laneLabels) as FunnelLane[]).map(lane=><section className="staffing-funnel-lane" key={lane}>
           <header><span>{laneLabels[lane]}</span><b>{lanes[lane].length}</b></header>
