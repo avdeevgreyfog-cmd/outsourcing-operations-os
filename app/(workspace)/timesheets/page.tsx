@@ -31,9 +31,7 @@ export default async function Timesheets({searchParams}:{searchParams:Promise<{o
   if(!data)return <><PageHeader eyebrow="Операции → Персонал объектов" title="Табели"/><Empty title="Нет доступного табеля" text="Объект недоступен в вашем контуре или по нему нет данных за выбранный период."/></>;
   const sensitive=hasCapability(actor.access,"worker.compensation.read");
   return <>
-    <PageHeader eyebrow="Операции → Персонал объектов" title={"Табель · "+data.object} subtitle="Рабочий табель конкретного объекта. После согласования с заказчиком факт фиксируется и открывается заново только руководителем." breadcrumbs={[{label:"Операции"},{label:"Персонал объектов"},{label:"Табели",href:"/timesheets?month="+month},{label:data.object}]}>
-      <Link className="button" href={"/timesheets?month="+month}>Все табели</Link>
-    </PageHeader>
+    <PageHeader eyebrow="Операции → Персонал объектов" title={"Табель · "+data.object} subtitle="Рабочий табель конкретного объекта. После согласования с заказчиком факт фиксируется и открывается заново только руководителем." breadcrumbs={[{label:"Операции"},{label:"Персонал объектов"},{label:"Табели",href:"/timesheets?month="+month},{label:data.object}]} actions={<Link className="button" href={"/timesheets?month="+month}>Все табели</Link>}/>
     <div className="metrics-grid">
       <Metric label="Сотрудников" value={new Set(data.rows.filter(row=>row.rowKind!=="candidate").map(row=>row.workerId)).size}/>
       <Metric label="Внутренний факт" value={data.internalHours+" ч"}/>
