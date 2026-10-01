@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { Status } from "@/components/UI";
 import { SalesSearch } from "@/components/sales/SalesUI";
 import type { InventorySnapshot, OperationsReferenceData, SupplyRequestRow } from "@/lib/operations/service";
+import type { SupplyPartnerRow } from "@/lib/operations/supply-control";
 import { rub } from "@/lib/ui/format";
 
 type View="all"|"approval"|"work"|"execution"|"overdue";
@@ -34,7 +35,7 @@ function stageTone(row:SupplyRequestRow){
   return "info" as const;
 }
 
-export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,initialItemId,initialLocationId,initialObjectId,initialQuantity,openInitially=false}:{rows:SupplyRequestRow[];options:OperationsReferenceData;inventory:InventorySnapshot;canManage:boolean;demo:boolean;initialItemId?:string|null;initialLocationId?:string|null;initialObjectId?:string|null;initialQuantity?:string|null;openInitially?:boolean}){
+export function SupplyRequestsWorkspace({rows,options,inventory,partners,canManage,demo,initialItemId,initialLocationId,initialObjectId,initialQuantity,openInitially=false}:{rows:SupplyRequestRow[];options:OperationsReferenceData;inventory:InventorySnapshot;partners:SupplyPartnerRow[];canManage:boolean;demo:boolean;initialItemId?:string|null;initialLocationId?:string|null;initialObjectId?:string|null;initialQuantity?:string|null;openInitially?:boolean}){
   const [view,setView]=useState<View>("all");
   const [query,setQuery]=useState("");
   const [manager,setManager]=useState("all");
@@ -50,6 +51,7 @@ export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,i
   const [unit,setUnit]=useState(inventory.items.find(x=>x.id===initialItemId)?.unit??"шт");
   const [amount,setAmount]=useState("");
   const [vendor,setVendor]=useState("");
+  const [partnerId,setPartnerId]=useState("");
   const [neededBy,setNeededBy]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
@@ -105,7 +107,7 @@ export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,i
     setBusy(true);setError("");
     try{
       if(demo){setError("В демо-режиме заявка не сохраняется");return;}
-      const response=await fetch("/api/procurement",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({objectId:objectId||null,requestType,title,description:description||null,itemId:itemId||null,locationId:locationId||null,quantity:quantity?Number(quantity):null,unit:unit||null,amount:amount?Number(amount):null,vendor:vendor||null,neededBy:neededBy||null})});
+      const response=await fetch("/api/procurement",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({objectId:objectId||null,requestType,title,description:description||null,itemId:itemId||null,locationId:locationId||null,quantity:quantity?Number(quantity):null,unit:unit||null,amount:amount?Number(amount):null,vendor:vendor||null,partnerId:partnerId||null,neededBy:neededBy||null})});
       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось создать заявку");window.location.reload();
     }catch(e){setError(e instanceof Error?e.message:"Не удалось создать заявку");}finally{setBusy(false);}
   }
@@ -122,7 +124,7 @@ export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,i
 
     <div className="personnel-portfolio-groups">{groups.map(group=><section className="section personnel-manager-group" key={group.id}><div className="personnel-manager-head"><div><strong>{group.name}</strong><span>{group.rows.length} заявок · {new Set(group.rows.map(row=>row.objectId).filter(Boolean)).size} объектов</span></div><div>{group.rows.some(isOverdue)?<Status tone="warn">Просрочено: {group.rows.filter(isOverdue).length}</Status>:<Status tone="good">Без просрочки</Status>}</div></div><div className="request-table-wrap"><table className="data-table supply-requests-table">
       <thead><tr><th>Заявка</th><th>Объект</th><th>Тип</th><th>Позиция / количество</th><th>Сумма</th><th>Нужно до</th><th>Инициатор / исполнитель</th><th>Этап</th>{canManage&&<th>Действие</th>}</tr></thead>
-      <tbody>{group.rows.map(row=><tr key={row.id} className={isOverdue(row)?"row-attention":""}><td><strong className="cell-title">{row.title}</strong><span className="cell-sub">{row.description??row.vendor??row.createdAt}</span></td><td>{row.object??"Без объекта"}</td><td>{typeLabels[row.requestType]}</td><td>{row.item??"—"}<span className="cell-sub">{row.quantity==null?"":row.quantity+" "+(row.unit??"")}</span></td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td>{row.neededBy??"—"}{isOverdue(row)&&<span className="cell-sub supply-overdue">Срок прошёл</span>}</td><td>{row.createdBy}<span className="cell-sub">{row.assignedTo?"исполнитель: "+row.assignedTo:"исполнитель не назначен"}</span></td><td><Status tone={stageTone(row)}>{isOverdue(row)?"Просрочено":stageLabel(row)}</Status></td>{canManage&&<td>{row.approvalStatus==="pending"?<span className="cell-sub">Ожидает решения</span>:(row.status==="submitted"||row.status==="rejected")?<button className="button" disabled={busy} onClick={()=>void sendApproval(row.id)}>На согласование</button>:row.status==="approved"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"in_progress")}>В работу</button>:row.status==="in_progress"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"received")}>Исполнено</button>:row.status==="received"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"closed")}>Закрыть</button>:"—"}</td>}</tr>)}</tbody>
+      <tbody>{group.rows.map(row=><tr key={row.id} className={isOverdue(row)?"row-attention":""}><td><strong className="cell-title">{row.title}</strong><span className="cell-sub">{row.description??row.partner??row.vendor??row.createdAt}</span></td><td>{row.object??"Без объекта"}</td><td>{typeLabels[row.requestType]}</td><td>{row.item??"—"}<span className="cell-sub">{row.quantity==null?"":row.quantity+" "+(row.unit??"")}</span></td><td className="num">{row.amount==null?"—":rub(row.amount)}</td><td>{row.neededBy??"—"}{isOverdue(row)&&<span className="cell-sub supply-overdue">Срок прошёл</span>}</td><td>{row.createdBy}<span className="cell-sub">{row.assignedTo?"исполнитель: "+row.assignedTo:"исполнитель не назначен"}</span></td><td><Status tone={stageTone(row)}>{isOverdue(row)?"Просрочено":stageLabel(row)}</Status></td>{canManage&&<td>{row.approvalStatus==="pending"?<span className="cell-sub">Ожидает решения</span>:(row.status==="submitted"||row.status==="rejected")?<button className="button" disabled={busy} onClick={()=>void sendApproval(row.id)}>На согласование</button>:row.status==="approved"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"in_progress")}>В работу</button>:row.status==="in_progress"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"received")}>Исполнено</button>:row.status==="received"?<button className="button" disabled={busy} onClick={()=>void transition(row.id,"closed")}>Закрыть</button>:"—"}</td>}</tr>)}</tbody>
     </table></div></section>)}{!groups.length&&<div className="empty-inline">Заявок по выбранным фильтрам нет.</div>}</div>{error&&<div className="recruiting-error operations-inline-error">{error}</div>}
 
     {show&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShow(false)}}><div className="recruiting-modal-card">
@@ -134,7 +136,7 @@ export function SupplyRequestsWorkspace({rows,options,inventory,canManage,demo,i
         <label>Позиция<select value={itemId} onChange={e=>{setItemId(e.target.value);const item=inventory.items.find(x=>x.id===e.target.value);if(item)setUnit(item.unit)}}><option value="">Не связана</option>{inventory.items.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
         <label>Место получения<select value={locationId} onChange={e=>setLocationId(e.target.value)}><option value="">Не указано</option>{inventory.locations.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
         <label>Количество<input type="number" min="0" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><label>Единица<input value={unit} onChange={e=>setUnit(e.target.value)}/></label>
-        <label>Сумма / лимит<input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Поставщик / подрядчик<input value={vendor} onChange={e=>setVendor(e.target.value)}/></label><label>Нужно до<input type="date" value={neededBy} onChange={e=>setNeededBy(e.target.value)}/></label>
+        <label>Сумма / лимит<input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Поставщик / подрядчик<select value={partnerId} onChange={e=>setPartnerId(e.target.value)}><option value="">Не выбран</option>{partners.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>{!partnerId&&<label>Поставщик текстом<input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Для старых/разовых контрагентов"/></label>}<label>Нужно до<input type="date" value={neededBy} onChange={e=>setNeededBy(e.target.value)}/></label>
       </div><label>Комментарий<textarea value={description} onChange={e=>setDescription(e.target.value)}/></label>{error&&<div className="recruiting-error">{error}</div>}</div>
       <div className="recruiting-modal-footer"><button className="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" disabled={busy||!title} onClick={()=>void save()}>{busy?"Отправляю…":"Подать заявку"}</button></div>
     </div></div></Portal>}
