@@ -16,6 +16,7 @@ const schema=z.object({
   unit:z.string().trim().max(40).nullable().optional(),
   amount:z.number().min(0).nullable().optional(),
   vendor:z.string().trim().max(240).nullable().optional(),
+  partnerId:z.string().uuid().nullable().optional(),
   neededBy:z.string().date().nullable().optional(),
 });
 export async function POST(request:Request){
@@ -44,8 +45,8 @@ export async function POST(request:Request){
         if(body.objectId&&location.objectId&&location.objectId!==body.objectId)throw new Error("Место получения относится к другому объекту");
       }
       const [row]=await tx<Array<{id:string}>>`
-        INSERT INTO supply_requests(organization_id,object_id,request_type,title,description,item_id,location_id,quantity,unit,amount,vendor,needed_by,status,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${body.requestType},${body.title},${body.description??null},${body.itemId??null}::uuid,${body.locationId??null}::uuid,${body.quantity??null},${body.unit??null},${body.amount??null},${body.vendor??null},${body.neededBy??null}::date,'submitted',${actor.userId}::uuid)
+        INSERT INTO supply_requests(organization_id,object_id,request_type,title,description,item_id,location_id,quantity,unit,amount,vendor,partner_id,needed_by,status,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${body.requestType},${body.title},${body.description??null},${body.itemId??null}::uuid,${body.locationId??null}::uuid,${body.quantity??null},${body.unit??null},${body.amount??null},${body.vendor??null},${body.partnerId??null}::uuid,${body.neededBy??null}::date,'submitted',${actor.userId}::uuid)
         RETURNING id
       `;
       await tx`
