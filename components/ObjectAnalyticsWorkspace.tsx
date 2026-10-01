@@ -27,7 +27,6 @@ function compactDate(value:string){
   return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"));
 }
 function timesheetStatusLabel(value:string|null|undefined){return ({draft:"Черновик",submitted:"Передан",approved:"Согласован",returned:"Возвращён",internal_submitted:"На внутренней проверке",internal_checked:"Проверен внутри",client_sent:"Отправлен клиенту",client_approved:"Подтверждён клиентом",closed:"Закрыт"} as Record<string,string>)[value??""]??"Не зафиксирован"}
-function toneByCoverage(value:number){return value<85?"bad" as const:value<97?"warn" as const:"good" as const}
 function toneByMargin(value:number){return value<10?"bad" as const:value<18?"warn" as const:"good" as const}
 
 function groupWeeks(daily:ObjectAnalyticsDailyPoint[]){
@@ -149,7 +148,7 @@ export function ObjectAnalyticsWorkspace({
         <div className={"metric "+(noShows?"tone-bad":"tone-good")}><span>Невыходы</span><strong>{noShows}</strong><small>{shiftDemand?((noShows/shiftDemand)*100).toFixed(1):"0"}% от потребности</small></div>
         <div className="metric"><span>Часы</span><strong>{Math.round(hours).toLocaleString("ru-RU")}</strong><small>по внутреннему факту</small></div>
       </div>
-      <section className="section"><div className="section-head"><div><h2>Явка по дням</h2><p>Потребность и фактический выход. Невыход считается по зафиксированному коду табеля.</p></div></div><AnalyticsLineChart rows={data.daily} series={[{key:"shiftDemand",label:"Требовалось"},{key:"worked",label:"Вышло"}]}/></section>
+      <section className="section"><div className="section-head"><div><h2>Явка по дням</h2><p>Потребность, фактические выходы и невыходы за выбранный период.</p></div></div>{data.daily.length?<ObjectAnalyticsTrendChart rows={data.daily} mode="attendance"/>:<div className="empty-inline">За выбранный период данных нет.</div>}</section>
       <section className="section"><div className="section-head"><div><h2>Дни с отклонениями</h2><p>Показываются дни с дефицитом выхода, невыходами или инцидентами.</p></div><Link className="button" href={`/objects/${objectId}?tab=shifts`}>Открыть смены</Link></div><DailyExceptions rows={data.daily}/></section>
     </>}
 
