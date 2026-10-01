@@ -4,6 +4,8 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import type { Actor } from "@/lib/access/types";
+import type { Sql } from "postgres";
 
 const createSchema=z.object({
   operationType:z.enum(["employee_trip","hired_transport"]),
@@ -28,8 +30,8 @@ const patchSchema=z.discriminatedUnion("action",[
   z.object({action:z.literal("record_payment"),id:z.string().uuid(),amount:z.number().positive(),paymentDate:z.string().date(),prepaidUntil:z.string().date().nullable().optional(),reference:z.string().trim().max(240).nullable().optional()}),
 ]);
 
-async function objectScope(tx:any,actor:any,objectId:string){
-  const [row]=await tx`
+async function objectScope(tx:Sql,actor:Actor,objectId:string){
+  const [row]=await tx<Array<{organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
     SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
       ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
     FROM objects o WHERE o.id=${objectId}::uuid
