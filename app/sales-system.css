@@ -3620,3 +3620,36 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .personnel-portfolio-filters>select,
   .sales-workspace.operations-workspace .personnel-portfolio-filters>.sales-search{width:100%;max-width:none}
 }
+
+
+/* Supply portfolio workspaces */
+.sales-workspace.operations-workspace .supply-portfolio-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.sales-workspace.operations-workspace .supply-portfolio-tabs{margin:0 0 12px}
+.sales-workspace.operations-workspace .supply-portfolio-toolbar{margin-bottom:10px}
+.sales-workspace.operations-workspace .supply-partners-table{min-width:1120px}
+.sales-workspace.operations-workspace .transport-portfolio-table{min-width:1180px}
+.sales-workspace.operations-workspace .housing-portfolio-table{min-width:1240px}
+.sales-workspace.operations-workspace .housing-contracts-table{min-width:1280px}
+.sales-workspace.operations-workspace .supply-holdings-table{min-width:1020px}
+.sales-workspace.operations-workspace .supply-movements-table{min-width:1220px}
+.sales-workspace.operations-workspace .supply-requests-table{min-width:1220px}
+.sales-workspace.operations-workspace .supply-chip-list{display:flex;gap:5px;flex-wrap:wrap}
+.sales-workspace.operations-workspace .supply-services-cell{display:grid;gap:4px;min-width:180px}
+.sales-workspace.operations-workspace .supply-services-cell>span{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.sales-workspace.operations-workspace .supply-services-cell strong{font-size:10.5px;font-weight:600}
+.sales-workspace.operations-workspace .supply-services-cell small{color:var(--muted);font-size:9.5px;white-space:nowrap}
+.sales-workspace.operations-workspace .supply-category-picker{margin-top:12px;padding-top:12px;display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;border-top:1px solid var(--border)}
+.sales-workspace.operations-workspace .supply-category-picker>span{width:100%;color:var(--muted);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.sales-workspace.operations-workspace .supply-overdue{color:var(--bad)!important;font-weight:600}
+.sales-workspace.operations-workspace .housing-portfolio-workspace,
+.sales-workspace.operations-workspace .transport-workspace,
+.sales-workspace.operations-workspace .supply-partners-workspace,
+.sales-workspace.operations-workspace .supply-requests-workspace{display:grid;gap:12px}
+.sales-workspace.operations-workspace .supply-assets-workspace{display:grid;gap:12px}
+.sales-workspace.operations-workspace .supply-assets-workspace>.section{margin-top:0}
+@media(max-width:1100px){
+  .sales-workspace.operations-workspace .supply-portfolio-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:720px){
+  .sales-workspace.operations-workspace .supply-portfolio-metrics{grid-template-columns:1fr}
+}
