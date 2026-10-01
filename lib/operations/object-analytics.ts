@@ -159,8 +159,13 @@ export async function getObjectAnalyticsDetail(actor:Actor,objectId:string,from:
 
     const specialties=await sql<ObjectAnalyticsSpecialtyActivity[]>`
       WITH shift_stats AS (
+        SELECT sh.specialty_id,sum(sh.demand_count)::int "shiftDemand"
+        FROM shifts sh
+        WHERE sh.object_id=${objectId}::uuid AND sh.shift_date BETWEEN ${from}::date AND ${to}::date
+        GROUP BY sh.specialty_id
+      ),
+      assignment_stats AS (
         SELECT sh.specialty_id,
-          sum(sh.demand_count)::int "shiftDemand",
           count(sa.id) FILTER (WHERE NOT sa.is_reserve AND sa.confirmation_status<>'cancelled')::int assigned
         FROM shifts sh
         LEFT JOIN shift_assignments sa ON sa.shift_id=sh.id
@@ -191,12 +196,13 @@ export async function getObjectAnalyticsDetail(actor:Actor,objectId:string,from:
       )
       SELECT s.id "specialtyId",s.name specialty,
         COALESCE(ss."shiftDemand",0)::int "shiftDemand",
-        COALESCE(ss.assigned,0)::int assigned,
+        COALESCE(ast.assigned,0)::int assigned,
         COALESCE(ts.worked,0)::int worked,
         COALESCE(ts."noShows",0)::int "noShows",
         COALESCE(ts.hours,0)::numeric hours
       FROM specialty_ids x JOIN specialties s ON s.id=x.specialty_id
       LEFT JOIN shift_stats ss ON ss.specialty_id=x.specialty_id
+      LEFT JOIN assignment_stats ast ON ast.specialty_id=x.specialty_id
       LEFT JOIN time_stats ts ON ts.specialty_id=x.specialty_id
       ORDER BY s.name
     `;
