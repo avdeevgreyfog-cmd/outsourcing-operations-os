@@ -3556,3 +3556,67 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .object-analytics-attention-list .stack-item{align-items:flex-start;flex-direction:column}
   .sales-workspace.operations-workspace .object-analytics-coverage{min-width:120px}
 }
+
+
+/* Personnel portfolio workspaces */
+.sales-workspace.operations-workspace .personnel-portfolio-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.sales-workspace.operations-workspace .personnel-portfolio-tabs{margin-bottom:12px}
+.sales-workspace.operations-workspace .personnel-portfolio-toolbar{margin-bottom:10px}
+.sales-workspace.operations-workspace .personnel-portfolio-filters{min-width:0;display:flex;align-items:center;gap:7px;flex:1;flex-wrap:wrap}
+.sales-workspace.operations-workspace .personnel-portfolio-filters .sales-search{min-width:250px;max-width:360px}
+.sales-workspace.operations-workspace .personnel-portfolio-filters :is(select,input[type="month"]){min-height:34px;height:34px;padding:0 28px 0 9px;border:1px solid var(--border);border-radius:var(--radius-control);background:var(--panel);color:var(--text);font-size:11.5px}
+.sales-workspace.operations-workspace .personnel-month-filter{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:10.5px}
+.sales-workspace.operations-workspace .personnel-month-filter input{padding-right:9px}
+.sales-workspace.operations-workspace .personnel-portfolio-period-label{color:var(--muted);font-size:10.5px;white-space:nowrap}
+.sales-workspace.operations-workspace .personnel-portfolio-groups{display:grid;gap:12px}
+.sales-workspace.operations-workspace .personnel-manager-group{margin:0}
+.sales-workspace.operations-workspace .personnel-manager-head{min-height:46px;padding:9px 13px;display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid var(--border);background:var(--panel-2)}
+.sales-workspace.operations-workspace .personnel-manager-head strong{display:block;font-size:12.5px;font-weight:650}
+.sales-workspace.operations-workspace .personnel-manager-head span:not(.status){display:block;margin-top:3px;color:var(--muted);font-size:10px}
+.sales-workspace.operations-workspace .personnel-workers-table{min-width:1120px}
+.sales-workspace.operations-workspace .personnel-workers-table .cell-sub{max-width:170px}
+.sales-workspace.operations-workspace .row-attention td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.sales-workspace.operations-workspace .timesheet-portfolio-table{min-width:1050px}
+.sales-workspace.operations-workspace .timesheet-portfolio-table th:nth-child(1){min-width:210px}
+.sales-workspace.operations-workspace .timesheet-portfolio-table th:last-child{width:132px}
+.sales-workspace.operations-workspace .shift-week-navigation{display:flex;align-items:center;gap:5px}
+.sales-workspace.operations-workspace .shift-week-current{min-width:118px;justify-content:center;font-variant-numeric:tabular-nums}
+.sales-workspace.operations-workspace .shift-portfolio-calendar{display:grid;gap:12px}
+.sales-workspace.operations-workspace .shift-calendar-object{border-top:1px solid var(--border)}
+.sales-workspace.operations-workspace .shift-calendar-object:first-of-type{border-top:0}
+.sales-workspace.operations-workspace .shift-calendar-object-head{min-height:38px;padding:7px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sales-workspace.operations-workspace .shift-calendar-object-head a{font-size:11.5px;font-weight:650;color:var(--text)}
+.sales-workspace.operations-workspace .shift-calendar-object-head span{color:var(--muted);font-size:9.5px}
+.sales-workspace.operations-workspace .shift-calendar-table{min-width:930px;table-layout:fixed}
+.sales-workspace.operations-workspace .shift-calendar-table th:first-child{width:210px}
+.sales-workspace.operations-workspace .shift-calendar-table th:not(:first-child){width:102px;text-align:center}
+.sales-workspace.operations-workspace .shift-calendar-table th span{display:block;margin-bottom:2px;color:var(--soft);font-size:8.5px;font-weight:550;text-transform:uppercase}
+.sales-workspace.operations-workspace .shift-calendar-table td:not(:first-child){padding:5px;text-align:center}
+.sales-workspace.operations-workspace .shift-calendar-cell{width:100%;min-height:44px;padding:5px 6px;display:grid;place-items:center;gap:1px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);cursor:pointer}
+.sales-workspace.operations-workspace .shift-calendar-cell:hover{background:var(--panel-2)}
+.sales-workspace.operations-workspace .shift-calendar-cell strong{font-size:11px;font-variant-numeric:tabular-nums}
+.sales-workspace.operations-workspace .shift-calendar-cell small{color:var(--muted);font-size:8.5px}
+.sales-workspace.operations-workspace .shift-calendar-cell.has-deficit{border-color:color-mix(in srgb,var(--warn) 55%,var(--border));background:var(--warn-bg)}
+.sales-workspace.operations-workspace .shift-calendar-cell.has-deficit small{color:var(--warn);font-weight:650}
+.sales-workspace.operations-workspace .shift-calendar-cell.is-covered strong{color:var(--good)}
+.sales-workspace.operations-workspace .shift-portfolio-list{min-width:1220px}
+.sales-workspace.operations-workspace .shift-worker-calendar{min-width:1120px;table-layout:fixed}
+.sales-workspace.operations-workspace .shift-worker-calendar th:nth-child(1){width:190px}
+.sales-workspace.operations-workspace .shift-worker-calendar th:nth-child(2){width:145px}
+.sales-workspace.operations-workspace .shift-worker-calendar th:nth-child(3){width:170px}
+.sales-workspace.operations-workspace .shift-worker-calendar th:nth-child(4){width:145px}
+.sales-workspace.operations-workspace .shift-worker-calendar th:nth-child(n+5){width:84px;text-align:center}
+.sales-workspace.operations-workspace .shift-worker-calendar th:nth-child(n+5) span{display:block;color:var(--soft);font-size:8.5px}
+.sales-workspace.operations-workspace .shift-worker-day{text-align:center}
+.sales-workspace.operations-workspace .shift-worker-legend{padding:8px 12px;display:flex;gap:16px;border-top:1px solid var(--border);color:var(--muted);font-size:9.5px}
+.sales-workspace.operations-workspace .shift-worker-legend b{color:var(--text)}
+@media(max-width:1100px){
+  .sales-workspace.operations-workspace .personnel-portfolio-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sales-workspace.operations-workspace .personnel-portfolio-toolbar{align-items:stretch;flex-direction:column}
+  .sales-workspace.operations-workspace .personnel-portfolio-filters .sales-search{width:100%;max-width:none}
+}
+@media(max-width:720px){
+  .sales-workspace.operations-workspace .personnel-manager-head{align-items:flex-start;flex-direction:column}
+  .sales-workspace.operations-workspace .personnel-portfolio-filters>select,
+  .sales-workspace.operations-workspace .personnel-portfolio-filters>.sales-search{width:100%;max-width:none}
+}
