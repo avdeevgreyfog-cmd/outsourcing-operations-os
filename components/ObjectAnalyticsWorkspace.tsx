@@ -5,13 +5,13 @@ import type { StaffingForecastRow } from "@/lib/operations/service";
 import type { ObjectAnalyticsDetail, ObjectAnalyticsDailyPoint, ObjectAnalyticsMovementPoint } from "@/lib/operations/object-analytics";
 import { pct, rub } from "@/lib/ui/format";
 
-type AnalyticsView="summary"|"workforce"|"attendance"|"timesheet"|"quality"|"economics";
+export type ObjectObjectAnalyticsView="summary"|"workforce"|"attendance"|"timesheet"|"quality"|"economics";
 type FinanceSnapshot={
   id:string;objectId:string;periodStart?:string|null;periodEnd?:string|null;
   revenue:number|string;workerCost:number|string;expenses:number|string;contribution:number|string;marginPct:number|string;planMarginPct?:number|string|null;
 };
 
-const viewLabels:Record<AnalyticsView,string>={
+const viewLabels:Record<ObjectAnalyticsView,string>={
   summary:"Сводка",workforce:"Персонал",attendance:"Смены и явка",timesheet:"Табель",quality:"Качество",economics:"Экономика",
 };
 const periodLabels:Record<string,string>={"7":"7 дней","30":"30 дней",month:"Текущий месяц","90":"3 месяца"};
@@ -50,7 +50,7 @@ export function ObjectAnalyticsWorkspace({
   timesheet:TimesheetData|null;
   finance:FinanceSnapshot[];
   incidents:IncidentRow[];
-  view:AnalyticsView;
+  view:ObjectAnalyticsView;
   period:string;
   canFinance:boolean;
 }){
@@ -91,8 +91,8 @@ export function ObjectAnalyticsWorkspace({
     };
   }).sort((a,b)=>b.projectedDeficit-a.projectedDeficit||a.specialty.localeCompare(b.specialty,"ru"));
 
-  const tabs=(Object.keys(viewLabels) as AnalyticsView[]).filter(key=>key!=="economics"||canFinance);
-  const href=(nextView:AnalyticsView,nextPeriod=period)=>`/objects/${objectId}?tab=analytics&analyticsView=${nextView}&period=${nextPeriod}`;
+  const tabs=(Object.keys(viewLabels) as ObjectAnalyticsView[]).filter(key=>key!=="economics"||canFinance);
+  const href=(nextView:ObjectAnalyticsView,nextPeriod=period)=>`/objects/${objectId}?tab=analytics&analyticsView=${nextView}&period=${nextPeriod}`;
 
   const attention=[
     projectedDeficit>0?{tone:"warn" as const,title:`Прогнозный дефицит: ${projectedDeficit}`,text:`Через 30 дней прогнозируется ${projectedAvailable} из ${required} человек.`,href:`/objects/${objectId}?tab=staffing`,action:"Комплектация"}:null,
