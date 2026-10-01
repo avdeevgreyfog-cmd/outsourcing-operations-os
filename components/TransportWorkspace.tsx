@@ -43,6 +43,10 @@ export function TransportWorkspace({rows,options,partners,canManage,demo}:{rows:
   const [amount,setAmount]=useState("");
   const [paymentDue,setPaymentDue]=useState("");
   const [notes,setNotes]=useState("");
+  const [paymentRow,setPaymentRow]=useState<TransportOperationRow|null>(null);
+  const [paymentAmount,setPaymentAmount]=useState("");
+  const [paymentDate,setPaymentDate]=useState(new Date().toISOString().slice(0,10));
+  const [paymentPrepaidUntil,setPaymentPrepaidUntil]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -76,7 +80,22 @@ export function TransportWorkspace({rows,options,partners,canManage,demo}:{rows:
       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить транспорт");window.location.reload();
     }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить транспорт");}finally{setBusy(false);}
   }
+  async function patch(body:unknown){
+    setBusy(true);setError("");
+    try{
+      if(demo){setError("В демо-режиме изменения не сохраняются");return;}
+      const response=await fetch("/api/supply/transport",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+      const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить транспорт");window.location.reload();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось изменить транспорт");}finally{setBusy(false);}
+  }
   function openCreate(type:"employee_trip"|"hired_transport"){setOperationType(type);setView(type);setShow(true)}
+  function openPayment(row:TransportOperationRow){setPaymentRow(row);setPaymentAmount(String(row.amount??""));setPaymentPrepaidUntil("");}
+  function nextStatus(row:TransportOperationRow){
+    if(row.status==="planned")return {status:"booked" as const,label:"Забронировано"};
+    if(row.status==="booked")return {status:"in_transit" as const,label:"В пути"};
+    if(row.status==="in_transit")return {status:"completed" as const,label:"Завершить"};
+    return null;
+  }
 
   return <div className="transport-workspace">
     <div className="metrics-grid supply-portfolio-metrics">
@@ -95,7 +114,7 @@ export function TransportWorkspace({rows,options,partners,canManage,demo}:{rows:
       {canManage&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>openCreate("employee_trip")}><Plus size={14}/> Поездка сотрудника</button><button className="button primary" onClick={()=>openCreate("hired_transport")}><Plus size={14}/> Заказной транспорт</button></div>}
     </div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table transport-portfolio-table">
-      <thead><tr><th>{view==="hired_transport"?"Маршрут / услуга":"Сотрудник / маршрут"}</th><th>Менеджер</th><th>Объект</th><th>Подрядчик</th><th>Когда / график</th><th>Оплата</th><th>Оплачено / до</th><th>Статус</th></tr></thead>
+      <thead><tr><th>{view==="hired_transport"?"Маршрут / услуга":"Сотрудник / маршрут"}</th><th>Менеджер</th><th>Объект</th><th>Подрядчик</th><th>Когда / график</th><th>Оплата</th><th>Оплачено / до</th><th>Статус</th>{canManage&&<th>Действия</th>}</tr></thead>
       <tbody>{filtered.map(row=><tr key={row.id} className={needsAttention(row)?"row-attention":""}>
         <td><strong className="cell-title">{row.operationType==="employee_trip"?(row.worker??"Сотрудник не указан"):(kindLabels[row.transportKind]??row.transportKind)}</strong><span className="cell-sub">{[row.routeFrom,row.routeTo].filter(Boolean).join(" → ")||"Маршрут не указан"}</span></td>
         <td>{row.manager??"—"}</td><td>{row.object??"—"}</td><td>{row.partner??"—"}</td>
@@ -103,8 +122,15 @@ export function TransportWorkspace({rows,options,partners,canManage,demo}:{rows:
         <td>{row.amount==null?"—":rub(row.amount)}<span className="cell-sub">{row.paymentModel?paymentLabels[row.paymentModel]??row.paymentModel:""}</span>{row.paymentDue&&<span className="cell-sub">срок {row.paymentDue}</span>}</td>
         <td>{row.lastPaymentAmount!=null?rub(row.lastPaymentAmount):"—"}{row.lastPaymentDate&&<span className="cell-sub">{row.lastPaymentDate}</span>}{row.prepaidUntil&&<span className="cell-sub">оплачено до {row.prepaidUntil}</span>}</td>
         <td><Status tone={needsAttention(row)?"warn":statusTone(row.status)}>{needsAttention(row)?"Проверить":statusLabels[row.status]??row.status}</Status></td>
+        {canManage&&<td><div className="page-actions">{nextStatus(row)&&<button className="button" disabled={busy} onClick={()=>void patch({action:"status",id:row.id,status:nextStatus(row)!.status})}>{nextStatus(row)!.label}</button>}{row.objectId&&row.amount!=null&&row.status!=="cancelled"&&<button className="button" disabled={busy} onClick={()=>openPayment(row)}>Оплата</button>}</div></td>}
       </tr>)}</tbody>
     </table>{!filtered.length&&<div className="empty-inline">Транспортных операций по выбранным фильтрам нет.</div>}</div></section>
+
+    {paymentRow&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setPaymentRow(null)}}><div className="recruiting-modal-card">
+      <div className="recruiting-modal-head"><div><h2>Оплата транспорта</h2><p>{[paymentRow.partner,paymentRow.routeFrom&&paymentRow.routeTo?paymentRow.routeFrom+" → "+paymentRow.routeTo:null].filter(Boolean).join(" · ")}. Расход будет связан с объектом.</p></div><button className="icon-button" onClick={()=>setPaymentRow(null)}><X size={17}/></button></div>
+      <div className="candidate-import-body"><div className="candidate-import-options"><label>Сумма<input type="number" min="0.01" value={paymentAmount} onChange={e=>setPaymentAmount(e.target.value)}/></label><label>Дата оплаты<input type="date" value={paymentDate} onChange={e=>setPaymentDate(e.target.value)}/></label><label>Оплачено до<input type="date" value={paymentPrepaidUntil} onChange={e=>setPaymentPrepaidUntil(e.target.value)}/></label></div>{error&&<div className="recruiting-error">{error}</div>}</div>
+      <div className="recruiting-modal-footer"><button className="button" onClick={()=>setPaymentRow(null)}>Отмена</button><button className="button primary" disabled={busy||!paymentAmount||!paymentDate} onClick={()=>void patch({action:"record_payment",id:paymentRow.id,amount:Number(paymentAmount),paymentDate,prepaidUntil:paymentPrepaidUntil||null})}>{busy?"Сохраняю…":"Зафиксировать оплату"}</button></div>
+    </div></div></Portal>}
 
     {show&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShow(false)}}><div className="recruiting-modal-card">
       <div className="recruiting-modal-head"><div><h2>{operationType==="employee_trip"?"Поездка сотрудника":"Заказной транспорт"}</h2><p>{operationType==="employee_trip"?"Билет, компенсация или трансфер сотрудника.":"Регулярная развозка, автобус, такси или грузовая перевозка."}</p></div><button className="icon-button" onClick={()=>setShow(false)}><X size={17}/></button></div>
