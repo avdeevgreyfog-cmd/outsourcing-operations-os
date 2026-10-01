@@ -73,11 +73,11 @@ export function ObjectAnalyticsWorkspace({
   const latestFinance=finance[0]??null;
   const weeks=groupWeeks(data.daily);
 
-  const activityBySpecialty=new Map(data.specialties.map(row=>[row.specialtyId,row]));
-  const specialtyRows=[...new Map([
-    ...forecast.map(row=>[row.specialtyId,{specialtyId:row.specialtyId,specialty:row.specialty}]),
-    ...data.specialties.map(row=>[row.specialtyId,{specialtyId:row.specialtyId,specialty:row.specialty}]),
-  ]).values()].map(base=>{
+  const activityBySpecialty=new Map(data.specialties.map(row=>[row.specialtyId,row] as const));
+  const specialtyBase=new Map<string,{specialtyId:string;specialty:string}>();
+  for(const row of forecast)specialtyBase.set(row.specialtyId,{specialtyId:row.specialtyId,specialty:row.specialty});
+  for(const row of data.specialties)specialtyBase.set(row.specialtyId,{specialtyId:row.specialtyId,specialty:row.specialty});
+  const specialtyRows=[...specialtyBase.values()].map(base=>{
     const current=forecast.find(row=>row.specialtyId===base.specialtyId);
     const activity=activityBySpecialty.get(base.specialtyId);
     const demand=activity?.shiftDemand??0;
