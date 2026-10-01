@@ -9,7 +9,7 @@ export default async function Workers(){
   const actor=await requireActor();
   const [rows,options]=await Promise.all([listWorkers(actor),getOperationsReferenceData(actor)]);
   return <>
-    <PageHeader eyebrow="Операции → Персонал объектов" title="Сотрудники" subtitle="Действующий персонал объектов, назначения, расчётный статус и история работы." breadcrumbs={[{label:"Операции"},{label:"Персонал объектов"},{label:"Сотрудники"}]}/>
+    <PageHeader eyebrow="Операции → Персонал объектов" title="Сотрудники" subtitle="Единый реестр персонала по всем доступным объектам: текущее состояние, графики, изменения, документы и обеспечение." breadcrumbs={[{label:"Операции"},{label:"Персонал объектов"},{label:"Сотрудники"}]}/>
     <WorkersWorkspace rows={rows} options={options} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"worker.edit")} demo={actor.demo}/>
   </>;
 }
