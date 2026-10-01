@@ -21,6 +21,11 @@ export function SupplyPartnersWorkspace({rows,canManage,demo}:{rows:SupplyPartne
   const [email,setEmail]=useState("");
   const [paymentTerms,setPaymentTerms]=useState("");
   const [categories,setCategories]=useState<string[]>(["services"]);
+  const [servicePartner,setServicePartner]=useState<SupplyPartnerRow|null>(null);
+  const [serviceName,setServiceName]=useState("");
+  const [serviceCategory,setServiceCategory]=useState("services");
+  const [serviceUnit,setServiceUnit]=useState("");
+  const [servicePrice,setServicePrice]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -40,6 +45,15 @@ export function SupplyPartnersWorkspace({rows,canManage,demo}:{rows:SupplyPartne
       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось создать организацию");window.location.reload();
     }catch(e){setError(e instanceof Error?e.message:"Не удалось создать организацию");}finally{setBusy(false);}
   }
+  async function saveService(){
+    if(!servicePartner)return;
+    setBusy(true);setError("");
+    try{
+      if(demo){setError("В демо-режиме услуга не сохраняется");return;}
+      const response=await fetch("/api/suppliers",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({partnerId:servicePartner.id,category:serviceCategory,serviceName,unit:serviceUnit||null,price:servicePrice?Number(servicePrice):null})});
+      const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось добавить услугу");window.location.reload();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить услугу");}finally{setBusy(false);}
+  }
   function toggleCategory(value:string){setCategories(current=>current.includes(value)?current.filter(item=>item!==value):[...current,value])}
 
   return <div className="supply-partners-workspace">
@@ -57,15 +71,21 @@ export function SupplyPartnersWorkspace({rows,canManage,demo}:{rows:SupplyPartne
       {canManage&&<button className="button primary" type="button" onClick={()=>setShow(true)}><Plus size={14}/> Добавить организацию</button>}
     </div>
     <section className="section section-flush"><div className="request-table-wrap"><table className="data-table supply-partners-table">
-      <thead><tr><th>Организация</th><th>Категории</th><th>Услуги / цены</th><th>Контакт</th><th>Условия оплаты</th><th>Ответственный</th><th>Статус</th></tr></thead>
+      <thead><tr><th>Организация</th><th>Категории</th><th>Услуги / цены</th><th>Контакт</th><th>Условия оплаты</th><th>Ответственный</th><th>Статус</th>{canManage&&<th>Действие</th>}</tr></thead>
       <tbody>{filtered.map(row=><tr key={row.id}>
         <td><strong className="cell-title">{row.name}</strong><span className="cell-sub">{row.legalName??row.taxId??"Юр. данные не заполнены"}</span></td>
         <td><div className="supply-chip-list">{row.categories.map(value=><Status key={value} tone="neutral">{categoryLabels[value]??value}</Status>)}</div></td>
         <td>{row.services.length?<div className="supply-services-cell">{row.services.slice(0,3).map(item=><span key={item.id}><strong>{item.serviceName}</strong>{item.price!=null&&<small>{rub(item.price)}{item.unit?" / "+item.unit:""}</small>}</span>)}{row.services.length>3&&<small>ещё {row.services.length-3}</small>}</div>:<span className="cell-sub">Не заполнено</span>}</td>
         <td>{row.contactName??"—"}<span className="cell-sub">{[row.phone,row.email].filter(Boolean).join(" · ")||"Контакты не указаны"}</span></td>
-        <td>{row.paymentTerms??"—"}</td><td>{row.owner??"—"}</td><td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Активен":"Приостановлен"}</Status></td>
+        <td>{row.paymentTerms??"—"}</td><td>{row.owner??"—"}</td><td><Status tone={row.status==="active"?"good":"neutral"}>{row.status==="active"?"Активен":"Приостановлен"}</Status></td>{canManage&&<td><button className="button" onClick={()=>{setServicePartner(row);setServiceCategory(row.categories[0]??"services");setServiceName("");setServiceUnit("");setServicePrice("")}}>Добавить услугу</button></td>}
       </tr>)}</tbody>
     </table>{!filtered.length&&<div className="empty-inline">Организации по выбранным фильтрам не найдены.</div>}</div></section>
+
+    {servicePartner&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setServicePartner(null)}}><div className="recruiting-modal-card">
+      <div className="recruiting-modal-head"><div><h2>Услуга подрядчика</h2><p>{servicePartner.name}. Фиксируем, что предоставляет организация и по какой ориентировочной цене.</p></div><button className="icon-button" onClick={()=>setServicePartner(null)}><X size={17}/></button></div>
+      <div className="candidate-import-body"><div className="candidate-import-options"><label>Категория<select value={serviceCategory} onChange={e=>setServiceCategory(e.target.value)}>{Object.entries(categoryLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>Услуга / позиция<input value={serviceName} onChange={e=>setServiceName(e.target.value)} placeholder="Медосмотр / автобус 20 мест / койко-место"/></label><label>Единица<input value={serviceUnit} onChange={e=>setServiceUnit(e.target.value)} placeholder="чел., рейс, месяц"/></label><label>Цена<input type="number" min="0" value={servicePrice} onChange={e=>setServicePrice(e.target.value)}/></label></div>{error&&<div className="recruiting-error">{error}</div>}</div>
+      <div className="recruiting-modal-footer"><button className="button" onClick={()=>setServicePartner(null)}>Отмена</button><button className="button primary" disabled={busy||!serviceName} onClick={()=>void saveService()}>{busy?"Сохраняю…":"Добавить услугу"}</button></div>
+    </div></div></Portal>}
 
     {show&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShow(false)}}><div className="recruiting-modal-card">
       <div className="recruiting-modal-head"><div><h2>Новая организация</h2><p>Поставщик или подрядчик, который обслуживает контур обеспечения.</p></div><button className="icon-button" onClick={()=>setShow(false)}><X size={17}/></button></div>
