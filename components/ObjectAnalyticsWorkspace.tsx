@@ -5,7 +5,7 @@ import type { StaffingForecastRow } from "@/lib/operations/service";
 import type { ObjectAnalyticsDetail, ObjectAnalyticsDailyPoint, ObjectAnalyticsMovementPoint } from "@/lib/operations/object-analytics";
 import { pct, rub } from "@/lib/ui/format";
 
-export type ObjectObjectAnalyticsView="summary"|"workforce"|"attendance"|"timesheet"|"quality"|"economics";
+export type ObjectAnalyticsView="summary"|"workforce"|"attendance"|"timesheet"|"quality"|"economics";
 type FinanceSnapshot={
   id:string;objectId:string;periodStart?:string|null;periodEnd?:string|null;
   revenue:number|string;workerCost:number|string;expenses:number|string;contribution:number|string;marginPct:number|string;planMarginPct?:number|string|null;
