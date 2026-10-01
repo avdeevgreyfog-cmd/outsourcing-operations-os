@@ -182,6 +182,13 @@ FROM role_templates r
 WHERE r.code='regional_manager'
 ON CONFLICT DO NOTHING;
 
+INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
+SELECT r.organization_id,r.id,p.capability,'allow','all_org','{}'::uuid[]
+FROM role_templates r
+JOIN permission_definitions p ON p.capability IN ('supply.transport.read','supply.transport.manage','supplier.read','supplier.manage')
+WHERE r.code='supply_specialist'
+ON CONFLICT DO NOTHING;
+
 ALTER TABLE supply_partners ENABLE ROW LEVEL SECURITY;
 ALTER TABLE supply_partners FORCE ROW LEVEL SECURITY;
 CREATE POLICY supply_partners_tenant_isolation ON supply_partners
