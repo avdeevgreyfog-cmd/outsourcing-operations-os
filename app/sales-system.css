@@ -3537,61 +3537,22 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .object-analytics-metrics{margin:0}
 .sales-workspace.operations-workspace .object-analytics-status-value{font-size:18px!important;letter-spacing:-.015em!important}
 .sales-workspace.operations-workspace .object-analytics-attention{margin:0}
-.sales-workspace.operations-workspace .object-analytics-signal-list{display:grid}
-.sales-workspace.operations-workspace .object-analytics-signal-list>div{min-height:46px;padding:8px 14px;display:grid;grid-template-columns:minmax(180px,auto) 1fr auto;align-items:center;gap:12px;border-top:1px solid var(--border)}
-.sales-workspace.operations-workspace .object-analytics-signal-list>div:first-child{border-top:0}
-.sales-workspace.operations-workspace .object-analytics-signal-list>div>span:not(.status){color:var(--muted);font-size:10.5px}
-.sales-workspace.operations-workspace .object-analytics-chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.sales-workspace.operations-workspace .object-analytics-chart-grid>.section{margin:0;min-width:0}
-.sales-workspace.operations-workspace .object-analytics-line-chart{padding:8px 14px 12px;min-width:0}
-.sales-workspace.operations-workspace .object-analytics-line-chart svg{width:100%;height:210px;display:block;overflow:visible}
-.sales-workspace.operations-workspace .object-analytics-line-chart .grid{stroke:var(--border);stroke-width:1}
-.sales-workspace.operations-workspace .object-analytics-line-chart .series{stroke-width:2.2}
-.sales-workspace.operations-workspace .object-analytics-line-chart .series-0{stroke:var(--accent)}
-.sales-workspace.operations-workspace .object-analytics-line-chart .series-1{stroke:var(--text)}
-.sales-workspace.operations-workspace .object-analytics-legend{min-height:24px;display:flex;align-items:center;justify-content:flex-end;gap:14px;color:var(--muted);font-size:9.5px}
-.sales-workspace.operations-workspace .object-analytics-legend span{display:flex;align-items:center;gap:5px}
-.sales-workspace.operations-workspace .object-analytics-legend i{width:14px;height:2px;background:var(--accent)}
-.sales-workspace.operations-workspace .object-analytics-legend i[data-series="1"]{background:var(--text)}
-.sales-workspace.operations-workspace .object-analytics-chart-labels{display:flex;justify-content:space-between;gap:8px;color:var(--soft);font-size:9px}
+.sales-workspace.operations-workspace .object-analytics-attention-list .stack-item{min-height:54px}
+.sales-workspace.operations-workspace .object-analytics-attention-list .stack-item>div{display:grid;gap:5px}
+.sales-workspace.operations-workspace .object-analytics-attention-list .stack-item small{color:var(--muted);font-size:10.5px;line-height:1.35}
+.sales-workspace.operations-workspace .object-analytics-dashboard-grid{margin-bottom:0}
+.sales-workspace.operations-workspace .object-analytics-dashboard-grid>.section{min-width:0}
+.sales-workspace.operations-workspace .object-analytics-echart{width:100%;height:255px}
 .sales-workspace.operations-workspace .object-analytics-specialty-table{min-width:980px}
-.sales-workspace.operations-workspace .object-analytics-bars{height:260px;padding:20px 14px 12px;display:flex;align-items:stretch;gap:10px;overflow-x:auto}
-.sales-workspace.operations-workspace .object-analytics-bars>div{min-width:64px;flex:1;display:grid;grid-template-rows:18px 1fr 18px;gap:5px;text-align:center;color:var(--muted);font-size:9px}
-.sales-workspace.operations-workspace .object-analytics-bars>div>div{min-height:170px;display:flex;align-items:flex-end;justify-content:center;gap:5px;border-bottom:1px solid var(--border)}
-.sales-workspace.operations-workspace .object-analytics-bars i{width:15px;min-height:4px;border-radius:3px 3px 0 0;background:var(--accent)}
-.sales-workspace.operations-workspace .object-analytics-bars i.ended{background:var(--muted)}
-.sales-workspace.operations-workspace .object-analytics-hours{padding:6px 14px 12px;display:grid}
-.sales-workspace.operations-workspace .object-analytics-hours>div{min-height:44px;display:grid;grid-template-columns:70px minmax(150px,1fr) 100px 170px;align-items:center;gap:10px;border-top:1px solid var(--border);font-size:10.5px}
-.sales-workspace.operations-workspace .object-analytics-hours>div:first-child{border-top:0}
-.sales-workspace.operations-workspace .object-analytics-hours>div>div{height:7px;border-radius:4px;background:var(--panel-3);overflow:hidden}
-.sales-workspace.operations-workspace .object-analytics-hours i{display:block;height:100%;border-radius:4px;background:var(--accent)}
-.sales-workspace.operations-workspace .object-analytics-hours small{color:var(--muted)}
-.sales-workspace.operations-workspace .object-analytics-category-bars{padding:8px 14px 14px;display:grid}
-.sales-workspace.operations-workspace .object-analytics-category-bars>div{min-height:39px;display:grid;grid-template-columns:minmax(120px,180px) 1fr 34px;align-items:center;gap:10px;border-top:1px solid var(--border);font-size:10.5px}
-.sales-workspace.operations-workspace .object-analytics-category-bars>div:first-child{border-top:0}
-.sales-workspace.operations-workspace .object-analytics-category-bars>div>div{height:7px;border-radius:4px;background:var(--panel-3);overflow:hidden}
-.sales-workspace.operations-workspace .object-analytics-category-bars i{display:block;height:100%;border-radius:4px;background:var(--accent)}
-.sales-workspace.operations-workspace .object-analytics-category-bars strong{text-align:right;font-variant-numeric:tabular-nums}
-.sales-workspace.operations-workspace .object-analytics-reconcile{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
-.sales-workspace.operations-workspace .object-analytics-reconcile>div{min-height:74px;padding:12px 14px;border-right:1px solid var(--border)}
-.sales-workspace.operations-workspace .object-analytics-reconcile>div:last-child{border-right:0}
-.sales-workspace.operations-workspace .object-analytics-reconcile span{display:block;color:var(--muted);font-size:9.5px}
-.sales-workspace.operations-workspace .object-analytics-reconcile strong{display:block;margin-top:7px;font-size:16px;font-weight:650}
+.sales-workspace.operations-workspace .object-analytics-coverage{min-width:150px}
+.sales-workspace.operations-workspace .object-analytics-coverage .progress{min-width:82px}
+.sales-workspace.operations-workspace .object-analytics-reconcile{grid-template-columns:repeat(2,minmax(0,1fr))}
 .sales-workspace.operations-workspace .object-analytics-reconcile .has-attention strong{color:var(--warn)}
-.sales-workspace.operations-workspace .object-analytics-margin-chart{height:250px;padding:18px 14px 12px;display:flex;align-items:stretch;gap:12px;overflow-x:auto}
-.sales-workspace.operations-workspace .object-analytics-margin-chart>div{min-width:64px;flex:1;display:grid;grid-template-rows:18px 1fr 20px;gap:4px;text-align:center;color:var(--muted);font-size:9px}
-.sales-workspace.operations-workspace .object-analytics-margin-chart>div>div{min-height:160px;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid var(--border)}
-.sales-workspace.operations-workspace .object-analytics-margin-chart i{display:block;width:28px;min-height:3px;border-radius:3px 3px 0 0;background:var(--accent)}
-.sales-workspace.operations-workspace .object-analytics-margin-chart strong{color:var(--text);font-size:10px}
 @media(max-width:1180px){
   .sales-workspace.operations-workspace .object-analytics-commandbar{align-items:stretch;flex-direction:column;padding-bottom:8px}
   .sales-workspace.operations-workspace .object-analytics-period{justify-content:flex-start}
-  .sales-workspace.operations-workspace .object-analytics-chart-grid{grid-template-columns:1fr}
 }
 @media(max-width:760px){
-  .sales-workspace.operations-workspace .object-analytics-signal-list>div{grid-template-columns:1fr;gap:6px}
-  .sales-workspace.operations-workspace .object-analytics-reconcile{grid-template-columns:1fr 1fr}
-  .sales-workspace.operations-workspace .object-analytics-reconcile>div:nth-child(2){border-right:0}
-  .sales-workspace.operations-workspace .object-analytics-hours>div{grid-template-columns:60px 1fr 80px}
-  .sales-workspace.operations-workspace .object-analytics-hours small{grid-column:2/-1}
+  .sales-workspace.operations-workspace .object-analytics-attention-list .stack-item{align-items:flex-start;flex-direction:column}
+  .sales-workspace.operations-workspace .object-analytics-coverage{min-width:120px}
 }
