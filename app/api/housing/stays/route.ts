@@ -4,6 +4,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import type { Sql } from "postgres";
 
 const createSchema=z.object({
   workerId:z.string().uuid(),
@@ -20,7 +21,7 @@ const patchSchema=z.discriminatedUnion("action",[
   z.object({action:z.literal("cancel"),id:z.string().uuid(),note:z.string().trim().max(1000).nullable().optional()}),
 ]);
 
-async function getStayScope(tx:any,id:string){
+async function getStayScope(tx:Sql,id:string){
   const [row]=await tx`
     SELECT st.id,st.organization_id "organizationId",st.worker_id "workerId",st.site_id "siteId",st.object_id "objectId",
       COALESCE(o.owner_user_id,hs.responsible_user_id) "ownerUserId",o.region_id "regionId",
