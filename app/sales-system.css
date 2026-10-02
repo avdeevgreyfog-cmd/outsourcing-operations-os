@@ -3629,7 +3629,7 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .supply-partners-table{min-width:1120px}
 .sales-workspace.operations-workspace .transport-portfolio-table{min-width:1180px}
 .sales-workspace.operations-workspace .housing-portfolio-table{min-width:1240px}
-.sales-workspace.operations-workspace .housing-contracts-table{min-width:1280px}
+.sales-workspace.operations-workspace .housing-contracts-table{min-width:980px}
 .sales-workspace.operations-workspace .supply-holdings-table{min-width:1020px}
 .sales-workspace.operations-workspace .supply-movements-table{min-width:1220px}
 .sales-workspace.operations-workspace .supply-requests-table{min-width:1220px}
@@ -3691,8 +3691,8 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .housing-edit-form textarea{min-height:68px}
 .sales-workspace.operations-workspace .housing-contract-card{display:grid;gap:12px}
 .sales-workspace.operations-workspace .housing-contract-card .reconcile{grid-template-columns:repeat(4,minmax(0,1fr))}
-.sales-workspace.operations-workspace .housing-stays-table{min-width:1240px}
-.sales-workspace.operations-workspace .housing-stays-table th:first-child{min-width:190px}
+.sales-workspace.operations-workspace .housing-stays-table{min-width:1040px}
+.sales-workspace.operations-workspace .housing-stays-table th:first-child{min-width:170px}
 .sales-workspace.operations-workspace .housing-history-list{display:grid;gap:0}
 .sales-workspace.operations-workspace .housing-history-list .activity-line{padding:10px 0;border-bottom:1px solid var(--border)}
 @media(max-width:1000px){
@@ -3746,4 +3746,55 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .housing-site-workspace .stack-item:hover{background:var(--panel-2)}
 @media(max-width:980px){
   .sales-workspace.operations-workspace .housing-site-overview-grid{grid-template-columns:1fr}
+}
+
+
+/* Housing compact density */
+.sales-workspace.operations-workspace .housing-portfolio-toolbar{
+  min-height:42px;align-items:center
+}
+.sales-workspace.operations-workspace .housing-portfolio-toolbar>.button{
+  margin-left:auto;white-space:nowrap
+}
+.sales-workspace.operations-workspace .housing-stays-table td,
+.sales-workspace.operations-workspace .housing-contracts-table td{
+  padding-top:8px;padding-bottom:8px;vertical-align:middle
+}
+.sales-workspace.operations-workspace .housing-stays-table th:last-child,
+.sales-workspace.operations-workspace .housing-stays-table td:last-child{
+  width:170px;min-width:170px
+}
+.sales-workspace.operations-workspace .housing-contracts-table th:first-child{
+  min-width:210px
+}
+.sales-workspace.operations-workspace .housing-contracts-table th:nth-child(2){
+  min-width:190px
+}
+.sales-workspace.operations-workspace .housing-contracts-table th:nth-child(3){
+  min-width:185px
+}
+.sales-workspace.operations-workspace .housing-contracts-table th:nth-child(5){
+  min-width:150px
+}
+.sales-workspace.operations-workspace .housing-row-actions{
+  display:flex;align-items:center;gap:10px;flex-wrap:nowrap;white-space:nowrap
+}
+.sales-workspace.operations-workspace .housing-row-actions .table-link,
+.sales-workspace.operations-workspace .housing-contracts-table .table-link{
+  appearance:none;border:0;padding:0;background:transparent;color:var(--text);font:inherit;font-size:10.5px;font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:3px
+}
+.sales-workspace.operations-workspace .housing-row-actions .table-link:hover,
+.sales-workspace.operations-workspace .housing-contracts-table .table-link:hover{
+  text-decoration-color:currentColor
+}
+.sales-workspace.operations-workspace .housing-site-workspace .housing-stays-table td{
+  padding-top:8px;padding-bottom:8px
+}
+@media(max-width:900px){
+  .sales-workspace.operations-workspace .housing-portfolio-toolbar{
+    align-items:stretch
+  }
+  .sales-workspace.operations-workspace .housing-portfolio-toolbar>.button{
+    margin-left:0
+  }
 }
