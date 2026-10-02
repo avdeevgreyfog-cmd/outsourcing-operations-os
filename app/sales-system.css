@@ -3798,3 +3798,112 @@ button.sales-funnel-step:active{transform:translateY(1px)}
     margin-left:0
   }
 }
+
+
+/* Housing modal forms */
+.sales-workspace.operations-workspace .housing-modal-card{
+  width:min(820px,calc(100vw - 32px));
+  max-height:min(840px,calc(100dvh - 32px));
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  overflow:hidden;
+}
+.sales-workspace.operations-workspace .housing-modal-body{
+  overflow:auto;
+  padding:16px 18px;
+  display:grid;
+  gap:14px;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid{
+  display:grid;
+  gap:12px 16px;
+  min-width:0;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid.two{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid>.span-2{
+  grid-column:1/-1;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid>label,
+.sales-workspace.operations-workspace .housing-modal-body>label{
+  display:grid;
+  align-content:start;
+  gap:5px;
+  min-width:0;
+  color:var(--muted);
+  font-size:10px;
+  line-height:1.25;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid>label>span,
+.sales-workspace.operations-workspace .housing-modal-body>label>span{
+  display:block;
+  color:var(--muted);
+  font-size:10px;
+  font-weight:600;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid>label>:is(input,select,textarea),
+.sales-workspace.operations-workspace .housing-modal-body>label>:is(input,select,textarea){
+  width:100%;
+  min-width:0;
+  min-height:36px;
+  padding:0 10px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-control);
+  background:var(--panel);
+  color:var(--text);
+  font:inherit;
+  font-size:11px;
+  box-sizing:border-box;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid>label>textarea,
+.sales-workspace.operations-workspace .housing-modal-body>label>textarea{
+  min-height:72px;
+  padding:9px 10px;
+  resize:vertical;
+}
+.sales-workspace.operations-workspace .housing-modal-card .form-grid>label>:is(input,select,textarea):focus,
+.sales-workspace.operations-workspace .housing-modal-body>label>:is(input,select,textarea):focus{
+  outline:0;
+  border-color:var(--border-strong);
+}
+.sales-workspace.operations-workspace .housing-modal-card .housing-object-picker{
+  width:100%;
+  max-height:160px;
+  padding:8px 10px;
+  box-sizing:border-box;
+}
+.sales-workspace.operations-workspace .housing-modal-card .housing-object-picker label{
+  min-height:24px;
+}
+.sales-workspace.operations-workspace .housing-modal-card .housing-object-picker input[type="checkbox"]{
+  width:14px;
+  height:14px;
+  min-height:14px;
+  padding:0;
+}
+.sales-workspace.operations-workspace .housing-modal-card .page-actions{
+  grid-column:1/-1;
+  justify-content:flex-end;
+}
+.sales-workspace.operations-workspace .housing-modal-card .recruiting-error{
+  margin-top:0;
+}
+.sales-workspace.operations-workspace .housing-modal-card .recruiting-modal-footer{
+  padding:11px 18px;
+}
+@media(max-width:720px){
+  .sales-workspace.operations-workspace .housing-modal{
+    padding:10px;
+  }
+  .sales-workspace.operations-workspace .housing-modal-card{
+    width:calc(100vw - 20px);
+    max-height:calc(100dvh - 20px);
+  }
+  .sales-workspace.operations-workspace .housing-modal-card .form-grid.two{
+    grid-template-columns:1fr;
+  }
+  .sales-workspace.operations-workspace .housing-modal-card .form-grid>.span-2{
+    grid-column:auto;
+  }
+}
