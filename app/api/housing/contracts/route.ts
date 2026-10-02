@@ -31,6 +31,7 @@ const paymentSchema=z.object({
   prepaidUntil:z.string().date().nullable().optional(),
   nextPaymentDue:z.string().date().nullable().optional(),
   reference:z.string().trim().max(240).nullable().optional(),
+  objectId:z.string().uuid().nullable().optional(),
 });
 
 export async function POST(request:Request){
@@ -52,6 +53,10 @@ export async function POST(request:Request){
         RETURNING id
       `;
       if(body.partnerId)await tx`UPDATE housing_sites SET partner_id=${body.partnerId}::uuid,updated_at=now() WHERE id=${body.siteId}::uuid`;
+      await tx`
+        INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'housing_contract',${row.id}::uuid,'created',${"Добавлен договор жилья"+(body.contractNumber?" № "+body.contractNumber:"")},${tx.json({siteId:body.siteId,contractId:row.id,bookedCapacity:body.bookedCapacity??null})})
+      `;
       return row;
     }));
     return NextResponse.json(result,{status:201});
@@ -68,8 +73,8 @@ export async function PATCH(request:Request){
     requireCapability(actor,"supply.housing.manage");if(actor.demo)return NextResponse.json({ok:true});
     const body=paymentSchema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [row]=await tx<Array<{id:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];partnerId:string|null;partner:string|null;contractNumber:string|null;site:string}>>`
-        SELECT hc.id,hs.primary_object_id "objectId",COALESCE(hs.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+      const [row]=await tx<Array<{id:string;siteId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];partnerId:string|null;partner:string|null;contractNumber:string|null;site:string}>>`
+        SELECT hc.id,hc.site_id "siteId",hs.primary_object_id "objectId",COALESCE(hs.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=hs.primary_object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
           || CASE WHEN hs.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[hs.responsible_user_id::text] END "assigneeUserIds",
           hc.partner_id "partnerId",sp.name partner,hc.contract_number "contractNumber",hs.name site
@@ -78,16 +83,27 @@ export async function PATCH(request:Request){
         WHERE hc.id=${body.id}::uuid FOR UPDATE OF hc
       `;
       if(!row||!canReadRow(actor.access,"supply.housing.manage",{organizationId:actor.organizationId,...row,objectId:row.objectId??undefined,regionId:row.regionId??undefined},actor))throw new AccessDeniedError("supply.housing.manage");
-      if(!row.objectId)throw new Error("Для фиксации расхода жильё должно быть связано с объектом");
+      const expenseObjectId=body.objectId??row.objectId;
+      if(!expenseObjectId)throw new Error("Для фиксации расхода выберите объект");
+      const [linked]=await tx<Array<{id:string}>>`
+        SELECT id FROM housing_site_objects
+        WHERE site_id=(SELECT site_id FROM housing_contracts WHERE id=${row.id}::uuid)
+          AND object_id=${expenseObjectId}::uuid AND active
+      `;
+      if(!linked)throw new Error("Выбранный объект не связан с этим жильём");
       const [expense]=await tx<Array<{id:string}>>`
         INSERT INTO object_expenses(organization_id,object_id,expense_date,category,amount,vendor,reference,plan_fact,housing_contract_id,supply_partner_id,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${row.objectId}::uuid,${body.paymentDate}::date,'housing',${body.amount},${row.partner??null},${body.reference??(row.contractNumber?"Договор "+row.contractNumber:row.site)},'fact',${row.id}::uuid,${row.partnerId??null}::uuid,${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${expenseObjectId}::uuid,${body.paymentDate}::date,'housing',${body.amount},${row.partner??null},${body.reference??(row.contractNumber?"Договор "+row.contractNumber:row.site)},'fact',${row.id}::uuid,${row.partnerId??null}::uuid,${actor.userId}::uuid)
         RETURNING id
       `;
       await tx`
         UPDATE housing_contracts SET prepaid_until=COALESCE(${body.prepaidUntil??null}::date,prepaid_until),
           next_payment_due=COALESCE(${body.nextPaymentDue??null}::date,next_payment_due),updated_by_user_id=${actor.userId}::uuid,updated_at=now()
         WHERE id=${row.id}::uuid
+      `;
+      await tx`
+        INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'housing_contract',${row.id}::uuid,'payment_recorded',${"Зафиксирована оплата жилья: "+body.amount+" ₽"},${tx.json({siteId:row.siteId,contractId:row.id,expenseId:expense.id,objectId:expenseObjectId,amount:body.amount})})
       `;
       return {id:row.id,expenseId:expense.id};
     }));

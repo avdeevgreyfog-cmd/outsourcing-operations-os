@@ -601,7 +601,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
       ) units ON true
       LEFT JOIN LATERAL (
         SELECT count(*)::int occupied FROM housing_stays st
-        WHERE st.site_id=hs.id AND st.status='active' AND st.check_in<=current_date AND (st.check_out IS NULL OR st.check_out>=current_date)
+        WHERE st.site_id=hs.id AND st.status='active' AND st.check_in<=current_date AND st.actual_check_out IS NULL
       ) occupancy ON true
       WHERE hs.active
       ORDER BY hs.name
@@ -612,7 +612,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
     const stays=await sql<HousingStayRow[]>`
       SELECT st.id,st.organization_id "organizationId",st.worker_id "workerId",w.full_name worker,
         st.object_id "objectId",o.name object,st.site_id "siteId",hs.name site,st.unit_id "unitId",hu.name unit,st.bed_label "bedLabel",
-        to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status,
+        to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(COALESCE(st.actual_check_out,st.planned_check_out,st.check_out),'DD.MM.YYYY') "checkOut",st.status,
         COALESCE(o.owner_user_id,hs.responsible_user_id) "ownerUserId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=st.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
@@ -796,7 +796,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
       ORDER BY i.name,m.variant
     `:[] as Array<WorkerOutstandingAsset & {quantity:number|string}>;
     const housing=hasCapability(actor.access,"supply.housing.read")?await sql<Array<{id:string;site:string;checkIn:string;checkOut:string|null;status:string}>>`
-      SELECT st.id,hs.name site,to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status
+      SELECT st.id,hs.name site,to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(COALESCE(st.actual_check_out,st.planned_check_out,st.check_out),'DD.MM.YYYY') "checkOut",st.status
       FROM housing_stays st JOIN housing_sites hs ON hs.id=st.site_id
       WHERE st.worker_id=${workerId}::uuid AND st.status IN ('planned','active')
       ORDER BY st.check_in DESC
