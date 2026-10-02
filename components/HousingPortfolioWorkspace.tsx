@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useMemo, useState } from "react";
-import { Building2, Plus, UserPlus, X } from "lucide-react";
+import { Plus, UserPlus, X } from "lucide-react";
 import { Status } from "@/components/UI";
 import { SalesSearch } from "@/components/sales/SalesUI";
 import type { OperationsReferenceData } from "@/lib/operations/service";
@@ -195,7 +195,8 @@ export function HousingPortfolioWorkspace({snapshot,options,contracts,partners,c
   }
   function openStayAction(row:HousingControlStayRow,action:StayAction){
     setStayAction({row,action});setStayActionNote("");
-    const defaultDate=action==="plan_checkout"?(ruToIso(row.plannedCheckOut)??row.exitDate&&ruToIso(row.exitDate)??new Date().toISOString().slice(0,10)):new Date().toISOString().slice(0,10);
+    const today=new Date().toISOString().slice(0,10);
+    const defaultDate=action==="plan_checkout"?(ruToIso(row.plannedCheckOut)??ruToIso(row.exitDate)??today):today;
     setStayActionDate(defaultDate);
   }
   function openPayment(contract:HousingContractRow,site:HousingControlSiteRow){
