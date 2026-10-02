@@ -3661,7 +3661,7 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace.operations-workspace .housing-site-link{display:grid;gap:3px;padding:0;border:0;background:transparent;text-align:left;color:var(--text);cursor:pointer}
 .sales-workspace.operations-workspace .housing-site-link strong{font-size:11.5px;font-weight:650}
 .sales-workspace.operations-workspace .housing-site-link span{color:var(--muted);font-size:9.5px;line-height:1.3}
-.sales-workspace.operations-workspace .housing-site-link:hover strong{color:var(--accent)}
+.sales-workspace.operations-workspace .housing-site-link:hover strong{color:var(--text);text-decoration:underline;text-underline-offset:3px}
 .sales-workspace.operations-workspace .housing-object-list{display:grid;gap:2px}
 .sales-workspace.operations-workspace .housing-object-list span{font-size:10.5px}
 .sales-workspace.operations-workspace .housing-object-list small{color:var(--muted);font-size:9px}
@@ -3707,4 +3707,43 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace.operations-workspace .housing-contract-card .reconcile,
   .sales-workspace.operations-workspace .housing-notes-grid{grid-template-columns:1fr}
   .sales-workspace.operations-workspace .housing-notes-grid .span-2{grid-column:auto}
+}
+
+
+/* Full-page housing entity workspace */
+.sales-workspace.operations-workspace .housing-portfolio-toolbar .personnel-portfolio-filters :is(select,.sales-search){
+  border-color:var(--border);background:var(--panel);box-shadow:none
+}
+.sales-workspace.operations-workspace .housing-portfolio-toolbar .sales-search:focus-within{
+  outline:1px solid var(--border-strong);outline-offset:0
+}
+.sales-workspace.operations-workspace .housing-portfolio-summary .metric{color:var(--text)}
+.sales-workspace.operations-workspace .housing-site-workspace{display:grid;gap:14px;min-width:0}
+.sales-workspace.operations-workspace .housing-site-workspace .object-pilot-header{margin-bottom:0}
+.sales-workspace.operations-workspace .housing-site-workspace>.metrics-grid{margin-bottom:0}
+.sales-workspace.operations-workspace .housing-site-overview-grid{
+  display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:14px;align-items:start
+}
+.sales-workspace.operations-workspace .housing-site-overview-grid>div{min-width:0}
+.sales-workspace.operations-workspace .housing-site-overview-content,
+.sales-workspace.operations-workspace .housing-site-edit-wrap,
+.sales-workspace.operations-workspace .housing-site-contract-content,
+.sales-workspace.operations-workspace .housing-site-history{padding:12px 14px 14px}
+.sales-workspace.operations-workspace .housing-site-overview-content .housing-detail-kv{margin-bottom:14px}
+.sales-workspace.operations-workspace .housing-site-overview-content .housing-detail-section{margin-top:12px}
+.sales-workspace.operations-workspace .housing-site-contract-content{display:grid;gap:12px}
+.sales-workspace.operations-workspace .housing-site-empty{padding:18px}
+.sales-workspace.operations-workspace .housing-site-workspace .section-head .button{flex:0 0 auto}
+.sales-workspace.operations-workspace .housing-site-workspace .section-head{gap:12px}
+.sales-workspace.operations-workspace .housing-site-workspace .section-head>div{min-width:0}
+.sales-workspace.operations-workspace .housing-site-workspace .section-head h2{font-size:13px}
+.sales-workspace.operations-workspace .housing-site-workspace .section-head p{font-size:10px}
+.sales-workspace.operations-workspace .housing-site-workspace .housing-object-picker{
+  background:var(--panel);border-color:var(--border)
+}
+.sales-workspace.operations-workspace .housing-site-workspace .housing-notes-grid>div{background:var(--panel)}
+.sales-workspace.operations-workspace .housing-site-workspace .stack-item{background:var(--panel)}
+.sales-workspace.operations-workspace .housing-site-workspace .stack-item:hover{background:var(--panel-2)}
+@media(max-width:980px){
+  .sales-workspace.operations-workspace .housing-site-overview-grid{grid-template-columns:1fr}
 }
