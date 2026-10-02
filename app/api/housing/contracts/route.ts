@@ -73,8 +73,8 @@ export async function PATCH(request:Request){
     requireCapability(actor,"supply.housing.manage");if(actor.demo)return NextResponse.json({ok:true});
     const body=paymentSchema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [row]=await tx<Array<{id:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];partnerId:string|null;partner:string|null;contractNumber:string|null;site:string}>>`
-        SELECT hc.id,hs.primary_object_id "objectId",COALESCE(hs.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+      const [row]=await tx<Array<{id:string;siteId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];partnerId:string|null;partner:string|null;contractNumber:string|null;site:string}>>`
+        SELECT hc.id,hc.site_id "siteId",hs.primary_object_id "objectId",COALESCE(hs.responsible_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=hs.primary_object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
           || CASE WHEN hs.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[hs.responsible_user_id::text] END "assigneeUserIds",
           hc.partner_id "partnerId",sp.name partner,hc.contract_number "contractNumber",hs.name site
@@ -103,7 +103,7 @@ export async function PATCH(request:Request){
       `;
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'housing_contract',${row.id}::uuid,'payment_recorded',${"Зафиксирована оплата жилья: "+body.amount+" ₽"},${tx.json({siteId:(await tx<Array<{siteId:string}>>`SELECT site_id "siteId" FROM housing_contracts WHERE id=${row.id}::uuid`)[0]?.siteId,contractId:row.id,expenseId:expense.id,objectId:expenseObjectId,amount:body.amount})})
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'housing_contract',${row.id}::uuid,'payment_recorded',${"Зафиксирована оплата жилья: "+body.amount+" ₽"},${tx.json({siteId:row.siteId,contractId:row.id,expenseId:expense.id,objectId:expenseObjectId,amount:body.amount})})
       `;
       return {id:row.id,expenseId:expense.id};
     }));
