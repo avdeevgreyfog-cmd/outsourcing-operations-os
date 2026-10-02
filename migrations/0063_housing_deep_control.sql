@@ -57,13 +57,9 @@ SET actual_check_out=COALESCE(actual_check_out,check_out)
 WHERE status='completed' AND check_out IS NOT NULL AND actual_check_out IS NULL;
 
 ALTER TABLE housing_stays
-  DROP CONSTRAINT IF EXISTS housing_stays_planned_checkout_check;
-ALTER TABLE housing_stays
   ADD CONSTRAINT housing_stays_planned_checkout_check
   CHECK (planned_check_out IS NULL OR planned_check_out >= check_in);
 
-ALTER TABLE housing_stays
-  DROP CONSTRAINT IF EXISTS housing_stays_actual_checkout_check;
 ALTER TABLE housing_stays
   ADD CONSTRAINT housing_stays_actual_checkout_check
   CHECK (actual_check_out IS NULL OR actual_check_in IS NULL OR actual_check_out >= actual_check_in);
