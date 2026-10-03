@@ -123,17 +123,41 @@ export async function POST(request:Request){
       }
 
       const compatibilityCondition=targetCondition??sourceCondition??body.condition??null;
-      await tx`
-        INSERT INTO inventory_movements(
-          organization_id,item_id,variant,variant_id,movement_type,quantity,from_location_id,to_location_id,worker_id,
-          item_condition,source_condition,target_condition,unit_cost,note,created_by_user_id
-        )
-        VALUES(
-          ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,${type},${body.quantity},
-          ${body.fromLocationId??null}::uuid,${body.toLocationId??null}::uuid,${body.workerId??null}::uuid,
-          ${compatibilityCondition},${sourceCondition},${targetCondition},${body.unitCost??null},${body.note??null},${actor.userId}::uuid
-        )
-      `;
+      if(type==="recondition"){
+        const [operation]=await tx<Array<{reference:string}>>`SELECT 'recondition:'||gen_random_uuid()::text reference`;
+        await tx`
+          INSERT INTO inventory_movements(
+            organization_id,item_id,variant,variant_id,movement_type,quantity,from_location_id,
+            item_condition,source_condition,note,reference,created_by_user_id
+          )
+          VALUES(
+            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,'adjustment_out',${body.quantity},${body.fromLocationId!}::uuid,
+            ${sourceCondition},${sourceCondition},${body.note??null},${operation.reference},${actor.userId}::uuid
+          )
+        `;
+        await tx`
+          INSERT INTO inventory_movements(
+            organization_id,item_id,variant,variant_id,movement_type,quantity,to_location_id,
+            item_condition,target_condition,note,reference,created_by_user_id
+          )
+          VALUES(
+            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,'adjustment_in',${body.quantity},${body.toLocationId!}::uuid,
+            ${targetCondition},${targetCondition},${body.note??null},${operation.reference},${actor.userId}::uuid
+          )
+        `;
+      }else{
+        await tx`
+          INSERT INTO inventory_movements(
+            organization_id,item_id,variant,variant_id,movement_type,quantity,from_location_id,to_location_id,worker_id,
+            item_condition,source_condition,target_condition,unit_cost,note,created_by_user_id
+          )
+          VALUES(
+            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,${type},${body.quantity},
+            ${body.fromLocationId??null}::uuid,${body.toLocationId??null}::uuid,${body.workerId??null}::uuid,
+            ${compatibilityCondition},${sourceCondition},${targetCondition},${body.unitCost??null},${body.note??null},${actor.userId}::uuid
+          )
+        `;
+      }
       if(type==="return"&&body.writeoffAfterReturn){
         await tx`
           INSERT INTO inventory_movements(
