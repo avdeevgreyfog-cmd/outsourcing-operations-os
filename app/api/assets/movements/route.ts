@@ -33,13 +33,13 @@ async function locationConditionBalance(tx:Sql,itemId:string,variant:string,loca
       SELECT quantity delta
       FROM inventory_movements
       WHERE item_id=${itemId}::uuid AND variant=${variant} AND to_location_id=${locationId}::uuid
-        AND movement_type IN ('opening','receipt','transfer','return','adjustment_in','recondition')
+        AND movement_type IN ('opening','receipt','transfer','return','adjustment_in')
         AND COALESCE(target_condition,item_condition,CASE WHEN movement_type IN ('opening','receipt') THEN 'new' ELSE 'good' END)=${conditionValue}
       UNION ALL
       SELECT -quantity delta
       FROM inventory_movements
       WHERE item_id=${itemId}::uuid AND variant=${variant} AND from_location_id=${locationId}::uuid
-        AND movement_type IN ('transfer','issue','writeoff','adjustment_out','recondition')
+        AND movement_type IN ('transfer','issue','writeoff','adjustment_out')
         AND COALESCE(source_condition,item_condition,'good')=${conditionValue}
     ) SELECT COALESCE(sum(delta),0)::numeric quantity FROM deltas
   `;return Number(row?.quantity??0);
@@ -69,7 +69,7 @@ export async function POST(request:Request){
 
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       let variant=body.variant;
-      let variantId=body.variantId??null;
+      const variantId=body.variantId??null;
       if(variantId){
         const [variantRow]=await tx<Array<{id:string;label:string}>>`
           SELECT id,label FROM inventory_item_variants WHERE id=${variantId}::uuid AND item_id=${body.itemId}::uuid AND active
