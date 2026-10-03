@@ -87,3 +87,22 @@ jobs:
           test "$login_code" = "200"
           demo_code="$(curl -sS -L -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -H 'Cookie: oo_workspace_mode=demo; oo_demo_role=director' -o /tmp/demo.html -w '%{http_code}' "$BASE_URL/")"
           test "$demo_code" = "200"
+
+      - name: Verify internal request workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          director_code="$(curl -sS -L -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -H 'Cookie: oo_workspace_mode=demo; oo_demo_role=director' -o /tmp/procurement-director.html -w '%{http_code}' "$BASE_URL/procurement")"
+          test "$director_code" = "200"
+          grep -q 'Внутренние заявки' /tmp/procurement-director.html
+          grep -q 'Пополнение рекламного кабинета Avito' /tmp/procurement-director.html
+          grep -q 'Рабочая обувь для новых сотрудников' /tmp/procurement-director.html
+
+          recruiter_code="$(curl -sS -L -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -H 'Cookie: oo_workspace_mode=demo; oo_demo_role=recruiter_staff' -o /tmp/procurement-recruiter.html -w '%{http_code}' "$BASE_URL/procurement")"
+          test "$recruiter_code" = "200"
+          grep -q 'Внутренние заявки' /tmp/procurement-recruiter.html
+          grep -q 'Пополнение рекламного кабинета Avito' /tmp/procurement-recruiter.html
+          if grep -q 'Рабочая обувь для новых сотрудников' /tmp/procurement-recruiter.html; then
+            echo "::error::Recruiter can see an internal request created by another role."
+            exit 1
+          fi
