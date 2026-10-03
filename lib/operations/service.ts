@@ -449,6 +449,7 @@ export async function listStorageLocations(actor:Actor):Promise<StorageLocationR
     return [
       {id:"demo-location-manager",organizationId:object.organizationId,name:"Запас менеджера",kind:"manager",objectId:null,object:null,responsibleUserId:actor.userId,responsible:actor.displayName,ownerUserId:actor.userId,assigneeUserIds:[actor.userId],description:"Личный операционный запас менеджера"},
       {id:"demo-location-object",organizationId:object.organizationId,name:`${object.name} · запас`,kind:"object",objectId:object.id,object:object.name,responsibleUserId:object.ownerUserId??null,responsible:null,ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],description:"Запас непосредственно на объекте"},
+      {id:"demo-location-office",organizationId:object.organizationId,name:"Центральный склад компании",kind:"office",objectId:null,object:null,responsibleUserId:null,responsible:null,ownerUserId:null,assigneeUserIds:[],description:"Общий запас компании, доступный для просмотра менеджерам"},
     ];
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
@@ -466,7 +467,7 @@ export async function listStorageLocations(actor:Actor):Promise<StorageLocationR
       WHERE l.active
       ORDER BY l.name
     `;
-    return rows.filter(row=>canReadRow(actor.access,"assets.read",row,actor));
+    return rows.filter(row=>row.kind==="office"||canReadRow(actor.access,"assets.read",row,actor));
   });
 }
 
@@ -578,7 +579,7 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
     ]);
     const visibleLocationIds=new Set(locations.map(row=>row.id));
     const balances=rawBalances
-      .filter(row=>visibleLocationIds.has(row.locationId)&&canReadRow(actor.access,"assets.read",row,actor))
+      .filter(row=>visibleLocationIds.has(row.locationId))
       .map(({organizationId:_,...row})=>({
         ...row,
         quantity:Number(row.quantity),usableQuantity:Number(row.usableQuantity),newQuantity:Number(row.newQuantity),goodQuantity:Number(row.goodQuantity),
