@@ -34,12 +34,13 @@ export type InventoryMovementRow={
   id:string;itemId:string;item:string;variant:string;movementType:string;quantity:number;unit:string;
   fromLocationId:string|null;fromLocation:string|null;toLocationId:string|null;toLocation:string|null;
   workerId:string|null;worker:string|null;objectId:string|null;object:string|null;manager:string|null;
-  condition:string|null;unitCost:number|null;note:string|null;reference:string|null;occurredAt:string;createdBy:string;
+  condition:string|null;sourceCondition:string|null;targetCondition:string|null;unitCost:number|null;note:string|null;reference:string|null;occurredAt:string;createdBy:string;
   ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
 };
 export type WorkerAssetHoldingRow={
   workerId:string;worker:string;objectId:string|null;object:string|null;manager:string|null;
   itemId:string;item:string;variant:string;quantity:number;unit:string;returnable:boolean;
+  lastIssuedAt:string|null;replacementCycleDays:number|null;nextReplacementAt:string|null;
   ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
 };
 
@@ -178,16 +179,26 @@ export async function listInventoryMovements(actor:Actor):Promise<InventoryMovem
   if(actor.demo){
     const object=demoObjectFor(actor,"assets.read")??demo.objects[0];
     const worker=demo.workers.find(row=>row.objectId===object.id)??demo.workers[0];
-    return [{id:"demo-movement-1",itemId:"demo-item-jacket",item:"Куртка рабочая",variant:"52",movementType:"issue",quantity:1,unit:"шт",fromLocationId:"demo-location-manager",fromLocation:"Запас менеджера",toLocationId:null,toLocation:null,workerId:worker?.id??null,worker:worker?.fullName??null,objectId:object.id,object:object.name,manager:object.ownerName??null,condition:"new",unitCost:2500,note:null,reference:null,occurredAt:"30.09.2026 10:00",createdBy:actor.displayName,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[]}];
+    return [{id:"demo-movement-1",itemId:"demo-item-jacket",item:"Куртка рабочая",variant:"52",movementType:"issue",quantity:1,unit:"шт",fromLocationId:"demo-location-manager",fromLocation:"Запас менеджера",toLocationId:null,toLocation:null,workerId:worker?.id??null,worker:worker?.fullName??null,objectId:object.id,object:object.name,manager:object.ownerName??null,condition:"new",sourceCondition:"new",targetCondition:null,unitCost:2500,note:null,reference:null,occurredAt:"30.09.2026 10:00",createdBy:actor.displayName,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[]}];
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<Array<InventoryMovementRow>>`
-      SELECT m.id,m.item_id "itemId",i.name item,m.variant,m.movement_type "movementType",m.quantity::numeric quantity,i.unit,
-        m.from_location_id "fromLocationId",fl.name "fromLocation",m.to_location_id "toLocationId",tl.name "toLocation",
+      SELECT m.id,m.item_id "itemId",i.name item,m.variant,
+        CASE WHEN m.reference LIKE 'recondition:%' THEN 'recondition' ELSE m.movement_type END "movementType",
+        m.quantity::numeric quantity,i.unit,
+        m.from_location_id "fromLocationId",fl.name "fromLocation",
+        COALESCE(m.to_location_id,CASE WHEN m.reference LIKE 'recondition:%' THEN m.from_location_id END) "toLocationId",
+        COALESCE(tl.name,CASE WHEN m.reference LIKE 'recondition:%' THEN fl.name END) "toLocation",
         m.worker_id "workerId",w.full_name worker,COALESCE(tl.object_id,fl.object_id,wa.object_id) "objectId",
         COALESCE(to_obj.name,from_obj.name,worker_obj.name) object,
         COALESCE(to_manager.display_name,from_manager.display_name,worker_manager.display_name) manager,
-        m.item_condition condition,m.unit_cost::numeric "unitCost",m.note,m.reference,
+        m.item_condition condition,m.source_condition "sourceCondition",
+        COALESCE(m.target_condition,(
+          SELECT paired.target_condition FROM inventory_movements paired
+          WHERE paired.reference=m.reference AND paired.movement_type='adjustment_in'
+          ORDER BY paired.created_at LIMIT 1
+        )) "targetCondition",
+        m.unit_cost::numeric "unitCost",m.note,m.reference,
         to_char(m.occurred_at,'DD.MM.YYYY HH24:MI') "occurredAt",creator.display_name "createdBy",
         COALESCE(tl.responsible_user_id,fl.responsible_user_id,to_obj.owner_user_id,from_obj.owner_user_id,wa.manager_user_id,m.created_by_user_id) "ownerUserId",
         COALESCE(to_obj.region_id,from_obj.region_id,worker_obj.region_id) "regionId",
@@ -211,6 +222,7 @@ export async function listInventoryMovements(actor:Actor):Promise<InventoryMovem
       LEFT JOIN objects worker_obj ON worker_obj.id=wa.object_id
       LEFT JOIN app_users worker_manager ON worker_manager.id=wa.manager_user_id
       JOIN app_users creator ON creator.id=m.created_by_user_id
+      WHERE NOT (m.reference LIKE 'recondition:%' AND m.movement_type='adjustment_in')
       ORDER BY m.occurred_at DESC LIMIT 500
     `;
     return rows.filter(row=>canReadRow(actor.access,"assets.read",row,actor)).map(row=>({...row,quantity:Number(row.quantity),unitCost:row.unitCost==null?null:Number(row.unitCost)}));
@@ -221,7 +233,7 @@ export async function listWorkerAssetHoldings(actor:Actor):Promise<WorkerAssetHo
   requireCapability(actor,"assets.read");
   if(actor.demo){
     const object=demoObjectFor(actor,"assets.read")??demo.objects[0];
-    return demo.workers.filter(row=>row.objectId===object.id).slice(0,4).map((worker,index)=>({workerId:worker.id,worker:worker.fullName,objectId:object.id,object:object.name,manager:object.ownerName??null,itemId:index%2?"demo-item-boots":"demo-item-jacket",item:index%2?"Ботинки рабочие":"Куртка рабочая",variant:index%2?"43":"52",quantity:1,unit:index%2?"пар":"шт",returnable:true,ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[]}));
+    return demo.workers.filter(row=>row.objectId===object.id).slice(0,4).map((worker,index)=>({workerId:worker.id,worker:worker.fullName,objectId:object.id,object:object.name,manager:object.ownerName??null,itemId:index%2?"demo-item-boots":"demo-item-jacket",item:index%2?"Ботинки рабочие":"Куртка рабочая",variant:index%2?"43":"52",quantity:1,unit:index%2?"пар":"шт",returnable:true,lastIssuedAt:"30.09.2026",replacementCycleDays:180,nextReplacementAt:"29.03.2027",ownerUserId:object.ownerUserId??null,regionId:object.regionId??null,assigneeUserIds:object.assigneeUserIds??[]}));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<Array<WorkerAssetHoldingRow>>`
@@ -231,7 +243,11 @@ export async function listWorkerAssetHoldings(actor:Actor):Promise<WorkerAssetHo
                  WHEN m.movement_type='return' THEN -m.quantity
                  WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity
                  ELSE 0 END)::numeric quantity,
-        i.unit,i.returnable,COALESCE(a.manager_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
+        i.unit,i.returnable,to_char(max(m.occurred_at) FILTER (WHERE m.movement_type='issue'),'DD.MM.YYYY') "lastIssuedAt",
+        i.default_replacement_cycle_days "replacementCycleDays",
+        CASE WHEN i.default_replacement_cycle_days IS NULL THEN NULL ELSE
+          to_char((max(m.occurred_at) FILTER (WHERE m.movement_type='issue'))::date+i.default_replacement_cycle_days,'DD.MM.YYYY') END "nextReplacementAt",
+        COALESCE(a.manager_user_id,o.owner_user_id) "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM inventory_movements m
@@ -244,7 +260,8 @@ export async function listWorkerAssetHoldings(actor:Actor):Promise<WorkerAssetHo
       ) a ON true
       LEFT JOIN objects o ON o.id=a.object_id
       LEFT JOIN app_users manager ON manager.id=COALESCE(a.manager_user_id,o.owner_user_id)
-      GROUP BY w.id,w.full_name,a.object_id,o.name,manager.display_name,i.id,i.name,i.unit,i.returnable,m.variant,a.manager_user_id,o.owner_user_id,o.region_id
+      WHERE i.returnable
+      GROUP BY w.id,w.full_name,a.object_id,o.name,manager.display_name,i.id,i.name,i.unit,i.returnable,i.default_replacement_cycle_days,m.variant,a.manager_user_id,o.owner_user_id,o.region_id
       HAVING sum(CASE WHEN m.movement_type='issue' THEN m.quantity
                       WHEN m.movement_type='return' THEN -m.quantity
                       WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity

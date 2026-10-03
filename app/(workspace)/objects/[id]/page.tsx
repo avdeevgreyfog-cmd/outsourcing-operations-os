@@ -110,7 +110,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     safeObjectLoad(id,"incidents",()=>listIncidents(actor),[]),
     safeObjectLoad(id,"analytics",()=>listOperationsAnalytics(actor),[]),
     canNeeds?safeObjectLoad(id,"staffing-forecast",()=>listStaffingForecast(actor,30),[]):Promise.resolve([]),
-    canAssets?safeObjectLoad(id,"inventory",()=>getInventorySnapshot(actor),{locations:[],items:[],balances:[]}):Promise.resolve({locations:[],items:[],balances:[]}),
+    canAssets?safeObjectLoad(id,"inventory",()=>getInventorySnapshot(actor),{locations:[],items:[],variants:[],prices:[],balances:[]}):Promise.resolve({locations:[],items:[],variants:[],prices:[],balances:[]}),
     canHousing?safeObjectLoad(id,"housing",()=>getHousingSnapshot(actor),{sites:[],stays:[]}):Promise.resolve({sites:[],stays:[]}),
     canProcurement?safeObjectLoad(id,"supply-requests",()=>listSupplyRequests(actor),[]):Promise.resolve([]),
     safeObjectLoad(id,"contacts",()=>getObjectContacts(actor,id),{assigned:[],contacts:[]}),
