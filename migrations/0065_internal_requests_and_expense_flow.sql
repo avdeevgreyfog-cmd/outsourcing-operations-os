@@ -158,11 +158,18 @@ JOIN permission_definitions p ON p.capability IN ('procurement.read','procuremen
 WHERE r.code IN ('recruitment_head','recruiter')
 ON CONFLICT DO NOTHING;
 
--- Finance sees the cross-functional queue and is the only non-director role that records payment facts.
+-- Finance sees the cross-functional queue and records payment facts, but creating a request
+-- does not grant authority over another employee's request.
 INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
 SELECT r.organization_id,r.id,p.capability,'allow','all_org','{}'::uuid[]
 FROM role_templates r
-JOIN permission_definitions p ON p.capability IN ('procurement.read','procurement.create','procurement.finance')
+JOIN permission_definitions p ON p.capability IN ('procurement.read','procurement.finance')
+WHERE r.code IN ('finance','finance_economist')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
+SELECT r.organization_id,r.id,'procurement.create','allow','own_created','{}'::uuid[]
+FROM role_templates r
 WHERE r.code IN ('finance','finance_economist')
 ON CONFLICT DO NOTHING;
 
