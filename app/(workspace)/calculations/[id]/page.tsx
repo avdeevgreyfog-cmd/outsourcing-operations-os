@@ -55,7 +55,7 @@ export default async function CalculationWorkspace({params,searchParams}:{params
   const [rateReferences,supplyKitReferences]=await Promise.all([
     hasCapability(actor.access,"calculation.rate_reference.read")
       ? getRateReferencesForRoles(actor,baseRoles,request?.regionId??tender?.regionId??meta.regionId,economicsDate)
-      : Promise.resolve({}),
+      : Promise.resolve({} as Awaited<ReturnType<typeof getRateReferencesForRoles>>),
     getSupplyKitReferencesForRoles(actor,baseRoles,economicsDate),
   ]);
   const roles=baseRoles.map(role=>({...role,reference:rateReferences[role.id]??null,supplyKit:supplyKitReferences[role.id]??null}));
