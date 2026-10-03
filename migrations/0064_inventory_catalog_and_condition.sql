@@ -1,20 +1,14 @@
 BEGIN;
 
 -- Internal warehouse refinement: canonical variants, condition-aware stock and historical prices.
--- Existing inventory movements remain immutable; new metadata is additive and legacy rows are backfilled.
+-- Existing inventory movements remain immutable; all new structures are additive.
 
 ALTER TABLE inventory_items
-  ADD COLUMN IF NOT EXISTS size_mode text NOT NULL DEFAULT 'none',
-  ADD COLUMN IF NOT EXISTS default_replacement_cycle_days integer,
+  ADD COLUMN IF NOT EXISTS size_mode text NOT NULL DEFAULT 'none'
+    CHECK (size_mode IN ('none','clothing','shoe','manual')),
+  ADD COLUMN IF NOT EXISTS default_replacement_cycle_days integer
+    CHECK (default_replacement_cycle_days IS NULL OR default_replacement_cycle_days BETWEEN 1 AND 3650),
   ADD COLUMN IF NOT EXISTS notes text;
-
-ALTER TABLE inventory_items DROP CONSTRAINT IF EXISTS inventory_items_size_mode_check;
-ALTER TABLE inventory_items ADD CONSTRAINT inventory_items_size_mode_check
-  CHECK (size_mode IN ('none','clothing','shoe','manual'));
-
-ALTER TABLE inventory_items DROP CONSTRAINT IF EXISTS inventory_items_default_replacement_cycle_days_check;
-ALTER TABLE inventory_items ADD CONSTRAINT inventory_items_default_replacement_cycle_days_check
-  CHECK (default_replacement_cycle_days IS NULL OR default_replacement_cycle_days BETWEEN 1 AND 3650);
 
 UPDATE inventory_items
 SET size_mode=CASE WHEN tracks_variant THEN 'manual' ELSE 'none' END
@@ -59,32 +53,10 @@ CREATE INDEX IF NOT EXISTS idx_inventory_item_prices_lookup
 
 ALTER TABLE inventory_movements
   ADD COLUMN IF NOT EXISTS variant_id uuid REFERENCES inventory_item_variants(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS source_condition text,
-  ADD COLUMN IF NOT EXISTS target_condition text;
-
-ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_source_condition_check;
-ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_source_condition_check
-  CHECK (source_condition IS NULL OR source_condition IN ('new','good','worn','damaged','unusable'));
-
-ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_target_condition_check;
-ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_target_condition_check
-  CHECK (target_condition IS NULL OR target_condition IN ('new','good','worn','damaged','unusable'));
-
-ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_movement_type_check;
-ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_movement_type_check
-  CHECK (movement_type IN ('opening','receipt','transfer','issue','return','writeoff','adjustment_in','adjustment_out','recondition'));
-
-ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_check;
-ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_check
-  CHECK (
-    (movement_type IN ('opening','receipt','adjustment_in') AND to_location_id IS NOT NULL AND from_location_id IS NULL)
-    OR (movement_type='transfer' AND from_location_id IS NOT NULL AND to_location_id IS NOT NULL AND from_location_id<>to_location_id)
-    OR (movement_type='issue' AND from_location_id IS NOT NULL AND worker_id IS NOT NULL)
-    OR (movement_type='return' AND to_location_id IS NOT NULL AND worker_id IS NOT NULL)
-    OR (movement_type='writeoff' AND (from_location_id IS NOT NULL OR worker_id IS NOT NULL))
-    OR (movement_type='adjustment_out' AND from_location_id IS NOT NULL)
-    OR (movement_type='recondition' AND from_location_id IS NOT NULL AND to_location_id=from_location_id)
-  );
+  ADD COLUMN IF NOT EXISTS source_condition text
+    CHECK (source_condition IS NULL OR source_condition IN ('new','good','worn','damaged','unusable')),
+  ADD COLUMN IF NOT EXISTS target_condition text
+    CHECK (target_condition IS NULL OR target_condition IN ('new','good','worn','damaged','unusable'));
 
 UPDATE inventory_movements
 SET source_condition=CASE
@@ -127,24 +99,20 @@ WHERE m.variant_id IS NULL
 
 ALTER TABLE inventory_item_variants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_item_variants FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS inventory_item_variants_tenant_isolation ON inventory_item_variants;
 CREATE POLICY inventory_item_variants_tenant_isolation ON inventory_item_variants
   USING (organization_id=app_current_organization_id())
   WITH CHECK (organization_id=app_current_organization_id());
 
 ALTER TABLE inventory_item_prices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory_item_prices FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS inventory_item_prices_tenant_isolation ON inventory_item_prices;
 CREATE POLICY inventory_item_prices_tenant_isolation ON inventory_item_prices
   USING (organization_id=app_current_organization_id())
   WITH CHECK (organization_id=app_current_organization_id());
 
-DROP TRIGGER IF EXISTS audit_inventory_item_variants ON inventory_item_variants;
 CREATE TRIGGER audit_inventory_item_variants
   AFTER INSERT OR UPDATE OR DELETE ON inventory_item_variants
   FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 
-DROP TRIGGER IF EXISTS audit_inventory_item_prices ON inventory_item_prices;
 CREATE TRIGGER audit_inventory_item_prices
   AFTER INSERT OR UPDATE OR DELETE ON inventory_item_prices
   FOR EACH ROW EXECUTE FUNCTION audit_row_change();
