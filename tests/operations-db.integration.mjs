@@ -380,11 +380,11 @@ try{
   const internalPayment=randomUUID();
   await sql`
     INSERT INTO supply_requests(
-      id,organization_id,object_id,legal_entity_id,organization_unit_id,request_type,category_code,priority,title,description,
+      id,organization_id,object_id,legal_entity_id,organization_unit_id,request_type,category_code,priority,urgency_reason,title,description,
       amount,vendor,source_name,source_url,needed_by,status,payment_status,created_by_user_id
     )
     VALUES(
-      ${internalPayment}::uuid,${org}::uuid,NULL,${legalEntity.id}::uuid,${orgUnit.id}::uuid,'payment','recruiting_advertising','urgent',
+      ${internalPayment}::uuid,${org}::uuid,NULL,${legalEntity.id}::uuid,${orgUnit.id}::uuid,'payment','recruiting_advertising','urgent','Integration deadline',
       'Integration Avito payment','Recruiting advertising balance',30000,'Avito','Avito','https://www.avito.ru/',current_date+3,
       'approved','pending',${director}::uuid
     )
