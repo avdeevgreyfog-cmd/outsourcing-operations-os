@@ -8,12 +8,12 @@ import { hasCapability } from "@/lib/core/access.mjs";
 import { getOperationsReferenceData, getWorkerOffboardingContext, getWorkerOperationsDetails } from "@/lib/operations/service";
 import { WorkerAbsencesWorkspace, WorkerAssignmentsWorkspace } from "@/components/WorkerOperationsWorkspace";
 import { WorkerEmploymentWorkspace } from "@/components/WorkerEmploymentWorkspace";
-import { Empty, EntityTabs, KeyValue, Section, Status } from "@/components/UI";
+import { Empty, KeyValue, Section, Status } from "@/components/UI";
 import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { rub } from "@/lib/ui/format";
 import { PersonAvatar } from "@/components/registry/PersonAvatar";
 import { documentsLabel, nextChange, operationalState, rateLabel, scheduleLabel, todayState, todayStateTone } from "@/components/registry/worker-labels";
-import { shiftsForWorker, visibleWorkerTabs } from "@/lib/operations/worker-card.mjs";
+import { assignmentState, shiftsForWorker, visibleWorkerTabs } from "@/lib/operations/worker-card.mjs";
 import { listWorkerActivity } from "@/lib/operations/worker-activity";
 import { employmentTypeLabel } from "@/lib/ui/labels";
 
@@ -67,7 +67,15 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
   const details=sensitive?rawDetails:{...rawDetails,assignments:rawDetails.assignments.map(row=>({...row,dayRate:null,nightRate:null}))};
   const today=new Date().toISOString().slice(0,10);
   const shifts=shiftsForWorker(allShifts,id).filter(row=>row.dateIso&&row.dateIso>=today);
-  const tabs=visibleTabKeys.map(key=>({label:labels[key],href:"/workers/"+id+"?tab="+key}));
+  const groups=[
+    {label:"Обзор",keys:["overview"]},
+    {label:"Работа",keys:["assignments","schedule","timesheets","employment"]},
+    {label:"Расчёты",keys:["accruals","payments"]},
+    {label:"Документы",keys:["documents"]},
+    {label:"История",keys:["history"]},
+    {label:"Ещё",keys:["housing","assets","incidents"]},
+  ].map(group=>({...group,keys:group.keys.filter(key=>visibleTabKeys.includes(key))})).filter(group=>group.keys.length);
+  const href=(key:string)=>"/workers/"+id+"?tab="+key;
   const panel=(key:string,content:ReactNode)=>{
     if(!visibleTabKeys.includes(key)||(!staticDemo&&tab!==key))return null;
     return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
@@ -76,27 +84,45 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
   const workspace=<>
     <div className="worker-entity-header">
       <nav className="operis-registry-crumb" aria-label="Хлебные крошки"><span>Операции</span><span> / </span><Link href="/workers">Сотрудники</Link><span> / </span><span>{worker.fullName}</span></nav>
-      <div className="worker-entity-identity"><PersonAvatar size={64}/><div><h1>{worker.fullName}</h1><p>{worker.specialty??"Специальность не указана"} · {worker.object??"Без назначения"}</p><Status tone={worker.status==="dismissed"?"neutral":todayStateTone(worker)}>{operationalState(worker)}</Status></div><Link className="button worker-back" href="/workers">К реестру</Link></div>
+      <div className="worker-card-title"><h1>Карточка сотрудника</h1><div className="page-actions"><Link className="button" href="/workers">К реестру</Link>{canEdit&&<Link className="button primary" href={href("assignments")}>Управлять назначением</Link>}</div></div>
     </div>
-    <EntityTabs items={tabs} active={labels[tab]}/>
+    <div className="worker-card-layout">
+      <aside className="worker-profile" aria-label="Профиль сотрудника">
+        <div className="worker-profile-identity"><PersonAvatar size={104}/><h2>{worker.fullName}</h2><p>{worker.specialty??"Специальность не указана"}</p><Status tone={worker.status==="dismissed"?"neutral":todayStateTone(worker)}>{operationalState(worker)}</Status></div>
+        <div className="worker-profile-facts">
+          <KeyValue label="Телефон" value={worker.phone?<a href={"tel:"+worker.phone.replace(/[^+\d]/g,"")}>{worker.phone}</a>:"Не указан"}/>
+          <KeyValue label="Текущий объект" value={worker.object&&worker.objectId?<Link href={"/objects/"+worker.objectId}>{worker.object}</Link>:"Не назначен"}/>
+          <KeyValue label="Менеджер" value={worker.managerName??"—"}/>
+          <KeyValue label="Формат работы" value={worker.workMode==="rotation"?"Вахта":worker.workMode==="local"?"Местный":"—"}/>
+          <KeyValue label="Оформление" value={employmentTypeLabel(worker.employment)}/>
+          {sensitive&&<KeyValue label="Ставка" value={rateLabel(worker)} sensitive/>}
+        </div>
+        <div className="worker-profile-links"><h3>Связи</h3>
+          <KeyValue label="Кандидат" value={worker.originCandidateId?<Link href={"/candidates/"+worker.originCandidateId}>Открыть</Link>:"—"}/>
+          {canViewHousing&&<KeyValue label="Проживание" value={<Link href={href("housing")}>Открыть</Link>}/>}
+          {canViewAssets&&<KeyValue label="Имущество и СИЗ" value={<Link href={href("assets")}>Открыть</Link>}/>}
+        </div>
+      </aside>
+      <div className="worker-card-content">
+        <nav className="entity-tabs worker-card-nav" aria-label="Разделы карточки">{groups.map(group=><Link key={group.label} href={href(group.keys[0])} data-worker-tab-keys={group.keys.join(" ")} className={group.keys.includes(tab)?"active":""} aria-current={group.keys.includes(tab)?"page":undefined}>{group.label}</Link>)}</nav>
+        {groups.filter(group=>group.keys.length>1).map(group=><nav key={group.label} className="worker-card-subnav" aria-label={group.label} data-worker-subnav-keys={group.keys.join(" ")} style={{display:group.keys.includes(tab)?"flex":"none"}}>{group.keys.map(key=><Link key={key} href={href(key)} className={tab===key?"active":""} aria-current={tab===key?"page":undefined}>{labels[key]}</Link>)}</nav>)}
 
     {panel("overview",<>
-      <div className="worker-entity-summary" aria-label="Текущее состояние">
-        <div><span>Сегодня</span><strong>{todayState(worker)}</strong><small>{worker.todayShiftTime??"Время смены не указано"}</small></div>
-        <div><span>График</span><strong>{scheduleLabel(worker)}</strong><small>{worker.workMode==="rotation"?"Вахта":worker.workMode==="local"?"Местный персонал":"Формат не указан"}</small></div>
-        <div><span>Документы</span><strong>{documentsLabel(worker.employmentDocumentsStatus)}</strong><small><Link href={"/workers/"+id+"?tab=documents"}>Открыть оформление</Link></small></div>
-        <div><span>Ближайшее изменение</span><strong>{nextChange(worker)}</strong><small>По сохранённым планам</small></div>
-      </div>
+      <Section title="Текущее назначение" actions={<Link href={href("assignments")}>Все назначения</Link>}>
+        <div className="worker-entity-summary" aria-label="Текущее состояние">
+          <div><span>Объект</span><strong>{worker.object??"Не назначен"}</strong><small>{worker.specialty??"Специальность не указана"}</small></div>
+          <div><span>Сегодня</span><strong>{todayState(worker)}</strong><small>{worker.todayShiftTime??"Время смены не указано"}</small></div>
+          <div><span>График</span><strong>{scheduleLabel(worker)}</strong><small>{worker.managerName??"Менеджер не указан"}</small></div>
+          <div><span>Ближайшее изменение</span><strong>{nextChange(worker)}</strong><small>По сохранённым планам</small></div>
+        </div>
+        {details.assignments.length?<div className="request-table-wrap"><table className="data-table worker-assignment-summary"><thead><tr><th>Период</th><th>Объект</th><th>Специальность</th><th>Состояние</th></tr></thead><tbody>{details.assignments.slice(0,3).map(row=><tr key={row.id}><td>{displayDate(row.effectiveFrom)} — {row.effectiveTo?displayDate(row.effectiveTo):"н. в."}</td><td><Link href={"/objects/"+row.objectId}>{row.object}</Link></td><td>{row.specialty??"—"}</td><td><Status tone={assignmentState(row)==="current"?"good":assignmentState(row)==="planned"?"info":"neutral"}>{assignmentState(row)==="current"?"Назначен":assignmentState(row)==="planned"?"Запланировано":"Завершено"}</Status></td></tr>)}</tbody></table></div>:<Empty title="Назначений нет" text="Сотрудник пока не назначен на объект."/>}
+      </Section>
+      <Section title="Смены и табель" note="Ближайшие личные назначения и резерв." actions={<Link href={href("schedule")}>Весь график</Link>}>
+        {shifts.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Дата</th><th>Смена</th><th>Объект</th><th>Время</th><th>Назначение</th></tr></thead><tbody>{shifts.slice(0,6).map(row=><tr key={row.id}><td>{row.date}</td><td>{shiftKindLabel(row.kind)}</td><td>{row.object}</td><td>{row.time}</td><td><Status tone={row.reserveWorkerIds.includes(id)?"warn":"info"}>{row.reserveWorkerIds.includes(id)?"Резерв":"Назначен"}</Status></td></tr>)}</tbody></table></div>:<Empty title="Ближайших смен нет" text="Личные назначения и резерв в доступном периоде не найдены."/>}
+        {canViewTimesheets&&<div className="worker-section-footer"><Link href={href("timesheets")}>Открыть табели объектов</Link></div>}
+      </Section>
+      <Section title="Документы и оформление" actions={<Link href={href("documents")}>Подробнее</Link>}><div className="worker-document-summary"><div><span>Комплект документов</span><strong>{documentsLabel(worker.employmentDocumentsStatus)}</strong></div><div><span>Тип оформления</span><strong>{employmentTypeLabel(worker.employment)}</strong></div></div></Section>
       <div className="workspace-grid">
-        <Section title="Назначение и ответственность"><div className="worker-entity-facts">
-          <KeyValue label="Объект" value={worker.object&&worker.objectId?<Link href={"/objects/"+worker.objectId}>{worker.object}</Link>:"Не назначен"}/>
-          <KeyValue label="Менеджер объекта" value={worker.managerName??"—"}/>
-          <KeyValue label="Специальность" value={worker.specialty??"—"}/>
-          <KeyValue label="Дата начала" value={worker.startDate?displayDate(worker.startDate):"—"}/>
-          <KeyValue label="Оформление" value={employmentTypeLabel(worker.employment)}/>
-          {sensitive&&<KeyValue label="Действующая ставка" value={rateLabel(worker)} sensitive/>}
-          <div className="worker-entity-links"><Link href={"/workers/"+id+"?tab=assignments"}>История и настройки назначения</Link><Link href={"/workers/"+id+"?tab=employment"}>Оформление и завершение работы</Link></div>
-        </div></Section>
         <Section title="Контакты и подбор"><div className="worker-entity-facts">
           <KeyValue label="Телефон" value={worker.phone?<a href={"tel:"+worker.phone.replace(/[^+\d]/g,"")}>{worker.phone}</a>:"—"}/>
           <KeyValue label="Источник" value={worker.origin??worker.source??"—"}/>
@@ -104,10 +130,6 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
           {worker.originCandidateId&&<KeyValue label="История подбора" value={<Link href={"/candidates/"+worker.originCandidateId}>Карточка кандидата</Link>}/>}
           <p className="worker-entity-note">Контакты показаны из профиля сотрудника.</p>
         </div></Section>
-        <Section title="Ближайшие смены" note="Личные назначения и резерв сотрудника.">
-          <div className="stack-list">{shifts.slice(0,4).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {shiftKindLabel(row.kind)}</strong><small>{row.object} · {row.time}</small></div><Status tone={row.reserveWorkerIds.includes(id)?"warn":"info"}>{row.reserveWorkerIds.includes(id)?"Резерв":"Назначен"}</Status></div>)}</div>
-          {!shifts.length&&<Empty title="Ближайших смен нет" text="Личные назначения и резерв в доступном периоде не найдены."/>}
-        </Section>
         <Section title="Рабочие условия"><div className="worker-entity-facts">
           <KeyValue label="Первые ежедневные выплаты" value={worker.dailyPaymentShifts==null?"—":`${worker.dailyPaymentShifts} смен`}/>
           <KeyValue label="Адаптация" value={worker.transitionDays==null?"—":`${worker.transitionDays} дней`}/>
@@ -135,6 +157,8 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     {panel("timesheets",<Section title="Табели" note="Учёт часов ведётся в табеле объекта."><div className="worker-entity-facts">{details.assignments.length?<div className="stack-list">{Array.from(new Map(details.assignments.map(row=>[row.objectId,row])).values()).map(row=><div className="stack-item" key={row.objectId}><div><strong>{row.object}</strong><small>{row.specialty??"—"}</small></div><Link className="button" href={"/timesheets?object="+row.objectId}>Открыть табель</Link></div>)}</div>:<Empty title="Назначений нет" text="Для перехода к табелю необходимо назначение на объект."/>}<p className="worker-entity-note">Открывается текущий период объекта. Исторические периоды доступны в самом табеле.</p></div></Section>)}
     {panel("incidents",<Section title="Инциденты" note="Только события, связанные с сотрудником по его идентификатору.">{incidents.length?<div className="stack-list">{incidents.map(row=><div className="stack-item" key={row.id}><div><strong>{row.title}</strong><small>{row.occurredAt} · {row.object}</small><p>{row.description}</p></div><Status>{recordStatusLabel(row.status)}</Status></div>)}</div>:<Empty title="Инциденты не найдены" text="В доступных объектах нет зарегистрированных событий по этому сотруднику."/>}</Section>)}
     {panel("history",<Section title="История изменений" note="Последние 100 системных событий сотрудника. История назначений доступна в отдельной вкладке.">{activity.length?<div className="stack-list">{activity.map(row=><div className="stack-item" key={row.id}><div><strong>{row.summary}</strong><small>{row.createdAt} · {row.actor??"Система"}</small></div></div>)}</div>:<Empty title="Системные события не найдены" text={actor.demo?"В демо-режиме журнал реальных изменений не формируется.":"По сотруднику пока нет сохранённых системных событий."}/>}</Section>)}
+      </div>
+    </div>
   </>;
   return <div className="worker-entity-workspace">{staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace}</div>;
 }

@@ -19,6 +19,16 @@ try {
   const card=page.locator(".worker-entity-workspace");
   assert(await card.locator("h1").isVisible());
   assert.equal(await card.locator(".worker-entity-summary>div").count(),4);
+  assert(await card.getByRole("complementary",{name:"Профиль сотрудника"}).isVisible());
+  assert.equal(await card.locator(".worker-card-nav>a").count(),6);
+  await card.locator(".worker-card-nav").getByRole("link",{name:"Работа",exact:true}).click();
+  await page.waitForFunction(()=>new URL(location.href).searchParams.get("tab")==="assignments");
+  await card.locator(".worker-card-subnav").getByRole("link",{name:"График и отсутствия"}).waitFor({state:"visible"});
+  assert(await card.locator(".worker-card-subnav").getByRole("link",{name:"График и отсутствия"}).isVisible());
+  assert(await card.locator(".worker-card-nav").getByRole("link",{name:"Работа",exact:true}).evaluate(node=>node.getAttribute("aria-current")==="page"));
+  await card.locator(".worker-card-nav").getByRole("link",{name:"Обзор",exact:true}).click();
+  await page.waitForFunction(()=>new URL(location.href).searchParams.get("tab")==="overview");
+  await card.locator(".worker-entity-summary").waitFor({state:"visible"});
   await page.screenshot({path:`${artifacts}/overview-1440.png`,fullPage:true});
 
   for (const [tab,button] of [["assignments","Настроить назначение"],["assignments","Перевести"],["schedule","Запланировать"],["employment","Завершение работы"]]) {
