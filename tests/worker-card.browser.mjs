@@ -19,11 +19,27 @@ try {
   const card=page.locator(".worker-entity-workspace");
   assert(await card.locator("h1").isVisible());
   assert.equal(await card.locator(".worker-entity-summary>div").count(),4);
+  assert.equal(await card.locator(".status").evaluateAll(nodes=>nodes.some(node=>getComputedStyle(node).backgroundColor!=="rgba(0, 0, 0, 0)")),false);
+  await card.getByRole("button",{name:"Редактировать профиль",exact:true}).click();
+  const editor=page.getByRole("dialog");
+  await editor.getByLabel("ФИО",{exact:true}).fill("Александр Ермаков — проверка");
+  await editor.getByLabel("Телефон для звонков").fill("+7 900 111-22-33");
+  await editor.getByRole("button",{name:"Добавить способ связи"}).click();
+  await editor.getByLabel("Контакт 1",{exact:true}).fill("+7 901 555-66-77");
+  await editor.getByRole("button",{name:"Применить в демо"}).click();
+  assert.equal(await card.locator("h1").textContent(),"Александр Ермаков — проверка");
+  assert(await card.locator(".worker-contact-list").getByText("+7 901 555-66-77",{exact:true}).isVisible());
+  assert(await card.getByText("Демо: изменения действуют",{exact:false}).isVisible());
+
   assert(await card.getByRole("complementary",{name:"Профиль сотрудника"}).isVisible());
   assert.equal(await card.locator(".worker-card-nav>a").count(),6);
   await card.locator(".worker-card-nav").getByRole("link",{name:"Работа",exact:true}).click();
   await page.waitForFunction(()=>new URL(location.href).searchParams.get("tab")==="assignments");
   await card.locator(".worker-card-subnav").getByRole("link",{name:"График и отсутствия"}).waitFor({state:"visible"});
+  assert.equal(await card.locator(".worker-profile").isVisible(),false);
+  const contentWidth=(await card.locator(".worker-card-content").boundingBox()).width;
+  const totalWidth=(await card.locator(".worker-card-layout").boundingBox()).width;
+  assert(Math.abs(contentWidth-totalWidth)<2);
   assert(await card.locator(".worker-card-subnav").getByRole("link",{name:"График и отсутствия"}).isVisible());
   assert(await card.locator(".worker-card-nav").getByRole("link",{name:"Работа",exact:true}).evaluate(node=>node.getAttribute("aria-current")==="page"));
   await card.locator(".worker-card-nav").getByRole("link",{name:"Обзор",exact:true}).click();
@@ -42,6 +58,20 @@ try {
     assert.equal(await page.getByRole("dialog").count(),0);
   }
 
+  await page.goto(`${base}${href}?tab=timesheets`,{waitUntil:"networkidle"});
+  const timesheet=card.getByRole("region",{name:"Личный табель"});
+  const firstMonth=await timesheet.getByLabel("Месяц личного табеля").inputValue();
+  await timesheet.getByRole("button",{name:"Предыдущий месяц",exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('.worker-timesheet-notice[role=status]'));
+  const previous=await timesheet.getByLabel("Месяц личного табеля").inputValue();
+  assert.notEqual(previous,firstMonth);
+  assert((await timesheet.locator(".worker-month-grid tbody tr").count())>0);
+  assert((await timesheet.getByRole("link",{name:"Табель объекта",exact:false}).first().getAttribute("href")).includes(`month=${previous}`));
+  await page.screenshot({path:`${artifacts}/personal-timesheet.png`,fullPage:true});
+  await page.goto(`${base}${href}?tab=employment`,{waitUntil:"networkidle"});
+  const blocks=await card.locator(".workspace-grid").first().locator(".section").evaluateAll(nodes=>nodes.map(node=>({top:node.getBoundingClientRect().top,height:node.getBoundingClientRect().height})));
+  assert(Math.abs(blocks[0].top-blocks[1].top)<1);
+  assert(Math.abs(blocks[0].height-blocks[1].height)<1);
   await page.goto(`${base}${href}?tab=payments`,{waitUntil:"networkidle"});
   assert((await card.locator("tbody tr").count())>0);
   assert.equal(await card.getByText("planned",{exact:true}).count(),0);

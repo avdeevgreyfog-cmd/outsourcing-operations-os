@@ -64,6 +64,29 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0050_object_document_metadata.sql"),"object document metadata migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0065_internal_requests_and_expense_flow.sql"),"internal request / expense flow migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
+  assert.ok(migrations.some(row=>row.filename==="0066_worker_contact_methods.sql"),"employee contact migration must be applied");
+  const rollbackContact=new Error("rollback contact fixture");
+  let contactChecks=false;
+  try{
+    await sql.begin(async tx=>{
+      await tx`SELECT set_config('app.organization_id',${org},true),set_config('app.user_id',${director},true)`;
+      const [worker]=await tx`SELECT id,full_name,phone FROM worker_profiles WHERE organization_id=${org}::uuid LIMIT 1`;
+      assert(worker,"seed provides employee for profile persistence checks");
+      const contacts=[{channel:"max",value:"+7 901 123-45-67",label:"Переписка"}];
+      await tx`UPDATE worker_profiles SET contact_methods=${tx.json(contacts)} WHERE id=${worker.id}::uuid`;
+      const [saved]=await tx`SELECT contact_methods,full_name,phone FROM worker_profiles WHERE id=${worker.id}::uuid`;
+      assert.deepEqual(saved.contact_methods,contacts);
+      assert.equal(saved.full_name,worker.full_name);
+      assert.equal(saved.phone,worker.phone);
+      await tx`UPDATE worker_profiles SET contact_methods='[]'::jsonb WHERE id=${worker.id}::uuid`;
+      const [cleared]=await tx`SELECT contact_methods FROM worker_profiles WHERE id=${worker.id}::uuid`;
+      assert.deepEqual(cleared.contact_methods,[]);
+      contactChecks=true;
+      throw rollbackContact;
+    });
+  }catch(error){if(error!==rollbackContact)throw error;}
+  assert(contactChecks,"structured contacts are persisted and can be explicitly cleared");
+
 
   const [object]=await sql`SELECT id,owner_user_id,client_company_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
   const [specialty]=await sql`SELECT id FROM specialties WHERE organization_id=${org}::uuid ORDER BY name LIMIT 1`;

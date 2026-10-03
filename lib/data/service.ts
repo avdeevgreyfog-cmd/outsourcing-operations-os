@@ -1,3 +1,4 @@
+import { validTimesheetMonth } from "@/lib/operations/worker-timesheet.mjs";
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
@@ -492,7 +493,7 @@ export async function listShifts(actor: Actor): Promise<ShiftRow[]> {
 
 export async function getTimesheet(actor: Actor, options?: { objectId?: string | null; month?: string | null }): Promise<TimesheetData | null> {
   requireCapability(actor, "time.timesheet.read");
-  const requestedMonth=options?.month&&/^\\d{4}-\\d{2}$/.test(options.month)?options.month:new Date().toISOString().slice(0,7);
+  const requestedMonth=options?.month&&validTimesheetMonth(options.month)?options.month:new Date().toISOString().slice(0,7);
   const [year,monthNumber]=requestedMonth.split("-").map(Number);
   const periodStart=requestedMonth+"-01";
   const periodEnd=new Date(Date.UTC(year,monthNumber,0)).toISOString().slice(0,10);
@@ -777,7 +778,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       row.accrual=earned;
     }
 
-    const cellNumber=(value:TimesheetCellValue|undefined)=>typeof value==="number"?value:typeof value==="string"&&/^\\d+(?:[.,]\\d+)?$/.test(value.trim())?Number(value.replace(",",".")):0;
+    const cellNumber=(value:TimesheetCellValue|undefined)=>typeof value==="number"?value:typeof value==="string"&&/^\d+(?:[.,]\d+)?$/.test(value.trim())?Number(value.replace(",",".")):0;
     const workerRows:TimesheetWorkerRow[]=[];
     for(const base of byWorker.values()){
       const activeDates=datesBetween(periodStart,periodEnd).filter(date=>Boolean(assignmentAt(base.workerId,date)));

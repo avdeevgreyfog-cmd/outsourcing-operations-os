@@ -44,6 +44,8 @@ export function StaticDemoQueryTabsController({ enabled, defaultTab, className, 
           else link.removeAttribute("aria-current");
         }
       }
+      for (const element of root.querySelectorAll<HTMLElement>("[data-worker-overview-only]")) element.style.display=active==="overview"?"":"none";
+      for (const element of root.querySelectorAll<HTMLElement>("[data-worker-card-layout]")) element.dataset.overview=String(active==="overview");
       for (const nav of root.querySelectorAll<HTMLElement>("[data-worker-subnav-keys]")) {
         nav.style.display = nav.dataset.workerSubnavKeys?.split(" ").includes(active) ? "flex" : "none";
         for (const link of nav.querySelectorAll<HTMLAnchorElement>("a[href]")) {
