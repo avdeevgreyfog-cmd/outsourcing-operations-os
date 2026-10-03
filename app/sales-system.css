@@ -3981,3 +3981,63 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .inventory-modal-card .form-grid.two{grid-template-columns:1fr}
   .inventory-modal-card .form-grid>.span-2{grid-column:auto}
 }
+
+/* Registry adoption: Candidates, Needs and Objects. Domain fields stay in their modules. */
+.operis-data-registry{--registry-bg:var(--panel);--registry-border:var(--border);--registry-text:var(--text);--registry-muted:var(--muted);--registry-accent:var(--accent);min-width:0}
+.operis-shared-registry-controls{min-width:0;margin:12px 0}
+.operis-shared-registry-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px}
+.operis-shared-registry-search-group{display:flex;align-items:center;gap:8px;flex:1 1 540px;min-width:min(100%,500px)}
+.operis-shared-registry-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-left:auto}
+.operis-data-registry .operis-shared-registry-search{display:flex;align-items:center;gap:8px;flex:1 1 240px;min-width:180px;max-width:340px;height:38px;border:1px solid var(--border);border-radius:7px;background:var(--panel);padding:0 10px;color:var(--muted)}
+:root .operis-data-registry .operis-shared-registry-search input{width:100%;min-width:0;height:36px;min-height:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--text);font:13px "Segoe UI Variable Text","Segoe UI",sans-serif}
+.operis-shared-registry-search button{display:flex;padding:0;border:0;background:none;color:var(--muted);cursor:pointer}
+:root .operis-data-registry .operis-shared-registry-controls .button{height:38px;min-height:38px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;font:500 13px/1.2 "Segoe UI Variable Text","Segoe UI",sans-serif;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);box-shadow:none}
+:root .operis-data-registry .operis-shared-registry-controls .button.primary{background:#c64c0b;border-color:#c64c0b;color:white}
+:root[data-theme=dark] .operis-data-registry .operis-shared-registry-controls .button.primary{background:var(--accent);border-color:var(--accent);color:#0a1016}
+.operis-shared-registry-search-group>.operis-select{flex:0 1 200px;min-width:140px}
+:root .operis-data-registry .operis-shared-registry-controls .operis-select-trigger{justify-content:space-between;width:100%;max-width:100%;text-align:left}
+.operis-shared-filter-count{font-size:11px;padding:1px 5px;border-radius:4px;background:var(--panel-2);color:var(--muted)}
+.operis-shared-registry-settings{position:relative;min-width:0;margin-top:10px;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.operis-shared-registry-settings>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;font-size:13px}
+.operis-shared-registry-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.operis-shared-registry-fields>div>span{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+.operis-shared-registry-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.operis-shared-registry-chips button{display:inline-flex;align-items:center;gap:8px;max-width:100%;border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--muted);padding:5px 8px;font-size:12px;cursor:pointer}
+.operis-shared-registry-chips button span{overflow-wrap:anywhere}
+.operis-shared-registry-chips svg{flex-shrink:0}
+.operis-shared-registry-result{font-size:12px;color:var(--muted);margin-bottom:10px}
+:root .operis-data-registry :is(button,a,input):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+:root .operis-data-registry .data-table{font-size:13px;border-collapse:separate;border-spacing:0;min-width:100%;color:var(--text)}
+:root[data-operis-ui] .sales-workspace.operations-workspace .operis-data-registry .data-table th{height:42px;padding:8px 12px;background:var(--panel-2);color:var(--muted);font-size:12px;font-weight:500;text-align:left;border-bottom:1px solid var(--border)}
+:root .operis-data-registry .data-table td{height:60px;padding:8px 12px;background:var(--panel);font-size:13px;line-height:1.4;vertical-align:middle;border-bottom:1px solid var(--border)}
+:root .operis-data-registry .data-table tbody tr:last-child td{border-bottom:0}
+:root .operis-data-registry .data-table tbody tr:hover td{background:var(--panel-2)}
+:root .operis-data-registry .data-table .cell-title{font-size:14px;font-weight:650;color:var(--text)}
+:root .operis-data-registry .data-table .cell-sub{font-size:12px;color:var(--muted);line-height:1.45}
+:root .operis-data-registry .data-table .status,:root .operis-entity-tables .data-table:not(.timesheet) .status{display:inline-flex;gap:6px;align-items:center;background:transparent;border:0;border-radius:0;padding:0;color:var(--muted);font-size:12px;white-space:normal}
+:root .operis-data-registry .data-table .status i,:root .operis-entity-tables .data-table:not(.timesheet) .status i{display:block;width:6px;height:6px;flex:0 0 6px;border-radius:50%}
+:root .operis-data-registry .data-table .status-good i,:root .operis-entity-tables .data-table:not(.timesheet) .status-good i{background:var(--good,#229451)}
+:root .operis-data-registry .data-table .status-warn i,:root .operis-entity-tables .data-table:not(.timesheet) .status-warn i{background:var(--warn,#d99c19)}
+:root .operis-data-registry .data-table .status-bad i,:root .operis-entity-tables .data-table:not(.timesheet) .status-bad i{background:var(--danger,#c84d4d)}
+:root .operis-data-registry .data-table :is(.status-neutral,.status-info) i,:root .operis-entity-tables .data-table:not(.timesheet) :is(.status-neutral,.status-info) i{background:var(--muted)}
+:root .operis-data-registry :is(.needs-table-wrap,.section.section-flush){border-radius:8px}
+.operis-data-registry .needs-object{overflow:visible;border-radius:8px}
+.operis-data-registry .needs-object .needs-table-wrap{border-radius:0 0 8px 8px}
+:root .operis-data-registry .data-table.candidates-directory-table{min-width:1520px}
+:root .operis-data-registry .data-table.needs-table{min-width:1080px}
+.operis-data-registry .needs-table th:first-child,.operis-data-registry .candidates-directory-table th:first-child{min-width:220px}
+:root .operis-entity-tables .data-table:not(.timesheet) th{height:42px;padding:8px 12px;font-size:12px;font-weight:500;color:var(--muted);background:var(--panel-2)}
+:root .operis-entity-tables .data-table:not(.timesheet) td{padding:8px 12px;font-size:13px;line-height:1.4}
+@media(max-width:600px){.operis-shared-registry-search-group{flex-wrap:wrap;min-width:0;width:100%}.operis-data-registry .operis-shared-registry-search{flex-basis:100%;min-width:0;max-width:none}.operis-shared-registry-search-group>.operis-select{flex:1;min-width:140px}.operis-shared-registry-actions{margin-left:0}.operis-shared-registry-fields{grid-template-columns:1fr}}
+
+:root .operis-data-registry .operis-choice-search input{width:100%;min-width:0;height:30px;min-height:30px;padding:0;border:0;background:transparent;box-shadow:none;font-size:12px}
+
+.operis-data-registry :is(.request-table-wrap,.section,.needs-object-list,.needs-object){min-width:0;max-width:100%}
+:root .operis-data-registry .data-table :is(.need-staffing span,.need-funnel-values,.needs-attention-marker){font-size:12px}
+:root .operis-data-registry .data-table :is(.need-staffing b,.need-funnel-values b){font-size:13px}
+
+.operis-data-registry.recruiting-workspace{grid-template-columns:minmax(0,1fr)}
+.operis-data-registry>*{min-width:0;max-width:100%}
+.operis-data-registry .sales-segments-navigation{max-width:100%;min-width:0;overflow-x:auto;flex-wrap:nowrap}
+.operis-data-registry .operis-shared-registry-search:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+:root .operis-data-registry .operis-shared-registry-search input:focus-visible{outline:none;box-shadow:none}

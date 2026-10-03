@@ -33,7 +33,7 @@ export default async function Objects(){
   const working=analytics.reduce((sum,row)=>sum+row.working,0);
   const deficit=Math.max(required-working,0);
   const attention=enhancedRows.filter(row=>Boolean(row.attentionReasons?.length)).length;
-  return <div className="object-portfolio-page">
+  return <div className="object-portfolio-page operis-data-registry">
     <PageHeader eyebrow="Операции → Управление объектами" title="Объекты" subtitle="Портфель объектов: юридические лица, ответственные, комплектация и объяснимые операционные сигналы." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Объекты"}]}/>
     <div className="metrics-grid object-portfolio-metrics">
       <Metric label="Объекты в контуре" value={rows.length}/>

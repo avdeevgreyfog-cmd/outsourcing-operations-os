@@ -11,7 +11,7 @@ export function RegistrySelect({label,value,onChange,options,disabled=false,sear
  useEffect(()=>{if(open){const input=root.current?.querySelector<HTMLInputElement>("input");if(input)input.focus();else list.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus()}},[open]);
  function select(next:string){onChange(next);setOpen(false);setQuery("");trigger.current?.focus()}
  function keys(event:KeyboardEvent){
-  if(event.key==="Escape"){event.preventDefault();event.stopPropagation();setOpen(false);trigger.current?.focus();return}
+  if(event.key==="Escape"&&open){event.preventDefault();event.stopPropagation();setOpen(false);trigger.current?.focus();return}
   if(!["ArrowDown","ArrowUp","Home","End"].includes(event.key))return;
   event.preventDefault();if(!open){setOpen(true);return}
   const buttons=Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="option"]')??[]);const current=buttons.indexOf(document.activeElement as HTMLButtonElement);const index=event.key==="Home"?0:event.key==="End"?buttons.length-1:event.key==="ArrowDown"?Math.min(buttons.length-1,current+1):Math.max(0,current-1);buttons[index]?.focus();
