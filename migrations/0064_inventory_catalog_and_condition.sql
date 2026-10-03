@@ -74,6 +74,18 @@ ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_mo
 ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_movement_type_check
   CHECK (movement_type IN ('opening','receipt','transfer','issue','return','writeoff','adjustment_in','adjustment_out','recondition'));
 
+ALTER TABLE inventory_movements DROP CONSTRAINT IF EXISTS inventory_movements_check;
+ALTER TABLE inventory_movements ADD CONSTRAINT inventory_movements_check
+  CHECK (
+    (movement_type IN ('opening','receipt','adjustment_in') AND to_location_id IS NOT NULL AND from_location_id IS NULL)
+    OR (movement_type='transfer' AND from_location_id IS NOT NULL AND to_location_id IS NOT NULL AND from_location_id<>to_location_id)
+    OR (movement_type='issue' AND from_location_id IS NOT NULL AND worker_id IS NOT NULL)
+    OR (movement_type='return' AND to_location_id IS NOT NULL AND worker_id IS NOT NULL)
+    OR (movement_type='writeoff' AND (from_location_id IS NOT NULL OR worker_id IS NOT NULL))
+    OR (movement_type='adjustment_out' AND from_location_id IS NOT NULL)
+    OR (movement_type='recondition' AND from_location_id IS NOT NULL AND to_location_id=from_location_id)
+  );
+
 UPDATE inventory_movements
 SET source_condition=CASE
       WHEN movement_type IN ('transfer','issue','writeoff','adjustment_out') THEN COALESCE(item_condition,'good')
