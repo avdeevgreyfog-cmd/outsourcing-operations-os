@@ -31,7 +31,7 @@ export function nextChange(row:WorkerRow){
   }else if(row.absenceFrom&&row.absenceFrom>today())changes.push({date:row.absenceFrom,text:(absenceLabels[row.absenceType??""]??"Отсутствие").toLocaleLowerCase("ru")+" с "+formatDate(row.absenceFrom)});
   return changes.sort((a,b)=>a.date.localeCompare(b.date))[0]?.text??"—";
 }
-export function documentsLabel(value:string|null|undefined){return ({completed:"Готовы",submitted:"Переданы",processing:"Проверка",collecting:"Сбор"} as Record<string,string>)[value??""]??"Не указано"}
+export function documentsLabel(value:string|null|undefined){return ({not_received:"Не получены",received:"Получены мастером",completed:"Готовы",submitted:"Переданы",processing:"На оформлении",collecting:"Собираются",problem:"Есть проблема"} as Record<string,string>)[value??""]??"Не указано"}
 export function workerNeedsAttention(row:WorkerRow){
   if(row.status!=="active")return false;
   if(!row.objectId||!row.specialtyId)return true;
