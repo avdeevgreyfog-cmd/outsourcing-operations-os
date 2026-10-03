@@ -249,6 +249,7 @@ export async function listWorkerAssetHoldings(actor:Actor):Promise<WorkerAssetHo
       ) a ON true
       LEFT JOIN objects o ON o.id=a.object_id
       LEFT JOIN app_users manager ON manager.id=COALESCE(a.manager_user_id,o.owner_user_id)
+      WHERE i.returnable
       GROUP BY w.id,w.full_name,a.object_id,o.name,manager.display_name,i.id,i.name,i.unit,i.returnable,i.default_replacement_cycle_days,m.variant,a.manager_user_id,o.owner_user_id,o.region_id
       HAVING sum(CASE WHEN m.movement_type='issue' THEN m.quantity
                       WHEN m.movement_type='return' THEN -m.quantity
