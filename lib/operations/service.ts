@@ -121,9 +121,10 @@ export type ObjectPpeTemplateRow={id:string;objectId:string|null;specialtyId:str
 
 function demoSupplyTemplate(specialtyId:string,specialty:string):ObjectPpeTemplateRow{
   return {id:`demo-ppe-global-${specialtyId}`,objectId:null,specialtyId,specialty,name:"Базовая норма",source:"global",items:[
-    {itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:"",replacementCycleDays:180},
-    {itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:"",replacementCycleDays:365},
-    {itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:"",replacementCycleDays:null},
+    {itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:"",replacementCycleDays:180,unitCost:4200,priceId:"demo-price-jacket",priceEffectiveFrom:"2026-09-01"},
+    {itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:"",replacementCycleDays:180,unitCost:3200,priceId:"demo-price-boots",priceEffectiveFrom:"2026-09-01"},
+    {itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:"",replacementCycleDays:365,unitCost:900,priceId:"demo-price-helmet",priceEffectiveFrom:"2026-09-01"},
+    {itemId:"demo-item-gloves",item:"Перчатки рабочие",quantity:1,unit:"пар",sizeSource:"none",variant:"",replacementCycleDays:7,unitCost:120,priceId:"demo-price-gloves",priceEffectiveFrom:"2026-09-01"},
   ]};
 }
 function demoSpecialtyOptions(actor:Actor){
@@ -137,7 +138,13 @@ export async function listGlobalPpeTemplates(actor:Actor):Promise<ObjectPpeTempl
   if(actor.demo)return demoSpecialtyOptions(actor).map(item=>demoSupplyTemplate(item.id,item.name));
   return withTenant(actor.organizationId,actor.userId,async sql=>sql<ObjectPpeTemplateRow[]>`
     SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,'global'::text source,
-      COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,'replacementCycleDays',ti.replacement_cycle_days) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
+      COALESCE(jsonb_agg(jsonb_build_object(
+        'itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,
+        'replacementCycleDays',COALESCE(ti.replacement_cycle_days,i.default_replacement_cycle_days),
+        'unitCost',(SELECT p.unit_cost::numeric FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
+        'priceId',(SELECT p.id FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
+        'priceEffectiveFrom',(SELECT p.effective_from::text FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1)
+      ) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
     FROM object_ppe_templates t
     JOIN specialties s ON s.id=t.specialty_id
     LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id
@@ -170,7 +177,13 @@ export async function listObjectPpeTemplates(actor:Actor,objectId:string):Promis
       )
       SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,
         CASE WHEN t.object_id IS NULL THEN 'global' ELSE 'object' END source,
-        COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,'replacementCycleDays',ti.replacement_cycle_days) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
+        COALESCE(jsonb_agg(jsonb_build_object(
+        'itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,
+        'replacementCycleDays',COALESCE(ti.replacement_cycle_days,i.default_replacement_cycle_days),
+        'unitCost',(SELECT p.unit_cost::numeric FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
+        'priceId',(SELECT p.id FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
+        'priceEffectiveFrom',(SELECT p.effective_from::text FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1)
+      ) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
       FROM ranked t
       JOIN specialties s ON s.id=t.specialty_id
       LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id
