@@ -18,25 +18,20 @@ ALTER TABLE supply_requests
   ADD COLUMN IF NOT EXISTS paid_by_user_id uuid REFERENCES app_users(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS payment_reference text;
 
-ALTER TABLE supply_requests DROP CONSTRAINT IF EXISTS supply_requests_category_code_check;
 ALTER TABLE supply_requests ADD CONSTRAINT supply_requests_category_code_check CHECK (category_code IN (
   'workwear_ppe','tools_equipment','housing','transport','recruiting_advertising',
   'software_subscriptions','communications','medical','training','office_household',
   'rent','services','other'
 ));
-ALTER TABLE supply_requests DROP CONSTRAINT IF EXISTS supply_requests_priority_check;
 ALTER TABLE supply_requests ADD CONSTRAINT supply_requests_priority_check
   CHECK (priority IN ('normal','urgent','critical'));
-ALTER TABLE supply_requests DROP CONSTRAINT IF EXISTS supply_requests_payment_status_check;
 ALTER TABLE supply_requests ADD CONSTRAINT supply_requests_payment_status_check
   CHECK (payment_status IN ('not_required','pending','paid','cancelled'));
-ALTER TABLE supply_requests DROP CONSTRAINT IF EXISTS supply_requests_amounts_check;
 ALTER TABLE supply_requests ADD CONSTRAINT supply_requests_amounts_check CHECK (
   (approved_amount IS NULL OR approved_amount >= 0)
   AND (actual_amount IS NULL OR actual_amount >= 0)
   AND (fulfilled_quantity IS NULL OR fulfilled_quantity >= 0)
 );
-ALTER TABLE supply_requests DROP CONSTRAINT IF EXISTS supply_requests_urgency_reason_check;
 ALTER TABLE supply_requests ADD CONSTRAINT supply_requests_urgency_reason_check CHECK (
   priority='normal' OR urgency_reason IS NOT NULL
 );
@@ -75,7 +70,6 @@ CREATE INDEX IF NOT EXISTS idx_supply_requests_category
 -- The existing expense ledger becomes capable of holding company/department costs
 -- that are not attributable to a single customer object (for example recruiting ads).
 ALTER TABLE object_expenses
-  ALTER COLUMN object_id DROP NOT NULL,
   ADD COLUMN IF NOT EXISTS legal_entity_id uuid REFERENCES legal_entities(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS organization_unit_id uuid REFERENCES organization_units(id) ON DELETE SET NULL;
 
@@ -86,6 +80,41 @@ WHERE e.object_id=o.id AND e.legal_entity_id IS NULL AND o.legal_entity_id IS NO
 
 CREATE INDEX IF NOT EXISTS idx_object_expenses_context
   ON object_expenses(organization_id,legal_entity_id,organization_unit_id,expense_date DESC);
+
+-- Costs that have no customer object (recruiting ads, office subscriptions, company rent)
+-- are distinct from object P&L facts. Keep them in a tenant-scoped corporate ledger
+-- instead of weakening the historical object_expenses invariant.
+CREATE TABLE IF NOT EXISTS company_expenses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  legal_entity_id uuid NOT NULL REFERENCES legal_entities(id) ON DELETE RESTRICT,
+  organization_unit_id uuid REFERENCES organization_units(id) ON DELETE SET NULL,
+  expense_date date NOT NULL,
+  category text NOT NULL,
+  amount numeric(14,2) NOT NULL CHECK (amount > 0),
+  vendor text,
+  reference text,
+  plan_fact text NOT NULL DEFAULT 'fact' CHECK (plan_fact IN ('plan','forecast','fact')),
+  supply_request_id uuid REFERENCES supply_requests(id) ON DELETE SET NULL,
+  created_by_user_id uuid NOT NULL REFERENCES app_users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_expenses_context
+  ON company_expenses(organization_id,legal_entity_id,organization_unit_id,expense_date DESC);
+CREATE INDEX IF NOT EXISTS idx_company_expenses_request
+  ON company_expenses(organization_id,supply_request_id)
+  WHERE supply_request_id IS NOT NULL;
+
+ALTER TABLE company_expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_expenses FORCE ROW LEVEL SECURITY;
+CREATE POLICY company_expenses_tenant_isolation ON company_expenses
+  USING (organization_id=app_current_organization_id())
+  WITH CHECK (organization_id=app_current_organization_id());
+
+CREATE TRIGGER audit_company_expenses
+  AFTER INSERT OR UPDATE OR DELETE ON company_expenses
+  FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 
 CREATE OR REPLACE FUNCTION validate_internal_request_context() RETURNS trigger
 LANGUAGE plpgsql AS $$
@@ -105,7 +134,6 @@ BEGIN
   RETURN NEW;
 END $$;
 
-DROP TRIGGER IF EXISTS supply_requests_context_integrity ON supply_requests;
 CREATE TRIGGER supply_requests_context_integrity
 BEFORE INSERT OR UPDATE OF organization_id,object_id,legal_entity_id,organization_unit_id ON supply_requests
 FOR EACH ROW EXECUTE FUNCTION validate_internal_request_context();
@@ -128,10 +156,30 @@ BEGIN
   RETURN NEW;
 END $$;
 
-DROP TRIGGER IF EXISTS object_expenses_context_integrity ON object_expenses;
 CREATE TRIGGER object_expenses_context_integrity
 BEFORE INSERT OR UPDATE OF organization_id,object_id,legal_entity_id,organization_unit_id ON object_expenses
 FOR EACH ROW EXECUTE FUNCTION validate_expense_context();
+
+CREATE OR REPLACE FUNCTION validate_company_expense_context() RETURNS trigger
+LANGUAGE plpgsql AS $
+BEGIN
+  IF organization_reference_org('legal_entities',NEW.legal_entity_id) IS DISTINCT FROM NEW.organization_id THEN
+    RAISE EXCEPTION 'company expense legal entity belongs to another organization' USING ERRCODE='23514';
+  END IF;
+  IF NEW.organization_unit_id IS NOT NULL
+     AND organization_reference_org('organization_units',NEW.organization_unit_id) IS DISTINCT FROM NEW.organization_id THEN
+    RAISE EXCEPTION 'company expense organization unit belongs to another organization' USING ERRCODE='23514';
+  END IF;
+  IF NEW.supply_request_id IS NOT NULL
+     AND organization_reference_org('supply_requests',NEW.supply_request_id) IS DISTINCT FROM NEW.organization_id THEN
+    RAISE EXCEPTION 'company expense request belongs to another organization' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $;
+
+CREATE TRIGGER company_expenses_context_integrity
+BEFORE INSERT OR UPDATE OF organization_id,legal_entity_id,organization_unit_id,supply_request_id ON company_expenses
+FOR EACH ROW EXECUTE FUNCTION validate_company_expense_context();
 
 INSERT INTO permission_definitions(capability,domain,resource,action,field_sensitive,description) VALUES
   ('procurement.create','operations','supply_request','create',false,'Создание собственных внутренних заявок'),
