@@ -45,6 +45,27 @@ export type StorageLocationRow = {
   description:string|null;
 };
 
+export type InventoryVariantRow = {
+  id:string;
+  itemId:string;
+  code:string|null;
+  label:string;
+  sortOrder:number;
+  active:boolean;
+};
+
+export type InventoryPriceRow = {
+  id:string;
+  itemId:string;
+  variantId:string|null;
+  unitCost:number;
+  effectiveFrom:string;
+  effectiveTo:string|null;
+  source:string;
+  partnerId:string|null;
+  partner:string|null;
+};
+
 export type InventoryItemRow = {
   id:string;
   name:string;
@@ -53,6 +74,12 @@ export type InventoryItemRow = {
   unit:string;
   returnable:boolean;
   tracksVariant:boolean;
+  sizeMode:"none"|"clothing"|"shoe"|"manual";
+  defaultReplacementCycleDays:number|null;
+  notes:string|null;
+  currentPrice:number|null;
+  currentPriceId:string|null;
+  currentPriceEffectiveFrom:string|null;
 };
 
 export type InventoryBalanceRow = {
@@ -64,6 +91,7 @@ export type InventoryBalanceRow = {
   returnable:boolean;
   tracksVariant:boolean;
   variant:string;
+  variantId:string|null;
   locationId:string;
   location:string;
   locationKind:string;
@@ -71,16 +99,24 @@ export type InventoryBalanceRow = {
   ownerUserId:string|null;
   assigneeUserIds:string[];
   quantity:number;
+  usableQuantity:number;
+  newQuantity:number;
+  goodQuantity:number;
+  serviceQuantity:number;
+  repairQuantity:number;
+  unusableQuantity:number;
   minQuantity:number;
 };
 
 export type InventorySnapshot = {
   locations:StorageLocationRow[];
   items:InventoryItemRow[];
+  variants:InventoryVariantRow[];
+  prices:InventoryPriceRow[];
   balances:InventoryBalanceRow[];
 };
 
-export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string;replacementCycleDays:number|null};
+export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string;replacementCycleDays:number|null;unitCost:number|null;priceId:string|null;priceEffectiveFrom:string|null};
 export type ObjectPpeTemplateRow={id:string;objectId:string|null;specialtyId:string;specialty:string;name:string;source:"global"|"object";items:ObjectPpeTemplateItemRow[]};
 
 function demoSupplyTemplate(specialtyId:string,specialty:string):ObjectPpeTemplateRow{
@@ -426,50 +462,97 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
   if(actor.demo){
     const locations=await listStorageLocations(actor);
     const items:InventoryItemRow[]=[
-      {id:"demo-item-boots",name:"Ботинки рабочие",code:"BOOT",category:"workwear",unit:"пар",returnable:true,tracksVariant:true},
-      {id:"demo-item-jacket",name:"Куртка рабочая",code:"JACKET",category:"workwear",unit:"шт",returnable:true,tracksVariant:true},
-      {id:"demo-item-helmet",name:"Каска",code:"HELMET",category:"ppe",unit:"шт",returnable:true,tracksVariant:false},
-      {id:"demo-item-gloves",name:"Перчатки рабочие",code:"GLOVES",category:"consumable",unit:"пар",returnable:false,tracksVariant:false},
+      {id:"demo-item-boots",name:"Ботинки рабочие",code:"BOOT",category:"workwear",unit:"пар",returnable:true,tracksVariant:true,sizeMode:"shoe",defaultReplacementCycleDays:180,notes:null,currentPrice:3200,currentPriceId:"demo-price-boots",currentPriceEffectiveFrom:"2026-09-01"},
+      {id:"demo-item-jacket",name:"Куртка рабочая",code:"JACKET",category:"workwear",unit:"шт",returnable:true,tracksVariant:true,sizeMode:"clothing",defaultReplacementCycleDays:180,notes:null,currentPrice:4200,currentPriceId:"demo-price-jacket",currentPriceEffectiveFrom:"2026-09-01"},
+      {id:"demo-item-helmet",name:"Каска",code:"HELMET",category:"ppe",unit:"шт",returnable:true,tracksVariant:false,sizeMode:"none",defaultReplacementCycleDays:365,notes:null,currentPrice:900,currentPriceId:"demo-price-helmet",currentPriceEffectiveFrom:"2026-09-01"},
+      {id:"demo-item-gloves",name:"Перчатки рабочие",code:"GLOVES",category:"consumable",unit:"пар",returnable:false,tracksVariant:false,sizeMode:"none",defaultReplacementCycleDays:7,notes:null,currentPrice:120,currentPriceId:"demo-price-gloves",currentPriceEffectiveFrom:"2026-09-01"},
     ];
+    const variants:InventoryVariantRow[]=[
+      {id:"demo-variant-boots-43",itemId:items[0].id,code:"43",label:"43",sortOrder:43,active:true},
+      {id:"demo-variant-boots-44",itemId:items[0].id,code:"44",label:"44",sortOrder:44,active:true},
+      {id:"demo-variant-jacket-52",itemId:items[1].id,code:"52",label:"52",sortOrder:52,active:true},
+      {id:"demo-variant-jacket-54",itemId:items[1].id,code:"54",label:"54",sortOrder:54,active:true},
+    ];
+    const prices:InventoryPriceRow[]=items.map(item=>({id:item.currentPriceId!,itemId:item.id,variantId:null,unitCost:item.currentPrice!,effectiveFrom:item.currentPriceEffectiveFrom!,effectiveTo:null,source:"manual",partnerId:null,partner:null}));
     const balances:InventoryBalanceRow[]=[
-      {...items[0],itemId:items[0].id,item:items[0].name,variant:"43",locationId:locations[0].id,location:locations[0].name,locationKind:locations[0].kind,objectId:locations[0].objectId,ownerUserId:locations[0].ownerUserId,assigneeUserIds:locations[0].assigneeUserIds,quantity:3,minQuantity:2},
-      {...items[1],itemId:items[1].id,item:items[1].name,variant:"52",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:4,minQuantity:3},
-      {...items[2],itemId:items[2].id,item:items[2].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:6,minQuantity:5},
-      {...items[3],itemId:items[3].id,item:items[3].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:80,minQuantity:100},
+      {...items[0],itemId:items[0].id,item:items[0].name,variant:"43",variantId:variants[0].id,locationId:locations[0].id,location:locations[0].name,locationKind:locations[0].kind,objectId:locations[0].objectId,ownerUserId:locations[0].ownerUserId,assigneeUserIds:locations[0].assigneeUserIds,quantity:3,usableQuantity:3,newQuantity:2,goodQuantity:1,serviceQuantity:0,repairQuantity:0,unusableQuantity:0,minQuantity:2},
+      {...items[1],itemId:items[1].id,item:items[1].name,variant:"52",variantId:variants[2].id,locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:4,usableQuantity:3,newQuantity:2,goodQuantity:1,serviceQuantity:1,repairQuantity:0,unusableQuantity:0,minQuantity:3},
+      {...items[2],itemId:items[2].id,item:items[2].name,variant:"",variantId:null,locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:6,usableQuantity:5,newQuantity:3,goodQuantity:2,serviceQuantity:0,repairQuantity:1,unusableQuantity:0,minQuantity:5},
+      {...items[3],itemId:items[3].id,item:items[3].name,variant:"",variantId:null,locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:80,usableQuantity:80,newQuantity:80,goodQuantity:0,serviceQuantity:0,repairQuantity:0,unusableQuantity:0,minQuantity:100},
     ];
-    return {locations,items,balances};
+    return {locations,items,variants,prices,balances};
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const [locations,items,rawBalances]=await Promise.all([
+    const [locations,items,variants,prices,rawBalances]=await Promise.all([
       listStorageLocations(actor),
       sql<InventoryItemRow[]>`
-        SELECT id,name,code,category,unit,returnable,tracks_variant "tracksVariant"
-        FROM inventory_items WHERE active ORDER BY name
+        SELECT i.id,i.name,i.code,i.category,i.unit,i.returnable,i.tracks_variant "tracksVariant",
+          i.size_mode "sizeMode",i.default_replacement_cycle_days "defaultReplacementCycleDays",i.notes,
+          current_price.unit_cost::numeric "currentPrice",current_price.id "currentPriceId",current_price.effective_from::text "currentPriceEffectiveFrom"
+        FROM inventory_items i
+        LEFT JOIN LATERAL (
+          SELECT p.id,p.unit_cost,p.effective_from
+          FROM inventory_item_prices p
+          WHERE p.item_id=i.id AND p.variant_id IS NULL
+            AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date)
+          ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1
+        ) current_price ON true
+        WHERE i.active ORDER BY i.name
+      `,
+      sql<InventoryVariantRow[]>`
+        SELECT id,item_id "itemId",code,label,sort_order "sortOrder",active
+        FROM inventory_item_variants WHERE active
+        ORDER BY item_id,sort_order,label
+      `,
+      sql<InventoryPriceRow[]>`
+        SELECT p.id,p.item_id "itemId",p.variant_id "variantId",p.unit_cost::numeric "unitCost",
+          p.effective_from::text "effectiveFrom",p.effective_to::text "effectiveTo",p.source,p.partner_id "partnerId",sp.name partner
+        FROM inventory_item_prices p
+        LEFT JOIN supply_partners sp ON sp.id=p.partner_id
+        ORDER BY p.effective_from DESC,p.created_at DESC
       `,
       sql<Array<InventoryBalanceRow & {organizationId:string}>>`
         WITH deltas AS (
-          SELECT m.organization_id,m.item_id,m.variant,m.to_location_id location_id,m.quantity delta
+          SELECT m.organization_id,m.item_id,m.variant,m.variant_id,m.to_location_id location_id,
+            COALESCE(m.target_condition,m.item_condition,CASE WHEN m.movement_type IN ('opening','receipt') THEN 'new' ELSE 'good' END) condition,
+            m.quantity delta
           FROM inventory_movements m
-          WHERE m.to_location_id IS NOT NULL AND m.movement_type IN ('opening','receipt','transfer','return','adjustment_in')
+          WHERE m.to_location_id IS NOT NULL AND m.movement_type IN ('opening','receipt','transfer','return','adjustment_in','recondition')
           UNION ALL
-          SELECT m.organization_id,m.item_id,m.variant,m.from_location_id location_id,-m.quantity delta
+          SELECT m.organization_id,m.item_id,m.variant,m.variant_id,m.from_location_id location_id,
+            COALESCE(m.source_condition,m.item_condition,'good') condition,-m.quantity delta
           FROM inventory_movements m
-          WHERE m.from_location_id IS NOT NULL AND m.movement_type IN ('transfer','issue','writeoff','adjustment_out')
+          WHERE m.from_location_id IS NOT NULL AND m.movement_type IN ('transfer','issue','writeoff','adjustment_out','recondition')
+        ), condition_balances AS (
+          SELECT organization_id,item_id,variant,variant_id,location_id,condition,sum(delta)::numeric quantity
+          FROM deltas GROUP BY organization_id,item_id,variant,variant_id,location_id,condition
         ), balances AS (
-          SELECT organization_id,item_id,variant,location_id,sum(delta)::numeric quantity
-          FROM deltas GROUP BY organization_id,item_id,variant,location_id
+          SELECT organization_id,item_id,variant,max(variant_id::text)::uuid variant_id,location_id,
+            sum(quantity)::numeric quantity,
+            sum(quantity) FILTER (WHERE condition='new')::numeric "newQuantity",
+            sum(quantity) FILTER (WHERE condition='good')::numeric "goodQuantity",
+            sum(quantity) FILTER (WHERE condition='worn')::numeric "serviceQuantity",
+            sum(quantity) FILTER (WHERE condition='damaged')::numeric "repairQuantity",
+            sum(quantity) FILTER (WHERE condition='unusable')::numeric "unusableQuantity"
+          FROM condition_balances
+          GROUP BY organization_id,item_id,variant,location_id
         ), keys AS (
           SELECT organization_id,item_id,variant,location_id FROM balances
           UNION
           SELECT organization_id,item_id,variant,location_id FROM inventory_stock_limits
         )
         SELECT i.id "itemId",i.name item,i.code,i.category,i.unit,i.returnable,i.tracks_variant "tracksVariant",
-          k.variant,l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
+          k.variant,b.variant_id "variantId",l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
           COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa
             WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
             || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds",
-          COALESCE(b.quantity,0)::numeric quantity,COALESCE(lim.min_quantity,0)::numeric "minQuantity",k.organization_id "organizationId"
+          COALESCE(b.quantity,0)::numeric quantity,
+          (COALESCE(b."newQuantity",0)+COALESCE(b."goodQuantity",0))::numeric "usableQuantity",
+          COALESCE(b."newQuantity",0)::numeric "newQuantity",COALESCE(b."goodQuantity",0)::numeric "goodQuantity",
+          COALESCE(b."serviceQuantity",0)::numeric "serviceQuantity",COALESCE(b."repairQuantity",0)::numeric "repairQuantity",
+          COALESCE(b."unusableQuantity",0)::numeric "unusableQuantity",
+          COALESCE(lim.min_quantity,0)::numeric "minQuantity",k.organization_id "organizationId"
         FROM keys k
         JOIN inventory_items i ON i.id=k.item_id
         JOIN storage_locations l ON l.id=k.location_id
@@ -483,8 +566,18 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
     const visibleLocationIds=new Set(locations.map(row=>row.id));
     const balances=rawBalances
       .filter(row=>visibleLocationIds.has(row.locationId)&&canReadRow(actor.access,"assets.read",row,actor))
-      .map(({organizationId:_,...row})=>({...row,quantity:Number(row.quantity),minQuantity:Number(row.minQuantity)}));
-    return {locations,items,balances};
+      .map(({organizationId:_,...row})=>({
+        ...row,
+        quantity:Number(row.quantity),usableQuantity:Number(row.usableQuantity),newQuantity:Number(row.newQuantity),goodQuantity:Number(row.goodQuantity),
+        serviceQuantity:Number(row.serviceQuantity),repairQuantity:Number(row.repairQuantity),unusableQuantity:Number(row.unusableQuantity),minQuantity:Number(row.minQuantity),
+      }));
+    return {
+      locations,
+      items:items.map(row=>({...row,currentPrice:row.currentPrice==null?null:Number(row.currentPrice)})),
+      variants,
+      prices:prices.map(row=>({...row,unitCost:Number(row.unitCost)})),
+      balances,
+    };
   });
 }
 
