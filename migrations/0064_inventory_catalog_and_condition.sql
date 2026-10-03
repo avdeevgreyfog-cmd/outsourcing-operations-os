@@ -77,10 +77,7 @@ FROM (
   FROM inventory_movements m
   WHERE trim(COALESCE(m.variant,''))<>''
   UNION
-  SELECT l.organization_id,l.item_id,trim(l.variant) variant,
-    COALESCE(i.created_by_user_id,(
-      SELECT u.id FROM app_users u WHERE u.organization_id=l.organization_id ORDER BY u.created_at LIMIT 1
-    )) created_by_user_id
+  SELECT l.organization_id,l.item_id,trim(l.variant) variant,i.created_by_user_id
   FROM inventory_stock_limits l
   JOIN inventory_items i ON i.id=l.item_id
   WHERE trim(COALESCE(l.variant,''))<>''
