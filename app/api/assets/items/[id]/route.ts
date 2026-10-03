@@ -88,7 +88,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       const [price]=await tx<Array<{id:string}>>`
         INSERT INTO inventory_item_prices(organization_id,item_id,variant_id,unit_cost,effective_from,effective_to,source,partner_id,notes,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.variantId??null}::uuid,${body.unitCost},${body.effectiveFrom}::date,
-          ${nextPrice?.effectiveFrom??null}::date - CASE WHEN ${nextPrice?.effectiveFrom??null}::date IS NULL THEN 0 ELSE 1 END,
+          CASE WHEN ${nextPrice?.effectiveFrom??null}::date IS NULL THEN NULL ELSE ${nextPrice?.effectiveFrom??null}::date-1 END,
           ${body.source},${body.partnerId??null}::uuid,${body.notes??null},${actor.userId}::uuid)
         RETURNING id
       `;
