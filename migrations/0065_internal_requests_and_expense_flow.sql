@@ -47,13 +47,12 @@ FROM objects o
 WHERE r.object_id=o.id AND r.legal_entity_id IS NULL AND o.legal_entity_id IS NOT NULL;
 
 UPDATE supply_requests r
-SET legal_entity_id=le.id
-FROM LATERAL (
-  SELECT id FROM legal_entities
-  WHERE organization_id=r.organization_id AND active
-  ORDER BY is_primary DESC,name
+SET legal_entity_id=(
+  SELECT le.id FROM legal_entities le
+  WHERE le.organization_id=r.organization_id AND le.active
+  ORDER BY le.is_primary DESC,le.name
   LIMIT 1
-) le
+)
 WHERE r.legal_entity_id IS NULL;
 
 UPDATE supply_requests r
