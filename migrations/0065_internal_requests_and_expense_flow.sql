@@ -161,7 +161,7 @@ BEFORE INSERT OR UPDATE OF organization_id,object_id,legal_entity_id,organizatio
 FOR EACH ROW EXECUTE FUNCTION validate_expense_context();
 
 CREATE OR REPLACE FUNCTION validate_company_expense_context() RETURNS trigger
-LANGUAGE plpgsql AS $
+LANGUAGE plpgsql AS $$
 BEGIN
   IF organization_reference_org('legal_entities',NEW.legal_entity_id) IS DISTINCT FROM NEW.organization_id THEN
     RAISE EXCEPTION 'company expense legal entity belongs to another organization' USING ERRCODE='23514';
@@ -175,7 +175,7 @@ BEGIN
     RAISE EXCEPTION 'company expense request belongs to another organization' USING ERRCODE='23514';
   END IF;
   RETURN NEW;
-END $;
+END $$;
 
 CREATE TRIGGER company_expenses_context_integrity
 BEFORE INSERT OR UPDATE OF organization_id,legal_entity_id,organization_unit_id,supply_request_id ON company_expenses
