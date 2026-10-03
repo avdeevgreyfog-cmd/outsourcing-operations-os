@@ -219,17 +219,33 @@ export async function PATCH(request:Request){
       }
 
       if(row.paymentStatus!=="pending")throw new Error("Заявка не находится в очереди на оплату");
-      const [existingExpense]=await tx<Array<{id:string}>>`SELECT id FROM object_expenses WHERE supply_request_id=${row.id}::uuid ORDER BY created_at DESC LIMIT 1`;
-      if(!existingExpense){
-        await tx`
-          INSERT INTO object_expenses(
-            organization_id,object_id,legal_entity_id,organization_unit_id,expense_date,category,amount,vendor,reference,plan_fact,created_by_user_id,supply_request_id
-          )
-          VALUES(
-            ${actor.organizationId}::uuid,${row.objectId}::uuid,${row.legalEntityId}::uuid,${row.orgUnitId}::uuid,current_date,${row.categoryCode},${body.actualAmount},
-            ${row.partner??row.vendor},${body.paymentReference??row.title},'fact',${actor.userId}::uuid,${row.id}::uuid
-          )
-        `;
+      if(row.objectId){
+        const [existingExpense]=await tx<Array<{id:string}>>`SELECT id FROM object_expenses WHERE supply_request_id=${row.id}::uuid ORDER BY created_at DESC LIMIT 1`;
+        if(!existingExpense){
+          await tx`
+            INSERT INTO object_expenses(
+              organization_id,object_id,legal_entity_id,organization_unit_id,expense_date,category,amount,vendor,reference,plan_fact,created_by_user_id,supply_request_id
+            )
+            VALUES(
+              ${actor.organizationId}::uuid,${row.objectId}::uuid,${row.legalEntityId}::uuid,${row.orgUnitId}::uuid,current_date,${row.categoryCode},${body.actualAmount},
+              ${row.partner??row.vendor},${body.paymentReference??row.title},'fact',${actor.userId}::uuid,${row.id}::uuid
+            )
+          `;
+        }
+      }else{
+        if(!row.legalEntityId)throw new Error("Для оплаты не определено юридическое лицо");
+        const [existingExpense]=await tx<Array<{id:string}>>`SELECT id FROM company_expenses WHERE supply_request_id=${row.id}::uuid ORDER BY created_at DESC LIMIT 1`;
+        if(!existingExpense){
+          await tx`
+            INSERT INTO company_expenses(
+              organization_id,legal_entity_id,organization_unit_id,expense_date,category,amount,vendor,reference,plan_fact,created_by_user_id,supply_request_id
+            )
+            VALUES(
+              ${actor.organizationId}::uuid,${row.legalEntityId}::uuid,${row.orgUnitId}::uuid,current_date,${row.categoryCode},${body.actualAmount},
+              ${row.partner??row.vendor},${body.paymentReference??row.title},'fact',${actor.userId}::uuid,${row.id}::uuid
+            )
+          `;
+        }
       }
       const nextStatus=(row.requestType==="payment"||row.requestType==="compensation")?"received":row.status;
       await tx`
