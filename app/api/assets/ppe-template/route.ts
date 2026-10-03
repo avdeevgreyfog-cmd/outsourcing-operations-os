@@ -27,7 +27,7 @@ export async function PUT(request:Request){
       if(!specialty)throw new Error("Специальность не найдена");
       const itemIds=[...new Set(body.items.map(item=>item.itemId))];
       if(itemIds.length){
-        const valid=await tx<Array<{id:string}>>`SELECT id FROM inventory_items WHERE id=ANY(${itemIds}::uuid[]) AND active AND category<>'consumable'`;
+        const valid=await tx<Array<{id:string}>>`SELECT id FROM inventory_items WHERE id=ANY(${itemIds}::uuid[]) AND active`;
         if(valid.length!==itemIds.length)throw new Error("В норме есть недоступная позиция");
       }
       let [template]=await tx<Array<{id:string}>>`SELECT id FROM object_ppe_templates WHERE object_id IS NULL AND specialty_id=${body.specialtyId}::uuid AND active FOR UPDATE`;
