@@ -264,7 +264,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
     if(!supplyKitEstimate||supplyKitEstimate.total<=0)return;
     const cost:Cost={
       id:"ppe",group:groups[1],label:"Комплект обеспечения · "+(selectedRole?.specialty??"специальность"),
-      amount:supplyKitEstimate.total,base:"per_worker_period",enabled:true,scope:"worker",source:"reference",
+      amount:supplyKitEstimate.total,base:"per_worker_period",enabled:true,scope:"worker",source:"reference",amortizationMonths:Math.max(projectMonths,1),
       referenceSnapshot:{
         templateId:supplyKitEstimate.kit.templateId,
         specialtyId:supplyKitEstimate.kit.specialtyId,
