@@ -183,12 +183,22 @@ export async function listInventoryMovements(actor:Actor):Promise<InventoryMovem
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<Array<InventoryMovementRow>>`
-      SELECT m.id,m.item_id "itemId",i.name item,m.variant,m.movement_type "movementType",m.quantity::numeric quantity,i.unit,
-        m.from_location_id "fromLocationId",fl.name "fromLocation",m.to_location_id "toLocationId",tl.name "toLocation",
+      SELECT m.id,m.item_id "itemId",i.name item,m.variant,
+        CASE WHEN m.reference LIKE 'recondition:%' THEN 'recondition' ELSE m.movement_type END "movementType",
+        m.quantity::numeric quantity,i.unit,
+        m.from_location_id "fromLocationId",fl.name "fromLocation",
+        COALESCE(m.to_location_id,CASE WHEN m.reference LIKE 'recondition:%' THEN m.from_location_id END) "toLocationId",
+        COALESCE(tl.name,CASE WHEN m.reference LIKE 'recondition:%' THEN fl.name END) "toLocation",
         m.worker_id "workerId",w.full_name worker,COALESCE(tl.object_id,fl.object_id,wa.object_id) "objectId",
         COALESCE(to_obj.name,from_obj.name,worker_obj.name) object,
         COALESCE(to_manager.display_name,from_manager.display_name,worker_manager.display_name) manager,
-        m.item_condition condition,m.source_condition "sourceCondition",m.target_condition "targetCondition",m.unit_cost::numeric "unitCost",m.note,m.reference,
+        m.item_condition condition,m.source_condition "sourceCondition",
+        COALESCE(m.target_condition,(
+          SELECT paired.target_condition FROM inventory_movements paired
+          WHERE paired.reference=m.reference AND paired.movement_type='adjustment_in'
+          ORDER BY paired.created_at LIMIT 1
+        )) "targetCondition",
+        m.unit_cost::numeric "unitCost",m.note,m.reference,
         to_char(m.occurred_at,'DD.MM.YYYY HH24:MI') "occurredAt",creator.display_name "createdBy",
         COALESCE(tl.responsible_user_id,fl.responsible_user_id,to_obj.owner_user_id,from_obj.owner_user_id,wa.manager_user_id,m.created_by_user_id) "ownerUserId",
         COALESCE(to_obj.region_id,from_obj.region_id,worker_obj.region_id) "regionId",
@@ -212,6 +222,7 @@ export async function listInventoryMovements(actor:Actor):Promise<InventoryMovem
       LEFT JOIN objects worker_obj ON worker_obj.id=wa.object_id
       LEFT JOIN app_users worker_manager ON worker_manager.id=wa.manager_user_id
       JOIN app_users creator ON creator.id=m.created_by_user_id
+      WHERE NOT (m.reference LIKE 'recondition:%' AND m.movement_type='adjustment_in')
       ORDER BY m.occurred_at DESC LIMIT 500
     `;
     return rows.filter(row=>canReadRow(actor.access,"assets.read",row,actor)).map(row=>({...row,quantity:Number(row.quantity),unitCost:row.unitCost==null?null:Number(row.unitCost)}));
