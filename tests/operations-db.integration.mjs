@@ -401,19 +401,20 @@ try{
 
   const internalExpense=randomUUID();
   await sql`
-    INSERT INTO object_expenses(
-      id,organization_id,object_id,legal_entity_id,organization_unit_id,expense_date,category,amount,vendor,reference,plan_fact,created_by_user_id,supply_request_id
+    INSERT INTO company_expenses(
+      id,organization_id,legal_entity_id,organization_unit_id,expense_date,category,amount,vendor,reference,plan_fact,created_by_user_id,supply_request_id
     )
     VALUES(
-      ${internalExpense}::uuid,${org}::uuid,NULL,${legalEntity.id}::uuid,${orgUnit.id}::uuid,current_date,'recruiting_advertising',30000,
+      ${internalExpense}::uuid,${org}::uuid,${legalEntity.id}::uuid,${orgUnit.id}::uuid,current_date,'recruiting_advertising',30000,
       'Avito','Integration internal request fact','fact',${director}::uuid,${internalPayment}::uuid
     )
   `;
   const [expenseContext]=await sql`
-    SELECT object_id "objectId",legal_entity_id "legalEntityId",organization_unit_id "orgUnitId",supply_request_id "supplyRequestId"
-    FROM object_expenses WHERE id=${internalExpense}::uuid
+    SELECT legal_entity_id "legalEntityId",organization_unit_id "orgUnitId",supply_request_id "supplyRequestId"
+    FROM company_expenses WHERE id=${internalExpense}::uuid
   `;
-  assert.equal(expenseContext.objectId,null,"fact expense must support non-object company costs");
+  assert.equal(expenseContext.legalEntityId,legalEntity.id,"company expense must preserve payer legal entity");
+  assert.equal(expenseContext.orgUnitId,orgUnit.id,"company expense must preserve cost center");
   assert.equal(expenseContext.supplyRequestId,internalPayment);
 
   const requestRoleGrants=await sql`
