@@ -34,7 +34,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo,preference
       if(form.fullName.trim().length<2)throw new Error("Укажите ФИО");
       if((form.objectId&&!form.specialtyId)||(!form.objectId&&form.specialtyId))throw new Error("Объект и специальность указываются вместе");
       if(form.rate && (!Number.isFinite(Number(form.rate)) || Number(form.rate)<=0))throw new Error("Ставка должна быть больше нуля");
-      if(form.rateUnit==="shift" && form.rate && (!Number(form.paidHoursPerShift)||Number(form.paidHoursPerShift)>24))throw new Error("Укажите оплачиваемые часы в смене от 0,5 до 24");
+      if(form.rateUnit==="shift" && form.rate && (!Number.isFinite(Number(form.paidHoursPerShift))||Number(form.paidHoursPerShift)<0.5||Number(form.paidHoursPerShift)>24))throw new Error("Укажите оплачиваемые часы в смене от 0,5 до 24");
       if(demo){
         const object=options.objects.find(x=>x.id===form.objectId);
         const specialty=options.specialties.find(x=>x.id===form.specialtyId);
