@@ -56,6 +56,7 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0034_operations_workforce_core.sql"),"operations workforce migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0035_operations_offboarding_and_supply_approval.sql"),"offboarding/supply approval migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0039_object_worker_manager_integrity.sql"),"object/worker manager integrity migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0059_worker_manager_future_integrity.sql"),"future worker manager integrity migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0041_object_contacts.sql"),"object contacts migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0047_workforce_rehire_and_supply_norms.sql"),"repeat recruiting/supply norm migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0048_supply_norm_inheritance.sql"),"supply norm inheritance migration must be applied");
@@ -193,6 +194,40 @@ try{
     WHERE worker_id=${worker}::uuid AND effective_to IS NULL
   `;
   assert.equal(workerManager.manager_user_id,object.owner_user_id,"worker assignment trigger must override an arbitrary manager with the object manager");
+
+  const futureWorker=randomUUID();
+  await sql`
+    INSERT INTO worker_profiles(id,organization_id,full_name,status,created_by_user_id)
+    VALUES(${futureWorker}::uuid,${org}::uuid,'Future manager integration worker','active',${director}::uuid)
+  `;
+  await sql`
+    INSERT INTO employment_relations(organization_id,worker_id,relation_type,effective_from,created_by_user_id)
+    VALUES(${org}::uuid,${futureWorker}::uuid,'employment',current_date,${director}::uuid)
+  `;
+  await sql`
+    INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,created_by_user_id)
+    VALUES(${org}::uuid,${futureWorker}::uuid,${object.id}::uuid,${specialty.id}::uuid,current_date+10,${director}::uuid,${director}::uuid)
+  `;
+  const [futureBeforeChange]=await sql`
+    SELECT manager_user_id FROM worker_object_assignments
+    WHERE worker_id=${futureWorker}::uuid AND effective_from>current_date
+  `;
+  assert.equal(futureBeforeChange.manager_user_id,object.owner_user_id,"future assignment must inherit the object manager when scheduled");
+
+  await sql`UPDATE objects SET owner_user_id=${director}::uuid WHERE id=${object.id}::uuid`;
+  const [futureAfterChange]=await sql`
+    SELECT manager_user_id FROM worker_object_assignments
+    WHERE worker_id=${futureWorker}::uuid AND effective_from>current_date
+  `;
+  assert.equal(futureAfterChange.manager_user_id,director,"future assignment must follow a manager change before the worker starts");
+
+  await sql`UPDATE objects SET owner_user_id=${object.owner_user_id}::uuid WHERE id=${object.id}::uuid`;
+  const [futureAfterRestore]=await sql`
+    SELECT manager_user_id FROM worker_object_assignments
+    WHERE worker_id=${futureWorker}::uuid AND effective_from>current_date
+  `;
+  assert.equal(futureAfterRestore.manager_user_id,object.owner_user_id,"future assignment must stay aligned after the object manager is restored");
+
 
   const managerPayment=randomUUID();
   await sql`
