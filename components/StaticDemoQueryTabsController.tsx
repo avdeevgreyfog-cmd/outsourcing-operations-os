@@ -38,8 +38,20 @@ export function StaticDemoQueryTabsController({ enabled, defaultTab, className, 
         for (const link of nav.querySelectorAll<HTMLAnchorElement>("a[href]")) {
           const target = new URL(link.href, window.location.href);
           const key = target.searchParams.get("tab");
-          link.classList.toggle("active", key === active);
-          if (key === active) link.setAttribute("aria-current", "page");
+          const selected = link.dataset.workerTabKeys?.split(" ").includes(active) ?? key === active;
+          link.classList.toggle("active", selected);
+          if (selected) link.setAttribute("aria-current", "page");
+          else link.removeAttribute("aria-current");
+        }
+      }
+      for (const element of root.querySelectorAll<HTMLElement>("[data-worker-overview-only]")) element.style.display=active==="overview"?"":"none";
+      for (const element of root.querySelectorAll<HTMLElement>("[data-worker-card-layout]")) element.dataset.overview=String(active==="overview");
+      for (const nav of root.querySelectorAll<HTMLElement>("[data-worker-subnav-keys]")) {
+        nav.style.display = nav.dataset.workerSubnavKeys?.split(" ").includes(active) ? "flex" : "none";
+        for (const link of nav.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+          const selected = new URL(link.href).searchParams.get("tab") === active;
+          link.classList.toggle("active", selected);
+          if (selected) link.setAttribute("aria-current", "page");
           else link.removeAttribute("aria-current");
         }
       }
