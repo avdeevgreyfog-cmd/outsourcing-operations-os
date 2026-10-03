@@ -3,6 +3,7 @@ import { requireCapability } from "@/lib/access/server";
 import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
+import { companyProfile as demoCompanyProfile, organizationUnits as demoOrganizationUnits } from "@/lib/demo/organization";
 
 export type OperationsAnalyticsRow = {
   organizationId:string;
@@ -790,12 +791,24 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
 }
 
 
+export type InternalRequestReferenceData={
+  legalEntities:Array<{id:string;name:string;shortName:string|null;primary:boolean}>;
+  orgUnits:Array<{id:string;name:string;kind:string}>;
+};
+
 export type SupplyRequestRow={
   id:string;
   organizationId:string;
   objectId:string|null;
   object:string|null;
+  legalEntityId:string|null;
+  legalEntity:string|null;
+  orgUnitId:string|null;
+  orgUnit:string|null;
   requestType:"purchase"|"payment"|"compensation"|"service";
+  categoryCode:string;
+  priority:"normal"|"urgent"|"critical";
+  urgencyReason:string|null;
   title:string;
   description:string|null;
   itemId:string|null;
@@ -803,15 +816,24 @@ export type SupplyRequestRow={
   locationId:string|null;
   location:string|null;
   quantity:number|null;
+  fulfilledQuantity:number|null;
   unit:string|null;
   amount:number|null;
+  approvedAmount:number|null;
+  actualAmount:number|null;
   vendor:string|null;
   partnerId:string|null;
   partner:string|null;
+  sourceName:string|null;
+  sourceUrl:string|null;
   neededBy:string|null;
   status:string;
+  paymentStatus:"not_required"|"pending"|"paid"|"cancelled";
+  paidAt:string|null;
+  paymentReference:string|null;
   approvalId:string|null;
   approvalStatus:string|null;
+  createdByUserId:string;
   createdBy:string;
   assignedTo:string|null;
   createdAt:string;
@@ -819,29 +841,76 @@ export type SupplyRequestRow={
   assigneeUserIds:string[];
 };
 
+export async function getInternalRequestReferenceData(actor:Actor):Promise<InternalRequestReferenceData>{
+  requireCapability(actor,"procurement.read");
+  if(actor.demo){
+    const unitIds=new Set(actor.orgUnitIds??[]);
+    const allOrg=actor.access.allOrg||actor.access.scopes["procurement.read"]?.some(scope=>scope.type==="all_org");
+    return {
+      legalEntities:demoCompanyProfile.legalEntities.map(row=>({id:row.id,name:row.name,shortName:row.shortName??null,primary:row.primary})),
+      orgUnits:demoOrganizationUnits.filter(row=>allOrg||unitIds.has(row.id)).map(row=>({id:row.id,name:row.name,kind:row.kind})),
+    };
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const legalEntities=await sql<Array<{id:string;name:string;shortName:string|null;primary:boolean}>>`
+      SELECT id,name,short_name "shortName",is_primary "primary" FROM legal_entities WHERE active ORDER BY is_primary DESC,name
+    `;
+    const allOrg=actor.access.allOrg||actor.access.scopes["procurement.read"]?.some(scope=>scope.type==="all_org");
+    const ids=actor.orgUnitIds??[];
+    const orgUnits=allOrg
+      ? await sql<Array<{id:string;name:string;kind:string}>>`SELECT id,name,kind FROM organization_units WHERE active ORDER BY sort_order,name`
+      : ids.length
+        ? await sql<Array<{id:string;name:string;kind:string}>>`SELECT id,name,kind FROM organization_units WHERE active AND id=ANY(${ids}::uuid[]) ORDER BY sort_order,name`
+        : [];
+    return {legalEntities,orgUnits};
+  });
+}
+
 export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]>{
   requireCapability(actor,"procurement.read");
   if(actor.demo){
     const object=demo.objects.find(row=>canReadRow(actor.access,"operations.object.read",row,actor))??demo.objects[0];
-    return [{
-      id:"demo-supply-request-1",organizationId:object.organizationId,objectId:object.id,object:object.name,requestType:"purchase",
-      title:"Пополнить рабочую обувь",description:"Дефицит размера 43",itemId:"demo-item-boots",item:"Ботинки рабочие",locationId:null,location:null,
-      quantity:6,unit:"пар",amount:null,vendor:null,partnerId:null,partner:null,neededBy:"25.09.2026",status:"submitted",approvalId:null,approvalStatus:null,createdBy:actor.displayName,assignedTo:null,createdAt:"20.09.2026",
-      ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],
-    }];
+    const legalEntity=demoCompanyProfile.legalEntities[0];
+    const ownUnit=demoOrganizationUnits.find(row=>actor.orgUnitIds.includes(row.id))??demoOrganizationUnits[0];
+    const rows:SupplyRequestRow[]=[
+      {
+        id:"demo-supply-request-1",organizationId:object.organizationId,objectId:object.id,object:object.name,legalEntityId:legalEntity.id,legalEntity:legalEntity.shortName??legalEntity.name,orgUnitId:"21000000-0000-4000-8000-000000000007",orgUnit:"Обеспечение",
+        requestType:"purchase",categoryCode:"workwear_ppe",priority:"urgent",urgencyReason:"Новые сотрудники выходят на объект",title:"Рабочая обувь для новых сотрудников",description:"Нужны размеры 42–44",itemId:"demo-item-boots",item:"Ботинки рабочие",locationId:null,location:null,
+        quantity:6,fulfilledQuantity:0,unit:"пар",amount:19200,approvedAmount:19200,actualAmount:null,vendor:null,partnerId:null,partner:null,sourceName:"Ozon",sourceUrl:"https://www.ozon.ru/",neededBy:"06.10.2026",status:"approved",paymentStatus:"pending",paidAt:null,paymentReference:null,approvalId:"demo-approval-supply-1",approvalStatus:"approved",
+        createdByUserId:"10000000-0000-4000-8000-000000000004",createdBy:"Дмитрий Орлов",assignedTo:"Ирина Белова",createdAt:"02.10.2026",ownerUserId:"10000000-0000-4000-8000-000000000011",assigneeUserIds:["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000011"],
+      },
+      {
+        id:"demo-supply-request-2",organizationId:object.organizationId,objectId:null,object:null,legalEntityId:legalEntity.id,legalEntity:legalEntity.shortName??legalEntity.name,orgUnitId:"21000000-0000-4000-8000-000000000009",orgUnit:"Группа подбора",
+        requestType:"payment",categoryCode:"recruiting_advertising",priority:"normal",urgencyReason:null,title:"Пополнение рекламного кабинета Avito",description:"Продвижение вакансий электромонтажников",itemId:null,item:null,locationId:null,location:null,
+        quantity:null,fulfilledQuantity:null,unit:null,amount:30000,approvedAmount:30000,actualAmount:null,vendor:"Avito",partnerId:null,partner:null,sourceName:"Avito",sourceUrl:"https://www.avito.ru/",neededBy:"07.10.2026",status:"approved",paymentStatus:"pending",paidAt:null,paymentReference:null,approvalId:"demo-approval-supply-2",approvalStatus:"approved",
+        createdByUserId:"10000000-0000-4000-8000-000000000012",createdBy:"Ольга Зайцева",assignedTo:"Елена Котова",createdAt:"03.10.2026",ownerUserId:"10000000-0000-4000-8000-000000000006",assigneeUserIds:["10000000-0000-4000-8000-000000000012","10000000-0000-4000-8000-000000000006"],
+      },
+      {
+        id:"demo-supply-request-3",organizationId:object.organizationId,objectId:object.id,object:object.name,legalEntityId:legalEntity.id,legalEntity:legalEntity.shortName??legalEntity.name,orgUnitId:"21000000-0000-4000-8000-000000000005",orgUnit:"Операции",
+        requestType:"service",categoryCode:"housing",priority:"normal",urgencyReason:null,title:"Продлить проживание сотрудников",description:"Общежитие на октябрь, 8 койко-мест",itemId:null,item:null,locationId:null,location:null,
+        quantity:8,fulfilledQuantity:8,unit:"мест",amount:64000,approvedAmount:64000,actualAmount:64000,vendor:"Общежитие Север",partnerId:null,partner:"Общежитие Север",sourceName:null,sourceUrl:null,neededBy:"05.10.2026",status:"received",paymentStatus:"paid",paidAt:"03.10.2026",paymentReference:"ПП 418",approvalId:"demo-approval-supply-3",approvalStatus:"approved",
+        createdByUserId:"10000000-0000-4000-8000-000000000003",createdBy:"Алексей Громов",assignedTo:"Ирина Белова",createdAt:"28.09.2026",ownerUserId:"10000000-0000-4000-8000-000000000011",assigneeUserIds:["10000000-0000-4000-8000-000000000003","10000000-0000-4000-8000-000000000011"],
+      },
+    ];
+    return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<SupplyRequestRow[]>`
-      SELECT r.id,r.organization_id "organizationId",r.object_id "objectId",o.name object,r.request_type "requestType",
+      SELECT r.id,r.organization_id "organizationId",r.object_id "objectId",o.name object,
+        r.legal_entity_id "legalEntityId",COALESCE(le.short_name,le.name) "legalEntity",
+        r.organization_unit_id "orgUnitId",ou.name "orgUnit",r.request_type "requestType",r.category_code "categoryCode",r.priority,r.urgency_reason "urgencyReason",
         r.title,r.description,r.item_id "itemId",i.name item,r.location_id "locationId",l.name location,
-        r.quantity::numeric quantity,r.unit,r.amount::numeric amount,r.vendor,r.partner_id "partnerId",sp.name partner,to_char(r.needed_by,'DD.MM.YYYY') "neededBy",
-        r.status,approval.id "approvalId",approval.status "approvalStatus",creator.display_name "createdBy",assignee.display_name "assignedTo",to_char(r.created_at,'DD.MM.YYYY') "createdAt",
-        COALESCE(o.owner_user_id,r.created_by_user_id) "ownerUserId",
-        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
-          WHERE oa.object_id=r.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
-          || ARRAY[r.created_by_user_id::text] "assigneeUserIds"
+        r.quantity::numeric quantity,r.fulfilled_quantity::numeric "fulfilledQuantity",r.unit,r.amount::numeric amount,r.approved_amount::numeric "approvedAmount",r.actual_amount::numeric "actualAmount",
+        r.vendor,r.partner_id "partnerId",sp.name partner,r.source_name "sourceName",r.source_url "sourceUrl",to_char(r.needed_by,'DD.MM.YYYY') "neededBy",
+        r.status,r.payment_status "paymentStatus",to_char(r.paid_at,'DD.MM.YYYY') "paidAt",r.payment_reference "paymentReference",
+        approval.id "approvalId",approval.status "approvalStatus",r.created_by_user_id "createdByUserId",creator.display_name "createdBy",assignee.display_name "assignedTo",to_char(r.created_at,'DD.MM.YYYY') "createdAt",
+        COALESCE(r.assigned_to_user_id,o.owner_user_id,r.created_by_user_id) "ownerUserId",
+        ARRAY_REMOVE(ARRAY[r.created_by_user_id::text,r.assigned_to_user_id::text,o.owner_user_id::text],NULL) "assigneeUserIds"
       FROM supply_requests r
-      LEFT JOIN objects o ON o.id=r.object_id LEFT JOIN inventory_items i ON i.id=r.item_id
+      LEFT JOIN objects o ON o.id=r.object_id
+      LEFT JOIN legal_entities le ON le.id=r.legal_entity_id
+      LEFT JOIN organization_units ou ON ou.id=r.organization_unit_id
+      LEFT JOIN inventory_items i ON i.id=r.item_id
       LEFT JOIN storage_locations l ON l.id=r.location_id
       LEFT JOIN supply_partners sp ON sp.id=r.partner_id
       JOIN app_users creator ON creator.id=r.created_by_user_id
@@ -851,12 +920,18 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
         WHERE ai.subject_type='supply_request' AND ai.subject_id=r.id
         ORDER BY ai.submitted_at DESC LIMIT 1
       ) approval ON true
-      ORDER BY r.status IN ('closed','rejected'),r.needed_by NULLS LAST,r.created_at DESC
+      ORDER BY r.status IN ('closed','rejected'),r.payment_status='pending' DESC,r.needed_by NULLS LAST,r.created_at DESC
     `;
-    return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor)).map(row=>({...row,quantity:row.quantity==null?null:Number(row.quantity),amount:row.amount==null?null:Number(row.amount)}));
+    return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor)).map(row=>({
+      ...row,
+      quantity:row.quantity==null?null:Number(row.quantity),
+      fulfilledQuantity:row.fulfilledQuantity==null?null:Number(row.fulfilledQuantity),
+      amount:row.amount==null?null:Number(row.amount),
+      approvedAmount:row.approvedAmount==null?null:Number(row.approvedAmount),
+      actualAmount:row.actualAmount==null?null:Number(row.actualAmount),
+    }));
   });
 }
-
 
 export type WorkerOutstandingAsset={itemId:string;item:string;variant:string;quantity:number;unit:string};
 export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string;replacementRequired:boolean;returnToRecruiting:boolean;replacementNeedId:string|null;replacementWorkerId:string|null;replacementWorker:string|null};
