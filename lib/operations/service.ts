@@ -530,12 +530,12 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
             COALESCE(m.target_condition,m.item_condition,CASE WHEN m.movement_type IN ('opening','receipt') THEN 'new' ELSE 'good' END) condition,
             m.quantity delta
           FROM inventory_movements m
-          WHERE m.to_location_id IS NOT NULL AND m.movement_type IN ('opening','receipt','transfer','return','adjustment_in','recondition')
+          WHERE m.to_location_id IS NOT NULL AND m.movement_type IN ('opening','receipt','transfer','return','adjustment_in')
           UNION ALL
           SELECT m.organization_id,m.item_id,m.variant,m.variant_id,m.from_location_id location_id,
             COALESCE(m.source_condition,m.item_condition,'good') condition,-m.quantity delta
           FROM inventory_movements m
-          WHERE m.from_location_id IS NOT NULL AND m.movement_type IN ('transfer','issue','writeoff','adjustment_out','recondition')
+          WHERE m.from_location_id IS NOT NULL AND m.movement_type IN ('transfer','issue','writeoff','adjustment_out')
         ), condition_balances AS (
           SELECT organization_id,item_id,variant,variant_id,location_id,condition,sum(delta)::numeric quantity
           FROM deltas GROUP BY organization_id,item_id,variant,variant_id,location_id,condition
