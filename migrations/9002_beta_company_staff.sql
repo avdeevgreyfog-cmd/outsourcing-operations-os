@@ -378,7 +378,7 @@ BEGIN
   SELECT org_id,r.id,p.capability,'allow','own_created','{}'::uuid[]
   FROM role_templates r
   JOIN permission_definitions p ON p.capability IN ('procurement.read','procurement.create')
-  WHERE r.code IN ('recruitment_head','recruiter')
+  WHERE r.code IN ('commercial_lead','client_manager','recruitment_head','recruiter')
   ON CONFLICT DO NOTHING;
 
   INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
