@@ -150,12 +150,12 @@ FROM role_templates r
 WHERE r.code IN ('director','operations_head','regional_manager','object_manager','supply_specialist')
 ON CONFLICT DO NOTHING;
 
--- Recruitment can create and follow its own requests without gaining execution rights.
+-- Regular office roles can create and follow their own requests without gaining execution rights.
 INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
 SELECT r.organization_id,r.id,p.capability,'allow','own_created','{}'::uuid[]
 FROM role_templates r
 JOIN permission_definitions p ON p.capability IN ('procurement.read','procurement.create')
-WHERE r.code IN ('recruitment_head','recruiter')
+WHERE r.code IN ('commercial_lead','client_manager','recruitment_head','recruiter')
 ON CONFLICT DO NOTHING;
 
 -- Finance sees the cross-functional queue and records payment facts, but creating a request
