@@ -3907,3 +3907,77 @@ button.sales-funnel-step:active{transform:translateY(1px)}
     grid-column:auto;
   }
 }
+
+
+/* Internal warehouse workspace */
+.sales-workspace.operations-workspace .inventory-stock-table{min-width:1260px}
+.sales-workspace.operations-workspace .inventory-items-table{min-width:1120px}
+.sales-workspace.operations-workspace .inventory-locations-table{min-width:1040px}
+.sales-workspace.operations-workspace .supply-holdings-table{min-width:1180px}
+.sales-workspace.operations-workspace .supply-movements-table{min-width:1260px}
+.sales-workspace.operations-workspace .inventory-directory-actions,
+.sales-workspace.operations-workspace .inventory-row-actions{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap
+}
+.sales-workspace.operations-workspace .inventory-directory-actions .table-link{
+  appearance:none;border:0;padding:0;background:transparent;color:var(--text);font:inherit;font-size:10.5px;font-weight:600;cursor:pointer;
+  text-decoration:underline;text-decoration-color:var(--border-strong);text-underline-offset:3px
+}
+.sales-workspace.operations-workspace .inventory-directory-actions .table-link:hover{text-decoration-color:currentColor}
+.sales-workspace.operations-workspace .inventory-items-table td,
+.sales-workspace.operations-workspace .inventory-locations-table td,
+.sales-workspace.operations-workspace .inventory-stock-table td{vertical-align:middle}
+.sales-workspace.operations-workspace .inventory-return-strip{margin-top:10px}
+.sales-workspace.operations-workspace .inventory-directory-section>.section-head{min-height:54px}
+.sales-workspace.operations-workspace .inventory-directory-section>.section-head p{max-width:760px}
+.sales-workspace.operations-workspace .object-supply-norm-table table{min-width:930px}
+.sales-workspace.operations-workspace .calculation-supply-kit-reference{background:var(--panel)}
+.sales-workspace.operations-workspace .calculation-supply-kit-reference small+small{margin-top:2px}
+
+/* Warehouse modals are rendered through a portal, so these rules must not depend on the workspace ancestor. */
+.inventory-modal-card{
+  width:min(820px,calc(100vw - 32px));
+  max-height:min(840px,calc(100dvh - 32px));
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  overflow:hidden;
+}
+.inventory-modal-body{
+  overflow:auto;
+  padding:16px 18px;
+  display:grid;
+  gap:14px;
+}
+.inventory-modal-card .form-grid{display:grid;gap:12px 16px;min-width:0}
+.inventory-modal-card .form-grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.inventory-modal-card .form-grid>.span-2{grid-column:1/-1}
+.inventory-modal-card .form-grid>label,
+.inventory-modal-body>label{
+  display:grid;align-content:start;gap:5px;min-width:0;color:var(--muted);font-size:10px;line-height:1.25
+}
+.inventory-modal-card .form-grid>label>span,
+.inventory-modal-body>label>span{display:block;color:var(--muted);font-size:10px;font-weight:600}
+.inventory-modal-card .form-grid>label>:is(input,select,textarea),
+.inventory-modal-body>label>:is(input,select,textarea){
+  width:100%;min-width:0;min-height:36px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius-control);
+  background:var(--panel);color:var(--text);font:inherit;font-size:11px;box-sizing:border-box
+}
+.inventory-modal-card .form-grid>label>textarea,
+.inventory-modal-body>label>textarea{min-height:72px;padding:9px 10px;resize:vertical}
+.inventory-modal-card .form-grid>label>:is(input,select,textarea):focus,
+.inventory-modal-body>label>:is(input,select,textarea):focus{outline:0;border-color:var(--border-strong)}
+.inventory-modal-card .operations-check{
+  display:flex;align-items:center;gap:8px;min-height:36px;color:var(--text);font-size:11px;font-weight:500
+}
+.inventory-modal-card .operations-check input[type="checkbox"]{
+  flex:0 0 auto;width:15px!important;height:15px!important;min-height:15px!important;margin:0;padding:0
+}
+.inventory-modal-card .operations-check>span{color:var(--text)!important;font-weight:500!important}
+.inventory-modal-card .recruiting-error{margin-top:0}
+.inventory-modal-card .recruiting-modal-footer{padding:11px 18px}
+@media(max-width:720px){
+  .inventory-modal{padding:10px}
+  .inventory-modal-card{width:calc(100vw - 20px);max-height:calc(100dvh - 20px)}
+  .inventory-modal-card .form-grid.two{grid-template-columns:1fr}
+  .inventory-modal-card .form-grid>.span-2{grid-column:auto}
+}
