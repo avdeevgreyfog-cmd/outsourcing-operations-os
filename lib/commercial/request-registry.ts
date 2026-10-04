@@ -1,10 +1,10 @@
 import { normalizeRegistryLayout, type RegistryColumnLayout } from "@/lib/ui/registry-layout";
 
 export const requestColumns = [
-  { id: "identity", label: "Заявка / клиент", width: 270, required: true },
-  { id: "need", label: "Потребность", width: 180 }, { id: "stage", label: "Этап", width: 165 },
-  { id: "owner", label: "Ответственный", width: 165 }, { id: "start", label: "Старт", width: 130 },
-  { id: "activity", label: "Последнее изменение", width: 185 }, { id: "proposal", label: "КП", width: 115 },
+  { id: "identity", label: "Заявка / клиент", width: 340, required: true },
+  { id: "need", label: "Потребность", width: 170 }, { id: "stage", label: "Этап", width: 150 },
+  { id: "owner", label: "Ответственный", width: 145 }, { id: "start", label: "Старт", width: 115 },
+  { id: "activity", label: "Последнее изменение", width: 165 }, { id: "proposal", label: "КП", width: 115 },
   { id: "client", label: "Заказчик", width: 190 }, { id: "location", label: "Адрес объекта", width: 240 },
   { id: "roles", label: "Специальности", width: 240 }, { id: "source", label: "Источник", width: 160 }, { id: "region", label: "Регион", width: 180 },
 ] as const;
@@ -19,7 +19,7 @@ export type RequestRegistrySettings = RegistryColumnLayout<RequestColumnId> & {
 };
 export const defaultRequestSettings: RequestRegistrySettings = {
   bucket: "active", stage: "", owner: "", client: "", source: "",
-  columns: ["identity", "need", "stage", "owner", "start", "activity", "proposal"], pinned: ["identity"], widths: {},
+  columns: ["identity", "need", "stage", "owner", "start", "activity"], pinned: ["identity"], widths: {},
   sort: "updated", direction: "desc", group: "none", subgroup: "none", hideEmpty: false,
 };
 const groupIds = ["none", "stage", "owner", "client"];

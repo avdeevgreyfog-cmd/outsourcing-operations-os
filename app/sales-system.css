@@ -3435,8 +3435,8 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .requests-registry-controlbar .sales-search{width:220px;min-width:160px;max-width:300px;flex:1}
 .requests-stage-choice{width:160px;min-width:130px}
 .requests-view-choice{width:180px;min-width:150px}
-.requests-registry-controlbar select,.requests-registry-options :is(select,input:not([type=checkbox])){width:100%;height:38px;min-height:38px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;padding:8px 10px}
-.requests-registry-controlbar .button{height:38px;padding:8px 10px;white-space:nowrap;font-size:13px}
+.requests-registry-controlbar select,.requests-registry-options :is(select,input:not([type=checkbox])){width:100%;height:var(--registry-control-height);min-height:var(--registry-control-height);border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;padding:8px 10px}
+.requests-registry-controlbar .button{height:var(--registry-control-height);padding:8px 10px;white-space:nowrap;font-size:13px}
 .requests-registry-controlbar .requests-compact-action{width:38px;padding:0;justify-content:center}
 .requests-control-count{display:grid;place-items:center;min-width:18px;font-size:11px;color:var(--muted)}
 .requests-registry-options{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 14px;display:grid;gap:12px;min-width:0}
@@ -3450,22 +3450,23 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .requests-registry-save-view small{flex-basis:100%;font-size:12px;color:var(--muted)}
 .requests-registry .sales-results{flex-wrap:wrap}
 :is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table{min-width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;font-size:13px}
-:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table th{height:42px;padding:0 12px;background:var(--panel-2);font-size:12px;position:relative;white-space:nowrap;overflow:hidden}
-.requests-column-sort{width:100%;height:42px;display:flex;align-items:center;justify-content:space-between;gap:6px;background:none;border:0;font:inherit;color:var(--muted);padding:0;text-align:left;cursor:pointer;min-width:0;overflow:hidden}
+:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table th{height:var(--registry-header-height);padding:0 12px;background:var(--panel-2);font-size:12px;position:relative;white-space:nowrap;overflow:hidden}
+.requests-column-sort{width:100%;height:var(--registry-header-height);display:flex;align-items:center;justify-content:space-between;gap:6px;background:none;border:0;font:inherit;color:var(--muted);padding:0;text-align:left;cursor:pointer;min-width:0;overflow:hidden}
 .requests-column-resize{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:col-resize;touch-action:none;z-index:4}
 .requests-column-resize:hover,.requests-column-resize:focus-visible{background:var(--border)}
+.requests-column-sort>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .requests-column-sort svg{flex-shrink:0;opacity:.5}
 .requests-registry th[aria-sort=ascending] .requests-column-sort,.requests-registry th[aria-sort=descending] .requests-column-sort{color:var(--text)}
-:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table td{height:60px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;overflow:hidden}
+:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table td{height:var(--registry-row-height);padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;overflow:hidden}
 .requests-cell-content{max-height:36px;line-height:18px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .requests-cell-content .cell-title,.requests-cell-content .cell-sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table .cell-title{font-size:13px;font-weight:600;line-height:18px}
-:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table .cell-sub{font-size:12px;line-height:18px;color:var(--muted);margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table .cell-title{font-size:var(--registry-identity-size);font-weight:600;line-height:18px}
+:is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table .cell-sub{font-size:var(--registry-secondary-size);line-height:18px;color:var(--muted);margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 :is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table :is(td,th).registry-pinned-cell{position:sticky;z-index:2;box-shadow:1px 0 0 var(--border)}
 :is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table th.registry-pinned-cell{z-index:3}
 :is(.requests-registry, :root[data-operis-ui="new"] .sales-workspace .requests-registry) .sales-request-table tbody tr:hover td{background:var(--panel-2)}
 .requests-cell-need,.requests-cell-proposal,.requests-cell-start{font-variant-numeric:tabular-nums}
-.requests-registry .requests-group-row>th{padding:0;background:var(--panel-2);height:38px}
+.requests-registry .requests-group-row>th{padding:0;background:var(--panel-2);height:var(--registry-control-height)}
 .requests-group-row button{width:100%;display:flex;align-items:center;gap:8px;background:transparent;border:0;color:var(--text);padding:9px 14px;font:inherit;font-size:13px;font-weight:600;text-align:left;cursor:pointer}
 .requests-group-row svg{color:var(--muted);flex-shrink:0}.requests-group-row svg.expanded{transform:rotate(90deg)}
 .requests-group-row small{font-size:12px;font-weight:400;color:var(--muted)}

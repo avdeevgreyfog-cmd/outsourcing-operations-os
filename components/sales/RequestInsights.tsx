@@ -167,7 +167,7 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
   const sourceOptions=[...new Set(options.sources)];
 
   return <div className="request-analytics-screen request-analytics-unified">
-    {demo&&<p className="request-analytics-context-note">Демо: те же заявки, что в таблице и доске. Полной истории переходов и отправок нет. Первое КП учитывается только при единственной известной отправке; пропущенные этапы не восстанавливаются.</p>}
+    {demo&&<p className="request-analytics-context-note"><AlertTriangle size={14} aria-hidden="true"/><span>Демо: история переходов неполная. Учитываются только известные этапы.</span></p>}
     <section className="request-analytics-filters" aria-label="Фильтры аналитики заявок">
       <div className="request-date-filter"><span><CalendarDays size={14}/> Период</span><input aria-label="Начало периода аналитики" type="date" value={filters.from} onChange={event=>apply({from:event.target.value})}/><i>—</i><input aria-label="Конец периода аналитики" type="date" value={filters.to} onChange={event=>apply({to:event.target.value})}/></div>
       <div className="request-period-presets" role="group" aria-label="Быстрый выбор периода">{[7,30,90].map(days=><button type="button" key={days} className={currentPeriodDays===days?"active":""} onClick={()=>setPreset(days)}>{days} дней</button>)}</div>
@@ -180,19 +180,28 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
       <button type="button" className="button" onClick={()=>router.replace("/requests?view=analytics",{scroll:false})}><RotateCcw size={14}/> Сбросить</button>
     </section>
 
+    <details className="request-analytics-help">
+      <summary><span>Как считаются показатели</span><ChevronDown size={14} aria-hidden="true"/></summary>
+      <div>
+        <p><strong>За период</strong> — новые заявки выбранного периода и их результат. <strong>Сейчас</strong> — текущее состояние всех доступных заявок, вне выбранного периода. Графики событий показывают события по датам, в том числе по более ранним заявкам.</p>
+        <p><strong>Воронка и разрывы</strong> учитывают только зафиксированные этапы. Если следующий этап не записан, заявка входит в разрыв; это может быть работающий процесс, несогласование или пропущенная запись. Разрыв сам по себе не означает отказ.</p>
+        {demo&&<p><strong>Демо</strong> использует те же заявки, что таблица и доска, без полной истории переходов и отправок. Первое КП учитывается только при единственной известной отправке; пропущенные этапы не восстанавливаются.</p>}
+      </div>
+    </details>
+
       <section className="request-kpi-panel request-kpi-overview">
         <div className="request-kpi-title"><span>Показатели заявок</span><div><small>Период: {formatRange(filters.from,filters.to)}</small>{canConfigureMetrics&&<button type="button" className="icon-button" onClick={openMetricSettings} aria-label="Настроить показатели"><Settings2 size={15}/></button>}</div></div>
         <div className="request-kpi-grid">{visibleMetrics.map(item=>{
           const definition=requestAnalyticsMetricDefinition(item.key),current=metricRaw(item.key,true),previous=definition.comparison?metricRaw(item.key,false):null;
           const delta=definition.comparison&&current!=null&&previous!=null?metricTrend(current,previous,definition.direction,definition.format):null;
-          return <div className="request-kpi-card" key={item.key}><span className="request-kpi-icon">{metricIcon(item.key)}</span><div><span>{item.label}</span><em>{definition.comparison?"Новые заявки выбранного периода":"Текущее состояние · вне периода"}</em><strong>{formatMetricValue(current,definition.format)}</strong><small className={delta?.tone??"neutral"}>{metricFootnote(item,definition,delta?.text??null)}</small></div></div>;
+          return <div className="request-kpi-card" key={item.key}><span className="request-kpi-icon">{metricIcon(item.key)}</span><div><span>{item.label}</span><em>{definition.comparison?"За период":"Сейчас · вне периода"}</em><strong>{formatMetricValue(current,definition.format)}</strong><small className={delta?.tone??"neutral"}>{metricFootnote(item,definition,delta?.text??null)}</small></div></div>;
         })}</div>
       </section>
 
     <div className="request-analytics-primary-grid">
       <section className="request-analytics-card request-funnel-card">
         <div className="request-analytics-card-head">
-          <div><h3>Коммерческая воронка</h3><p>Новые заявки периода; только зафиксированные этапы. Форма показывает последовательность этапов, ширина не пропорциональна количеству.</p></div>
+          <div><h3>Коммерческая воронка</h3><p>Новые заявки выбранного периода.</p><p className="request-funnel-shape-note">Форма условная: ширина не отражает количество.</p></div>
           <div className="request-analytics-head-actions">
             <div className="request-unit-toggle" role="group" aria-label="Единица анализа"><button type="button" className={unit==="requests"?"active":""} aria-pressed={unit==="requests"} onClick={()=>setUnit("requests")}>Заявки</button><button type="button" className={unit==="headcount"?"active":""} aria-pressed={unit==="headcount"} onClick={()=>setUnit("headcount")}>Численность</button></div>
             <div className="request-mini-segments" role="group" aria-label="Режим воронки">{([
@@ -214,7 +223,7 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
       </section>
 
       <section className="request-analytics-card request-gap-card">
-        <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Не зафиксирован следующий этап. В работе и несогласованные заявки показаны отдельно; пропуск этапа также входит в разрыв.</p></div></div>
+        <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Переходы без следующего зафиксированного этапа.</p></div></div>
         <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><small>В работе: {item.pending} заяв. · Не согласовано: {item.lost} заяв.</small><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Зафиксированных разрывов нет" text="Все зафиксированные переходы пройдены либо для анализа пока недостаточно данных."/>}</div>
       </section>
     </div>
@@ -226,13 +235,13 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
 
     <div className="request-analytics-secondary-grid">
       <section className="request-analytics-card request-breakdown-card">
-        <div className="request-analytics-card-head"><div><h3>Разрез эффективности</h3><p>Сравнение результата по ключевым коммерческим измерениям.</p></div><div className="request-mini-segments">{(["clients","owners","sources"] as BreakdownMode[]).map(value=><button type="button" key={value} className={breakdownMode===value?"active":""} aria-pressed={breakdownMode===value} onClick={()=>setBreakdownMode(value)}>{value==="clients"?"Клиенты":value==="owners"?"Ответственные":"Источники"}</button>)}</div></div>
+        <div className="request-analytics-card-head"><div><h3>Разрез эффективности</h3><p>Результат по новым заявкам периода.</p></div><div className="request-mini-segments">{(["clients","owners","sources"] as BreakdownMode[]).map(value=><button type="button" key={value} className={breakdownMode===value?"active":""} aria-pressed={breakdownMode===value} onClick={()=>setBreakdownMode(value)}>{value==="clients"?"Клиенты":value==="owners"?"Ответственные":"Источники"}</button>)}</div></div>
         <BreakdownTable rows={breakdownRows} unit={unit}/>
       </section>
 
-      <section className="request-analytics-card request-loss-reasons">
-        <div className="request-analytics-card-head"><div><h3>Причины несогласования</h3><p>Только завершённые проигрышем заявки, без смешения с активной воронкой.</p></div></div>
-        <div className="request-loss-reason-list">{analytics.lossReasons.length?analytics.lossReasons.slice(0,8).map(row=><div key={row.code}><span>{row.label}</span><strong>{unit==="requests"?row.requests:row.headcount}</strong></div>):<div className="request-analytics-empty">Причины появятся после фиксации несогласованных заявок.</div>}</div>
+      <section className={`request-analytics-card request-loss-reasons${analytics.lossReasons.length?"":" is-empty"}`}>
+        <div className="request-analytics-card-head"><div><h3>Причины несогласования</h3><p>Зафиксированные причины по заявкам периода.</p></div></div>
+        <div className="request-loss-reason-list">{analytics.lossReasons.length?analytics.lossReasons.slice(0,8).map(row=><div key={row.code}><span>{row.label}</span><strong>{unit==="requests"?row.requests:row.headcount}</strong></div>):<div className="request-analytics-empty">Причины за этот период ещё не зафиксированы.</div>}</div>
       </section>
     </div>
 

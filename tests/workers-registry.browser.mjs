@@ -66,7 +66,29 @@ for(const width of [1440,390])for(const theme of ['light','dark']){
  const p=await c.newPage();p.on('pageerror',error=>errors.push(error.message));await p.goto(`${base}/workers`,{waitUntil:'networkidle'});await p.locator('.operis-worker-registry').getByRole('button',{name:'Колонки',exact:true}).click();
  const panel=p.locator('.operis-registry-popover.columns');const canvas=p.locator('.operis-worker-registry');const bounds=await panel.boundingBox(),container=await canvas.boundingBox();assert(bounds.x>=container.x-1&&bounds.x+bounds.width<=width+1,'Column controls stay inside the canvas');
  if(width===390) assert.ok(await p.locator('.registry-column-setting').first().evaluate(row=>row.querySelector('.registry-column-width').getBoundingClientRect().top>=row.querySelector('.registry-column-name').getBoundingClientRect().bottom),'Mobile column labels and width controls occupy separate rows');
- await p.getByRole('checkbox',{name:'Телефон',exact:true}).check();await p.screenshot({path:`${artifacts}/columns-${width}-${theme}.png`});await c.close();
+ await p.getByRole('checkbox',{name:'Телефон',exact:true}).check();await p.screenshot({path:`${artifacts}/columns-${width}-${theme}.png`});
+ await p.locator('.operis-worker-registry').getByRole('button',{name:'Закрыть настройки',exact:true}).click();
+ const themeState=await p.locator('.operis-registry-table').evaluate(table=>{
+  const style=getComputedStyle(table), root=getComputedStyle(document.documentElement), row=table.querySelector('tbody tr:not(.operis-group-row)'), cell=row.querySelector('td');
+  return {background:style.backgroundColor,panel:root.getPropertyValue('--panel').trim(),color:getComputedStyle(cell).color,rowHeight:row.getBoundingClientRect().height,headerHeight:table.querySelector('thead tr').getBoundingClientRect().height};
+ });
+ assert.ok(Math.abs(themeState.rowHeight-60)<=1&&Math.abs(themeState.headerHeight-42)<=1,'Shared table geometry survives both themes');
+ const channels=color=>(color.match(/[\d.]+/g)||[]).slice(0,3).map(Number);
+ const luminance=color=>channels(color).map(c=>c/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4).reduce((sum,c,index)=>sum+c*[.2126,.7152,.0722][index],0);
+ const contrast=(a,b)=>(Math.max(luminance(a),luminance(b))+.05)/(Math.min(luminance(a),luminance(b))+.05);
+ assert.ok(contrast(themeState.background,themeState.color)>=4.5,'Worker text remains legible on the actual themed table surface');
+ if(theme==='dark')assert.ok(luminance(themeState.background)<.1,'Dark worker registry uses a dark surface rather than a white island');
+ await p.screenshot({path:`${artifacts}/table-${width}-${theme}.png`});
+ await p.locator('.operis-person').first().click();
+ const themedDrawer=p.getByRole('dialog');
+ const drawerColors=await themedDrawer.evaluate(drawer=>({background:getComputedStyle(drawer).backgroundColor,color:getComputedStyle(drawer).color,footer:getComputedStyle(drawer.querySelector('footer')).backgroundColor}));
+ assert.equal(drawerColors.background,themeState.background,'Registry and quick drawer share the active theme surface');
+ assert.equal(drawerColors.footer,drawerColors.background,'Drawer footer does not retain a light surface');
+ assert.ok(contrast(drawerColors.background,drawerColors.color)>=4.5,'Drawer text contrast');
+ await p.screenshot({path:`${artifacts}/quick-${width}-${theme}.png`});await p.keyboard.press('Escape');
+ await p.getByRole('button',{name:'Добавить сотрудника',exact:true}).click();
+ assert.equal(await p.getByRole('dialog').evaluate(drawer=>getComputedStyle(drawer).backgroundColor),themeState.background,'Creation drawer inherits the same active theme');
+ await p.screenshot({path:`${artifacts}/create-${width}-${theme}.png`});await p.keyboard.press('Escape');await c.close();
 }
-checks.push('inline shared column settings accessible at1440/390 in light/dark');
+checks.push('inline column settings, table geometry and themed quick/create drawers at1440/390; text contrast');
 assert.deepEqual(errors,[]);console.log(JSON.stringify({checks,errors}));} finally { await browser.close(); }

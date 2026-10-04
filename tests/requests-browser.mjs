@@ -68,6 +68,9 @@ try {
   await goto(page, '/requests');
   await page.getByRole('button', { name: 'Таблица', exact: true }).waitFor();
   assert.equal(await page.locator('.request-kpi-overview').count(), 0, 'KPIs only belong to analytics');
+  const initialColumns=await tableLayout(page);
+  assert.ok(!initialColumns.headers.includes('КП'),'Basic view keeps proposal history available as an optional column');
+  assert.ok(Number.parseInt(initialColumns.widths[0],10)>=340,'Basic view gives the request/client identity more reading space');
   const geometry = await page.locator('.sales-request-table').evaluate(table => ({ header: table.querySelector('thead tr').getBoundingClientRect().height, rows: Array.from(table.querySelectorAll('tbody tr')).map(row => row.getBoundingClientRect().height), cells: Array.from(table.querySelectorAll('.requests-cell-content')).map(cell => cell.getBoundingClientRect().height) }));
   assert.ok(Math.abs(geometry.header - 42) <= 1, `Shared header height: ${geometry.header}`);
   assert.ok(geometry.rows.every(height => Math.abs(height - 60) <= 1), `Shared row heights: ${geometry.rows}`);
@@ -97,8 +100,8 @@ try {
   assert.deepEqual(await page.locator('.sales-request-table tbody .cell-title').allTextContents(), originalTitles, 'Changing visible columns preserves the request records');
   const savedLayout = await tableLayout(page);
   assert.equal(savedLayout.widths[savedLayout.headers.indexOf('Потребность')], '340px');
-  assert.ok(savedLayout.pinned.some(cell => cell.label === 'Потребность' && cell.left === '270px'));
-  assert.equal(savedLayout.headers.indexOf('Источник'), savedLayout.headers.indexOf('КП') - 1, 'Column order changes visibly');
+  assert.ok(savedLayout.pinned.some(cell => cell.label === 'Потребность' && cell.left === initialColumns.widths[0]));
+  assert.equal(savedLayout.headers.indexOf('Источник'), savedLayout.headers.indexOf('Последнее изменение') - 1, 'Column order changes visibly');
   await page.getByRole('button', { name: 'Группировка', exact: true }).click();
   await page.getByRole('combobox', { name: 'Первый уровень', exact: true }).selectOption('stage');
   await page.getByRole('combobox', { name: 'Второй уровень', exact: true }).selectOption('owner');
@@ -129,6 +132,13 @@ try {
   await bounded(page, 'board-occupied-1440-light');
   await page.getByLabel('Вид заявок', { exact: true }).getByRole('button', { name: 'Аналитика', exact: true }).click();
   await page.locator('.request-funnel-readable-row').first().waitFor();
+  const analyticsHelp=page.locator('.request-analytics-help');
+  assert.equal(await analyticsHelp.getAttribute('open'),null,'Methodology is collapsed initially');
+  await analyticsHelp.locator('summary').focus();await analyticsHelp.locator('summary').press('Enter');
+  assert.notEqual(await analyticsHelp.getAttribute('open'),null,'Methodology is accessible using the keyboard');
+  await analyticsHelp.locator('summary').press('Enter');
+  const lossBlock=page.locator('.request-loss-reasons.is-empty');
+  if(await lossBlock.count())assert.ok((await lossBlock.boundingBox()).height<(await page.locator('.request-breakdown-card').boundingBox()).height,'Empty loss reasons occupy their own compact height');
   assert.ok(await page.locator('.request-kpi-overview').count());
   await page.getByRole('heading', { name: 'Поступление заявок', exact: true }).waitFor();
   const charts = await page.locator('.request-trend-chart').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().top));

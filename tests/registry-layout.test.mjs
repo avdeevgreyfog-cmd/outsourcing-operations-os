@@ -42,6 +42,9 @@ test('old request views acquire valid pinning without losing order, filters or g
   assert.equal(result.group, 'owner');
   assert.equal(result.subgroup, 'none');
   assert.equal(result.sort, 'start');
+  const legacy=requests.normalizeRequestSettings({...requests.defaultRequestSettings,columns:['identity','need','stage','owner','start','activity','proposal'],widths:{identity:270}});
+  assert.equal(legacy.widths.identity,270,'Explicit user widths are preserved');
+  assert.ok(legacy.columns.includes('proposal'),'Previously selected proposal column survives the new basic layout');
 });
 
 test('two grouping levels remain distinct and independent fields stay available', () => {
