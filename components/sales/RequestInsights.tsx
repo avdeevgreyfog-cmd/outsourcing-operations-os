@@ -92,24 +92,26 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
   }
   function setPreset(days:number){apply({from:shiftDay(filters.to,-(days-1)),to:filters.to})}
 
-  const funnelSteps=useMemo(()=>analytics.stages.map(stage=>{
+  const funnelSteps=useMemo(()=>analytics.stages.map((stage,index)=>{
     const value=unit==="requests"?stage.requests:stage.headcount;
     const share=unit==="requests"?stage.shareRequests:stage.shareHeadcount;
     const conversion=unit==="requests"?stage.conversionRequests:stage.conversionHeadcount;
     const notAdvanced=unit==="requests"?stage.notAdvancedRequests:stage.notAdvancedHeadcount;
     const notAdvancedRate=unit==="requests"?stage.notAdvancedRate:stage.notAdvancedHeadcountRate;
+    const incoming=unit==="requests"?analytics.metrics.newRequests:analytics.metrics.newHeadcount;
+    const previous=index===0?incoming:unit==="requests"?analytics.stages[index-1].requests:analytics.stages[index-1].headcount;
     return {
-      key:stage.code,label:stage.label,value,requestIds:stage.requestIds,note:`${share}% от входящего объёма`,
-      aside:mode==="share"?`${share}%`:mode==="conversion"?`${conversion}%`:mode==="not_advanced"?(stage.code===analytics.stages.at(-1)?.code?"—":`−${notAdvanced} · ${notAdvancedRate}%`):formatDuration(stage.avgHours),
+      key:stage.code,label:stage.label,value,requestIds:stage.requestIds,note:incoming?`${share}% от входящего объёма`:"Нет входящих заявок",
+      aside:mode==="share"?(incoming?`${share}%`:"—"):mode==="conversion"?(previous?`${conversion}%`:"—"):mode==="not_advanced"?(stage.code===analytics.stages.at(-1)?.code||!value?"—":`${notAdvanced} · ${notAdvancedRate}%`):formatDuration(stage.avgHours),
     };
-  }),[analytics.stages,unit,mode]);
+  }),[analytics.stages,analytics.metrics.newRequests,analytics.metrics.newHeadcount,unit,mode]);
 
   const gaps=useMemo(()=>analytics.stages.slice(0,-1).map((stage,index)=>({
     from:stage.label,to:analytics.stages[index+1]?.label??"",
     count:unit==="requests"?stage.notAdvancedRequests:stage.notAdvancedHeadcount,
     rate:unit==="requests"?stage.notAdvancedRate:stage.notAdvancedHeadcountRate,
     pending:stage.pendingRequests,lost:stage.lostRequests,
-  })).sort((a,b)=>b.rate-a.rate||b.count-a.count).slice(0,5),[analytics.stages,unit]);
+  })).filter(item=>item.count>0).sort((a,b)=>b.rate-a.rate||b.count-a.count).slice(0,5),[analytics.stages,unit]);
 
   const visibleMetrics=useMemo(()=>preferences.filter(item=>item.visible).sort((a,b)=>a.position-b.position),[preferences]);
 
@@ -147,9 +149,15 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
     finally{setSavingMetrics(false)}
   }
 
+  function stageConversion(index:number,analysisUnit:RequestAnalyticsUnit){
+    const stage=analytics.stages[index];
+    const denominator=index===0?(analysisUnit==="requests"?analytics.metrics.newRequests:analytics.metrics.newHeadcount):(analysisUnit==="requests"?analytics.stages[index-1].requests:analytics.stages[index-1].headcount);
+    return denominator?`${analysisUnit==="requests"?stage.conversionRequests:stage.conversionHeadcount}%`:"—";
+  }
+
   function exportCsv(){
     const header=["Этап","Заявки","Численность","Конверсия заявок","Конверсия численности","Не перешли, заявки","Не перешли, чел.","Среднее время"];
-    const lines=analytics.stages.map(stage=>[stage.label,stage.requests,stage.headcount,`${stage.conversionRequests}%`,`${stage.conversionHeadcount}%`,stage.notAdvancedRequests,stage.notAdvancedHeadcount,formatDuration(stage.avgHours)]);
+    const lines=analytics.stages.map((stage,index)=>[stage.label,stage.requests,stage.headcount,stageConversion(index,"requests"),stageConversion(index,"headcount"),stage.notAdvancedRequests,stage.notAdvancedHeadcount,formatDuration(stage.avgHours)]);
     const csv="\ufeff"+[header,...lines].map(row=>row.map(value=>`"${String(value).replaceAll('"','""')}"`).join(";")).join("\n");
     const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),anchor=document.createElement("a");
     anchor.href=url;anchor.download=`analitika-zayavok-${filters.from}-${filters.to}.csv`;anchor.click();URL.revokeObjectURL(url);
@@ -161,7 +169,7 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
   return <div className="request-analytics-screen request-analytics-unified">
     {demo&&<p className="request-analytics-context-note">Демо: те же заявки, что в таблице и доске. Полной истории переходов и отправок нет. Первое КП учитывается только при единственной известной отправке; пропущенные этапы не восстанавливаются.</p>}
     <section className="request-analytics-filters" aria-label="Фильтры аналитики заявок">
-      <div className="request-date-filter"><span><CalendarDays size={14}/> Период</span><input type="date" value={filters.from} onChange={event=>apply({from:event.target.value})}/><i>—</i><input type="date" value={filters.to} onChange={event=>apply({to:event.target.value})}/></div>
+      <div className="request-date-filter"><span><CalendarDays size={14}/> Период</span><input aria-label="Начало периода аналитики" type="date" value={filters.from} onChange={event=>apply({from:event.target.value})}/><i>—</i><input aria-label="Конец периода аналитики" type="date" value={filters.to} onChange={event=>apply({to:event.target.value})}/></div>
       <div className="request-period-presets" role="group" aria-label="Быстрый выбор периода">{[7,30,90].map(days=><button type="button" key={days} className={currentPeriodDays===days?"active":""} onClick={()=>setPreset(days)}>{days} дней</button>)}</div>
       <div className="request-auto-compare"><span>Сравнение</span><strong>{formatRange(filters.compareFrom,filters.compareTo)}</strong><small>предыдущий равный период</small></div>
       <select value={filters.clientId??""} onChange={event=>apply({clientId:event.target.value||null})} aria-label="Клиент"><option value="">Все клиенты</option>{options.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>
@@ -184,7 +192,7 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
     <div className="request-analytics-primary-grid">
       <section className="request-analytics-card request-funnel-card">
         <div className="request-analytics-card-head">
-          <div><h3>Коммерческая воронка</h3><p>Заявки, созданные за выбранный период. Только зафиксированные этапы до конца периода; пропущенные этапы не восстанавливаются.</p></div>
+          <div><h3>Коммерческая воронка</h3><p>Новые заявки периода; только зафиксированные этапы. Форма показывает последовательность этапов, ширина не пропорциональна количеству.</p></div>
           <div className="request-analytics-head-actions">
             <div className="request-unit-toggle" role="group" aria-label="Единица анализа"><button type="button" className={unit==="requests"?"active":""} aria-pressed={unit==="requests"} onClick={()=>setUnit("requests")}>Заявки</button><button type="button" className={unit==="headcount"?"active":""} aria-pressed={unit==="headcount"} onClick={()=>setUnit("headcount")}>Численность</button></div>
             <div className="request-mini-segments" role="group" aria-label="Режим воронки">{([
@@ -205,19 +213,20 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
         </div>
       </section>
 
+      <section className="request-analytics-card request-gap-card">
+        <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Не зафиксирован следующий этап. В работе и несогласованные заявки показаны отдельно; пропуск этапа также входит в разрыв.</p></div></div>
+        <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><small>В работе: {item.pending} заяв. · Не согласовано: {item.lost} заяв.</small><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Зафиксированных разрывов нет" text="Все зафиксированные переходы пройдены либо для анализа пока недостаточно данных."/>}</div>
+      </section>
+    </div>
 
+    <div className="request-analytics-chart-grid">
+      <RequestAnalyticsTrendChart rows={analytics.daily} comparisonRows={analytics.comparisonDaily} unit={unit} variant="inflow"/>
+      <RequestAnalyticsTrendChart rows={analytics.daily} comparisonRows={analytics.comparisonDaily} unit={unit} variant="outcomes"/>
     </div>
 
     <div className="request-analytics-secondary-grid">
-      <section className="request-analytics-card request-gap-card">
-        <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Не зафиксирован следующий этап. В работе и несогласованные заявки показаны отдельно; пропуск этапа также входит в разрыв.</p></div></div>
-        <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><small>В работе: {item.pending} · Не согласовано: {item.lost}</small><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Разрывов между этапами нет" text="Переходы появятся после движения заявок по воронке."/>}</div>
-      </section>
-
-      <RequestAnalyticsTrendChart rows={analytics.daily} comparisonRows={analytics.comparisonDaily} unit={unit}/>
-
       <section className="request-analytics-card request-breakdown-card">
-        <div className="request-analytics-card-head"><div><h3>Разрез эффективности</h3><p>Сравнение результата по ключевым коммерческим измерениям.</p></div><div className="request-mini-segments">{(["clients","owners","sources"] as BreakdownMode[]).map(value=><button type="button" key={value} className={breakdownMode===value?"active":""} onClick={()=>setBreakdownMode(value)}>{value==="clients"?"Клиенты":value==="owners"?"Ответственные":"Источники"}</button>)}</div></div>
+        <div className="request-analytics-card-head"><div><h3>Разрез эффективности</h3><p>Сравнение результата по ключевым коммерческим измерениям.</p></div><div className="request-mini-segments">{(["clients","owners","sources"] as BreakdownMode[]).map(value=><button type="button" key={value} className={breakdownMode===value?"active":""} aria-pressed={breakdownMode===value} onClick={()=>setBreakdownMode(value)}>{value==="clients"?"Клиенты":value==="owners"?"Ответственные":"Источники"}</button>)}</div></div>
         <BreakdownTable rows={breakdownRows} unit={unit}/>
       </section>
 
@@ -225,19 +234,19 @@ export function RequestInsights({analytics:serverAnalytics,options,metricPrefere
         <div className="request-analytics-card-head"><div><h3>Причины несогласования</h3><p>Только завершённые проигрышем заявки, без смешения с активной воронкой.</p></div></div>
         <div className="request-loss-reason-list">{analytics.lossReasons.length?analytics.lossReasons.slice(0,8).map(row=><div key={row.code}><span>{row.label}</span><strong>{unit==="requests"?row.requests:row.headcount}</strong></div>):<div className="request-analytics-empty">Причины появятся после фиксации несогласованных заявок.</div>}</div>
       </section>
-
-      <section className="request-analytics-card request-stage-details">
-        <div className="request-analytics-card-head"><div><h3>Этапы воронки — детали</h3><p>Конверсия, скорость и разрыв по каждой ступени коммерческого процесса.</p></div><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
-        <div className="request-stage-table-wrap"><table className="data-table request-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Заявки</th><th>Численность</th><th>Конверсия</th><th>Не перешли</th><th>Ср. время</th></tr></thead><tbody>{analytics.stages.map((stage,index)=><tr key={stage.code}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.requests}</td><td>{stage.headcount}</td><td>{unit==="requests"?stage.conversionRequests:stage.conversionHeadcount}%</td><td>{index===analytics.stages.length-1?"—":unit==="requests"?`${stage.notAdvancedRequests} (${stage.notAdvancedRate}%)`:`${stage.notAdvancedHeadcount} (${stage.notAdvancedHeadcountRate}%)`}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
-      </section>
     </div>
+
+    <details className="request-analytics-card request-stage-details">
+        <summary className="request-stage-details-summary"><span><strong>Этапы воронки — детали</strong><small>Конверсия, скорость и разрыв по каждой ступени</small></span><ChevronDown size={16} aria-hidden="true"/></summary><div className="request-stage-details-actions"><button type="button" className="button" onClick={exportCsv}><Download size={14}/> Экспорт</button></div>
+        <div className="request-stage-table-wrap"><table className="data-table request-stage-table"><thead><tr><th>#</th><th>Этап</th><th>Заявки</th><th>Численность</th><th>Конверсия</th><th>Не перешли</th><th>Ср. время</th></tr></thead><tbody>{analytics.stages.map((stage,index)=><tr key={stage.code}><td>{index+1}</td><td><strong>{stage.label}</strong></td><td>{stage.requests}</td><td>{stage.headcount}</td><td>{stageConversion(index,unit)}</td><td>{index===analytics.stages.length-1||!(unit==="requests"?stage.requests:stage.headcount)?"—":unit==="requests"?`${stage.notAdvancedRequests} (${stage.notAdvancedRate}%)`:`${stage.notAdvancedHeadcount} (${stage.notAdvancedHeadcountRate}%)`}</td><td>{formatDuration(stage.avgHours)}</td></tr>)}</tbody></table></div>
+    </details>
 
     {showMetrics&&<div className="recruiting-modal analytics-settings-backdrop" onMouseDown={event=>{if(event.currentTarget===event.target)setShowMetrics(false)}}><div className="recruiting-modal-card needs-metric-settings"><div className="recruiting-modal-head needs-metric-settings-head"><div><h2>Настроить показатели</h2><p>Формулы системные. Настройте состав, порядок, подпись и целевое значение.</p></div><button type="button" className="icon-button" aria-label="Закрыть настройки показателей" onClick={()=>setShowMetrics(false)}><X size={17}/></button></div><div className="needs-metric-settings-body">{metricError&&<div className="recruiting-error">{metricError}</div>}<div className="needs-metric-settings-toolbar"><span>Показывается <strong>{draftPreferences.filter(item=>item.visible).length}</strong> из {draftPreferences.length}</span><small>Порядок строк соответствует порядку карточек.</small></div><div className="needs-metric-settings-list">{draftPreferences.map((item,index)=>{const definition=requestAnalyticsMetricDefinition(item.key);return <div className={`needs-metric-setting-row ${item.visible?"is-visible":"is-hidden"}`} key={item.key}><label className="needs-metric-visible"><input type="checkbox" checked={item.visible} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,visible:event.target.checked}:row))}/><span className="needs-metric-title"><strong>{definition.label}</strong><small>{definition.description}</small></span></label><label className="needs-metric-field"><span>Название в карточке</span><input className="needs-metric-label-input" value={item.label} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,label:event.target.value}:row))}/></label><label className="needs-metric-field needs-metric-target"><span>Цель</span><div><input className="needs-metric-target-input" type="number" step="0.1" value={item.targetValue??""} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,targetValue:event.target.value===""?null:Number(event.target.value)}:row))} placeholder="—"/><small>{metricTargetUnit(definition.format)}</small></div></label><div className="needs-metric-order"><button type="button" className="icon-button" disabled={index===0} onClick={()=>moveMetric(index,-1)}><ChevronUp size={14}/></button><button type="button" className="icon-button" disabled={index===draftPreferences.length-1} onClick={()=>moveMetric(index,1)}><ChevronDown size={14}/></button></div></div>})}</div></div><div className="recruiting-form-actions needs-metric-settings-footer"><button type="button" className="button needs-metric-reset" onClick={()=>setDraftPreferences(defaultRequestAnalyticsMetricPreferences())}>Сбросить к стандарту</button><span/><button type="button" className="button" onClick={()=>setShowMetrics(false)}>Отмена</button><button type="button" className="button primary" disabled={savingMetrics} onClick={()=>void saveMetricSettings()}>{savingMetrics?"Сохраняю…":"Сохранить"}</button></div></div></div>}
   </div>;
 }
 
 function BreakdownTable({rows,unit}:{rows:RequestAnalyticsBreakdownRow[];unit:RequestAnalyticsUnit}){
-  return <div className="request-breakdown-table-wrap"><table className="data-table request-breakdown-table"><thead><tr><th>Контур</th><th>{unit==="requests"?"Заявки":"Численность"}</th><th>Согласовано</th><th>Конверсия</th><th>Ср. цикл</th></tr></thead><tbody>{rows.length?rows.slice(0,10).map(row=><tr key={row.key}><td><strong>{row.label}</strong></td><td>{unit==="requests"?row.requests:row.headcount}</td><td>{unit==="requests"?row.agreed:row.agreedHeadcount}</td><td>{unit==="requests"?row.conversion:row.headcountConversion}%</td><td>{row.avgCycleDays==null?"—":`${formatNumber(row.avgCycleDays)} дн.`}</td></tr>):<tr><td colSpan={5}>Нет данных для выбранного разреза</td></tr>}</tbody></table></div>;
+  return <div className="request-breakdown-table-wrap"><table className="data-table request-breakdown-table"><thead><tr><th>Контур</th><th>{unit==="requests"?"Заявки":"Численность"}</th><th>Согласовано</th><th>Конверсия</th><th>Ср. цикл</th></tr></thead><tbody>{rows.length?rows.slice(0,10).map(row=><tr key={row.key}><td><strong>{row.label}</strong></td><td>{unit==="requests"?row.requests:row.headcount}</td><td>{unit==="requests"?row.agreed:row.agreedHeadcount}</td><td>{(unit==="requests"?row.requests:row.headcount)?`${unit==="requests"?row.conversion:row.headcountConversion}%`:"—"}</td><td>{row.avgCycleDays==null?"—":`${formatNumber(row.avgCycleDays)} дн.`}</td></tr>):<tr><td colSpan={5}>Нет данных для выбранного разреза</td></tr>}</tbody></table></div>;
 }
 
 function camelMetricKey(key:RequestAnalyticsMetricKey):keyof RequestAnalyticsData["metrics"]{
