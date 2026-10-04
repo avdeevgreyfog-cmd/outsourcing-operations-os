@@ -197,7 +197,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   };
 
 
-  const workspaceClass="object-workspace-compare object-workspace-pilot";
+  const workspaceClass="object-workspace-compare object-workspace-pilot operis-entity-tables";
   const workspaceContent=<>
     <div className="object-pilot-breadcrumbs"><Link href="/objects">Объекты</Link><span>/</span><span>{object.code}</span></div>
     <div className="object-pilot-header">

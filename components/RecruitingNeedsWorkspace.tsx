@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BarChart3, Building2, Check, ChevronDown, ChevronRight, Filter, Minus, Pencil, Plus, UsersRound, X } from "lucide-react";
+import { ArrowRight, BarChart3, Building2, Check, ChevronDown, ChevronRight, Minus, Pencil, Plus, UsersRound, X } from "lucide-react";
 import { KeyValue, Status } from "@/components/UI";
-import { SalesMetrics, SalesSearch, SalesSegments } from "@/components/sales/SalesUI";
+import { SalesMetrics, SalesSegments } from "@/components/sales/SalesUI";
+import {RegistryHeader} from "@/components/registry/RegistryHeader";
+import {RegistryToolbar} from "@/components/registry/RegistryToolbar";
 import { RecruitingNeedsAnalytics } from "@/components/RecruitingNeedsAnalytics";
 import type { NeedDocumentRequirement, RecruitingApplicationRow, RecruitingDocumentType, RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
 import type { RecruitingAnalyticsData } from "@/lib/recruiting/analytics";
@@ -135,10 +137,22 @@ export function RecruitingNeedsWorkspace({applications,rows,options,analytics,me
    finally{setSaving(false)}
  }
  function changeView(next:View){setView(next);if(next==="analytics")router.replace("/needs?view=analytics",{scroll:false});else if(next==="needs")router.replace("/needs?view=needs",{scroll:false});else router.replace("/needs",{scroll:false})}
- return <div className="recruiting-workspace needs-control-center">
+ return <div className="recruiting-workspace needs-control-center operis-data-registry">
+  <RegistryHeader title="Потребности" subtitle="План комплектации объектов, потребности и готовность к выходу." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]} actions={<>{view!=="analytics"&&<Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть воронку</Link>}{canCreate&&!needsSetup&&<button className="button primary" onClick={openCreate}><Plus size={14}/> Создать потребность</button>}</>}/>
   {view!=="analytics"&&<SalesMetrics label="Сводка по потребностям" items={metrics}/>}
-  <div className="needs-viewbar"><SalesSegments<View> label="Представление" value={view} variant="navigation" onChange={changeView} items={[{value:"objects",label:"Объекты",icon:<Building2 size={14}/>},{value:"needs",label:"Потребности",icon:<UsersRound size={14}/>},{value:"analytics",label:"Аналитика",icon:<BarChart3 size={14}/>} ]}/><div className="needs-view-actions">{view!=="analytics"&&<Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть воронку</Link>}{canCreate&&!needsSetup&&<button className="button primary" onClick={openCreate}><Plus size={14}/> Создать потребность</button>}</div></div>
-  {view!=="analytics"&&(<div className="needs-filterbar"><SalesSegments<Bucket> label="Состояние" value={bucket} onChange={setBucket} items={[{value:"active",label:"Активные"},{value:"attention",label:"Требуют внимания"},{value:"closed",label:"Закрытые"},{value:"all",label:"Все"}]}/><div className="needs-filters"><Filter size={14}/><select value={objectFilter} onChange={e=>setObjectFilter(e.target.value)} aria-label="Объект"><option value="all">Все объекты</option>{objectOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select><select value={specialtyFilter} onChange={e=>setSpecialtyFilter(e.target.value)} aria-label="Специальность"><option value="all">Все специальности</option>{specialtyOptions.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select><select value={recruiterFilter} onChange={e=>setRecruiterFilter(e.target.value)} aria-label="Рекрутер"><option value="all">Все рекрутеры</option>{options.recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><select value={source} onChange={e=>setSource(e.target.value)} aria-label="Источник"><option value="all">Все источники</option><option value="commercial">Из коммерции</option><option value="object">От объекта</option><option value="manual">Ручные</option><option value="replacement">Замены</option><option value="reserve">Резерв</option></select></div><SalesSearch value={query} onChange={setQuery} placeholder="Специальность, объект, регион, рекрутер"/></div>)}
+  <div className="needs-viewbar"><SalesSegments<View> label="Представление" value={view} variant="navigation" onChange={changeView} items={[{value:"objects",label:"Объекты",icon:<Building2 size={14}/>},{value:"needs",label:"Потребности",icon:<UsersRound size={14}/>},{value:"analytics",label:"Аналитика",icon:<BarChart3 size={14}/>} ]}/></div>
+  {view!=="analytics"&&<>
+   <SalesSegments<Bucket> label="Состояние" value={bucket} variant="navigation" onChange={setBucket} items={[{value:"active",label:"Активные"},{value:"attention",label:"Требуют внимания"},{value:"closed",label:"Закрытые"},{value:"all",label:"Все"}]}/>
+   <RegistryToolbar query={query} onQueryChange={setQuery} searchLabel="Поиск потребностей" placeholder="Специальность, объект, регион, рекрутер"
+    quickFilter={{label:"Объект",value:objectFilter,emptyValue:"all",onChange:setObjectFilter,searchable:true,options:[{value:"all",label:"Все объекты"},...objectOptions.map(([value,label])=>({value,label}))]}}
+    filters={[
+     {label:"Специальность",value:specialtyFilter,emptyValue:"all",onChange:setSpecialtyFilter,searchable:true,options:[{value:"all",label:"Все специальности"},...specialtyOptions.map(([value,label])=>({value,label}))]},
+     {label:"Рекрутер",value:recruiterFilter,emptyValue:"all",onChange:setRecruiterFilter,searchable:true,options:[{value:"all",label:"Все рекрутеры"},...options.recruiters.map(item=>({value:item.id,label:item.name}))]},
+     {label:"Источник",value:source,emptyValue:"all",onChange:setSource,options:[{value:"all",label:"Все источники"},{value:"commercial",label:"Из коммерции"},{value:"object",label:"От объекта"},{value:"manual",label:"Ручные"},{value:"replacement",label:"Замены"},{value:"reserve",label:"Резерв"}]},
+    ]} onReset={()=>{setQuery("");setObjectFilter("all");setSpecialtyFilter("all");setRecruiterFilter("all");setSource("all")}}/>
+   <div className="operis-shared-registry-result" role="status">Показано {filtered.length} из {allRows.length}</div>
+  </>}
+
   {view==="objects"&&<ObjectNeedsView groups={groups} onOpen={setSelected}/>}
   {view==="needs"&&<NeedsTable rows={filtered} onOpen={setSelected}/>}
   {view==="analytics"&&<RecruitingNeedsAnalytics applications={applications} data={analytics} options={options} needs={allRows} metricPreferences={metricPreferences} canConfigure={canConfigureAnalytics} demo={demo}/>}

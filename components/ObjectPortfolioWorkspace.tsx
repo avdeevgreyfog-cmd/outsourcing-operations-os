@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import {Plus} from "lucide-react";
+import {Status} from "@/components/UI";
+import {RegistryHeader} from "@/components/registry/RegistryHeader";
+import {RegistryToolbar} from "@/components/registry/RegistryToolbar";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ObjectRow } from "@/lib/data/service";
 import type { OperationsAnalyticsRow } from "@/lib/operations/service";
@@ -19,7 +23,7 @@ function initialForm(options:ObjectManagementOptions):CreateForm{
   };
 }
 
-export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo}:{objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean}){
+export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo,summary}:{objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean;summary:ReactNode}){
   const router=useRouter();
   const [localRows,setLocalRows]=useState(objects);
   const analyticsByObject=useMemo(()=>new Map(analytics.map(row=>[row.objectId,row])),[analytics]);
@@ -39,7 +43,6 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   const legalEntities=useMemo(()=>[...new Set(localRows.map(row=>row.legalEntity).filter((value):value is string=>Boolean(value)))].sort(),[localRows]);
   const managers=useMemo(()=>[...new Set(localRows.flatMap(row=>[row.ownerName,...(row.additionalManagers??[]).map(item=>item.name)]).filter((value):value is string=>Boolean(value)))].sort(),[localRows]);
   const recruiters=useMemo(()=>[...new Set(localRows.flatMap(row=>[...(row.activeRecruiters??[]),...(row.recruitingTeam??[])].map(item=>item.name)).filter(Boolean))].sort(),[localRows]);
-  const hasFilters=Boolean(query||status||region||manager||legalEntity||recruiter||attentionOnly);
   const filtered=useMemo(()=>localRows.filter(row=>{
     const recruiterNames=[...(row.activeRecruiters??[]),...(row.recruitingTeam??[])].map(item=>item.name);
     const managerNames=[row.ownerName,...(row.additionalManagers??[]).map(item=>item.name)].filter(Boolean);
@@ -91,23 +94,22 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   }
 
   return <>
-    <div className="object-portfolio-toolbar-row">
-      <div className="object-portfolio-toolbar">
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по объекту, клиенту, локации, юрлицу или ответственному"/>
-        <select value={region} onChange={e=>setRegion(e.target.value)}><option value="">Все регионы</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={legalEntity} onChange={e=>setLegalEntity(e.target.value)}><option value="">Все юрлица</option>{legalEntities.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={manager} onChange={e=>setManager(e.target.value)}><option value="">Все менеджеры</option>{managers.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Все рекрутеры</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
-      </div>
-      {canCreate&&<button className="button primary object-create-button" onClick={()=>{setError("");setCreateOpen(true)}}>+ Добавить объект</button>}
-    </div>
+    <RegistryHeader title="Объекты" subtitle="Портфель объектов: юридические лица, ответственные, комплектация и операционные сигналы." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Объекты"}]} actions={canCreate&&<button className="button primary" onClick={()=>{setError("");setCreateOpen(true)}}><Plus size={15}/> Добавить объект</button>}/>
+    {summary}
+    <RegistryToolbar query={query} onQueryChange={setQuery} searchLabel="Поиск объектов" placeholder="Объект, клиент, адрес, ответственный"
+      quickFilter={{label:"Статус",value:status,emptyValue:"",onChange:setStatus,options:[{value:"",label:"Все статусы"},...Object.entries(statusLabels).map(([value,label])=>({value,label}))]}}
+      filters={[
+        {label:"Регион",value:region,emptyValue:"",onChange:setRegion,searchable:true,options:[{value:"",label:"Все регионы"},...regions.map(value=>({value,label:value}))]},
+        {label:"Юрлицо",value:legalEntity,emptyValue:"",onChange:setLegalEntity,searchable:true,options:[{value:"",label:"Все юрлица"},...legalEntities.map(value=>({value,label:value}))]},
+        {label:"Менеджер",value:manager,emptyValue:"",onChange:setManager,searchable:true,options:[{value:"",label:"Все менеджеры"},...managers.map(value=>({value,label:value}))]},
+        {label:"Рекрутер",value:recruiter,emptyValue:"",onChange:setRecruiter,searchable:true,options:[{value:"",label:"Все рекрутеры"},...recruiters.map(value=>({value,label:value}))]},
+      ]} onReset={reset}/>
 
     <div className="object-portfolio-results">
       <span>Показано {filtered.length} из {localRows.length}</span>
       <div className="object-portfolio-result-actions">
         <label className={"object-attention-filter"+(attentionOnly?" active":"")}><input type="checkbox" checked={attentionOnly} onChange={e=>setAttentionOnly(e.target.checked)}/>Только требующие внимания</label>
-        {hasFilters&&<button className="object-filter-reset" onClick={reset}>Сбросить фильтры</button>}
+        {attentionOnly&&!query&&!status&&!region&&!manager&&!legalEntity&&!recruiter&&<button className="object-filter-reset" onClick={reset}>Сбросить фильтры</button>}
       </div>
     </div>
     <section className="section section-flush">
@@ -222,7 +224,7 @@ function durationLabel(from:string,to:string){
 }
 
 function ObjectStatus({status}:{status:string}){
-  return <span className="object-status">{statusLabels[status]??"В работе"}</span>;
+  return <Status tone={status==="active"?"good":status==="paused"?"warn":"neutral"}>{statusLabels[status]??"В работе"}</Status>;
 }
 
 function AttentionCell({row}:{row:ObjectRow}){

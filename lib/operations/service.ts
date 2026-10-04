@@ -745,11 +745,12 @@ export type WorkerOperationsDetails={assignments:WorkerAssignmentHistoryRow[];ab
 export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Promise<WorkerOperationsDetails>{
   requireCapability(actor,"worker.read");
   if(actor.demo){
-    const worker=demo.workers.find(row=>row.id===workerId);
+    const {listWorkers}=await import("@/lib/data/service");
+    const worker=(await listWorkers(actor)).find(row=>row.id===workerId);
     if(!worker)return {assignments:[],absences:[]};
     const assignmentWorker=worker as typeof worker&{workMode?:string|null;paidHoursPerShift?:number|string|null;absenceType?:string|null;absenceStatus?:string|null;absenceFrom?:string|null;absenceTo?:string|null};
     return {
-      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift),scheduleWorkDays:5,scheduleRestDays:2,scheduleShiftKind:(Number(worker.id.slice(-2))%3===1?"night":"day"),scheduleAnchorDate:worker.startDate??null,transitionDays:7,dailyPaymentShifts:Number(worker.id.slice(-2))<=4?3:0,dayRate:Number(worker.rate??0)||null,nightRate:Number(worker.rate??0)||null}]:[],
+      assignments:worker.objectId?[{id:"demo-assignment",objectId:worker.objectId,object:worker.object??"Объект",specialtyId:worker.specialtyId??null,specialty:worker.specialty??null,effectiveFrom:worker.startDate?worker.startDate.split("-").reverse().join("."):"—",effectiveTo:null,manager:worker.managerName??null,workMode:assignmentWorker.workMode==="rotation"?"rotation":"local",paidHoursPerShift:assignmentWorker.paidHoursPerShift==null?null:Number(assignmentWorker.paidHoursPerShift),scheduleWorkDays:worker.scheduleWorkDays??null,scheduleRestDays:worker.scheduleRestDays??null,scheduleShiftKind:worker.scheduleShiftKind??"mixed",scheduleAnchorDate:worker.startDate??null,transitionDays:worker.transitionDays??7,dailyPaymentShifts:worker.dailyPaymentShifts??0,dayRate:worker.rateUnit==="hour"?Number(worker.dayRate??worker.rate)||null:worker.rateUnit==="shift"&&Number(worker.paidHoursPerShift)>0?Number(worker.dayRate??worker.rate)/Number(worker.paidHoursPerShift):null,nightRate:worker.rateUnit==="hour"?Number(worker.nightRate??worker.rate)||null:worker.rateUnit==="shift"&&Number(worker.paidHoursPerShift)>0?Number(worker.nightRate??worker.rate)/Number(worker.paidHoursPerShift):null}]:[],
       absences:assignmentWorker.absenceType&&assignmentWorker.absenceFrom?[{
         id:"demo-absence-"+worker.id,absenceType:assignmentWorker.absenceType,status:assignmentWorker.absenceStatus??"tentative",
         plannedFrom:assignmentWorker.absenceFrom.split("-").reverse().join("."),plannedTo:assignmentWorker.absenceTo?assignmentWorker.absenceTo.split("-").reverse().join("."):null,
@@ -772,12 +773,15 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
         SELECT a.id,a.object_id "objectId",o.name object,a.specialty_id "specialtyId",s.name specialty,
           to_char(a.effective_from,'DD.MM.YYYY') "effectiveFrom",to_char(a.effective_to,'DD.MM.YYYY') "effectiveTo",u.display_name manager,
           a.work_mode "workMode",a.paid_hours_per_shift::numeric "paidHoursPerShift",a.schedule_work_days "scheduleWorkDays",a.schedule_rest_days "scheduleRestDays",a.schedule_shift_kind "scheduleShiftKind",a.schedule_anchor_date::text "scheduleAnchorDate",a.transition_days "transitionDays",a.daily_payment_shifts "dailyPaymentShifts",
-          COALESCE(day_rate.amount,any_rate.amount)::numeric "dayRate",COALESCE(night_rate.amount,any_rate.amount)::numeric "nightRate"
+          CASE WHEN COALESCE(day_rate.unit,any_rate.unit)='hour' THEN COALESCE(day_rate.amount,any_rate.amount)
+            WHEN COALESCE(day_rate.unit,any_rate.unit)='shift' AND a.paid_hours_per_shift>0 THEN COALESCE(day_rate.amount,any_rate.amount)/a.paid_hours_per_shift ELSE NULL END::numeric "dayRate",
+          CASE WHEN COALESCE(night_rate.unit,any_rate.unit)='hour' THEN COALESCE(night_rate.amount,any_rate.amount)
+            WHEN COALESCE(night_rate.unit,any_rate.unit)='shift' AND a.paid_hours_per_shift>0 THEN COALESCE(night_rate.amount,any_rate.amount)/a.paid_hours_per_shift ELSE NULL END::numeric "nightRate"
         FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
         LEFT JOIN specialties s ON s.id=a.specialty_id LEFT JOIN app_users u ON u.id=a.manager_user_id
-        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) any_rate ON true
-        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='day' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) day_rate ON true
-        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='night' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) night_rate ON true
+        LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) any_rate ON true
+        LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='day' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) day_rate ON true
+        LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='night' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) night_rate ON true
         WHERE a.worker_id=${workerId}::uuid ORDER BY a.effective_from DESC
       `,
       sql<WorkerAbsenceRow[]>`

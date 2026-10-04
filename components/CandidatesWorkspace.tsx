@@ -3,13 +3,15 @@
 import Link from 'next/link';
 import {createPortal} from 'react-dom';
 import {useEffect,useMemo,useState} from 'react';
-import {Archive,Download,FileSpreadsheet,Filter,Phone,Upload,UserPlus,X} from 'lucide-react';
+import {Archive,Download,FileSpreadsheet,Phone,Upload,UserPlus,X} from 'lucide-react';
 import type {CandidateDirectoryRow,RecruitingApplicationRow,RecruitingNeedRow,RecruitingOptions} from '@/lib/recruiting/service';
 import {contactChannelLabels,type RecruitingStage} from '@/lib/recruiting/model';
 import {useRecruitingApplications,saveDemoApplication} from '@/lib/recruiting/demo-client';
 import {formatWorkDate} from '@/lib/recruiting/workflow';
 import {Status} from './UI';
-import {SalesSearch,SalesSegments} from './sales/SalesUI';
+import {SalesSegments} from './sales/SalesUI';
+import {RegistryHeader} from './registry/RegistryHeader';
+import {RegistryToolbar} from './registry/RegistryToolbar';
 
 type ImportRow={
  fullName:string;phone:string|null;email:string|null;city:string|null;telegram:string|null;whatsapp:string|null;max:string|null;preferredChannel:"phone"|"email"|"telegram"|"whatsapp"|"max"|"other"|null;
@@ -167,7 +169,8 @@ export function CandidatesWorkspace({
   finally{setImportBusy(false);}
  }
 
- return <div className="recruiting-workspace candidate-directory candidate-directory-v2">
+ return <div className="recruiting-workspace candidate-directory candidate-directory-v2 operis-data-registry">
+  <RegistryHeader title="Кандидаты" subtitle="База людей: новые контакты, подбор, контроль после выхода и неактивные." breadcrumbs={[{label:"Люди"},{label:"Подбор",href:"/recruiting"},{label:"Кандидаты"}]} actions={<>{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></>}/>
   <div className="candidate-directory-viewbar">
    <SalesSegments label="Состояние кандидатов" value={bucket} variant="navigation" onChange={value=>{setBucket(value);setStage('all')}} items={[
     {value:'new',label:`Новые · ${counts.new}`},
@@ -176,20 +179,17 @@ export function CandidatesWorkspace({
     {value:'post_exit',label:`После выхода · ${counts.post_exit}`},
     {value:'inactive',label:`Неактивные · ${counts.inactive}`},
    ]}/>
-   <div className="candidate-directory-buttons">{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></div>
+
   </div>
 
-  <div className="candidate-directory-filterbar">
-   <div className="candidate-directory-filter-controls">
-    <Filter size={14}/>
-    <select aria-label="Этап" value={stage} onChange={e=>setStage(e.target.value)}><option value="all">Все этапы</option>{stageOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-    <select aria-label="Объект" value={object} onChange={e=>setObject(e.target.value)}><option value="all">Все объекты</option>{objectOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-    <select aria-label="Рекрутер" value={owner} onChange={e=>setOwner(e.target.value)}><option value="all">Все ответственные</option>{ownerOptions.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
-    <select aria-label="Источник" value={source} onChange={e=>setSource(e.target.value)}><option value="all">Все источники</option>{sourceOptions.map(v=><option key={v} value={v}>{v}</option>)}</select>
-    <button className="button" onClick={()=>{setQuery('');setStage('all');setObject('all');setOwner('all');setSource('all');}}>Сбросить</button>
-   </div>
-   <SalesSearch value={query} onChange={setQuery} placeholder="ФИО, телефон, email или мессенджер"/>
-  </div>
+  <RegistryToolbar query={query} onQueryChange={setQuery} searchLabel="Поиск кандидатов" placeholder="ФИО, телефон, email или мессенджер"
+   quickFilter={{label:"Объект",value:object,emptyValue:"all",onChange:setObject,searchable:true,options:[{value:"all",label:"Все объекты"},...objectOptions.map(([value,label])=>({value,label}))]}}
+   filters={[
+    {label:"Этап",value:stage,emptyValue:"all",onChange:setStage,options:[{value:"all",label:"Все этапы"},...stageOptions.map(([value,label])=>({value,label}))]},
+    {label:"Рекрутер",value:owner,emptyValue:"all",onChange:setOwner,searchable:true,options:[{value:"all",label:"Все ответственные"},...ownerOptions.map(([value,label])=>({value,label}))]},
+    {label:"Источник",value:source,emptyValue:"all",onChange:setSource,options:[{value:"all",label:"Все источники"},...sourceOptions.map(value=>({value,label:value}))]},
+   ]} onReset={()=>{setQuery('');setStage('all');setObject('all');setOwner('all');setSource('all')}}/>
+  <div className="operis-shared-registry-result" role="status">Показано {filteredPeople.length} из {people.length}{searchActive?' · поиск по всей базе':''}</div>
 
   <CandidatePeopleTable rows={filteredPeople} applications={all} needs={needs} demo={demo} canEdit={canEdit}/>
   {showImport&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowImport(false)}}>
