@@ -27,7 +27,9 @@
 @media(max-width:1000px){.registry-column-list{grid-template-columns:1fr}}
 @media(max-width:600px){.registry-grouping-levels{grid-template-columns:1fr}.registry-column-setting{gap:4px}.registry-column-setting .registry-column-name{font-size:11px}}
 
-.operis-registry-popover .registry-column-list{grid-template-columns:1fr}
+.operis-worker-registry .operis-registry-popover:is(.columns,.groups){position:relative;inset:auto;width:100%;max-width:100%;max-height:none;overflow:visible;margin:12px 0;box-shadow:none}
+.operis-worker-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){.operis-worker-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:1fr}}
 
 /* Workers retains its existing light registry surface in both shell themes. */
 .operis-worker-registry :is(.registry-column-controls,.registry-grouping-controls){--text:var(--registry-text);--muted:var(--registry-muted);--border:var(--registry-border);--panel:var(--registry-bg);--panel-2:#f7f8fa}
