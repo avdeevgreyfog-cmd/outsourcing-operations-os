@@ -73,7 +73,7 @@ export async function createRequestPublicLink(actor: Actor, requestId: string, e
   if (!request) throw new Error("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", request, actor)) throw new AccessDeniedError("sales.request.edit");
   const token = randomBytes(24).toString("base64url");
-  return withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+  return withTenant(actor.organizationId, actor.userId, async (tx) => {
     await tx`UPDATE request_public_links SET revoked_at=COALESCE(revoked_at,now()) WHERE request_id=${requestId}::uuid AND revoked_at IS NULL`;
     const [row] = await tx<Array<{id:string;expiresAt:string|null}>>`
       INSERT INTO request_public_links(organization_id,request_id,token,created_by_user_id,expires_at)
@@ -83,7 +83,7 @@ export async function createRequestPublicLink(actor: Actor, requestId: string, e
     `;
     await registerPublicRequestToken(tx,token,actor.organizationId,actor.userId,"request_public_link",row.id);
     return { ...row, path: `/request-form/${token}` };
-  }));
+  });
 }
 
 export async function revokeRequestPublicLink(actor: Actor, requestId: string, linkId: string) {
@@ -164,7 +164,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
   if (!canReadRow(actor.access, "sales.request.edit", current, actor)) throw new AccessDeniedError("sales.request.edit");
   if (current.archivedAt || ["accepted","launched"].includes(current.status)) throw new Error("Зафиксированную заявку нельзя обновить из внешней формы");
 
-  return withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+  return withTenant(actor.organizationId, actor.userId, async (tx) => {
     const [submission] = await tx<Array<{status:string;payload:PublicRequestSubmissionPayload}>>`
       SELECT status,payload FROM request_public_submissions WHERE id=${submissionId}::uuid AND request_id=${requestId}::uuid FOR UPDATE
     `;
@@ -184,10 +184,10 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
 
     await tx`
       UPDATE requests SET title=${payload.title},location_text=${payload.location},region_id=${payload.regionId}::uuid,
-        expected_start_date=${payload.startDate}::date,duration_text=${payload.durationText},schedule_json=${sql.json(toJsonValue(payload.schedule))},lunch_paid=${payload.lunchPaid},
+        expected_start_date=${payload.startDate}::date,duration_text=${payload.durationText},schedule_json=${tx.json(toJsonValue(payload.schedule))},lunch_paid=${payload.lunchPaid},
         vat_mode=${payload.vatMode},housing_rule=${payload.housingRule},travel_rule=${payload.travelRule},shuttle_rule=${payload.shuttleRule},ppe_rule=${payload.ppeRule},
         medical_rule=${payload.medicalRule},citizenship_rule=${payload.citizenshipRule},tools_rule=${payload.toolsRule},comments=${payload.comments},
-        intake_json=${sql.json(toJsonValue(payload.intake))},updated_at=now()
+        intake_json=${tx.json(toJsonValue(payload.intake))},updated_at=now()
       WHERE id=${requestId}::uuid
     `;
 
@@ -202,14 +202,14 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
           throw new Error("Нельзя менять специальность позиции, по которой уже создан расчёт");
         }
         await tx`
-          UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${sql.json(toJsonValue(role.schedule))},
-            requirements_json=${sql.json(toJsonValue(role.requirements))},target_client_rate=${role.targetClientRate}
+          UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${tx.json(toJsonValue(role.schedule))},
+            requirements_json=${tx.json(toJsonValue(role.requirements))},target_client_rate=${role.targetClientRate}
           WHERE id=${role.id}::uuid AND request_id=${requestId}::uuid
         `;
       } else {
         await tx`
           INSERT INTO request_roles(organization_id,request_id,specialty_id,count_required,schedule_json,requirements_json,target_client_rate)
-          VALUES (${actor.organizationId}::uuid,${requestId}::uuid,${role.specialtyId}::uuid,${role.count},${sql.json(toJsonValue(role.schedule))},${sql.json(toJsonValue(role.requirements))},${role.targetClientRate})
+          VALUES (${actor.organizationId}::uuid,${requestId}::uuid,${role.specialtyId}::uuid,${role.count},${tx.json(toJsonValue(role.schedule))},${tx.json(toJsonValue(role.requirements))},${role.targetClientRate})
         `;
       }
     }
@@ -221,5 +221,5 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
 
     await tx`UPDATE request_public_submissions SET status='accepted',reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),review_comment=${comment} WHERE id=${submissionId}::uuid`;
     return { status: "accepted" };
-  }));
+  });
 }

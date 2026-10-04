@@ -8,7 +8,7 @@ export type RequestAnalyticsUnit="requests"|"headcount";
 type Metric="new"|"proposal"|"agreed"|"conversion";
 type ChartPoint={label:string;newRequests:number;newHeadcount:number;proposalRequests:number;proposalHeadcount:number;agreedRequests:number;agreedHeadcount:number;conversionRequests:number;conversionHeadcount:number};
 
-const metricLabels:Record<Metric,string>={new:"Новые",proposal:"КП отправлено",agreed:"Согласовано",conversion:"Конверсия"};
+const metricLabels:Record<Metric,string>={new:"Новые",proposal:"Первое КП",agreed:"Согласовано",conversion:"Конверсия новых"};
 
 export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:RequestAnalyticsDaily[];comparisonRows:RequestAnalyticsDaily[];unit:RequestAnalyticsUnit}){
   const ref=useRef<HTMLDivElement>(null);
@@ -27,7 +27,7 @@ export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:Requ
       const css=getComputedStyle(document.documentElement);
       const text=css.getPropertyValue("--text").trim();
       const muted=css.getPropertyValue("--muted").trim();
-      const soft=css.getPropertyValue("--soft").trim()||muted;
+      const soft=muted;
       const border=css.getPropertyValue("--border").trim();
       const accent=css.getPropertyValue("--accent").trim();
       const panel=css.getPropertyValue("--panel").trim();
@@ -35,32 +35,33 @@ export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:Requ
       const currentData=points.map(point=>pointValue(metric,unit,point));
       const previousData=points.map((_,index)=>comparisonPoints[index]?pointValue(metric,unit,comparisonPoints[index]):null);
       chart.setOption({
-        animationDuration:220,
+        animationDuration:window.matchMedia("(prefers-reduced-motion: reduce)").matches?0:180,
         aria:{enabled:true,description:`Динамика показателя «${metricLabels[metric]}» по текущему и предыдущему периоду`},
         grid:{left:10,right:14,top:34,bottom:10,containLabel:true},
-        tooltip:{trigger:"axis",backgroundColor:panel,borderColor:border,borderWidth:1,padding:[8,10],textStyle:{color:text,fontSize:10},axisPointer:{type:"line",lineStyle:{color:border,width:1}},valueFormatter:(value:unknown)=>isPercent?`${value}%`:String(value)},
-        legend:{top:2,left:4,itemWidth:16,itemHeight:7,itemGap:16,textStyle:{color:muted,fontSize:9.5},data:["Текущий период","Предыдущий период"]},
-        xAxis:{type:"category",boundaryGap:false,data:points.map(point=>point.label),axisLine:{lineStyle:{color:border}},axisTick:{show:false},axisLabel:{color:muted,fontSize:9,interval:Math.max(0,Math.ceil(points.length/7)-1),hideOverlap:true}},
-        yAxis:{type:"value",min:0,max:isPercent?100:undefined,minInterval:isPercent?undefined:1,splitNumber:4,splitLine:{lineStyle:{color:border,type:"dashed",opacity:.55}},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:muted,fontSize:9,formatter:isPercent?"{value}%":"{value}"}},
+        tooltip:{trigger:"axis",backgroundColor:panel,borderColor:border,borderWidth:1,padding:[8,10],textStyle:{color:text,fontSize:12},axisPointer:{type:"line",lineStyle:{color:border,width:1}},valueFormatter:(value:unknown)=>isPercent?`${value}%`:String(value)},
+        legend:{top:2,left:4,itemWidth:16,itemHeight:7,itemGap:16,textStyle:{color:muted,fontSize:11},data:["Текущий период","Предыдущий период"]},
+        xAxis:{type:"category",boundaryGap:false,data:points.map(point=>point.label),axisLine:{lineStyle:{color:border}},axisTick:{show:false},axisLabel:{color:muted,fontSize:11,interval:Math.max(0,Math.ceil(points.length/7)-1),hideOverlap:true}},
+        yAxis:{type:"value",min:0,max:isPercent?100:undefined,minInterval:isPercent?undefined:1,splitNumber:4,splitLine:{lineStyle:{color:border,type:"dashed",opacity:.55}},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:muted,fontSize:11,formatter:isPercent?"{value}%":"{value}"}},
         series:[
-          {name:"Текущий период",type:"line",smooth:.28,showSymbol:false,symbol:"circle",symbolSize:6,data:currentData,lineStyle:{width:2.2,color:accent},itemStyle:{color:accent},areaStyle:isPercent?undefined:{color:accent,opacity:.055},emphasis:{focus:"series",scale:true}},
-          {name:"Предыдущий период",type:"line",smooth:.28,showSymbol:false,symbol:"circle",symbolSize:5,data:previousData,lineStyle:{width:1.6,color:soft,type:"dashed"},itemStyle:{color:soft},emphasis:{focus:"series",scale:true},connectNulls:false},
+          {name:"Текущий период",type:"line",smooth:false,showSymbol:false,symbol:"circle",symbolSize:6,data:currentData,lineStyle:{width:2.2,color:accent},itemStyle:{color:accent},areaStyle:isPercent?undefined:{color:accent,opacity:.055},emphasis:{focus:"series",scale:true}},
+          {name:"Предыдущий период",type:"line",smooth:false,showSymbol:false,symbol:"circle",symbolSize:5,data:previousData,lineStyle:{width:1.6,color:soft,type:"dashed"},itemStyle:{color:soft},emphasis:{focus:"series",scale:true},connectNulls:false},
         ],
       },true);
     };
     draw();
     const resize=()=>chart.resize();
+    const sizeObserver=new ResizeObserver(resize);sizeObserver.observe(node);
     const observer=new MutationObserver(draw);
     observer.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
     window.addEventListener("resize",resize);
-    return()=>{window.removeEventListener("resize",resize);observer.disconnect();chart.dispose()};
+    return()=>{window.removeEventListener("resize",resize);observer.disconnect();sizeObserver.disconnect();chart.dispose()};
   },[points,comparisonPoints,metric,unit]);
 
   return <section className="request-analytics-card request-trend-card">
     <div className="request-analytics-card-head">
-      <div><h3>Динамика коммерческой воронки</h3><p>Текущий период против предыдущего равного периода.</p></div>
+      <div><h3>Динамика коммерческой воронки</h3><p>{metric==="conversion"?"Доля согласованных среди новых заявок периода, накопительно. Старые заявки не входят в знаменатель.":"События текущего и предыдущего равного периода, включая ранее созданные заявки. Первое КП — одна заявка, независимо от числа версий."}</p></div>
       <div className="request-mini-segments" role="group" aria-label="Показатель графика">
-        {(Object.keys(metricLabels) as Metric[]).map(value=><button type="button" key={value} className={metric===value?"active":""} onClick={()=>setMetric(value)}>{metricLabels[value]}</button>)}
+        {(Object.keys(metricLabels) as Metric[]).map(value=><button type="button" key={value} className={metric===value?"active":""} aria-pressed={metric===value} onClick={()=>setMetric(value)}>{metricLabels[value]}</button>)}
       </div>
     </div>
     <div className="request-trend-summary">
@@ -68,7 +69,7 @@ export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:Requ
       <div><span>Предыдущий период</span><strong>{formatMetric(metric,previousValue)}</strong></div>
       <div className={`request-trend-delta ${delta.tone}`}><span>Изменение</span><strong>{delta.text}</strong></div>
     </div>
-    <div ref={ref} className="request-trend-chart"/>
+    <div ref={ref} className="request-trend-chart" role="img" aria-label={`${metricLabels[metric]}: текущий период ${formatMetric(metric,currentValue)}, предыдущий ${formatMetric(metric,previousValue)}`}/>
   </section>;
 }
 
