@@ -95,16 +95,16 @@ export function PatternRegistry<T extends {id:string}>({
  const [saveViewOpen,setSaveViewOpen]=useState(false);
  const [viewName,setViewName]=useState("");
  const [rowMenu,setRowMenu]=useState<string|null>(null);
- const nextFilter=useRef(1);
+ const nextFilter=useRef(1);const columnsRef=useRef(columns);columnsRef.current=columns;
  const filterRoot=useRef<HTMLDivElement>(null),groupRoot=useRef<HTMLDivElement>(null),viewRoot=useRef<HTMLDivElement>(null);
  const conditionsKey=JSON.stringify([quickFilter?.value,...filters.map(f=>f.value)]);
 
- useEffect(()=>{const timer=setTimeout(()=>{try{const parsed=JSON.parse(localStorage.getItem(storageKey)??"[]");if(Array.isArray(parsed)){const migrated:SavedView[]=parsed.flatMap((item:unknown)=>{const source=item as Partial<SavedView>&{columns?:unknown;pinned?:unknown;widths?:unknown;group?:unknown;conditions?:unknown};
+ useEffect(()=>{const timer=setTimeout(()=>{try{const activeColumns=columnsRef.current;const parsed=JSON.parse(localStorage.getItem(storageKey)??"[]");if(Array.isArray(parsed)){const migrated:SavedView[]=parsed.flatMap((item:unknown)=>{const source=item as Partial<SavedView>&{columns?:unknown;pinned?:unknown;widths?:unknown;group?:unknown;conditions?:unknown};
    if(typeof source?.name!=="string")return[];
    if(source.config?.order&&source.config?.visible)return[{name:source.name,config:source.config as PatternViewConfig}];
-   if(Array.isArray(source.columns)){const oldColumns=source.columns.filter((value):value is string=>typeof value==="string");return[{name:source.name,config:{order:[...oldColumns,...columns.map(c=>c.id).filter(id=>!oldColumns.includes(id))],visible:oldColumns,pinned:Array.isArray(source.pinned)?source.pinned.filter((value):value is string=>typeof value==="string"):[],widths:source.widths&&typeof source.widths==="object"?source.widths as Record<string,number>:{},group1:typeof source.group==="string"?source.group:"",group2:"",filters:[],sorts:[{column:columns[0].id,direction:"asc"}],externalConditions:source.conditions&&typeof source.conditions==="object"?source.conditions as Record<string,string>:{}}}];}
+   if(Array.isArray(source.columns)){const oldColumns=source.columns.filter((value):value is string=>typeof value==="string");return[{name:source.name,config:{order:[...oldColumns,...activeColumns.map(c=>c.id).filter(id=>!oldColumns.includes(id))],visible:oldColumns,pinned:Array.isArray(source.pinned)?source.pinned.filter((value):value is string=>typeof value==="string"):[],widths:source.widths&&typeof source.widths==="object"?source.widths as Record<string,number>:{},group1:typeof source.group==="string"?source.group:"",group2:"",filters:[],sorts:[{column:activeColumns[0].id,direction:"asc"}],externalConditions:source.conditions&&typeof source.conditions==="object"?source.conditions as Record<string,string>:{}}}];}
    return[];
-  });setSaved(migrated)}}catch{}setLoaded(true)},0);return()=>clearTimeout(timer)},[columns,storageKey]);
+  });setSaved(migrated)}}catch{}setLoaded(true)},0);return()=>clearTimeout(timer)},[storageKey]);
  useEffect(()=>{if(loaded)try{localStorage.setItem(storageKey,JSON.stringify(saved))}catch{}},[loaded,saved,storageKey]);
  useEffect(()=>{const timer=setTimeout(()=>{setSelected([]);setAllResultsSelected(false);setPage(1)},0);return()=>clearTimeout(timer)},[conditionsKey]);
  useEffect(()=>{function outside(event:MouseEvent){const target=event.target as Node;if(filterOpen&&!filterRoot.current?.contains(target))setFilterOpen(false);if(groupOpen&&!groupRoot.current?.contains(target))setGroupOpen(false);if(viewOpen&&!viewRoot.current?.contains(target))setViewOpen(false);if(rowMenu&&!(event.target as Element).closest?.(".pattern-row-actions"))setRowMenu(null)}document.addEventListener("mousedown",outside);return()=>document.removeEventListener("mousedown",outside)},[filterOpen,groupOpen,viewOpen,rowMenu]);
