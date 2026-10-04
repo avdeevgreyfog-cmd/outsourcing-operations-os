@@ -1,7 +1,6 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
-import { PageHeader } from "@/components/UI";
 import { RecruitingNeedsWorkspace } from "@/components/RecruitingNeedsWorkspace";
 import { getRecruitingOptions, listRecruitingNeeds, listRecruitingApplications } from "@/lib/recruiting/service";
 import { getRecruitingAnalytics, normalizeRecruitingAnalyticsFilters } from "@/lib/recruiting/analytics";
@@ -36,7 +35,6 @@ export default async function Needs({searchParams}:{searchParams:Promise<SearchP
   const canManageDocuments=hasCapability(actor.access,"recruiting.documents.manage");
   const initialView=params.view==="analytics"?"analytics":params.view==="needs"?"needs":"objects";
   return <>
-    <PageHeader eyebrow="Подбор" title="Потребности" subtitle="План комплектации объектов, потребности и готовность к выходу." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]}/>
     <RecruitingNeedsWorkspace applications={applications} rows={rows} options={options} analytics={analytics} metricPreferences={metricPreferences} initialView={initialView} canCreate={canCreate} canManage={canManage} canConfigureAnalytics={canConfigureAnalytics} canManageDocuments={canManageDocuments} demo={actor.demo}/>
   </>;
 }

@@ -2,7 +2,7 @@ import { requireActor } from "@/lib/auth/server";
 import { listObjects } from "@/lib/data/service";
 import { listOperationsAnalytics,listStaffingForecast } from "@/lib/operations/service";
 import { getObjectManagementOptions, type ObjectManagementOptions } from "@/lib/operations/object-management";
-import { Metric, PageHeader } from "@/components/UI";
+import { Metric } from "@/components/UI";
 import { ObjectPortfolioWorkspace } from "@/components/ObjectPortfolioWorkspace";
 import { hasCapability } from "@/lib/core/access.mjs";
 
@@ -34,14 +34,12 @@ export default async function Objects(){
   const deficit=Math.max(required-working,0);
   const attention=enhancedRows.filter(row=>Boolean(row.attentionReasons?.length)).length;
   return <div className="object-portfolio-page operis-data-registry">
-    <PageHeader eyebrow="Операции → Управление объектами" title="Объекты" subtitle="Портфель объектов: юридические лица, ответственные, комплектация и объяснимые операционные сигналы." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Объекты"}]}/>
-    <div className="metrics-grid object-portfolio-metrics">
+    <ObjectPortfolioWorkspace objects={enhancedRows} analytics={analytics} options={options} canCreate={canCreate} demo={actor.demo} summary={<div className="metrics-grid object-portfolio-metrics">
       <Metric label="Объекты в контуре" value={rows.length}/>
       <Metric label="Сотрудников на объектах" value={working}/>
       <Metric label="Нужно найти" value={deficit}/>
       <Metric label="Требуют внимания" value={attention}/>
-    </div>
-    <ObjectPortfolioWorkspace objects={enhancedRows} analytics={analytics} options={options} canCreate={canCreate} demo={actor.demo}/>
+    </div>}/>
   </div>;
 }
 

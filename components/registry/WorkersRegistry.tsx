@@ -6,6 +6,7 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronLeft, ChevronRight, Columns3, D
 import type { WorkerRow } from "@/lib/data/service";
 import { employmentTypeLabel } from "@/lib/ui/labels";
 import { rub } from "@/lib/ui/format";
+import { RegistryHeader } from "./RegistryHeader";
 import { RegistrySelect } from "./RegistrySelect";
 import { RegistryDrawer } from "./RegistryDrawer";
 import { PersonAvatar, type PersonAvatarKind } from "./PersonAvatar";
@@ -106,8 +107,7 @@ export function WorkersRegistry({rows,sensitive,canEdit,preferenceScope,onCreate
     return Array.from(map).map(([label,members])=>{const id=JSON.stringify([path,group,label]);return <Fragment key={id}><tr className="operis-group-row"><td colSpan={columns.length+2}><button style={{paddingLeft:level?32:12}} aria-expanded={!collapsed.has(id)} onClick={()=>setCollapsed(s=>{const n=new Set(s);if(n.has(id))n.delete(id);else n.add(id);return n})}><ChevronRight size={16} className={collapsed.has(id)?"":"is-open"}/><span>{label}</span><small>{members.length} на странице</small>{members.some(workerNeedsAttention)&&<em>{members.filter(workerNeedsAttention).length} требуют внимания</em>}</button></td></tr>{!collapsed.has(id)&&(level===0&&view.subgroup?renderGroups(members,1,id):members.map(renderRow))}</Fragment>})
   }
   return <div className="operis-worker-registry" ref={wrapper}>
-    <div className="operis-registry-crumb">Операции <ChevronRight size={12}/> Персонал объектов</div>
-    <header className="operis-registry-header"><div><h1>Сотрудники</h1><p>Персонал, назначения и состояние работы</p></div><div className="operis-header-actions"><button className="button" onClick={()=>exportCsv(filtered,columns)}><Download size={15}/> Экспорт</button>{canEdit&&<><button className="button" onClick={onImport}><Upload size={15}/> Импорт</button><button className="button primary" onClick={onCreate}><Plus size={16}/> Добавить сотрудника</button></>}</div></header>
+    <RegistryHeader title="Сотрудники" subtitle="Персонал, назначения и состояние работы" breadcrumbs={[{label:"Операции"},{label:"Персонал объектов"}]} actions={<><button className="button" onClick={()=>exportCsv(filtered,columns)}><Download size={15}/> Экспорт</button>{canEdit&&<><button className="button" onClick={onImport}><Upload size={15}/> Импорт</button><button className="button primary" onClick={onCreate}><Plus size={16}/> Добавить сотрудника</button></>}</>}/>
     <nav className="operis-registry-tabs" aria-label="Состояние сотрудников">{TABS.map(t=><button key={t.id} className={tab===t.id?"active":""} aria-current={tab===t.id?"page":undefined} onClick={()=>{setTab(t.id);setPage(1);setSelected(new Set())}}>{t.label}<span>{searched.filter(r=>matchesTab(r,t.id)).length}</span></button>)}</nav>
     <div className="operis-registry-toolbar"><div className="operis-toolbar-filters"><label className="operis-registry-search"><Search size={16}/><input value={query} onChange={e=>{setQuery(e.target.value);setPage(1);setSelected(new Set())}} placeholder="Имя, телефон, объект…" aria-label="Поиск сотрудников"/>{query&&<button aria-label="Очистить поиск" onClick={()=>setQuery("")}><X size={14}/></button>}</label>
       <RegistrySelect label="Быстрый фильтр по объекту" value={filters.object} searchable options={[{value:"",label:"Все объекты"},...choices("object").map(label=>({value:label,label}))]} onChange={object=>{setFilters({...filters,object});setPage(1);setSelected(new Set())}}/>

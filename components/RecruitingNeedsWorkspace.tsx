@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, BarChart3, Building2, Check, ChevronDown, ChevronRight, Minus, Pencil, Plus, UsersRound, X } from "lucide-react";
 import { KeyValue, Status } from "@/components/UI";
 import { SalesMetrics, SalesSegments } from "@/components/sales/SalesUI";
+import {RegistryHeader} from "@/components/registry/RegistryHeader";
 import {RegistryToolbar} from "@/components/registry/RegistryToolbar";
 import { RecruitingNeedsAnalytics } from "@/components/RecruitingNeedsAnalytics";
 import type { NeedDocumentRequirement, RecruitingApplicationRow, RecruitingDocumentType, RecruitingNeedRow, RecruitingOptions } from "@/lib/recruiting/service";
@@ -137,8 +138,9 @@ export function RecruitingNeedsWorkspace({applications,rows,options,analytics,me
  }
  function changeView(next:View){setView(next);if(next==="analytics")router.replace("/needs?view=analytics",{scroll:false});else if(next==="needs")router.replace("/needs?view=needs",{scroll:false});else router.replace("/needs",{scroll:false})}
  return <div className="recruiting-workspace needs-control-center operis-data-registry">
+  <RegistryHeader title="Потребности" subtitle="План комплектации объектов, потребности и готовность к выходу." breadcrumbs={[{label:"Люди"},{label:"Подбор"},{label:"Потребности"}]} actions={<>{view!=="analytics"&&<Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть воронку</Link>}{canCreate&&!needsSetup&&<button className="button primary" onClick={openCreate}><Plus size={14}/> Создать потребность</button>}</>}/>
   {view!=="analytics"&&<SalesMetrics label="Сводка по потребностям" items={metrics}/>}
-  <div className="needs-viewbar"><SalesSegments<View> label="Представление" value={view} variant="navigation" onChange={changeView} items={[{value:"objects",label:"Объекты",icon:<Building2 size={14}/>},{value:"needs",label:"Потребности",icon:<UsersRound size={14}/>},{value:"analytics",label:"Аналитика",icon:<BarChart3 size={14}/>} ]}/><div className="needs-view-actions">{view!=="analytics"&&<Link className="button" href={funnelHref}><UsersRound size={14}/> Открыть воронку</Link>}{canCreate&&!needsSetup&&<button className="button primary" onClick={openCreate}><Plus size={14}/> Создать потребность</button>}</div></div>
+  <div className="needs-viewbar"><SalesSegments<View> label="Представление" value={view} variant="navigation" onChange={changeView} items={[{value:"objects",label:"Объекты",icon:<Building2 size={14}/>},{value:"needs",label:"Потребности",icon:<UsersRound size={14}/>},{value:"analytics",label:"Аналитика",icon:<BarChart3 size={14}/>} ]}/></div>
   {view!=="analytics"&&<>
    <SalesSegments<Bucket> label="Состояние" value={bucket} variant="navigation" onChange={setBucket} items={[{value:"active",label:"Активные"},{value:"attention",label:"Требуют внимания"},{value:"closed",label:"Закрытые"},{value:"all",label:"Все"}]}/>
    <RegistryToolbar query={query} onQueryChange={setQuery} searchLabel="Поиск потребностей" placeholder="Специальность, объект, регион, рекрутер"

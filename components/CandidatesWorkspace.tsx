@@ -10,6 +10,7 @@ import {useRecruitingApplications,saveDemoApplication} from '@/lib/recruiting/de
 import {formatWorkDate} from '@/lib/recruiting/workflow';
 import {Status} from './UI';
 import {SalesSegments} from './sales/SalesUI';
+import {RegistryHeader} from './registry/RegistryHeader';
 import {RegistryToolbar} from './registry/RegistryToolbar';
 
 type ImportRow={
@@ -169,6 +170,7 @@ export function CandidatesWorkspace({
  }
 
  return <div className="recruiting-workspace candidate-directory candidate-directory-v2 operis-data-registry">
+  <RegistryHeader title="Кандидаты" subtitle="База людей: новые контакты, подбор, контроль после выхода и неактивные." breadcrumbs={[{label:"Люди"},{label:"Подбор",href:"/recruiting"},{label:"Кандидаты"}]} actions={<>{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></>}/>
   <div className="candidate-directory-viewbar">
    <SalesSegments label="Состояние кандидатов" value={bucket} variant="navigation" onChange={value=>{setBucket(value);setStage('all')}} items={[
     {value:'new',label:`Новые · ${counts.new}`},
@@ -177,7 +179,7 @@ export function CandidatesWorkspace({
     {value:'post_exit',label:`После выхода · ${counts.post_exit}`},
     {value:'inactive',label:`Неактивные · ${counts.inactive}`},
    ]}/>
-   <div className="candidate-directory-buttons">{canCreate&&<button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт базы</button>}<Link className="button primary" href="/recruiting">Открыть воронку / добавить</Link></div>
+
   </div>
 
   <RegistryToolbar query={query} onQueryChange={setQuery} searchLabel="Поиск кандидатов" placeholder="ФИО, телефон, email или мессенджер"

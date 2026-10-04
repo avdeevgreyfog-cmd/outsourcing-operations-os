@@ -3,8 +3,9 @@
 import Link from "next/link";
 import {Plus} from "lucide-react";
 import {Status} from "@/components/UI";
+import {RegistryHeader} from "@/components/registry/RegistryHeader";
 import {RegistryToolbar} from "@/components/registry/RegistryToolbar";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ObjectRow } from "@/lib/data/service";
 import type { OperationsAnalyticsRow } from "@/lib/operations/service";
@@ -22,7 +23,7 @@ function initialForm(options:ObjectManagementOptions):CreateForm{
   };
 }
 
-export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo}:{objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean}){
+export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo,summary}:{objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean;summary:ReactNode}){
   const router=useRouter();
   const [localRows,setLocalRows]=useState(objects);
   const analyticsByObject=useMemo(()=>new Map(analytics.map(row=>[row.objectId,row])),[analytics]);
@@ -93,6 +94,8 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   }
 
   return <>
+    <RegistryHeader title="Объекты" subtitle="Портфель объектов: юридические лица, ответственные, комплектация и операционные сигналы." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Объекты"}]} actions={canCreate&&<button className="button primary" onClick={()=>{setError("");setCreateOpen(true)}}><Plus size={15}/> Добавить объект</button>}/>
+    {summary}
     <RegistryToolbar query={query} onQueryChange={setQuery} searchLabel="Поиск объектов" placeholder="Объект, клиент, адрес, ответственный"
       quickFilter={{label:"Статус",value:status,emptyValue:"",onChange:setStatus,options:[{value:"",label:"Все статусы"},...Object.entries(statusLabels).map(([value,label])=>({value,label}))]}}
       filters={[
@@ -100,7 +103,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         {label:"Юрлицо",value:legalEntity,emptyValue:"",onChange:setLegalEntity,searchable:true,options:[{value:"",label:"Все юрлица"},...legalEntities.map(value=>({value,label:value}))]},
         {label:"Менеджер",value:manager,emptyValue:"",onChange:setManager,searchable:true,options:[{value:"",label:"Все менеджеры"},...managers.map(value=>({value,label:value}))]},
         {label:"Рекрутер",value:recruiter,emptyValue:"",onChange:setRecruiter,searchable:true,options:[{value:"",label:"Все рекрутеры"},...recruiters.map(value=>({value,label:value}))]},
-      ]} onReset={reset} actions={canCreate&&<button className="button primary" onClick={()=>{setError("");setCreateOpen(true)}}><Plus size={15}/> Добавить объект</button>}/>
+      ]} onReset={reset}/>
 
     <div className="object-portfolio-results">
       <span>Показано {filtered.length} из {localRows.length}</span>
