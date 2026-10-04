@@ -184,3 +184,10 @@ origin only. Local demo environment settings are ignored, never published as sec
   The four public intake steps were checked using an isolated local fixture and
   intercepted submission (16 additional captures). Database-backed external
   submission is not covered by that browser run.
+
+
+### Requests alignment with registry v4 (4 October 2026)
+
+Requests and Workers share column/grouping controls and the viewport horizontal scroll dock. Persisted layouts are normalized against each module's permitted columns; order, width (110–480 px), pinning and two grouping levels survive reload. Saved views include filters and sorting but exclude free-text search. Requests keep summary cells to two lines and expose client/location/roles as optional independent columns. Board scrolling uses the same dock without replacing its native scrollbar.
+
+Analytics uses funnel/gaps and inflow/outcomes grids; event charts compare calendar buckets as grouped bars, while cumulative cohort conversion is a separate unsmoothed line. Tooltips show the actual date intervals for both series. Unknown denominators stay unavailable. Stage details remain accessible in an expandable full-width section. This iteration changes presentation preferences only, with no API, database or migration changes.

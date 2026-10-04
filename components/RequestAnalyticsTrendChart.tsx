@@ -5,19 +5,20 @@ import * as echarts from "echarts";
 import type { RequestAnalyticsDaily } from "@/lib/commercial/request-analytics";
 
 export type RequestAnalyticsUnit="requests"|"headcount";
-type Metric="new"|"proposal"|"agreed"|"conversion";
-type ChartPoint={label:string;newRequests:number;newHeadcount:number;proposalRequests:number;proposalHeadcount:number;agreedRequests:number;agreedHeadcount:number;conversionRequests:number;conversionHeadcount:number};
+export type RequestTrendMetric="new"|"proposal"|"agreed"|"conversion";
+type ChartPoint={label:string;dateRange:string;newRequests:number;newHeadcount:number;proposalRequests:number;proposalHeadcount:number;agreedRequests:number;agreedHeadcount:number;conversionRequests:number|null;conversionHeadcount:number|null};
+type Props={rows:RequestAnalyticsDaily[];comparisonRows:RequestAnalyticsDaily[];unit:RequestAnalyticsUnit;variant?:"inflow"|"outcomes"};
+const metricLabels:Record<RequestTrendMetric,string>={new:"Новые заявки",proposal:"Первое КП",agreed:"Согласовано",conversion:"Конверсия новых"};
 
-const metricLabels:Record<Metric,string>={new:"Новые",proposal:"Первое КП",agreed:"Согласовано",conversion:"Конверсия новых"};
-
-export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:RequestAnalyticsDaily[];comparisonRows:RequestAnalyticsDaily[];unit:RequestAnalyticsUnit}){
+export function RequestAnalyticsTrendChart({rows,comparisonRows,unit,variant="inflow"}:Props){
   const ref=useRef<HTMLDivElement>(null);
-  const [metric,setMetric]=useState<Metric>("new");
-  const points=useMemo(()=>bucketRows(rows),[rows]);
-  const comparisonPoints=useMemo(()=>bucketRows(comparisonRows),[comparisonRows]);
-  const currentValue=useMemo(()=>metricValue(metric,unit,points),[metric,unit,points]);
-  const previousValue=useMemo(()=>metricValue(metric,unit,comparisonPoints),[metric,unit,comparisonPoints]);
+  const [metric,setMetric]=useState<RequestTrendMetric>(variant==="inflow"?"new":"proposal");
+  const points=useMemo(()=>bucketRequestTrendRows(rows),[rows]);
+  const comparisonPoints=useMemo(()=>bucketRequestTrendRows(comparisonRows),[comparisonRows]);
+  const currentValue=useMemo(()=>requestTrendTotal(metric,unit,points),[metric,unit,points]);
+  const previousValue=useMemo(()=>requestTrendTotal(metric,unit,comparisonPoints),[metric,unit,comparisonPoints]);
   const delta=useMemo(()=>metricDelta(metric,currentValue,previousValue),[metric,currentValue,previousValue]);
+  const chartDescription=`${metricLabels[metric]}: текущий период ${formatMetric(metric,currentValue)}, предыдущий ${formatMetric(metric,previousValue)}`;
 
   useEffect(()=>{
     if(!ref.current)return;
@@ -27,24 +28,29 @@ export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:Requ
       const css=getComputedStyle(document.documentElement);
       const text=css.getPropertyValue("--text").trim();
       const muted=css.getPropertyValue("--muted").trim();
-      const soft=muted;
       const border=css.getPropertyValue("--border").trim();
       const accent=css.getPropertyValue("--accent").trim();
       const panel=css.getPropertyValue("--panel").trim();
       const isPercent=metric==="conversion";
-      const currentData=points.map(point=>pointValue(metric,unit,point));
-      const previousData=points.map((_,index)=>comparisonPoints[index]?pointValue(metric,unit,comparisonPoints[index]):null);
+      const currentData=points.map(point=>requestTrendValue(metric,unit,point));
+      const previousData=points.map((_,index)=>comparisonPoints[index]?requestTrendValue(metric,unit,comparisonPoints[index]):null);
+      const seriesType=isPercent?"line":"bar";
       chart.setOption({
-        animationDuration:window.matchMedia("(prefers-reduced-motion: reduce)").matches?0:180,
-        aria:{enabled:true,description:`Динамика показателя «${metricLabels[metric]}» по текущему и предыдущему периоду`},
-        grid:{left:10,right:14,top:34,bottom:10,containLabel:true},
-        tooltip:{trigger:"axis",backgroundColor:panel,borderColor:border,borderWidth:1,padding:[8,10],textStyle:{color:text,fontSize:12},axisPointer:{type:"line",lineStyle:{color:border,width:1}},valueFormatter:(value:unknown)=>isPercent?`${value}%`:String(value)},
-        legend:{top:2,left:4,itemWidth:16,itemHeight:7,itemGap:16,textStyle:{color:muted,fontSize:11},data:["Текущий период","Предыдущий период"]},
-        xAxis:{type:"category",boundaryGap:false,data:points.map(point=>point.label),axisLine:{lineStyle:{color:border}},axisTick:{show:false},axisLabel:{color:muted,fontSize:11,interval:Math.max(0,Math.ceil(points.length/7)-1),hideOverlap:true}},
-        yAxis:{type:"value",min:0,max:isPercent?100:undefined,minInterval:isPercent?undefined:1,splitNumber:4,splitLine:{lineStyle:{color:border,type:"dashed",opacity:.55}},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:muted,fontSize:11,formatter:isPercent?"{value}%":"{value}"}},
+        animationDuration:window.matchMedia("(prefers-reduced-motion: reduce)").matches?0:160,
+        aria:{enabled:true,description:chartDescription},
+        grid:{left:12,right:16,top:42,bottom:12,containLabel:true},
+        tooltip:{trigger:"axis",confine:true,backgroundColor:panel,borderColor:border,borderWidth:1,padding:[10,12],textStyle:{color:text,fontSize:12},axisPointer:{type:isPercent?"line":"shadow",lineStyle:{color:border,width:1}},formatter:(params:unknown)=>{
+          const entries=Array.isArray(params)?params:[];
+          const index=(entries[0] as {dataIndex?:number}|undefined)?.dataIndex??0;
+          const current=points[index],previous=comparisonPoints[index];
+          return `<strong>${metricLabels[metric]}</strong><br/>Текущий · ${current?.dateRange??"—"}: <b>${formatMetric(metric,current?requestTrendValue(metric,unit,current):null)}</b><br/>Предыдущий · ${previous?.dateRange??"—"}: <b>${formatMetric(metric,previous?requestTrendValue(metric,unit,previous):null)}</b>`;
+        }},
+        legend:{top:6,left:12,itemWidth:14,itemHeight:9,itemGap:14,textStyle:{color:muted,fontSize:12},data:["Текущий период","Предыдущий период"]},
+        xAxis:{type:"category",boundaryGap:!isPercent,data:points.map(point=>point.label),axisLine:{lineStyle:{color:border}},axisTick:{show:false},axisLabel:{color:muted,fontSize:12,interval:Math.max(0,Math.ceil(points.length/5)-1),hideOverlap:true}},
+        yAxis:{type:"value",min:0,max:isPercent?100:undefined,minInterval:1,splitNumber:3,splitLine:{lineStyle:{color:border,type:"dashed",opacity:.65}},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:muted,fontSize:12,formatter:isPercent?"{value}%":"{value}"}},
         series:[
-          {name:"Текущий период",type:"line",smooth:false,showSymbol:false,symbol:"circle",symbolSize:6,data:currentData,lineStyle:{width:2.2,color:accent},itemStyle:{color:accent},areaStyle:isPercent?undefined:{color:accent,opacity:.055},emphasis:{focus:"series",scale:true}},
-          {name:"Предыдущий период",type:"line",smooth:false,showSymbol:false,symbol:"circle",symbolSize:5,data:previousData,lineStyle:{width:1.6,color:soft,type:"dashed"},itemStyle:{color:soft},emphasis:{focus:"series",scale:true},connectNulls:false},
+          {name:"Текущий период",type:seriesType,smooth:false,showSymbol:isPercent,symbol:"circle",symbolSize:4,data:currentData,barMaxWidth:18,barGap:"25%",lineStyle:{width:2,color:accent},itemStyle:{color:accent,borderRadius:isPercent?undefined:[2,2,0,0]},emphasis:{focus:"series"},connectNulls:false},
+          {name:"Предыдущий период",type:seriesType,smooth:false,showSymbol:isPercent,symbol:"circle",symbolSize:4,data:previousData,barMaxWidth:18,lineStyle:{width:1.6,color:muted,type:"dashed"},itemStyle:{color:muted,opacity:isPercent?1:.6,borderRadius:isPercent?undefined:[2,2,0,0]},emphasis:{focus:"series"},connectNulls:false},
         ],
       },true);
     };
@@ -55,36 +61,38 @@ export function RequestAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:Requ
     observer.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
     window.addEventListener("resize",resize);
     return()=>{window.removeEventListener("resize",resize);observer.disconnect();sizeObserver.disconnect();chart.dispose()};
-  },[points,comparisonPoints,metric,unit]);
+  },[points,comparisonPoints,metric,unit,chartDescription]);
 
   return <section className="request-analytics-card request-trend-card">
     <div className="request-analytics-card-head">
-      <div><h3>Динамика коммерческой воронки</h3><p>{metric==="conversion"?"Доля согласованных среди новых заявок периода, накопительно. Старые заявки не входят в знаменатель.":"События текущего и предыдущего равного периода, включая ранее созданные заявки. Первое КП — одна заявка, независимо от числа версий."}</p></div>
-      <div className="request-mini-segments" role="group" aria-label="Показатель графика">
-        {(Object.keys(metricLabels) as Metric[]).map(value=><button type="button" key={value} className={metric===value?"active":""} aria-pressed={metric===value} onClick={()=>setMetric(value)}>{metricLabels[value]}</button>)}
-      </div>
+      <div><h3>{variant==="inflow"?"Поступление заявок":"Коммерческий результат"}</h3><p>{metric==="conversion"?"Накопительная конверсия новых заявок периода. При отсутствии новых заявок — без значения.":metric==="new"?"Созданы в периоде. Столбцы сравнивают равные интервалы двух периодов.":"События в периоде, включая ранее созданные заявки. Первое КП — одна заявка независимо от числа версий."}</p></div>
+      {variant==="outcomes"&&<div className="request-mini-segments" role="group" aria-label="Показатель коммерческого результата">
+        {(["proposal","agreed","conversion"] as const).map(value=><button type="button" key={value} className={metric===value?"active":""} aria-pressed={metric===value} onClick={()=>setMetric(value)}>{metricLabels[value]}</button>)}
+      </div>}
     </div>
     <div className="request-trend-summary">
-      <div><span>{metricLabels[metric]} · текущий</span><strong>{formatMetric(metric,currentValue)}</strong></div>
+      <div><span>Текущий период</span><strong>{formatMetric(metric,currentValue)}</strong></div>
       <div><span>Предыдущий период</span><strong>{formatMetric(metric,previousValue)}</strong></div>
       <div className={`request-trend-delta ${delta.tone}`}><span>Изменение</span><strong>{delta.text}</strong></div>
     </div>
-    <div ref={ref} className="request-trend-chart" role="img" aria-label={`${metricLabels[metric]}: текущий период ${formatMetric(metric,currentValue)}, предыдущий ${formatMetric(metric,previousValue)}`}/>
+    <div ref={ref} className="request-trend-chart" role="img" aria-label={chartDescription}/>
+    <small className="request-trend-footnote">{metric==="conversion"?"Единица: % от новых заявок" : unit==="headcount"?"Единица: требуемые сотрудники":"Единица: заявки"} · {rows.length>14?"суммы по интервалам":"по дням"}{metric==="conversion"?"; конверсия — на конец интервала":""}</small>
   </section>;
 }
 
-function pointValue(metric:Metric,unit:RequestAnalyticsUnit,point:ChartPoint){
+export function requestTrendValue(metric:RequestTrendMetric,unit:RequestAnalyticsUnit,point:ChartPoint){
   if(metric==="new")return unit==="requests"?point.newRequests:point.newHeadcount;
   if(metric==="proposal")return unit==="requests"?point.proposalRequests:point.proposalHeadcount;
   if(metric==="agreed")return unit==="requests"?point.agreedRequests:point.agreedHeadcount;
   return unit==="requests"?point.conversionRequests:point.conversionHeadcount;
 }
-function metricValue(metric:Metric,unit:RequestAnalyticsUnit,points:ChartPoint[]){
-  if(!points.length)return 0;
-  if(metric==="conversion")return pointValue(metric,unit,points.at(-1)!);
-  return points.reduce((sum,point)=>sum+pointValue(metric,unit,point),0);
+export function requestTrendTotal(metric:RequestTrendMetric,unit:RequestAnalyticsUnit,points:ChartPoint[]){
+  if(!points.length)return metric==="conversion"?null:0;
+  if(metric==="conversion")return requestTrendValue(metric,unit,points.at(-1)!);
+  return points.reduce((sum,point)=>sum+(requestTrendValue(metric,unit,point)??0),0);
 }
-function metricDelta(metric:Metric,current:number,previous:number){
+function metricDelta(metric:RequestTrendMetric,current:number|null,previous:number|null){
+  if(current==null||previous==null)return {text:"—",tone:"neutral"};
   const diff=current-previous;
   if(diff===0)return {text:"без изменений",tone:"neutral"};
   if(metric==="conversion")return {text:`${diff>0?"+":""}${formatNumber(diff)} п.п.`,tone:diff>0?"good":"bad"};
@@ -92,28 +100,26 @@ function metricDelta(metric:Metric,current:number,previous:number){
   const percent=diff/previous*100;
   return {text:`${percent>0?"+":""}${formatNumber(percent)}%`,tone:"neutral"};
 }
-function formatMetric(metric:Metric,value:number){return metric==="conversion"?`${formatNumber(value)}%`:new Intl.NumberFormat("ru-RU").format(value)}
+function formatMetric(metric:RequestTrendMetric,value:number|null){return value==null?"—":metric==="conversion"?`${formatNumber(value)}%`:new Intl.NumberFormat("ru-RU").format(value)}
 function formatNumber(value:number){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1}).format(value)}
-function bucketRows(rows:RequestAnalyticsDaily[]):ChartPoint[]{
+export function bucketRequestTrendRows(rows:RequestAnalyticsDaily[]):ChartPoint[]{
   if(!rows.length)return[];
   const size=rows.length<=14?1:rows.length<=45?3:rows.length<=120?7:14;
   const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"});
-  const result:ChartPoint[]=[];
+  const fullFormatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",year:"numeric",timeZone:"UTC"});
+  const result:ChartPoint[]=[];let cumulativeNewRequests=0,cumulativeNewHeadcount=0;
   for(let index=0;index<rows.length;index+=size){
     const bucket=rows.slice(index,index+size);
     const first=new Date(`${bucket[0].date}T00:00:00.000Z`),last=new Date(`${bucket[bucket.length-1].date}T00:00:00.000Z`);
     const label=bucket.length===1?formatter.format(first):`${formatter.format(first)}–${formatter.format(last)}`;
+    const dateRange=bucket.length===1?fullFormatter.format(first):`${fullFormatter.format(first)} — ${fullFormatter.format(last)}`;
     const tail=bucket[bucket.length-1];
-    result.push({
-      label,
-      newRequests:bucket.reduce((sum,row)=>sum+row.newRequests,0),
-      newHeadcount:bucket.reduce((sum,row)=>sum+row.newHeadcount,0),
-      proposalRequests:bucket.reduce((sum,row)=>sum+row.proposalRequests,0),
-      proposalHeadcount:bucket.reduce((sum,row)=>sum+row.proposalHeadcount,0),
-      agreedRequests:bucket.reduce((sum,row)=>sum+row.agreedRequests,0),
-      agreedHeadcount:bucket.reduce((sum,row)=>sum+row.agreedHeadcount,0),
-      conversionRequests:tail.conversionRequests,
-      conversionHeadcount:tail.conversionHeadcount,
+    const newRequests=bucket.reduce((sum,row)=>sum+row.newRequests,0),newHeadcount=bucket.reduce((sum,row)=>sum+row.newHeadcount,0);
+    cumulativeNewRequests+=newRequests;cumulativeNewHeadcount+=newHeadcount;
+    result.push({label,dateRange,newRequests,newHeadcount,
+      proposalRequests:bucket.reduce((sum,row)=>sum+row.proposalRequests,0),proposalHeadcount:bucket.reduce((sum,row)=>sum+row.proposalHeadcount,0),
+      agreedRequests:bucket.reduce((sum,row)=>sum+row.agreedRequests,0),agreedHeadcount:bucket.reduce((sum,row)=>sum+row.agreedHeadcount,0),
+      conversionRequests:cumulativeNewRequests?tail.conversionRequests:null,conversionHeadcount:cumulativeNewHeadcount?tail.conversionHeadcount:null,
     });
   }
   return result;

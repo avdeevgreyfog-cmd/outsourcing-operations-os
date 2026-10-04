@@ -1,0 +1,42 @@
+/* Shared registry interactions. Colors follow the active OPERIS theme. */
+.operis-scroll-dock{position:fixed;bottom:max(10px,env(safe-area-inset-bottom));height:18px;box-sizing:border-box;overflow-x:scroll;overflow-y:hidden;border:1px solid var(--border);border-radius:5px;background:var(--panel-2);color:var(--text);z-index:35;scrollbar-width:auto;scrollbar-color:var(--muted) var(--panel-2);overscroll-behavior-x:contain}
+.operis-scroll-dock-track{height:1px;min-height:1px;pointer-events:none}
+.operis-scroll-dock:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.operis-scroll-dock::-webkit-scrollbar{height:14px}
+.operis-scroll-dock::-webkit-scrollbar-track{background:var(--panel-2);border-radius:4px}
+.operis-scroll-dock::-webkit-scrollbar-thumb{background:var(--muted);border:3px solid var(--panel-2);border-radius:7px}
+@media(prefers-reduced-motion:reduce){.operis-scroll-dock{scroll-behavior:auto}}
+
+.registry-column-controls,.registry-grouping-controls{display:grid;gap:12px;min-width:0;color:var(--text)}
+.registry-column-controls>p,.registry-grouping-controls>p{font-size:12px;color:var(--muted);margin:0;line-height:1.5}
+.registry-column-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 18px;min-width:0}
+.registry-column-setting{display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border);padding:6px 0;min-width:0;font-size:12px}
+.registry-column-setting .registry-column-name{display:flex;align-items:center;gap:7px;flex:1;min-width:0;color:var(--text);margin:0}
+.registry-column-name input{flex-shrink:0;accent-color:var(--accent);width:15px;height:15px;min-height:15px;margin:0}
+.registry-column-setting .icon-button{width:28px;height:30px;min-height:30px;flex-shrink:0;border-radius:5px;background:transparent;border:1px solid var(--border);color:var(--muted);display:grid;place-items:center;padding:0}
+.registry-column-setting .icon-button[aria-pressed=true]{color:var(--text);background:var(--panel-2)}
+.registry-column-setting .icon-button:disabled{opacity:.35;cursor:default}
+.registry-column-setting .registry-column-width{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);margin:0}
+.registry-column-width>span:first-child{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.registry-column-setting .registry-column-width input{width:64px;min-height:30px;height:30px;padding:4px 5px;border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--text);font:inherit;font-size:12px}
+.registry-column-order{display:flex;gap:3px}
+.registry-column-controls>.button,.registry-grouping-controls>.button{justify-self:start;font-size:12px}
+.registry-grouping-levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:640px}
+.registry-grouping-levels label{display:grid;gap:6px;font-size:12px;color:var(--muted);min-width:0}
+.registry-grouping-levels select{width:100%;height:38px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;padding:7px 10px}
+@media(max-width:1000px){.registry-column-list{grid-template-columns:1fr}}
+@media(max-width:600px){
+  .registry-grouping-levels{grid-template-columns:1fr}
+  .registry-column-setting{display:grid;grid-template-columns:minmax(0,1fr) 28px 28px;gap:7px;padding:9px 0}
+  .registry-column-setting .registry-column-name{grid-column:1/3;font-size:12px}
+  .registry-column-setting>.icon-button{grid-column:3}
+  .registry-column-setting .registry-column-width{grid-column:1}
+  .registry-column-order{grid-column:2/4}
+}
+
+.operis-worker-registry .operis-registry-popover:is(.columns,.groups){position:relative;inset:auto;width:100%;max-width:100%;max-height:none;overflow:visible;margin:12px 0;box-shadow:none}
+.operis-worker-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){.operis-worker-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:1fr}}
+
+/* Workers retains its existing light registry surface in both shell themes. */
+.operis-worker-registry :is(.registry-column-controls,.registry-grouping-controls){--text:var(--registry-text);--muted:var(--registry-muted);--border:var(--registry-border);--panel:var(--registry-bg);--panel-2:#f7f8fa}
