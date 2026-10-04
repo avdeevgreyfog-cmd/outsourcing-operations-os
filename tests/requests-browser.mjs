@@ -41,6 +41,12 @@ async function checkScrollDock(page, targetSelector, label) {
   await page.locator(targetSelector).evaluate(target => scrollTo(0, target.getBoundingClientRect().top + scrollY - 15));
   const dock = page.getByRole('region', { name: label, exact: true });
   await dock.waitFor({ state: 'visible' });
+  await page.getByRole('searchbox',{name:'Поиск по заявкам'}).fill('qa-no-request-can-match-838493');
+  await page.getByText('Заявки не найдены',{exact:true}).waitFor();
+  assert.equal(await dock.count(),0,'Empty search removes the inactive dock');
+  await page.getByRole('searchbox',{name:'Поиск по заявкам'}).fill('');
+  await page.locator(targetSelector).evaluate(target=>scrollTo(0,target.getBoundingClientRect().top+scrollY-15));
+  await dock.waitFor({state:'visible'});
   await page.locator(targetSelector).evaluate(target => { target.scrollLeft = 120; });
   await page.waitForFunction(({ targetSelector, label }) => {
     const target = document.querySelector(targetSelector), dock = document.querySelector(`[aria-label="${label}"]`);
