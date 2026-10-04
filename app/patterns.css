@@ -87,3 +87,74 @@
 .operis-patterns .pattern-tree,.operis-patterns .pattern-tree ul{list-style:none;margin:0;padding-left:20px}.operis-patterns .pattern-tree li{padding:8px 0 8px 12px;border-left:1px solid var(--border);font-size:13px}
 @media(max-width:1100px){.operis-patterns .pattern-column-settings{grid-template-columns:1fr}.operis-patterns .pattern-entity-layout{grid-template-columns:220px minmax(0,1fr)}.operis-patterns .pattern-entity-layout .pattern-paired{grid-template-columns:1fr}}
 @media(max-width:760px){.operis-patterns .pattern-paired,.operis-patterns .pattern-entity-layout{grid-template-columns:1fr}.operis-patterns .pattern-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.operis-patterns .pattern-entity-heading{align-items:flex-start;flex-direction:column}.operis-patterns .pattern-column-settings>div{flex-wrap:wrap}.operis-patterns .pattern-width{margin-left:auto}.operis-patterns .pattern-calendar>div{min-height:65px;padding:6px}.operis-patterns .pattern-chart-row{grid-template-columns:95px minmax(0,1fr) 20px}}
+
+
+/* Registry template v2: agreed interaction contract. */
+.operis-patterns .pattern-menu-anchor{position:relative;min-width:0}
+.operis-patterns .pattern-toolbar-toggle.is-active{border-color:color-mix(in srgb,var(--pattern-accent) 36%,var(--border));background:color-mix(in srgb,var(--pattern-accent) 7%,var(--panel));color:var(--pattern-accent)}
+.operis-patterns .pattern-menu-count{min-width:18px;height:18px;border-radius:9px;padding:0 5px;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--pattern-accent) 10%,var(--panel));color:var(--pattern-accent);font-size:11px;font-weight:700}
+.operis-patterns .pattern-view-trigger>span{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.operis-patterns .pattern-toolbar-popover,.operis-patterns .pattern-choice-menu{position:absolute;z-index:55;top:calc(100% + 7px);border:1px solid var(--border);border-radius:9px;background:var(--panel);box-shadow:0 8px 24px #1e28361f}
+.operis-patterns .pattern-toolbar-popover{padding:16px}
+.operis-patterns .pattern-toolbar-popover>header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:14px}
+.operis-patterns .pattern-toolbar-popover>header strong{display:block;font-size:14px}
+.operis-patterns .pattern-toolbar-popover>header small{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-weight:400}
+.operis-patterns .pattern-filter-popover{left:0;width:min(720px,calc(100vw - 48px))}
+.operis-patterns .pattern-group-popover{right:0;width:min(520px,calc(100vw - 48px))}
+.operis-patterns .pattern-group-popover>label{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:12px;margin:10px 0;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-group-popover .operis-select-trigger{width:100%;justify-content:space-between}
+.operis-patterns .pattern-group-popover>footer,.operis-patterns .pattern-filter-popover>footer{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.operis-patterns .pattern-group-popover>footer>span{flex:1}
+.operis-patterns .pattern-filter-popover>footer{justify-content:space-between}
+.operis-patterns .pattern-popover-subhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0 8px}
+.operis-patterns .pattern-popover-subhead strong{font-size:12px}
+.operis-patterns .pattern-popover-subhead span{font-size:11px;color:var(--muted)}
+.operis-patterns .pattern-filter-list,.operis-patterns .pattern-sort-list{display:grid;gap:8px}
+.operis-patterns .pattern-filter-row{display:grid;grid-template-columns:68px minmax(150px,1.1fr) minmax(145px,1fr) minmax(170px,1.2fr) 30px;gap:8px;align-items:center}
+.operis-patterns .pattern-sort-row{display:grid;grid-template-columns:24px minmax(180px,1fr) minmax(170px,1fr) 30px;gap:8px;align-items:center}
+.operis-patterns .pattern-filter-row .operis-select-trigger,.operis-patterns .pattern-sort-row .operis-select-trigger,.operis-patterns .pattern-filter-value .operis-select-trigger{width:100%;justify-content:space-between}
+.operis-patterns .pattern-filter-prefix,.operis-patterns .pattern-sort-row>span{color:var(--muted);font-size:12px}
+.operis-patterns .pattern-filter-value>input,.operis-patterns .pattern-filter-range input{width:100%}
+.operis-patterns .pattern-filter-range{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.operis-patterns .pattern-filter-no-value{display:flex;align-items:center;height:38px;color:var(--muted);font-size:11px}
+.operis-patterns .pattern-filter-empty{margin:0;padding:9px 0;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-add-condition{margin-top:8px}
+.operis-patterns .pattern-choice-menu{right:0;width:270px;padding:6px}
+.operis-patterns .pattern-choice-menu>button{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:35px;padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--text);text-align:left;font:13px/1.4 "Segoe UI",sans-serif}
+.operis-patterns .pattern-choice-menu>button:hover,.operis-patterns .pattern-choice-menu>button:focus-visible{background:var(--panel-2)}
+.operis-patterns .pattern-choice-menu>button>svg{flex-shrink:0;color:var(--pattern-accent)}
+.operis-patterns .pattern-menu-heading{display:block;padding:7px 9px 4px;color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.operis-patterns .pattern-menu-empty{display:block;padding:8px 9px 10px;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-menu-divider{display:block;height:1px;background:var(--border);margin:5px 0}
+.operis-patterns .pattern-choice-menu>button.pattern-menu-accent{color:var(--pattern-accent);font-weight:600;justify-content:flex-start}
+.operis-patterns .pattern-active-filters{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 8px}
+.operis-patterns .pattern-active-filters button{min-height:30px;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--text);display:inline-flex;align-items:center;gap:7px;font-size:12px}
+.operis-patterns .pattern-selection{gap:12px;background:color-mix(in srgb,var(--pattern-accent) 7%,var(--panel));border-color:color-mix(in srgb,var(--pattern-accent) 30%,var(--border))}
+.operis-patterns .pattern-selection>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.operis-patterns .pattern-selection>div:last-child{margin-left:auto}
+.operis-patterns .pattern-select-all-results{border:0;background:transparent;color:var(--pattern-accent);padding:0;font:600 12px "Segoe UI",sans-serif}
+.operis-patterns .pattern-table th{position:relative}
+.operis-patterns .pattern-table :is(th,td).is-pinned{background:var(--panel)}
+.operis-patterns .pattern-table th.is-pinned{background:var(--panel-2)}
+.operis-patterns .pattern-table tbody tr:hover td.is-pinned,.operis-patterns .pattern-table tr.selected td.is-pinned{background:var(--panel-2)}
+.operis-patterns .pattern-resize-handle{position:absolute;z-index:8;top:0;right:-3px;width:7px;height:100%;cursor:col-resize;touch-action:none}
+.operis-patterns .pattern-resize-handle::after{content:"";position:absolute;left:3px;top:7px;bottom:7px;width:1px;background:transparent}
+.operis-patterns th:hover>.pattern-resize-handle::after,.operis-patterns .pattern-resize-handle:focus-visible::after{background:var(--pattern-accent)}
+.operis-patterns .pattern-row-action-cell{width:52px;padding:0 8px}
+.operis-patterns .pattern-row-actions{position:relative;display:flex;justify-content:flex-end}
+.operis-patterns .pattern-row-menu{position:absolute;z-index:40;right:0;top:32px;width:190px;padding:5px;border:1px solid var(--border);border-radius:7px;background:var(--panel);box-shadow:0 6px 18px #1e28361f}
+.operis-patterns .pattern-row-menu button{display:block;width:100%;min-height:34px;padding:7px 9px;border:0;border-radius:4px;background:transparent;color:var(--text);text-align:left;font:12px/1.4 "Segoe UI",sans-serif}
+.operis-patterns .pattern-row-menu button:hover{background:var(--panel-2)}
+.operis-patterns .pattern-group-level-2 td{background:color-mix(in srgb,var(--panel-2) 72%,var(--panel))}
+.operis-patterns .pattern-group-level-2 button{padding-left:34px;font-weight:500}
+.operis-patterns .pattern-column-drawer>p{margin:0 0 14px;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-column-list{display:grid;gap:4px}
+.operis-patterns .pattern-column-item{display:grid;grid-template-columns:24px minmax(0,1fr) 30px 28px;align-items:center;gap:7px;min-height:42px;padding:5px 6px;border:1px solid transparent;border-radius:7px}
+.operis-patterns .pattern-column-item:hover{background:var(--panel-2)}
+.operis-patterns .pattern-column-item>svg{color:var(--soft);cursor:grab}
+.operis-patterns .pattern-column-item label{display:flex;align-items:center;gap:8px;min-width:0}
+.operis-patterns .pattern-column-item label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.operis-patterns .pattern-column-item .icon-button[aria-pressed=true]{background:color-mix(in srgb,var(--pattern-accent) 8%,var(--panel));color:var(--pattern-accent)}
+.operis-patterns .pattern-column-position{color:var(--soft);font-size:11px;text-align:right}
+@media(max-width:900px){.operis-patterns .pattern-filter-row{grid-template-columns:64px minmax(135px,1fr) minmax(135px,1fr);align-items:start}.operis-patterns .pattern-filter-row .pattern-filter-value{grid-column:2/4}.operis-patterns .pattern-filter-row>.icon-button{grid-column:4;grid-row:1}.operis-patterns .pattern-sort-row{grid-template-columns:24px minmax(150px,1fr) minmax(150px,1fr) 30px}}
+@media(max-width:650px){.operis-patterns .pattern-toolbar-popover{position:fixed;left:12px!important;right:12px!important;top:78px;width:auto;max-height:calc(100dvh - 96px);overflow:auto}.operis-patterns .pattern-filter-row,.operis-patterns .pattern-sort-row{grid-template-columns:1fr}.operis-patterns .pattern-filter-row .pattern-filter-value,.operis-patterns .pattern-filter-row>.icon-button{grid-column:auto;grid-row:auto}.operis-patterns .pattern-group-popover>label{grid-template-columns:1fr;gap:5px}.operis-patterns .pattern-selection{align-items:flex-start;flex-direction:column}.operis-patterns .pattern-selection>div:last-child{margin-left:0}}
