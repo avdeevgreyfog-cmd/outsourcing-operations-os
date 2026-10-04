@@ -1,28 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useMemo, useState } from "react";
-import { Download, FileSpreadsheet, Plus, Upload, X } from "lucide-react";
-import { Status } from "@/components/UI";
-import { SalesSearch } from "@/components/sales/SalesUI";
+import { useState } from "react";
+import { Download, FileSpreadsheet, Upload, X } from "lucide-react";
 import type { WorkerRow } from "@/lib/data/service";
 import type { OperationsReferenceData } from "@/lib/operations/service";
-import { rub } from "@/lib/ui/format";
-import { employmentTypeLabel,workerStatusLabel } from "@/lib/ui/labels";
+import { WorkersRegistry } from "@/components/registry/WorkersRegistry";
+import { RegistryDrawer } from "@/components/registry/RegistryDrawer";
 
 type ImportRow={fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;specialtyName:string|null;startDate:string|null;relationType:"employment"|"gph"|"npd"|"custom"|null;rate:number|null;rateUnit:"hour"|"shift"|"month"|null;workMode:"local"|"rotation"|null;paidHoursPerShift:number|null};
 type FormState={fullName:string;phone:string;email:string;city:string;birthDate:string;objectId:string;specialtyId:string;startDate:string;relationType:"employment"|"gph"|"npd"|"custom";rate:string;rateUnit:"hour"|"shift"|"month";workMode:"local"|"rotation";paidHoursPerShift:string;clothingSize:string;shoeSize:string;heightCm:string;notes:string};
 const today=()=>new Date().toISOString().slice(0,10);
 const blank=():FormState=>({fullName:"",phone:"",email:"",city:"",birthDate:"",objectId:"",specialtyId:"",startDate:today(),relationType:"employment",rate:"",rateUnit:"hour",workMode:"local",paidHoursPerShift:"",clothingSize:"",shoeSize:"",heightCm:"",notes:""});
 
-export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:WorkerRow[];options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;demo:boolean}){
-  const [query,setQuery]=useState("");
-  const [objectFilter,setObjectFilter]=useState("");
-  const [managerFilter,setManagerFilter]=useState("");
-  const [specialtyFilter,setSpecialtyFilter]=useState("");
-  const [workModeFilter,setWorkModeFilter]=useState("");
-  const [stateFilter,setStateFilter]=useState("");
+export function WorkersWorkspace({rows,options,sensitive,canEdit,demo,preferenceScope}:{rows:WorkerRow[];options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;demo:boolean;preferenceScope:string}){
   const [localRows,setLocalRows]=useState(rows);
   const [showCreate,setShowCreate]=useState(false);
   const [showImport,setShowImport]=useState(false);
@@ -37,30 +28,17 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
   const [importPaidHours,setImportPaidHours]=useState("");
   const [importResult,setImportResult]=useState("");
 
-  const objectOptions=useMemo(()=>[...new Set(localRows.map(row=>row.object).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
-  const managerOptions=useMemo(()=>[...new Set(localRows.map(row=>row.managerName).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
-  const specialtyOptions=useMemo(()=>[...new Set(localRows.map(row=>row.specialty).filter((value):value is string=>Boolean(value)))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
-  const stateOptions=useMemo(()=>[...new Set(localRows.map(operationalState))].sort((a,b)=>a.localeCompare(b,"ru")),[localRows]);
-  const hasFilters=Boolean(query||objectFilter||managerFilter||specialtyFilter||workModeFilter||stateFilter);
-  const filtered=useMemo(()=>localRows.filter(row=>{
-    const matchesQuery=`${row.fullName} ${row.object??""} ${row.managerName??""} ${row.specialty??""} ${row.source??""}`.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"));
-    return matchesQuery
-      &&(!objectFilter||row.object===objectFilter)
-      &&(!managerFilter||row.managerName===managerFilter)
-      &&(!specialtyFilter||row.specialty===specialtyFilter)
-      &&(!workModeFilter||(row.workMode??"local")===workModeFilter)
-      &&(!stateFilter||operationalState(row)===stateFilter);
-  }),[localRows,query,objectFilter,managerFilter,specialtyFilter,workModeFilter,stateFilter]);
-
   async function createWorker(){
     setBusy(true);setError("");
     try{
-      if(!form.fullName.trim())throw new Error("Укажите ФИО");
+      if(form.fullName.trim().length<2)throw new Error("Укажите ФИО");
       if((form.objectId&&!form.specialtyId)||(!form.objectId&&form.specialtyId))throw new Error("Объект и специальность указываются вместе");
+      if(form.rate && (!Number.isFinite(Number(form.rate)) || Number(form.rate)<=0))throw new Error("Ставка должна быть больше нуля");
+      if(form.rateUnit==="shift" && form.rate && (!Number.isFinite(Number(form.paidHoursPerShift))||Number(form.paidHoursPerShift)<0.5||Number(form.paidHoursPerShift)>24))throw new Error("Укажите оплачиваемые часы в смене от 0,5 до 24");
       if(demo){
         const object=options.objects.find(x=>x.id===form.objectId);
         const specialty=options.specialties.find(x=>x.id===form.specialtyId);
-        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:specialty?.name??null,specialtyId:specialty?.id??null,startDate:form.startDate,employment:form.relationType,workMode:form.workMode,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,rate:form.rate?Number(form.rate):null,rateUnit:form.rateUnit,accrued:0,paid:0,payable:0},...current]);
+        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName.trim(),phone:form.phone||null,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:specialty?.name??null,specialtyId:specialty?.id??null,startDate:form.startDate,employment:form.relationType,workMode:form.workMode,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,rate:form.rate?Number(form.rate):null,rateUnit:form.rateUnit,accrued:null,paid:null,payable:null},...current]);
       }else{
         const response=await fetch("/api/workers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
           ...form,phone:form.phone||null,email:form.email||null,city:form.city||null,birthDate:form.birthDate||null,
@@ -102,7 +80,7 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
       if(demo){
         const object=options.objects.find(x=>x.id===importObject);
         const fallbackSpecialty=options.specialties.find(x=>x.id===importSpecialty);
-        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:row.specialtyName??fallbackSpecialty?.name??null,specialtyId:fallbackSpecialty?.id??null,startDate:row.startDate??importStart,employment:row.relationType??"employment",workMode:row.workMode??importWorkMode,paidHoursPerShift:row.paidHoursPerShift??(importPaidHours?Number(importPaidHours):null),rate:row.rate,rateUnit:row.rateUnit??"hour",accrued:0,paid:0,payable:0} as WorkerRow));
+        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:row.specialtyName??fallbackSpecialty?.name??null,specialtyId:fallbackSpecialty?.id??null,startDate:row.startDate??importStart,employment:row.relationType??"employment",workMode:row.workMode??importWorkMode,paidHoursPerShift:row.paidHoursPerShift??(importPaidHours?Number(importPaidHours):null),rate:row.rate,rateUnit:row.rateUnit??"hour",accrued:null,paid:null,payable:null} as WorkerRow));
         setLocalRows(current=>[...created,...current]);
         setImportResult(`Добавлено сотрудников: ${created.length}`);
       }else{
@@ -116,44 +94,14 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
     finally{setBusy(false);}
   }
 
-  return <div>
-    <div className="workers-toolbar">
-      <div className="workers-filterbar">
-        <SalesSearch value={query} onChange={setQuery} placeholder="ФИО, объект, менеджер или источник"/>
-        <select aria-label="Фильтр по объекту" value={objectFilter} onChange={e=>setObjectFilter(e.target.value)}><option value="">Все объекты</option>{objectOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select aria-label="Фильтр по менеджеру" value={managerFilter} onChange={e=>setManagerFilter(e.target.value)}><option value="">Все менеджеры</option>{managerOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select aria-label="Фильтр по специальности" value={specialtyFilter} onChange={e=>setSpecialtyFilter(e.target.value)}><option value="">Все специальности</option>{specialtyOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select aria-label="Фильтр по формату работы" value={workModeFilter} onChange={e=>setWorkModeFilter(e.target.value)}><option value="">Все форматы</option><option value="local">Местный</option><option value="rotation">Вахта</option></select>
-        <select aria-label="Фильтр по состоянию" value={stateFilter} onChange={e=>setStateFilter(e.target.value)}><option value="">Все состояния</option>{stateOptions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        {hasFilters&&<button className="button" type="button" onClick={()=>{setQuery("");setObjectFilter("");setManagerFilter("");setSpecialtyFilter("");setWorkModeFilter("");setStateFilter("")}}>Сбросить</button>}
-      </div>
-      {canEdit&&<div className="candidate-directory-buttons"><button className="button" onClick={()=>setShowImport(true)}><Upload size={14}/> Импорт Excel</button><button className="button primary" onClick={()=>setShowCreate(true)}><Plus size={14}/> Добавить сотрудника</button></div>}
-    </div>
-    <div className="workers-resultbar"><span>Показано {filtered.length} из {localRows.length}</span>{objectOptions.length===1&&<span>Объект: {objectOptions[0]}</span>}</div>
-    <section className="section section-flush"><div className="request-table-wrap"><table className="data-table workers-table">
-      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Менеджер</th><th>Специальность</th><th>Формат</th><th>Сейчас</th><th>Возврат / изменение</th><th>Начало работы</th><th>Источник</th><th>Оформление</th>{sensitive&&<><th>Ставка</th><th>Начислено</th><th>К выплате</th></>}<th>Статус</th></tr></thead>
-      <tbody>{filtered.map(row=><tr key={row.id}>
-        <td><Link className="cell-title" href={`/workers/${row.id}`}>{row.fullName}</Link></td>
-        <td>{row.object&&row.objectId?<Link className="workers-object-link" href={"/objects/"+row.objectId}>{row.object}</Link>:"Без назначения"}</td>
-        <td>{row.managerName??"—"}</td>
-        <td>{row.specialty??"—"}</td>
-        <td>{row.workMode==="rotation"?"Вахта":"Местный"}</td>
-        <td><Status tone={operationalState(row)==="Работает"?"good":"info"}>{operationalState(row)}</Status></td>
-        <td>{availabilityChange(row)}</td>
-        <td>{row.startDate?new Intl.DateTimeFormat("ru-RU").format(new Date(row.startDate+"T00:00:00")):"—"}</td>
-        <td><span className="workers-source" title={row.origin??row.source??"—"}>{row.origin??row.source??"—"}</span></td>
-        <td>{employmentTypeLabel(row.employment)}</td>
-        {sensitive&&<><td className="num">{rateLabel(row)}</td><td className="num">{row.accrued==null?"—":rub(row.accrued)}</td><td className="num">{row.payable==null?"—":rub(row.payable)}</td></>}
-        <td><Status tone={row.status==="active"?"good":"neutral"}>{workerStatusLabel(row.status)}</Status></td>
-      </tr>)}</tbody>
-    </table>{!filtered.length&&<div className="empty-inline">Сотрудники не найдены</div>}</div></section>
-
-    {showCreate&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowCreate(false)}}><div className="recruiting-modal-card">
-      <div className="recruiting-modal-head"><div><h2>Новый сотрудник</h2><p>Для действующих сотрудников компании карточку можно создать без кандидата.</p></div><button className="icon-button" onClick={()=>setShowCreate(false)}><X size={17}/></button></div>
+  return <div className="workers-portfolio-workspace">
+    <WorkersRegistry rows={localRows} sensitive={sensitive} canEdit={canEdit} preferenceScope={preferenceScope} onCreate={()=>{setError("");setShowCreate(true)}} onImport={()=>{setError("");setShowImport(true)}}/>
+    {showCreate&&<RegistryDrawer title="Новый сотрудник" subtitle="Основная информация и назначение на объект" onClose={()=>{if(!busy)setShowCreate(false)}} footer={<><button className="button" disabled={busy} onClick={()=>setShowCreate(false)}>Отмена</button><button className="button primary" disabled={busy} onClick={()=>void createWorker()}>{busy?"Сохраняю…":"Создать сотрудника"}</button></>}>
+      <div className="operis-drawer-section"><h3>Личные данные и назначение</h3></div>
       <div className="candidate-import-body"><div className="candidate-import-options">
-        <label>ФИО<input value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})}/></label>
-        <label>Телефон<input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label>
-        <label>Email<input value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label>
+        <label>ФИО *<input required autoComplete="name" value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})}/></label>
+        <label>Телефон<input type="tel" autoComplete="tel" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})}/></label>
+        <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label>
         <label>Город<input value={form.city} onChange={e=>setForm({...form,city:e.target.value})}/></label>
         <label>Дата рождения<input type="date" value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/></label>
         <label>Объект<select value={form.objectId} onChange={e=>setForm({...form,objectId:e.target.value})}><option value="">Без назначения</option>{options.objects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
@@ -166,9 +114,9 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo}:{rows:Wor
         {form.rateUnit==="shift"&&<label>Оплачиваемых часов в смене<input type="number" min="0.5" max="24" step="0.5" value={form.paidHoursPerShift} onChange={e=>setForm({...form,paidHoursPerShift:e.target.value})} placeholder="Например, 11"/></label>}
         <label>Размер одежды<input value={form.clothingSize} onChange={e=>setForm({...form,clothingSize:e.target.value})}/></label>
         <label>Размер обуви<input value={form.shoeSize} onChange={e=>setForm({...form,shoeSize:e.target.value})}/></label>
+<label>Рост, см<input type="number" min="1" max="250" value={form.heightCm} onChange={e=>setForm({...form,heightCm:e.target.value})}/></label><label className="operis-form-full">Примечание<textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label>
       </div>{error&&<div className="recruiting-error">{error}</div>}</div>
-      <div className="recruiting-modal-footer"><button className="button" onClick={()=>setShowCreate(false)}>Отмена</button><button className="button primary" disabled={busy} onClick={()=>void createWorker()}>{busy?"Сохраняю…":"Создать сотрудника"}</button></div>
-    </div></div></Portal>}
+    </RegistryDrawer>}
 
     {showImport&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowImport(false)}}><div className="recruiting-modal-card candidate-import-modal">
       <div className="recruiting-modal-head"><div><h2>Импорт сотрудников</h2><p>Массовая загрузка действующего персонала на выбранный объект.</p></div><button className="icon-button" onClick={()=>setShowImport(false)}><X size={17}/></button></div>
@@ -201,11 +149,5 @@ function mapImportRow(row:Record<string,unknown>):ImportRow|null{
   const paidHoursRaw=get("Оплачиваемых часов в смене","paidHoursPerShift");
   return {fullName,phone:nullable(get("Телефон","phone")),email:nullable(get("Email","E-mail","email")),city:nullable(get("Город","city")),birthDate:nullable(get("Дата рождения","birthDate")),specialtyName:nullable(get("Специальность","specialty")),startDate:nullable(get("Дата начала","startDate")),relationType,rate:rateRaw?Number(rateRaw.replace(",",".")):null,rateUnit,workMode,paidHoursPerShift:paidHoursRaw?Number(paidHoursRaw.replace(",",".")):null};
 }
-const absenceLabels:Record<string,string>={intershift:"Межвахта",vacation:"Отпуск",sick:"Больничный",personal:"Личное отсутствие",other:"Отсутствие"};
-function operationalState(row:WorkerRow){if(row.status==="dismissed")return"Работа завершена";const current=Boolean(row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()));return current?(absenceLabels[row.absenceType??""]??"Отсутствует"):"Работает"}
-function availabilityChange(row:WorkerRow){if(!row.absenceFrom)return"—";const label=absenceLabels[row.absenceType??""]??"Отсутствие";if(row.absenceStatus==="confirmed"&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()))return row.absenceTo?`возврат ${formatDate(addDays(row.absenceTo,1))}`:"дата возврата открыта";return `${label.toLocaleLowerCase("ru")} с ${formatDate(row.absenceFrom)}`}
-function addDays(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
-function formatDate(value:string){return new Intl.DateTimeFormat("ru-RU").format(new Date(value+"T00:00:00"))}
-function rateLabel(row:WorkerRow){if(row.rate==null)return"—";const unit=row.rateUnit==="shift"?"/смену":row.rateUnit==="month"?"/мес":"/ч";if(row.rateUnit==="shift"&&Number(row.paidHoursPerShift)>0)return`${rub(row.rate)}${unit} · ${rub(Number(row.rate)/Number(row.paidHoursPerShift))}/ч`;return`${rub(row.rate)}${unit}`}
 function nullable(value:string){return value||null}
 function Portal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body)}

@@ -3,14 +3,15 @@
 import {useMemo,useState} from "react";
 import {Plus,Trash2} from "lucide-react";
 import type {InventoryItemRow,ObjectPpeTemplateRow} from "@/lib/operations/service";
+import {rub} from "@/lib/ui/format";
 
 type SpecialtyOption={id:string;name:string};
 type DraftRow={itemId:string;quantity:string;sizeSource:"none"|"clothing"|"shoe"|"manual";replacementCycleDays:string};
 const sizeLabels:Record<DraftRow["sizeSource"],string>={none:"Без размера",clothing:"Размер одежды",shoe:"Размер обуви",manual:"Указать вручную"};
-const categoryLabels:Record<string,string>={workwear:"Спецодежда",ppe:"СИЗ",tool:"Инструмент",equipment:"Оборудование",other:"Другое"};
+const categoryLabels:Record<string,string>={workwear:"Спецодежда",ppe:"СИЗ",tool:"Инструмент",equipment:"Оборудование",consumable:"Расходник",other:"Другое"};
 
 export function GlobalPpeTemplatesWorkspace({templates,inventoryItems,specialties,canManage,demo}:{templates:ObjectPpeTemplateRow[];inventoryItems:InventoryItemRow[];specialties:SpecialtyOption[];canManage:boolean;demo:boolean}){
-  const normItems=useMemo(()=>inventoryItems.filter(item=>item.category!=="consumable").sort((a,b)=>a.name.localeCompare(b.name,"ru")),[inventoryItems]);
+  const normItems=useMemo(()=>inventoryItems.slice().sort((a,b)=>a.name.localeCompare(b.name,"ru")),[inventoryItems]);
   const options=useMemo(()=>specialties.slice().sort((a,b)=>a.name.localeCompare(b.name,"ru")),[specialties]);
   const first=options[0]?.id??"";
   const [specialtyId,setSpecialtyId]=useState(first);
@@ -30,7 +31,7 @@ export function GlobalPpeTemplatesWorkspace({templates,inventoryItems,specialtie
   function addItem(){
     const item=normItems.find(row=>row.id===addItemId);if(!item)return;
     const sizeSource:DraftRow["sizeSource"]=/ботин|обув|сапог|кроссов/i.test(item.name)?"shoe":item.category==="workwear"?"clothing":"none";
-    setDraft(current=>[...current,{itemId:item.id,quantity:"1",sizeSource,replacementCycleDays:""}]);
+    setDraft(current=>[...current,{itemId:item.id,quantity:"1",sizeSource,replacementCycleDays:item.defaultReplacementCycleDays==null?"":String(item.defaultReplacementCycleDays)}]);
     setAddItemId("");
   }
   function patchRow(itemId:string,patch:Partial<DraftRow>){setDraft(current=>current.map(row=>row.itemId===itemId?{...row,...patch}:row))}
@@ -57,15 +58,15 @@ export function GlobalPpeTemplatesWorkspace({templates,inventoryItems,specialtie
       <div className="object-supply-norm-source"><strong>Базовая норма компании</strong><span>Эта норма автоматически применяется на объектах с данной специальностью, пока на объекте не создано локальное переопределение.</span></div>
     </div>
     <div className="object-ppe-template-editor-panel">
-      <header className="object-supply-norm-head"><div><strong>{currentName}</strong><span>Задайте индивидуально учитываемую спецодежду, СИЗ, инструмент и оборудование. Расходники учитываются отдельно по объектам.</span></div></header>
+      <header className="object-supply-norm-head"><div><strong>{currentName}</strong><span>Задайте состав комплекта: спецодежду, СИЗ, инструмент, оборудование и расходники. Период выдачи определяет плановое обновление позиции.</span></div></header>
       <div className="request-table-wrap object-supply-norm-table"><table className="data-table">
-        <thead><tr><th>Позиция</th><th>Категория</th><th>Количество</th><th>Размер</th><th>Период замены</th>{canManage&&<th aria-label="Удалить"></th>}</tr></thead>
+        <thead><tr><th>Позиция</th><th>Категория</th><th>Количество</th><th>Размер</th><th>Период выдачи</th><th>Цена / ед.</th><th>Стоимость выдачи</th>{canManage&&<th aria-label="Удалить"></th>}</tr></thead>
         <tbody>{draft.map(row=>{const item=normItems.find(value=>value.id===row.itemId);return <tr key={row.itemId}>
           <td><strong className="cell-title">{item?.name??"Позиция удалена из справочника"}</strong><span className="cell-sub">{item?.unit??"—"}</span></td>
           <td>{categoryLabels[item?.category??""]??item?.category??"—"}</td>
           <td><div className="object-norm-quantity"><input type="number" min=".001" step=".001" value={row.quantity} disabled={!canManage} onChange={event=>patchRow(row.itemId,{quantity:event.target.value})}/><span>{item?.unit??""}</span></div></td>
           <td><select value={row.sizeSource} disabled={!canManage} onChange={event=>patchRow(row.itemId,{sizeSource:event.target.value as DraftRow["sizeSource"]})}>{Object.entries(sizeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></td>
-          <td><div className="object-norm-cycle"><input type="number" min="1" max="3650" value={row.replacementCycleDays} disabled={!canManage} onChange={event=>patchRow(row.itemId,{replacementCycleDays:event.target.value})} placeholder="—"/><span>дн.</span></div></td>
+          <td><div className="object-norm-cycle"><input type="number" min="1" max="3650" value={row.replacementCycleDays} disabled={!canManage} onChange={event=>patchRow(row.itemId,{replacementCycleDays:event.target.value})} placeholder="—"/><span>дн.</span></div></td><td className="num">{item?.currentPrice==null?"—":rub(item.currentPrice)}</td><td className="num">{item?.currentPrice==null?"—":rub(item.currentPrice*Math.max(.001,Number(row.quantity)||1))}</td>
           {canManage&&<td><button className="icon-button" type="button" aria-label={"Удалить "+(item?.name??"позицию")} onClick={()=>removeRow(row.itemId)}><Trash2 size={14}/></button></td>}
         </tr>})}</tbody>
       </table>{!draft.length&&<div className="empty-inline">Для специальности базовая норма пока не задана.</div>}</div>

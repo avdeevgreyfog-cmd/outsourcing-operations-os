@@ -48,6 +48,7 @@ function workflowFixture({ validLink = true, validRegion = true, validSpecialty 
   const writes = [];
   const tx = async (strings, ...values) => {
     const query = strings.join('?');
+    if (query.startsWith('SELECT id,expires_at')) return validLink ? [{ id: link.id, expiresAt: null }] : [];
     if (query.startsWith('SELECT id FROM request_intake_links')) {
       assert.ok(query.includes("m.status='active'"), 'Link owner is rechecked inside the tenant transaction');
       return validLink ? [{ id: link.id }] : [];
@@ -64,15 +65,15 @@ function workflowFixture({ validLink = true, validRegion = true, validSpecialty 
   };
   tx.json = value => value;
   // postgres TransactionSql intentionally exposes no nested begin method.
-  const root = async (strings) => {
-    assert.ok(!strings.join('?').includes('organization_memberships'), 'Public bootstrap must not query tenant tables before withTenant');
-    return [link];
-  };
   const workflowServer = load('lib/commercial/request-workflow-server.ts', {
     '@/lib/commercial/public-intake-validation': validation,
     '@/lib/access/server': { requireCapability() {} },
     '@/lib/core/access.mjs': { hasCapability() { return false; }, canReadRow() { return true; } },
-    '@/lib/db/client': { db: () => root, withTenant: async (org, user, callback) => {
+    '@/lib/commercial/public-request-token-directory': { resolvePublicRequestToken: async (token, kind) => {
+      assert.equal(token, 'token'); assert.equal(kind, 'request_intake_link');
+      return { tenantId: link.organizationId, actorUserId: link.createdByUserId, linkId: link.id };
+    }, registerPublicRequestToken: async () => {} },
+    '@/lib/db/client': { withTenant: async (org, user, callback) => {
       assert.equal(org, link.organizationId); assert.equal(user, link.createdByUserId);
       return callback(tx);
     } },

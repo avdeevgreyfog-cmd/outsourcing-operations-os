@@ -10,6 +10,7 @@ export const githubPagesStaticParams = {
   objects: ids(demo.objects),
   candidates: ids(demo.candidates),
   workers: ids(demo.workers),
+  housing: ["demo-housing-1"],
   proposals: ids(demo.proposals),
   tenders: [
     "a1000000-0000-4000-8000-000000000001",
