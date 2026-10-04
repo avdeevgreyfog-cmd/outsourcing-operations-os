@@ -65,6 +65,7 @@ for(const width of [1440,390])for(const theme of ['light','dark']){
  const c=await browser.newContext({viewport:{width,height:900}});await c.addCookies([{name:'oo_workspace_mode',value:'demo',url:base},{name:'oo_demo_role',value:'director',url:base},{name:'oo_theme',value:theme,url:base}]);
  const p=await c.newPage();p.on('pageerror',error=>errors.push(error.message));await p.goto(`${base}/workers`,{waitUntil:'networkidle'});await p.locator('.operis-worker-registry').getByRole('button',{name:'Колонки',exact:true}).click();
  const panel=p.locator('.operis-registry-popover.columns');const canvas=p.locator('.operis-worker-registry');const bounds=await panel.boundingBox(),container=await canvas.boundingBox();assert(bounds.x>=container.x-1&&bounds.x+bounds.width<=width+1,'Column controls stay inside the canvas');
+ if(width===390) assert.ok(await p.locator('.registry-column-setting').first().evaluate(row=>row.querySelector('.registry-column-width').getBoundingClientRect().top>=row.querySelector('.registry-column-name').getBoundingClientRect().bottom),'Mobile column labels and width controls occupy separate rows');
  await p.getByRole('checkbox',{name:'Телефон',exact:true}).check();await p.screenshot({path:`${artifacts}/columns-${width}-${theme}.png`});await c.close();
 }
 checks.push('inline shared column settings accessible at1440/390 in light/dark');

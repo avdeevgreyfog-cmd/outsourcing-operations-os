@@ -226,10 +226,17 @@ try {
       await goto(p, path);
       if (name === 'analytics') await p.locator('.request-funnel-readable-row').first().waitFor();
       await bounded(p, `${name}-${width}-${theme}`);
+      if(name==='table'){
+        await p.getByRole('button',{name:'Колонки',exact:true}).click();
+        await p.getByRole('checkbox',{name:'Адрес объекта',exact:true}).check();
+        if(width===390) assert.ok(await p.locator('.registry-column-setting').first().evaluate(row=>row.querySelector('.registry-column-width').getBoundingClientRect().top>=row.querySelector('.registry-column-name').getBoundingClientRect().bottom),'On mobile, width controls have their own row below the full label');
+        await bounded(p, `column-settings-${width}-${theme}`);
+        await p.getByRole('button',{name:'Закрыть настройки представления',exact:true}).click();
+      }
     }
     await c.close();
   }
   assert.deepEqual(errors, [], 'No uncaught browser exceptions');
   if (process.env.PUBLIC_INTAKE_QA_PATH) console.log('Public intake QA passed: all four steps, contact validation, custom schedule and confirmation; 16 responsive light/dark captures with intercepted submission.');
-  console.log('Requests browser QA passed: persisted column order/width/pinning, optional fields, two-level groups, table/board scroll docks, event/conversion charts, collapsed stage details, saved views, stage filters, analytics drilldown and demo draft persistence; 32 responsive light/dark captures.');
+  console.log('Requests browser QA passed: persisted column order/width/pinning, optional fields, two-level groups, table/board scroll docks, event/conversion charts, collapsed stage details, saved views, stage filters, analytics drilldown and demo draft persistence; 40 responsive light/dark captures.');
 } finally { await browser.close(); }
