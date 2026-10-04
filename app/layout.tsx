@@ -16,6 +16,7 @@ import "./calculation-economics.css";
 import "./economics-workspaces.css";
 import "./navigation-shell.css";
 import "./workers-registry.css";
+import "./patterns.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",

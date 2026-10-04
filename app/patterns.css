@@ -1,0 +1,89 @@
+/* Shared working patterns. Scoped to keep adoption explicit and avoid module overrides. */
+.operis-patterns{--pattern-accent:#c64c0b;--pattern-good:#39a579;--pattern-warn:#d6a340;--pattern-bad:#d66560;font:13px/1.5 "Segoe UI Variable Text","Segoe UI",sans-serif;color:var(--text);min-width:0}
+:root[data-theme=dark] .operis-patterns{--pattern-accent:var(--accent)}
+.operis-patterns .pattern-catalog-note{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:0 0 18px;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-tabs{display:flex;gap:24px;min-width:0;max-width:100%;overflow:auto;flex-wrap:nowrap;border-bottom:1px solid var(--border);margin:0 0 18px}
+.operis-patterns .pattern-tabs button{display:flex;align-items:center;gap:7px;flex-shrink:0;height:40px;padding:0 0 12px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font:500 13px/1.2 "Segoe UI",sans-serif;white-space:nowrap;cursor:pointer;border-radius:0;box-shadow:none}
+.operis-patterns .pattern-tabs button[aria-pressed=true]{border-bottom-color:var(--pattern-accent);color:var(--pattern-accent)}
+.operis-patterns .pattern-intro{color:var(--muted);font-size:12px;margin:0 0 18px;max-width:960px}
+.operis-patterns .pattern-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.operis-patterns .pattern-actions>label{display:flex;align-items:center;gap:8px;color:var(--muted)}
+:root[data-operis-ui] .sales-workspace.operations-workspace .operis-patterns .button{height:38px;min-height:38px;padding:0 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:7px;box-shadow:none;font:500 13px/1.2 "Segoe UI",sans-serif;text-decoration:none;white-space:nowrap}
+:root[data-operis-ui] .sales-workspace.operations-workspace .operis-patterns .button.primary{background:var(--pattern-accent);border-color:var(--pattern-accent);color:#fff}
+:root[data-theme=dark] .sales-workspace.operations-workspace .operis-patterns .button.primary{color:#0a1016}
+.operis-patterns .icon-button{width:30px;height:30px;min-height:30px;border:0;border-radius:6px;background:transparent;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;padding:0;cursor:pointer;flex-shrink:0}
+.operis-patterns button:disabled{opacity:.4;cursor:default}
+.operis-patterns :is(button,input,select,textarea):focus-visible{outline:2px solid var(--pattern-accent);outline-offset:2px;box-shadow:none}
+.operis-patterns :is(input,select,textarea){min-width:0;max-width:100%;height:38px;min-height:38px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);padding:0 10px;font:13px "Segoe UI",sans-serif}
+.operis-patterns input[type=checkbox]{width:14px;height:14px;min-height:14px;max-width:14px;margin:0;padding:0;accent-color:var(--pattern-accent);vertical-align:middle}
+.operis-patterns .pattern-result{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0;padding:4px 0 12px;min-height:34px;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-selection{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;margin-bottom:10px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);font-size:12px}
+.operis-patterns .pattern-table-scroll{max-width:100%;min-width:0;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.operis-patterns .pattern-table{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:100%;font-size:13px;color:var(--text)}
+.operis-patterns .pattern-table th{height:42px;padding:0 12px;text-align:left;background:var(--panel-2);border-bottom:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:500}
+.operis-patterns .pattern-table th>button{display:flex;align-items:center;gap:6px;height:24px;min-height:0;padding:0;border:0;background:transparent;font:500 12px "Segoe UI",sans-serif;color:var(--muted);cursor:pointer}
+.operis-patterns .pattern-table td{height:60px;padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle;background:var(--panel);font-size:13px;line-height:1.4;overflow-wrap:anywhere}
+.operis-patterns .pattern-table tr:last-child td{border-bottom:0}
+.operis-patterns .pattern-table tbody tr:hover td,.operis-patterns .pattern-table tr.selected td{background:var(--panel-2)}
+.operis-patterns .pattern-table .pattern-check{position:sticky;left:0;z-index:3;width:40px;padding:0;text-align:center}
+.operis-patterns .pattern-cell-open{border:0;background:transparent;padding:0;text-align:left;color:inherit;font:inherit;cursor:pointer;width:100%;min-width:0}
+.operis-patterns .pattern-name{display:flex;align-items:center;gap:10px;min-width:0}
+.operis-patterns .pattern-name>span:last-child{min-width:0}
+.operis-patterns .pattern-name strong{display:block;font-size:13px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.operis-patterns .pattern-name small{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:4px;line-height:1.45}
+.operis-patterns .pattern-avatar{display:flex;align-items:center;justify-content:center;flex:0 0 34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--panel-2);font-size:11px;color:var(--muted)}
+.operis-patterns .pattern-status{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:400;color:var(--muted);white-space:normal;line-height:1.4}
+.operis-patterns .pattern-status i{height:6px;width:6px;flex:0 0 6px;border-radius:50%;background:var(--muted)}
+.operis-patterns .pattern-status.good i{background:var(--pattern-good)}.operis-patterns .pattern-status.warn i{background:var(--pattern-warn)}.operis-patterns .pattern-status.bad i{background:var(--pattern-bad)}
+.operis-patterns .pattern-number{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.operis-patterns .pattern-muted,.operis-patterns .pattern-note{color:var(--muted);font-size:12px}
+.operis-patterns .pattern-note{margin:12px 0 18px}
+.operis-patterns .pattern-group td{height:38px;background:var(--panel-2);padding:0 12px}
+.operis-patterns .pattern-group button{display:flex;align-items:center;gap:8px;width:100%;height:38px;min-height:0;border:0;background:transparent;padding:0;color:var(--text);font:600 12px "Segoe UI",sans-serif;text-align:left;cursor:pointer}
+.operis-patterns .pattern-group button[aria-expanded=false]>svg{transform:rotate(-90deg)}
+.operis-patterns .pattern-group small{margin-left:4px;font-weight:400;color:var(--muted)}
+.operis-patterns .pattern-empty{padding:32px 16px!important;text-align:center;height:auto!important}
+.operis-patterns .pattern-empty>strong,.operis-patterns .pattern-empty>span{display:block;margin:6px 0;font-size:13px}.operis-patterns .pattern-empty>span{color:var(--muted);font-size:12px}
+.operis-patterns .pattern-pagination{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0;padding:14px 0;color:var(--muted);font-size:12px}
+.operis-patterns .pattern-pagination>span{margin-right:auto}.operis-patterns .pattern-pagination label{display:flex;align-items:center;gap:8px}
+.operis-patterns .pattern-pagination select{height:30px;min-height:30px}
+.operis-patterns .pattern-settings{margin:10px 0;padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.operis-patterns .pattern-settings>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.operis-patterns .pattern-column-settings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px}
+.operis-patterns .pattern-column-settings>div{display:flex;align-items:center;gap:5px;min-width:0;border-bottom:1px solid var(--border);padding-bottom:8px}
+.operis-patterns .pattern-column-settings>div>label:first-child{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.operis-patterns .pattern-width{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}.operis-patterns .pattern-width input{width:65px;height:30px;min-height:30px;padding:0 5px}
+.operis-patterns .pattern-settings-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.operis-patterns .pattern-entity-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.operis-patterns .pattern-entity-heading h2{font-size:22px;line-height:1.3;margin:0 0 5px}.operis-patterns .pattern-entity-heading p{font-size:12px;color:var(--muted);margin:0}
+.operis-patterns .pattern-entity-heading .pattern-actions{margin:0}
+.operis-patterns .pattern-entity-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:18px;align-items:start}
+.operis-patterns .pattern-entity-full{min-width:0}
+.operis-patterns .pattern-entity-summary{padding:18px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.operis-patterns .pattern-entity-summary>.pattern-status{margin-top:12px}
+.operis-patterns .pattern-paired{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:stretch}
+.operis-patterns .pattern-block{min-width:0;border:1px solid var(--border);border-radius:8px;background:var(--panel);margin-bottom:18px}
+.operis-patterns .pattern-block>header{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.operis-patterns .pattern-block h3{margin:0;font-size:14px;font-weight:600}
+.operis-patterns .pattern-block>div{padding:16px}.operis-patterns .pattern-block p{margin:0 0 12px}
+.operis-patterns dl{margin:18px 0 0}.operis-patterns dl>div{display:grid;grid-template-columns:minmax(100px,.7fr) minmax(0,1fr);gap:12px;margin-bottom:12px;font-size:12px}.operis-patterns dt{color:var(--muted)}.operis-patterns dd{margin:0;overflow-wrap:anywhere}
+.operis-patterns .pattern-board-scroll{max-width:100%;overflow:auto}.operis-patterns .pattern-board{display:grid;grid-template-columns:repeat(4,minmax(250px,1fr));gap:12px;min-width:1036px}
+.operis-patterns .pattern-board-column{border:1px solid var(--border);border-radius:8px;background:var(--panel-2);min-height:360px}
+.operis-patterns .pattern-board-column>header{display:flex;align-items:center;justify-content:space-between;padding:12px;border-bottom:1px solid var(--border)}.operis-patterns .pattern-board-column h3{font-size:13px;margin:0}.operis-patterns .pattern-board-column>header>span{font-size:12px;color:var(--muted)}
+.operis-patterns .pattern-board-column>div{padding:8px}.operis-patterns .pattern-board-card{border:1px solid var(--border);border-radius:7px;background:var(--panel);padding:12px;margin-bottom:8px;cursor:grab}
+.operis-patterns .pattern-board-card p{font-size:12px;color:var(--muted);margin:12px 0 8px}.operis-patterns .pattern-board-card select{width:100%;height:30px;min-height:30px;font-size:12px;margin-top:10px}
+.operis-patterns .pattern-board-meta{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted)}.operis-patterns .pattern-board-empty{font-size:12px;color:var(--muted);padding:12px}
+.operis-patterns .pattern-list-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}.operis-patterns .pattern-list-row:first-child{padding-top:0}.operis-patterns .pattern-list-row:last-child{border-bottom:0}.operis-patterns .pattern-list-row small{display:block;font-size:11px;color:var(--muted);margin-top:4px}
+.operis-patterns .pattern-form-field{display:grid;gap:6px;margin-bottom:16px;font-size:12px;color:var(--muted)}.operis-patterns .pattern-form-field input,.operis-patterns .pattern-form-field textarea{width:100%}.operis-patterns .pattern-form-field textarea{min-height:100px;padding:10px;resize:vertical}
+.operis-patterns .pattern-error{font-size:12px;color:var(--danger,#c84d4d);padding:10px 12px;border:1px solid var(--border);border-radius:7px}
+.operis-patterns .pattern-checkbox{display:flex;align-items:center;gap:8px;font-size:12px}
+.operis-patterns .pattern-element-line{display:flex;flex-wrap:wrap;gap:16px}
+.operis-patterns .pattern-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--border);border-radius:8px;background:var(--panel);margin:0 0 18px;overflow:hidden}
+.operis-patterns .pattern-metrics>div{padding:12px 14px;min-width:0;border-right:1px solid var(--border)}.operis-patterns .pattern-metrics>div:last-child{border-right:0}.operis-patterns .pattern-metrics span{font-size:12px;color:var(--muted)}.operis-patterns .pattern-metrics strong{display:block;font-size:22px;margin-top:6px}.operis-patterns .pattern-metrics .pattern-number{font-size:22px;color:var(--text);white-space:normal}
+.operis-patterns .pattern-chart-row{display:grid;grid-template-columns:140px minmax(0,1fr) 30px;gap:12px;align-items:center;margin:12px 0;font-size:12px}.operis-patterns .pattern-chart-row>div{height:6px;background:var(--panel-2);border-radius:3px;overflow:hidden}.operis-patterns .pattern-chart-row i{display:block;height:100%;background:var(--pattern-accent)}
+.operis-patterns .pattern-month{display:flex;justify-content:center;align-items:center;gap:14px;margin-bottom:18px;font-size:13px;text-transform:capitalize}
+.operis-patterns .pattern-timesheet{table-layout:auto;min-width:1450px}.operis-patterns .pattern-timesheet th,.operis-patterns .pattern-timesheet td{min-width:36px;height:36px;text-align:center;padding:4px;font-size:12px;border-right:1px solid var(--border)}.operis-patterns .pattern-timesheet th:first-child,.operis-patterns .pattern-timesheet td:first-child{min-width:190px;text-align:left;padding:0 12px;position:sticky;left:0;z-index:2}
+.operis-patterns .pattern-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--border);border-left:1px solid var(--border)}.operis-patterns .pattern-calendar>div{min-height:85px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px;background:var(--panel)}.operis-patterns .pattern-calendar span{display:block;font-size:11px;color:var(--muted);margin-top:8px;overflow-wrap:anywhere}
+.operis-patterns .pattern-tree,.operis-patterns .pattern-tree ul{list-style:none;margin:0;padding-left:20px}.operis-patterns .pattern-tree li{padding:8px 0 8px 12px;border-left:1px solid var(--border);font-size:13px}
+@media(max-width:1100px){.operis-patterns .pattern-column-settings{grid-template-columns:1fr}.operis-patterns .pattern-entity-layout{grid-template-columns:220px minmax(0,1fr)}.operis-patterns .pattern-entity-layout .pattern-paired{grid-template-columns:1fr}}
+@media(max-width:760px){.operis-patterns .pattern-paired,.operis-patterns .pattern-entity-layout{grid-template-columns:1fr}.operis-patterns .pattern-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.operis-patterns .pattern-entity-heading{align-items:flex-start;flex-direction:column}.operis-patterns .pattern-column-settings>div{flex-wrap:wrap}.operis-patterns .pattern-width{margin-left:auto}.operis-patterns .pattern-calendar>div{min-height:65px;padding:6px}.operis-patterns .pattern-chart-row{grid-template-columns:95px minmax(0,1fr) 20px}}

@@ -10,12 +10,12 @@ import { AccountMenu } from "@/components/AccountMenu";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { roleLabel } from "@/lib/ui/format";
 import { hasCapability } from "@/lib/core/access.mjs";
-import { Activity, BriefcaseBusiness, Building2, ChartNoAxesCombined, ChevronDown, Factory, Home, Menu, PanelLeftClose, PanelLeftOpen, Pin, Search, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
+import { Activity, BriefcaseBusiness, Building2, ChartNoAxesCombined, ChevronDown, Factory, Home, Menu, PanelLeftClose, PanelLeftOpen, PanelsTopLeft, Pin, Search, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 
 export type NavigationItem = { id?: string; label: string; href: string; capability?: string; keywords?: string; status?: "foundation" };
 export type NavigationGroup = { id: string; label: string; items: NavigationItem[] };
 export type NavigationSection = { id: string; label: string; icon: string; groups: NavigationGroup[] };
-const icons = { home: Home, briefcase: BriefcaseBusiness, factory: Factory, users: Users, wallet: WalletCards, chart: ChartNoAxesCombined, shield: ShieldCheck, building: Building2, settings: Settings };
+const icons = { home: Home, briefcase: BriefcaseBusiness, factory: Factory, users: Users, wallet: WalletCards, chart: ChartNoAxesCombined, shield: ShieldCheck, building: Building2, settings: Settings, layout: PanelsTopLeft };
 function sameRoute(pathname: string, href: string, currentView: string) {
   const path = href.split("?")[0];
   if (!(path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`))) return false;

@@ -2,7 +2,7 @@ name: Deploy OPERIS GitHub Demo
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ui/templates"]
   workflow_dispatch:
 
 permissions:
@@ -47,6 +47,10 @@ jobs:
 
       - name: Build the real OPERIS app for GitHub Pages
         run: npm run build
+
+      - name: Verify template catalog
+        if: github.ref == 'refs/heads/ui/templates'
+        run: test -f out/templates/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
