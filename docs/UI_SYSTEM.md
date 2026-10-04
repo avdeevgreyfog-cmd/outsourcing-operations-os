@@ -151,3 +151,36 @@ origin only. Local demo environment settings are ignored, never published as sec
   are used instead of CSS inversion.
 - The product symbol is intentionally compact and name-agnostic. It is safe for the
   30 px collapsed sidebar mark while the final product name remains a separate decision.
+
+
+## Requests pattern (4 October 2026)
+
+- Keep Table, Board and Analytics in the top navigation. KPI cards belong only to
+  Analytics. The primary row contains the saved view, stage filter and search;
+  the secondary row controls filters, columns, grouping, sorting and saved views.
+- Controls expand inline and return focus on Escape. Stage is the primary quick
+  filter; terminal stages select the completed bucket. Active, Completed, Archive
+  and Unassigned presets remain available. Preferences are versioned, scoped to
+  organization/membership and hydrated before writing; search is not persisted.
+- The board reuses the recruiting board's quiet columns, counts, compact cards and
+  semantic stage dots. Empty columns can be hidden. Archive is read-only; existing
+  stage permissions and the required loss-reason workflow still govern changes.
+- Analytics retains the trapezoid funnel with readable labels outside the shape.
+  Calendar events include older requests; cohort conversions use the selected new
+  requests. Only recorded stages count as reached. Pending and lost are separate.
+  Drilldown uses exact scoped request IDs. Demo analytics uses the same merged demo
+  records as the registry and explicitly identifies absent historical events.
+- Manager entry starts with a compact call form and shares state with the six
+  detailed sections. Drafts may be incomplete; saving is explicit. Unsaved edits
+  warn on reload or link navigation. All commercial fields, imports, role schedules
+  and calculations remain available; there is no second editor or inferred pricing.
+- External new-request intake uses the existing single active organization link.
+  Show its owner, actual expiry and submission count; only its creator or an
+  authorized pipeline administrator may revoke it. Clarifying an existing request
+  remains a separate action in its card. Public contact validation requires a usable
+  phone or email. Tenant checks and creation reuse one transaction; no schema change.
+- Verification: 71 unit/contract tests, TypeScript, ESLint and production build;
+  browser workflows and 1440/1024/768/390 light/dark captures on isolated demo.
+  The four public intake steps were checked using an isolated local fixture and
+  intercepted submission (16 additional captures). Database-backed external
+  submission is not covered by that browser run.

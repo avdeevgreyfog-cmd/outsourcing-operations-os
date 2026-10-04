@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { normalizeRequestIntake } from "@/lib/commercial/request-intake";
 import { submitBlankRequest } from "@/lib/commercial/request-workflow-server";
+import { PublicIntakeInputError, publicIntakeContactError } from "@/lib/commercial/public-intake-validation";
 
 const role = z.object({
   specialtyId: z.string().uuid().nullable().optional(), specialtyName: z.string().trim().min(2).max(160), count: z.number().int().positive().max(5000),
@@ -19,10 +20,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   try {
     const { token } = await params;
     const body = schema.parse(await request.json());
-    const result = await submitBlankRequest(token, { ...body, intake: normalizeRequestIntake(body.intake) });
+    const intake = normalizeRequestIntake(body.intake);
+    const contactError = publicIntakeContactError(body.companyName, intake.contact);
+    if (contactError) return NextResponse.json({ error: contactError }, { status: 400 });
+    const result = await submitBlankRequest(token, { ...body, intake });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Проверьте обязательные поля", issues: error.issues }, { status: 400 });
+    if (error instanceof PublicIntakeInputError) return NextResponse.json({ error: error.message }, { status: error.status });
     console.error(error);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Не удалось отправить заявку" }, { status: 500 });
   }

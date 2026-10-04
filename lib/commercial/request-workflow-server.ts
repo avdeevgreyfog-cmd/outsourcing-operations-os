@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { PublicIntakeInputError } from "@/lib/commercial/public-intake-validation";
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { hasCapability, canReadRow } from "@/lib/core/access.mjs";
@@ -97,14 +98,74 @@ export async function getRequestWorkflowMeta(actor:Actor,requestId:string):Promi
   });
 }
 
-export async function getActiveBlankIntakeLink(actor:Actor){if(actor.demo)return null;return withTenant(actor.organizationId,actor.userId,async(sql)=>{const [row]=await sql<Array<{token:string;expiresAt:string|null;submissionCount:number}>>`SELECT token,expires_at::text "expiresAt",submission_count "submissionCount" FROM request_intake_links WHERE active AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC LIMIT 1`;return row?{path:`/request-intake/${row.token}`,...row}:null;});}
-export async function createBlankIntakeLink(actor:Actor,expiresInDays:number|null){requireCapability(actor,"sales.request.create");if(actor.demo)throw new Error("Демонстрационный режим доступен только для просмотра");const current=await getActiveBlankIntakeLink(actor);if(current)return current;const token=randomBytes(24).toString("base64url");return withTenant(actor.organizationId,actor.userId,async(sql)=>{const [row]=await sql<Array<{token:string;expiresAt:string|null;submissionCount:number}>>`INSERT INTO request_intake_links(organization_id,token,created_by_user_id,expires_at) VALUES(${actor.organizationId}::uuid,${token},${actor.userId}::uuid,CASE WHEN ${expiresInDays}::int IS NULL THEN NULL ELSE now()+(${expiresInDays}::int*interval '1 day') END) RETURNING token,expires_at::text "expiresAt",submission_count "submissionCount"`;return {path:`/request-intake/${row.token}`,...row};});}
+type IntakeLinkRecord = { token: string; expiresAt: string | null; submissionCount: number; ownerUserId: string; ownerName: string };
+function intakeLinkResult(actor: Actor, row: IntakeLinkRecord) {
+  return { path: `/request-intake/${row.token}`, expiresAt: row.expiresAt, submissionCount: row.submissionCount, ownerName: row.ownerName, canManage: row.ownerUserId === actor.userId || canConfigurePipeline(actor) };
+}
+export async function getActiveBlankIntakeLink(actor: Actor) {
+  requireCapability(actor, "sales.request.create");
+  if (actor.demo) return null;
+  return withTenant(actor.organizationId, actor.userId, async sql => {
+    const [row] = await sql<IntakeLinkRecord[]>`SELECT l.token,l.expires_at::text "expiresAt",l.submission_count "submissionCount",l.created_by_user_id "ownerUserId",u.display_name "ownerName" FROM request_intake_links l JOIN app_users u ON u.id=l.created_by_user_id WHERE l.active AND (l.expires_at IS NULL OR l.expires_at>now()) AND EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id=l.organization_id AND m.user_id=l.created_by_user_id AND m.status='active') ORDER BY l.created_at DESC LIMIT 1`;
+    return row ? intakeLinkResult(actor, row) : null;
+  });
+}
+export async function createBlankIntakeLink(actor: Actor, expiresInDays: number | null) {
+  requireCapability(actor, "sales.request.create");
+  if (actor.demo) throw new Error("В демо внешние ссылки не создаются. Создайте тестовую заявку через форму менеджера.");
+  return withTenant(actor.organizationId, actor.userId, async sql => {
+    await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`intake-link:${actor.organizationId}`},0))`;
+    await sql`UPDATE request_intake_links l SET active=false WHERE active AND ((expires_at IS NOT NULL AND expires_at<=now()) OR NOT EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id=l.organization_id AND m.user_id=l.created_by_user_id AND m.status='active'))`;
+    const [current] = await sql<IntakeLinkRecord[]>`SELECT l.token,l.expires_at::text "expiresAt",l.submission_count "submissionCount",l.created_by_user_id "ownerUserId",u.display_name "ownerName" FROM request_intake_links l JOIN app_users u ON u.id=l.created_by_user_id WHERE l.active LIMIT 1`;
+    if (current) return intakeLinkResult(actor, current);
+    const token = randomBytes(24).toString("base64url");
+    const [row] = await sql<Array<{token:string;expiresAt:string|null;submissionCount:number}>>`INSERT INTO request_intake_links(organization_id,token,created_by_user_id,expires_at) VALUES(${actor.organizationId}::uuid,${token},${actor.userId}::uuid,CASE WHEN ${expiresInDays}::int IS NULL THEN NULL ELSE now()+(${expiresInDays}::int*interval '1 day') END) RETURNING token,expires_at::text "expiresAt",submission_count "submissionCount"`;
+    return intakeLinkResult(actor, { ...row, ownerUserId: actor.userId, ownerName: actor.displayName });
+  });
+}
+export async function revokeBlankIntakeLink(actor: Actor) {
+  requireCapability(actor, "sales.request.create");
+  if (actor.demo) throw new Error("В демо внешние ссылки не изменяются");
+  return withTenant(actor.organizationId, actor.userId, async sql => {
+    await sql`SELECT pg_advisory_xact_lock(hashtextextended(${`intake-link:${actor.organizationId}`},0))`;
+    const [link] = await sql<Array<{id:string;ownerUserId:string}>>`SELECT id,created_by_user_id "ownerUserId" FROM request_intake_links WHERE active FOR UPDATE`;
+    if (!link) return;
+    if (link.ownerUserId !== actor.userId && !canConfigurePipeline(actor)) throw new PublicIntakeInputError("Отключить ссылку может её создатель или администратор воронки", 403);
+    await sql`UPDATE request_intake_links SET active=false WHERE id=${link.id}::uuid`;
+  });
+}
 
-export async function getBlankRequestContext(token:string):Promise<BlankRequestContext|null>{const root=db();const [link]=await root<Array<{id:string;organizationId:string;createdByUserId:string;expiresAt:string|null}>>`SELECT id,organization_id "organizationId",created_by_user_id "createdByUserId",expires_at::text "expiresAt" FROM request_intake_links WHERE token=${token} AND active AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`;if(!link)return null;await root`UPDATE request_intake_links SET last_opened_at=now() WHERE id=${link.id}::uuid`;return withTenant(link.organizationId,link.createdByUserId,async(sql)=>{const [organization,specialties,regions]=await Promise.all([sql<Array<{name:string}>>`SELECT name FROM organizations WHERE id=${link.organizationId}::uuid`,sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`]);return {organizationName:organization[0]?.name??"Компания",token,specialties,regions,expiresAt:link.expiresAt};});}
+export async function getBlankRequestContext(token: string): Promise<BlankRequestContext | null> {
+  // The public token lookup resolves the tenant. Membership checks require that tenant's RLS context.
+  const [link] = await db()<Array<{id:string;organizationId:string;createdByUserId:string;expiresAt:string|null}>>`SELECT id,organization_id "organizationId",created_by_user_id "createdByUserId",expires_at::text "expiresAt" FROM request_intake_links WHERE token=${token} AND active AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`;
+  if (!link) return null;
+  return withTenant(link.organizationId, link.createdByUserId, async sql => {
+    const [owner] = await sql<Array<{id:string}>>`SELECT id FROM organization_memberships WHERE organization_id=${link.organizationId}::uuid AND user_id=${link.createdByUserId}::uuid AND status='active' LIMIT 1`;
+    if (!owner) return null;
+    await sql`UPDATE request_intake_links SET last_opened_at=now() WHERE id=${link.id}::uuid`;
+    const [organization, specialties, regions] = await Promise.all([
+      sql<Array<{name:string}>>`SELECT name FROM organizations WHERE id=${link.organizationId}::uuid`,
+      sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
+      sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
+    ]);
+    return { organizationName: organization[0]?.name ?? "Компания", token, specialties, regions, expiresAt: link.expiresAt };
+  });
+}
 
-export async function submitBlankRequest(token:string,payload:Omit<RequestV2Payload,"clientId"|"ownerUserId"|"observerUserIds">&{companyName:string}){const root=db();const [link]=await root<Array<{id:string;organizationId:string;createdByUserId:string}>>`SELECT id,organization_id "organizationId",created_by_user_id "createdByUserId" FROM request_intake_links WHERE token=${token} AND active AND (expires_at IS NULL OR expires_at>now()) LIMIT 1`;if(!link)throw new Error("Ссылка недействительна или срок её действия истёк");return withTenant(link.organizationId,link.createdByUserId,async(sql)=>sql.begin(async(tx)=>{let clientId:string|null=null;if(payload.companyName.trim()){const [existing]=await tx<Array<{id:string}>>`SELECT id FROM client_companies WHERE lower(name)=lower(${payload.companyName.trim()}) LIMIT 1`;if(existing)clientId=existing.id;}const [request]=await tx<Array<{id:string}>>`INSERT INTO requests(organization_id,client_company_id,title,status,workflow_stage_code,source,location_text,region_id,expected_start_date,duration_text,schedule_json,intake_json,lunch_paid,vat_mode,housing_rule,travel_rule,shuttle_rule,ppe_rule,medical_rule,citizenship_rule,tools_rule,comments,owner_user_id,created_by_user_id) VALUES(${link.organizationId}::uuid,${clientId}::uuid,${payload.title},'draft','new','public_form',${payload.location},${payload.regionId}::uuid,${payload.startDate}::date,${payload.durationText},${sql.json(toJsonValue(payload.schedule))},${sql.json(toJsonValue(payload.intake))},${payload.lunchPaid},${payload.vatMode},${rule(payload.intake,"housing")},${rule(payload.intake,"travel")},${rule(payload.intake,"shuttle")},${`${rule(payload.intake,"workwear")} / ${rule(payload.intake,"ppe")}`},${`${rule(payload.intake,"medical")} / ${rule(payload.intake,"medbook")}`},${payload.intake.compliance.workerCategories.join(", ")},${rule(payload.intake,"tools")},${payload.comments},${link.createdByUserId}::uuid,${link.createdByUserId}::uuid) RETURNING id`;
-    for(const role of payload.roles){let specialtyId=role.specialtyId??null;if(!specialtyId){const name=role.specialtyName.trim();const [existing]=await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE active AND lower(name)=lower(${name}) LIMIT 1`;if(existing)specialtyId=existing.id;else{const [created]=await tx<Array<{id:string}>>`INSERT INTO specialties(organization_id,code,name) VALUES(${link.organizationId}::uuid,${`custom-${randomUUID().slice(0,8)}`},${name}) RETURNING id`;specialtyId=created.id;}}await tx`INSERT INTO request_roles(organization_id,request_id,specialty_id,count_required,schedule_json,requirements_json,target_client_rate) VALUES(${link.organizationId}::uuid,${request.id}::uuid,${specialtyId}::uuid,${role.count},${sql.json(toJsonValue(role.schedule))},${sql.json(toJsonValue(role.requirements))},${role.targetClientRate})`;}
-    await tx`UPDATE request_intake_links SET submission_count=submission_count+1 WHERE id=${link.id}::uuid`;return {id:request.id};}));}
+export async function submitBlankRequest(token:string,payload:Omit<RequestV2Payload,"clientId"|"ownerUserId"|"observerUserIds">&{companyName:string}){const root=db();const [link]=await root<Array<{id:string;organizationId:string;createdByUserId:string}>>`SELECT id,organization_id "organizationId",created_by_user_id "createdByUserId" FROM request_intake_links l WHERE l.token=${token} AND l.active AND (l.expires_at IS NULL OR l.expires_at>now()) LIMIT 1`;if(!link)throw new PublicIntakeInputError("Ссылка недействительна или срок её действия истёк");return withTenant(link.organizationId,link.createdByUserId,async(tx)=>{
+    const [validLink] = await tx<Array<{id:string}>>`SELECT id FROM request_intake_links l WHERE l.id=${link.id}::uuid AND l.active AND (l.expires_at IS NULL OR l.expires_at>now()) AND EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id=l.organization_id AND m.user_id=l.created_by_user_id AND m.status='active') FOR UPDATE`;
+    if (!validLink) throw new PublicIntakeInputError("Ссылка недействительна или срок её действия истёк");
+    if (payload.regionId) {
+      const [region] = await tx<Array<{id:string}>>`SELECT id FROM regions WHERE id=${payload.regionId}::uuid`;
+      if (!region) throw new PublicIntakeInputError("Выберите регион из списка формы");
+    }
+    for (const role of payload.roles) if (role.specialtyId) {
+      const [specialty] = await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${role.specialtyId}::uuid AND active`;
+      if (!specialty) throw new PublicIntakeInputError("Выберите действующую специальность из списка формы");
+    }
+    let clientId:string|null=null;if(payload.companyName.trim()){const [existing]=await tx<Array<{id:string}>>`SELECT id FROM client_companies WHERE lower(name)=lower(${payload.companyName.trim()}) LIMIT 1`;if(existing)clientId=existing.id;}const [request]=await tx<Array<{id:string}>>`INSERT INTO requests(organization_id,client_company_id,title,status,workflow_stage_code,source,location_text,region_id,expected_start_date,duration_text,schedule_json,intake_json,lunch_paid,vat_mode,housing_rule,travel_rule,shuttle_rule,ppe_rule,medical_rule,citizenship_rule,tools_rule,comments,owner_user_id,created_by_user_id) VALUES(${link.organizationId}::uuid,${clientId}::uuid,${payload.title},'draft','new','public_form',${payload.location},${payload.regionId}::uuid,${payload.startDate}::date,${payload.durationText},${tx.json(toJsonValue(payload.schedule))},${tx.json(toJsonValue(payload.intake))},${payload.lunchPaid},${payload.vatMode},${rule(payload.intake,"housing")},${rule(payload.intake,"travel")},${rule(payload.intake,"shuttle")},${`${rule(payload.intake,"workwear")} / ${rule(payload.intake,"ppe")}`},${`${rule(payload.intake,"medical")} / ${rule(payload.intake,"medbook")}`},${payload.intake.compliance.workerCategories.join(", ")},${rule(payload.intake,"tools")},${payload.comments},${link.createdByUserId}::uuid,${link.createdByUserId}::uuid) RETURNING id`;
+    for(const role of payload.roles){let specialtyId=role.specialtyId??null;if(!specialtyId){const name=role.specialtyName.trim();const [existing]=await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE active AND lower(name)=lower(${name}) LIMIT 1`;if(existing)specialtyId=existing.id;else{const [created]=await tx<Array<{id:string}>>`INSERT INTO specialties(organization_id,code,name) VALUES(${link.organizationId}::uuid,${`custom-${randomUUID().slice(0,8)}`},${name}) RETURNING id`;specialtyId=created.id;}}await tx`INSERT INTO request_roles(organization_id,request_id,specialty_id,count_required,schedule_json,requirements_json,target_client_rate) VALUES(${link.organizationId}::uuid,${request.id}::uuid,${specialtyId}::uuid,${role.count},${tx.json(toJsonValue(role.schedule))},${tx.json(toJsonValue(role.requirements))},${role.targetClientRate})`;}
+    await tx`UPDATE request_intake_links SET submission_count=submission_count+1 WHERE id=${link.id}::uuid`;return {id:request.id,reference:request.id};});}
 
 // Capture one server timestamp per snapshot, shared by SSR and client hydration.
 export function getRequestSnapshotTime() { return Date.now(); }

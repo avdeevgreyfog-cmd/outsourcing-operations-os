@@ -23,12 +23,11 @@ const sectionLabels = [
 const scheduleOptions = [["5/2","5/2"],["6/1","6/1"],["7/0","7/0"],["2/2","2/2"],["3/3","3/3"],["rotation","Вахта"],["on_demand","По заявке"],["custom","Другой"]] as const;
 const provisionLabels: Partial<Record<ProvisionKey,string>> = { housing:"Проживание",travel:"Билеты / проезд до региона",shuttle:"Развозка до объекта",meals:"Питание",workwear:"Спецодежда",ppe:"СИЗ",tools:"Инструмент",consumables:"Расходняк" };
 const provisionRows = provisionKeys.filter((key)=>provisionLabels[key]);
-const providerChoices = [["client","Заказчик"],["us","Мы"],["not_required","Не требуется"]] as const;
+const providerChoices = [["client","Заказчик"],["us","Мы"],["not_required","Не требуется"],["unknown","Уточняется"]] as const;
 const workerCategories = [["rf","РФ"],["eaeu","ЕАЭС"],["foreign_with_docs","Иностранные граждане с разрешительными документами"],["client_rules","По отдельным требованиям заказчика"]] as const;
 const checks = [["security","Служба безопасности"],["document_check","Проверка документов"],["qualification","Проверка квалификации"],["medical","Медосмотр"],["medbook","Медицинская книжка"],["labor_safety","Охрана труда"],["industrial_safety","Промышленная безопасность"],["certificates","Удостоверения / допуски"],["pass_docs","Документы для проходной"]] as const;
 const accessChoices = [["easy","Удобно"],["public_walk","Транспорт + пешком"],["difficult","Сложный маршрут"],["car_only","Только авто"],["shuttle","Нужна развозка"],["unknown","Уточнить"]] as const;
 
-function object(value:unknown):Record<string,unknown>{return value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};}
 function text(value:unknown){return typeof value==="string"?value:"";}
 function num(value:unknown):number|null{return typeof value==="number"&&Number.isFinite(value)?value:typeof value==="string"&&value.trim()&&Number.isFinite(Number(value))?Number(value):null;}
 function patch<T extends object>(current:T,next:Partial<T>):T{return {...current,...next};}
@@ -59,7 +58,7 @@ function emptyRole():RoleDraft{return {specialtyId:"",specialtyName:"",count:1,s
 export function RequestIntakeWorkspacePolished({options,intake:initialIntake,request,workflowMeta,demo=false,demoRequestId}:Props){
   const router=useRouter();
   const fileRef=useRef<HTMLInputElement>(null);
-  const [active,setActive]=useState<(typeof sectionLabels)[number][0]>("general");
+  const [active,setActive]=useState<(typeof sectionLabels)[number][0]|"quick">("quick");
   const [intake,setIntake]=useState<RequestIntake>(()=>normalizeLegacyIntake(initialIntake??emptyRequestIntake()));
   const [title,setTitle]=useState(request?.title??"");
   const [clientId,setClientId]=useState(request?.clientId??"");
@@ -79,11 +78,36 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   const [importOpen,setImportOpen]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
+  const [loaded,setLoaded]=useState(!demo||!demoRequestId);
+  const [dirty,setDirty]=useState(false);
+  const savedSnapshot=useRef<string|null>(null);
+  const dirtyRef=useRef(false);
+  const snapshot=JSON.stringify({title,clientId,source,location,regionId,startDate,durationText,vatMode,comments,ownerUserId,observerUserIds,intake,roles});
+
+  useEffect(()=>{
+    if(!loaded)return;
+    if(savedSnapshot.current===null)savedSnapshot.current=snapshot;
+    const changed=savedSnapshot.current!==snapshot;
+    dirtyRef.current=changed;
+    setDirty(changed);
+  },[loaded,snapshot]);
+  useEffect(()=>{
+    const beforeUnload=(event:BeforeUnloadEvent)=>{if(dirtyRef.current){event.preventDefault();event.returnValue="";}};
+    const followLink=(event:MouseEvent)=>{
+      const anchor=(event.target instanceof Element?event.target.closest("a"):null);
+      if(!dirtyRef.current||!anchor||anchor.target==="_blank"||anchor.hasAttribute("download")||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+      const href=anchor.getAttribute("href");
+      if(!href||href.startsWith("#"))return;
+      if(!window.confirm("В заявке есть несохранённые изменения. Выйти без сохранения?")){event.preventDefault();event.stopPropagation();}
+    };
+    window.addEventListener("beforeunload",beforeUnload);document.addEventListener("click",followLink,true);
+    return()=>{window.removeEventListener("beforeunload",beforeUnload);document.removeEventListener("click",followLink,true);};
+  },[]);
 
   useEffect(() => {
     if (!demo || !demoRequestId) return;
     const record = getDemoRequest(demoRequestId);
-    if (!record) return;
+    if (!record) { const timer=window.setTimeout(()=>setLoaded(true),0); return ()=>window.clearTimeout(timer); }
     const draft = record.payload;
     const timer = window.setTimeout(() => {
       setTitle(draft.title); setClientId(draft.clientId ?? ""); setSource(draft.source === "manual" ? "" : draft.source);
@@ -91,11 +115,12 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
       setVatMode(draft.vatMode ?? "with_vat"); setComments(draft.comments ?? ""); setOwnerUserId(draft.ownerUserId ?? options.currentUserId); setObserverUserIds(draft.observerUserIds ?? []);
       setIntake(normalizeLegacyIntake(draft.intake as RequestIntake));
       setRoles(draft.roles.map((role) => ({ id:role.id, specialtyId:role.specialtyId ?? "", specialtyName:role.specialtyName, count:role.count, scheduleOverride:Object.keys(role.schedule ?? {}).length > 0, schedule:role.schedule ?? {}, requirements:role.requirements ?? {}, targetClientRate:role.targetClientRate })));
+      setLoaded(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [demo, demoRequestId, options.currentUserId]);
 
-  const totalHeadcount=useMemo(()=>roles.reduce((sum,role)=>sum+(Number.isFinite(role.count)?role.count:0),0),[roles]);
+  const totalHeadcount=useMemo(()=>roles.filter((role)=>role.specialtyName.trim()).reduce((sum,role)=>sum+(Number.isFinite(role.count)?role.count:0),0),[roles]);
   const region=options.regions.find((item)=>item.id===regionId);
   const yandexMap=location.trim()?`https://yandex.ru/maps/?text=${encodeURIComponent(location.trim())}`:"";
 
@@ -127,22 +152,34 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
         const clientName = options.clients.find((item) => item.id === payload.clientId)?.name;
         const ownerName = options.members.find((item) => item.id === payload.ownerUserId)?.name;
         const saved = saveDemoRequest(payload as DemoRequestPayload, { id:demoRequestId ?? request?.id, clientName, ownerName, actorId:options.currentUserId });
-        router.push(`/requests?demo=${encodeURIComponent(saved.id)}`); router.refresh(); return;
+        dirtyRef.current=false;savedSnapshot.current=snapshot;router.push(`/requests?demo=${encodeURIComponent(saved.id)}`); router.refresh(); return;
       }
       const response=await fetch(request?`/api/requests/${request.id}/v2`:"/api/requests/v2",{method:request?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
       const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить заявку");
-      router.push(`/requests/${json.id??request?.id}`);router.refresh();
+      dirtyRef.current=false;savedSnapshot.current=snapshot;router.push(`/requests/${json.id??request?.id}`);router.refresh();
     }catch(saveError){setError(saveError instanceof Error?saveError.message:"Не удалось сохранить заявку");}finally{setBusy(false);}
   }
-  async function archive(){if(!request&&!demoRequestId)return;if(!window.confirm("Переместить заявку в архив? Архив предназначен для дублей, ошибочных и технических записей."))return;setBusy(true);setError("");try{if(demo){const current=getDemoRequest(demoRequestId??request?.id??"");if(current)saveDemoRequest(current.payload,{id:current.id,base:{...current.board,archivedAt:new Date().toISOString()},clientName:current.board.client,ownerName:current.board.owner??undefined,actorId:options.currentUserId});router.push("/requests");router.refresh();return;}if(!request)return;const response=await fetch(`/api/requests/${request.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"archive"})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось архивировать");router.push("/requests");router.refresh();}catch(archiveError){setError(archiveError instanceof Error?archiveError.message:"Не удалось архивировать");}finally{setBusy(false);}}
+  async function archive(){if(!request&&!demoRequestId)return;if(!window.confirm("Переместить заявку в архив? Архив предназначен для дублей, ошибочных и технических записей."))return;setBusy(true);setError("");try{if(demo){const current=getDemoRequest(demoRequestId??request?.id??"");if(current)saveDemoRequest(current.payload,{id:current.id,base:{...current.board,archivedAt:new Date().toISOString()},clientName:current.board.client,ownerName:current.board.owner??undefined,actorId:options.currentUserId});dirtyRef.current=false;router.push("/requests");router.refresh();return;}if(!request)return;const response=await fetch(`/api/requests/${request.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"archive"})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось архивировать");dirtyRef.current=false;router.push("/requests");router.refresh();}catch(archiveError){setError(archiveError instanceof Error?archiveError.message:"Не удалось архивировать");}finally{setBusy(false);}}
   async function importFile(file:File){setError("");try{const rows=await readSpreadsheet(file);const preview=rowsToPreview(rows,options.specialties);setImportPreview(preview);setImportOpen(true);}catch(importError){setError(importError instanceof Error?importError.message:"Не удалось прочитать файл");}}
   function applyImport(){const valid=importPreview.filter((row)=>row.errors.length===0);if(!valid.length)return;setRoles((current)=>[...current.filter((role)=>role.specialtyName.trim()),...valid.map((row)=>({specialtyId:row.specialtyId,specialtyName:row.specialtyName,count:row.count,scheduleOverride:Object.keys(row.schedule).length>0,schedule:row.schedule,requirements:row.requirements,targetClientRate:row.targetClientRate}))]);setImportOpen(false);setImportPreview([]);}
   function downloadTemplate(){const xml=excelTemplate();const blob=new Blob([xml],{type:"application/vnd.ms-excel;charset=utf-8"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="Шаблон_позиций_заявки.xls";link.click();URL.revokeObjectURL(url);}
 
-  return <div className="request-v2-layout">
-    <aside className="request-v2-nav"><div className="request-v2-nav-summary"><strong>{request?"Редактирование заявки":"Новая заявка"}</strong><span>{totalHeadcount} чел. · {roles.filter((role)=>role.specialtyName.trim()).length} позиций</span></div>{sectionLabels.map(([code,label],index)=><button type="button" key={code} className={active===code?"active":""} onClick={()=>setActive(code)}><span>{index+1}</span>{label}</button>)}</aside>
-    <main className="request-v2-main">
-      {error&&<div className="request-warning"><strong>Проверьте данные.</strong> {error}</div>}
+  return <div className="request-v2-layout request-intake-unified-layout">
+    <aside className="request-v2-nav"><div className="request-v2-nav-summary"><strong>{request?"Редактирование заявки":"Новая заявка"}</strong><span>{totalHeadcount} чел. · {roles.filter((role)=>role.specialtyName.trim()).length} позиций</span></div><button type="button" aria-pressed={active==="quick"} className={active==="quick"?"active":""} onClick={()=>setActive("quick")}><span>↳</span>Быстрое заполнение</button>{sectionLabels.map(([code,label],index)=><button type="button" key={code} aria-pressed={active===code} className={active===code?"active":""} onClick={()=>setActive(code)}><span>{index+1}</span>{label}</button>)}</aside>
+    <main className="request-v2-main"><fieldset className="request-intake-fieldset" disabled={busy}>
+      {error&&<div className="request-warning" role="alert"><strong>Проверьте данные.</strong> {error}</div>}
+
+      {active==="quick"&&<section className="request-v2-section request-quick-section">
+        <header><div><h2>Быстрое заполнение</h2><p>Основные данные во время звонка. Подробности можно дополнить в разделах слева.</p></div><div className="request-headcount"><strong>{totalHeadcount}</strong><span>человек</span></div></header>
+        <div className="request-form-grid cols-2"><label>Название заявки<input value={title} onChange={(event)=>setTitle(event.target.value)} placeholder="Например, персонал на склад"/></label><label>Клиент в базе<select value={clientId} onChange={(event)=>setClientId(event.target.value)}><option value="">Пока не привязан</option>{options.clients.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
+        <div className="request-form-grid cols-2"><label>Компания / рабочее название<input value={intake.companyName} onChange={(event)=>updateIntake("companyName",event.target.value)}/></label><label>Адрес объекта<input value={location} onChange={(event)=>onAddress(event.target.value)} placeholder="Город, улица, площадка"/></label></div>
+        <div className="request-form-grid cols-3"><label>Контактное лицо<input value={intake.contact.name} onChange={(event)=>updateIntake("contact",patch(intake.contact,{name:event.target.value}))}/></label><label>Телефон<input type="tel" value={intake.contact.phone} onChange={(event)=>updateIntake("contact",patch(intake.contact,{phone:event.target.value}))}/></label><label>Эл. почта<input type="email" value={intake.contact.email} onChange={(event)=>updateIntake("contact",patch(intake.contact,{email:event.target.value}))}/></label></div>
+        <div className="request-quick-positions"><div className="request-roles-head"><h3>Кто нужен</h3><button type="button" className="button" onClick={()=>setRoles((current)=>[...current,emptyRole()])}>Добавить позицию</button></div>{roles.map((role,index)=><div className="request-quick-role" key={role.id??index}><label>Специальность<input list={`quick-specialty-${index}`} value={role.specialtyName} onChange={(event)=>selectSpecialty(index,event.target.value)} placeholder="Название специальности"/><datalist id={`quick-specialty-${index}`}>{options.specialties.map((item)=><option key={item.id} value={item.name}/>)}</datalist></label><label>Количество<input type="number" min="1" max="5000" value={role.count} onChange={(event)=>rolePatch(index,{count:Math.max(1,Number(event.target.value)||1)})}/></label><button type="button" className="request-icon-button" aria-label={`Удалить позицию ${index+1}`} onClick={()=>setRoles((current)=>current.filter((_,roleIndex)=>roleIndex!==index))}>×</button></div>)}</div>
+        <div className="request-form-grid cols-4"><label>Плановый старт<input type="date" value={startDate} onChange={(event)=>setStartDate(event.target.value)}/></label><label>Общий график<select value={intake.schedule.pattern} onChange={(event)=>schedulePatch("pattern",event.target.value)}><option value="">Уточняется</option>{scheduleOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>Начало смены<input type="time" value={intake.schedule.shiftStart} onChange={(event)=>schedulePatch("shiftStart",event.target.value)}/></label><label>Конец смены<input type="time" value={intake.schedule.shiftEnd} onChange={(event)=>schedulePatch("shiftEnd",event.target.value)}/></label></div>
+        {intake.schedule.pattern==="custom"&&<label>Другой график<input value={intake.schedule.customPattern} onChange={(event)=>schedulePatch("customPattern",event.target.value)}/></label>}
+        <label>Заметки разговора<textarea value={comments} onChange={(event)=>setComments(event.target.value)} placeholder="Условия, вопросы, что нужно уточнить"/></label>
+        <div className="request-quick-links"><button type="button" className="request-subtle-action" onClick={()=>setActive("need")}>Требования по позициям и загрузка таблицы</button><button type="button" className="request-subtle-action" onClick={()=>setActive("provision")}>Обеспечение и логистика</button><button type="button" className="request-subtle-action" onClick={()=>setActive("commercial")}>Ставки и коммерческие условия</button></div>
+      </section>}
 
       {active==="general"&&<section className="request-v2-section"><header><div><span>01</span><h2>Заказчик и объект</h2><p>Основная информация, которую менеджер фиксирует во время разговора с заказчиком.</p></div></header>
         <div className="request-form-grid cols-2"><label>Название заявки<input value={title} onChange={(event)=>setTitle(event.target.value)} placeholder="Например, персонал на склад Руднево"/></label><label>Клиент в базе<select value={clientId} onChange={(event)=>setClientId(event.target.value)}><option value="">Пока не привязан</option>{options.clients.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label></div>
@@ -168,8 +205,8 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
 
       {active==="commercial"&&<section className="request-v2-section"><header><div><span>06</span><h2>Коммерческие ориентиры</h2><p>Внутренний блок менеджера. Во внешней форме наши исторические ставки и экономика не показываются.</p></div></header><div className="request-form-grid cols-3"><label>Как платит заказчик<select value={intake.commercial.billingUnit} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{billingUnit:event.target.value}))}><option value="unknown">Пока неизвестно</option><option value="hour">Человеко-час</option><option value="shift">Смена</option><option value="worker_month">Сотрудник / месяц</option><option value="unit">За единицу</option><option value="volume">За объём</option><option value="fixed">Фикс за проект</option><option value="mixed">Смешанная</option></select></label><label>Лимит / ставка заказчика<input type="number" min="0" value={intake.commercial.clientLimit??""} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{clientLimit:num(event.target.value)}))}/></label><label>НДС для лимита<select value={intake.commercial.clientLimitVatMode} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{clientLimitVatMode:event.target.value}))}><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option></select></label></div><div className="request-form-grid cols-3"><label>Желаемая зарплата сотруднику<input type="number" min="0" value={intake.commercial.desiredWorkerNet??""} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{desiredWorkerNet:num(event.target.value)}))}/></label><label>Единица зарплаты<select value={intake.commercial.desiredWorkerNetUnit} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{desiredWorkerNetUnit:event.target.value}))}><option value="hour">В час</option><option value="shift">За смену</option><option value="month">В месяц</option></select></label><label>НДС нашей ставки<select value={vatMode} onChange={(event)=>setVatMode(event.target.value)}><option value="with_vat">Показывать с НДС</option><option value="without_vat">Без НДС</option></select></label></div><div className="request-form-grid cols-3"><label>Известная ставка конкурента<input type="number" min="0" value={intake.commercial.competitorRate??""} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{competitorRate:num(event.target.value)}))}/></label><label>НДС конкурента<select value={intake.commercial.competitorRateVatMode} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{competitorRateVatMode:event.target.value}))}><option value="with_vat">С НДС</option><option value="without_vat">Без НДС</option></select></label><label>Комментарий<input value={intake.commercial.competitorComment} onChange={(event)=>updateIntake("commercial",patch(intake.commercial,{competitorComment:event.target.value}))}/></label></div><div className="historical-rate-grid">{roles.filter((role)=>role.specialtyName.trim()).map((role,index)=>{const stat=specialtyStats(role);return <article key={`${role.specialtyName}-${index}`}><strong>{role.specialtyName}</strong>{stat&&stat.stats.sampleCount>0?<><span>Заказчику: {formatRub(stat.stats.clientRateMin)}–{formatRub(stat.stats.clientRateMax)} / ч</span><span>Медиана: {formatRub(stat.stats.clientRateMedian)} / ч</span><span>Сотруднику: {formatRub(stat.stats.workerPayMin)}–{formatRub(stat.stats.workerPayMax)}</span><small>По {stat.stats.sampleCount} похожим сохранённым расчётам. Это ориентир, не готовая цена.</small></>:<small>Недостаточно истории для надёжного ориентира.</small>}</article>})}</div><label>Общий комментарий к заявке<textarea value={comments} onChange={(event)=>setComments(event.target.value)} placeholder="Информация, которой нет в структурированных полях"/></label><div className="request-subsection"><h3>Ответственность внутри компании</h3><div className="request-form-grid cols-2"><label>Ответственный<select value={ownerUserId} onChange={(event)=>setOwnerUserId(event.target.value)}>{options.members.map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select><small>По умолчанию ответственным становится создатель заявки.</small></label><label>Наблюдатели<select multiple value={observerUserIds} onChange={(event)=>setObserverUserIds(Array.from(event.currentTarget.selectedOptions).map((option)=>option.value))}>{options.members.filter((item)=>item.id!==ownerUserId).map((item)=><option key={item.id} value={item.id}>{item.name}</option>)}</select><small>Наблюдатели видят заявку, но не становятся её ответственными.</small></label></div></div></section>}
 
-      <div className="request-v2-sticky"><div><span>{(request||demoRequestId)?"Изменения сохранятся в заявке":"Черновик можно сохранить даже с неполными данными"}</span>{(request||demoRequestId)&&<button type="button" className="request-danger-link" disabled={busy} onClick={archive}>В архив</button>}</div><div><Link href="/requests" className="button">Отмена</Link><button type="button" className="button primary" disabled={busy} onClick={save}>{busy?"Сохраняю…":(request||demoRequestId)?"Сохранить изменения":"Создать заявку"}</button></div></div>
-    </main>
+      <div className="request-v2-sticky"><div><small className="request-save-state" role="status">{dirty?"Есть несохранённые изменения":"Изменений нет"}</small><span>{(request||demoRequestId)?"Изменения сохранятся в заявке":"Черновик можно сохранить даже с неполными данными"}</span>{(request||demoRequestId)&&<button type="button" className="request-danger-link" disabled={busy} onClick={archive}>В архив</button>}</div><div><Link href="/requests" className="button">Отмена</Link><button type="button" className="button primary" disabled={busy} onClick={save}>{busy?"Сохраняю…":(request||demoRequestId)?"Сохранить изменения":"Сохранить черновик"}</button></div></div>
+    </fieldset></main>
 
     {importOpen&&<div className="request-modal-backdrop"><div className="request-import-modal"><header><div><strong>Предпросмотр загрузки</strong><span>Найдено строк: {importPreview.length}. С ошибками: {importPreview.filter((row)=>row.errors.length).length}.</span></div><button type="button" className="request-icon-button" onClick={()=>setImportOpen(false)}>×</button></header><div className="request-import-table"><table><thead><tr><th>Строка</th><th>Специальность</th><th>Количество</th><th>График</th><th>Проверка</th></tr></thead><tbody>{importPreview.map((row)=><tr key={row.row} className={row.errors.length?"has-error":""}><td>{row.row}</td><td>{row.specialtyName}{!row.specialtyId&&row.specialtyName&&<small>Новая специальность</small>}</td><td>{row.count||"—"}</td><td>{text(row.schedule.pattern)||"общий"}</td><td>{row.errors.length?<span>{row.errors.join("; ")}</span>:<strong>Готово</strong>}</td></tr>)}</tbody></table></div><footer><button className="button" type="button" onClick={()=>setImportOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={!importPreview.some((row)=>row.errors.length===0)} onClick={applyImport}>Загрузить корректные ({importPreview.filter((row)=>row.errors.length===0).length})</button></footer></div></div>}
   </div>;

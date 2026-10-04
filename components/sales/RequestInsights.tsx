@@ -6,7 +6,7 @@ import {
   AlertTriangle, BriefcaseBusiness, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download,
   FileText, Handshake, RotateCcw, Settings2, TrendingUp, UsersRound, X,
 } from "lucide-react";
-import { SalesEmpty, SalesFunnel } from "./SalesUI";
+import { SalesEmpty } from "./SalesUI";
 import { RequestAnalyticsTrendChart, type RequestAnalyticsUnit } from "@/components/RequestAnalyticsTrendChart";
 import type { RequestAnalyticsData, RequestAnalyticsFilters, RequestAnalyticsBreakdownRow } from "@/lib/commercial/request-analytics";
 import {
@@ -16,7 +16,8 @@ import {
   type RequestAnalyticsMetricKey,
   type RequestAnalyticsMetricPreference,
 } from "@/lib/commercial/request-analytics-metric-registry";
-import type { RequestWorkspaceOptions } from "@/lib/commercial/request-workflow";
+import { requestSourceLabel, defaultRequestStages, type RequestWorkspaceOptions, type RequestBoardRow, type RequestStageDefinition } from "@/lib/commercial/request-workflow";
+import { analyticsFromBoardRows } from "@/lib/commercial/request-analytics-calculation";
 
 export const lossLabels: Record<string, string> = {
   price:"Цена / экономика",
@@ -44,12 +45,15 @@ type Props={
   metricPreferences:RequestAnalyticsMetricPreference[];
   canConfigureMetrics:boolean;
   demo:boolean;
-  onStage:(code:string)=>void;
+  demoRows?:RequestBoardRow[];
+  stageDefinitions?:RequestStageDefinition[];
+  onStage:(code:string,requestIds?:string[])=>void;
 };
 
 const demoMetricStorageKey="operis.requests.analytics.metrics.v1";
 
-export function RequestInsights({analytics,options,metricPreferences,canConfigureMetrics,demo,onStage}:Props){
+export function RequestInsights({analytics:serverAnalytics,options,metricPreferences,canConfigureMetrics,demo,demoRows,stageDefinitions=defaultRequestStages,onStage}:Props){
+  const analytics=useMemo(()=>demo&&demoRows?analyticsFromBoardRows(demoRows,serverAnalytics.filters,stageDefinitions,options.specialties):serverAnalytics,[demo,demoRows,serverAnalytics,stageDefinitions,options.specialties]);
   const router=useRouter();
   const [unit,setUnit]=useState<RequestAnalyticsUnit>("requests");
   const [mode,setMode]=useState<FunnelMode>("conversion");
@@ -95,7 +99,7 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
     const notAdvanced=unit==="requests"?stage.notAdvancedRequests:stage.notAdvancedHeadcount;
     const notAdvancedRate=unit==="requests"?stage.notAdvancedRate:stage.notAdvancedHeadcountRate;
     return {
-      key:stage.code,label:stage.label,value,note:`${share}% от входящего объёма`,
+      key:stage.code,label:stage.label,value,requestIds:stage.requestIds,note:`${share}% от входящего объёма`,
       aside:mode==="share"?`${share}%`:mode==="conversion"?`${conversion}%`:mode==="not_advanced"?(stage.code===analytics.stages.at(-1)?.code?"—":`−${notAdvanced} · ${notAdvancedRate}%`):formatDuration(stage.avgHours),
     };
   }),[analytics.stages,unit,mode]);
@@ -104,12 +108,15 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
     from:stage.label,to:analytics.stages[index+1]?.label??"",
     count:unit==="requests"?stage.notAdvancedRequests:stage.notAdvancedHeadcount,
     rate:unit==="requests"?stage.notAdvancedRate:stage.notAdvancedHeadcountRate,
+    pending:stage.pendingRequests,lost:stage.lostRequests,
   })).sort((a,b)=>b.rate-a.rate||b.count-a.count).slice(0,5),[analytics.stages,unit]);
 
   const visibleMetrics=useMemo(()=>preferences.filter(item=>item.visible).sort((a,b)=>a.position-b.position),[preferences]);
 
   function metricRaw(key:RequestAnalyticsMetricKey,current:boolean){
     const metrics=current?analytics.metrics:analytics.comparison;
+    if(key==="conversion_requests"&&!metrics.newRequests)return null;
+    if(key==="conversion_headcount"&&!metrics.newHeadcount)return null;
     return metrics[camelMetricKey(key)];
   }
 
@@ -151,7 +158,8 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
   const breakdownRows=analytics.breakdowns[breakdownMode];
   const sourceOptions=[...new Set(options.sources)];
 
-  return <div className="request-analytics-screen">
+  return <div className="request-analytics-screen request-analytics-unified">
+    {demo&&<p className="request-analytics-context-note">Демо: те же заявки, что в таблице и доске. Полной истории переходов и отправок нет. Первое КП учитывается только при единственной известной отправке; пропущенные этапы не восстанавливаются.</p>}
     <section className="request-analytics-filters" aria-label="Фильтры аналитики заявок">
       <div className="request-date-filter"><span><CalendarDays size={14}/> Период</span><input type="date" value={filters.from} onChange={event=>apply({from:event.target.value})}/><i>—</i><input type="date" value={filters.to} onChange={event=>apply({to:event.target.value})}/></div>
       <div className="request-period-presets" role="group" aria-label="Быстрый выбор периода">{[7,30,90].map(days=><button type="button" key={days} className={currentPeriodDays===days?"active":""} onClick={()=>setPreset(days)}>{days} дней</button>)}</div>
@@ -160,47 +168,50 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
       <select value={filters.ownerId??""} onChange={event=>apply({ownerId:event.target.value||null})} aria-label="Ответственный"><option value="">Все ответственные</option>{options.members.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>
       <select value={filters.regionId??""} onChange={event=>apply({regionId:event.target.value||null})} aria-label="Регион"><option value="">Все регионы</option>{options.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>
       <select value={filters.specialtyId??""} onChange={event=>apply({specialtyId:event.target.value||null})} aria-label="Специальность"><option value="">Все специальности</option>{options.specialties.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>
-      <select value={filters.source??""} onChange={event=>apply({source:event.target.value||null})} aria-label="Источник"><option value="">Все источники</option>{sourceOptions.map(item=><option key={item} value={item}>{sourceLabel(item)}</option>)}</select>
+      <select value={filters.source??""} onChange={event=>apply({source:event.target.value||null})} aria-label="Источник"><option value="">Все источники</option>{sourceOptions.map(item=><option key={item} value={item}>{requestSourceLabel(item)}</option>)}</select>
       <button type="button" className="button" onClick={()=>router.replace("/requests?view=analytics",{scroll:false})}><RotateCcw size={14}/> Сбросить</button>
     </section>
 
-    <section className="request-operational-strip" aria-label="Текущее состояние коммерческого контура">
-      <div><span>Активные заявки</span><strong>{analytics.metrics.activeRequests}</strong></div>
-      <div><span>Численность в работе</span><strong>{analytics.metrics.activeHeadcount}</strong></div>
-      <div><span>КП у заказчика</span><strong>{analytics.metrics.proposalClient}</strong></div>
-      <div><span>Переговоры</span><strong>{analytics.metrics.negotiation}</strong></div>
-      <div className={analytics.metrics.attention?"has-attention":""}><span>Требуют внимания</span><strong>{analytics.metrics.attention}</strong><small>без ответственного или без изменений ≥ 7 дней</small></div>
-    </section>
+      <section className="request-kpi-panel request-kpi-overview">
+        <div className="request-kpi-title"><span>Показатели заявок</span><div><small>Период: {formatRange(filters.from,filters.to)}</small>{canConfigureMetrics&&<button type="button" className="icon-button" onClick={openMetricSettings} aria-label="Настроить показатели"><Settings2 size={15}/></button>}</div></div>
+        <div className="request-kpi-grid">{visibleMetrics.map(item=>{
+          const definition=requestAnalyticsMetricDefinition(item.key),current=metricRaw(item.key,true),previous=definition.comparison?metricRaw(item.key,false):null;
+          const delta=definition.comparison&&current!=null&&previous!=null?metricTrend(current,previous,definition.direction,definition.format):null;
+          return <div className="request-kpi-card" key={item.key}><span className="request-kpi-icon">{metricIcon(item.key)}</span><div><span>{item.label}</span><em>{definition.comparison?"Новые заявки выбранного периода":"Текущее состояние · вне периода"}</em><strong>{formatMetricValue(current,definition.format)}</strong><small className={delta?.tone??"neutral"}>{metricFootnote(item,definition,delta?.text??null)}</small></div></div>;
+        })}</div>
+      </section>
 
     <div className="request-analytics-primary-grid">
       <section className="request-analytics-card request-funnel-card">
         <div className="request-analytics-card-head">
-          <div><h3>Коммерческая воронка</h3><p>Сколько заявок или требуемых сотрудников дошло до каждого этапа.</p></div>
+          <div><h3>Коммерческая воронка</h3><p>Заявки, созданные за выбранный период. Только зафиксированные этапы до конца периода; пропущенные этапы не восстанавливаются.</p></div>
           <div className="request-analytics-head-actions">
-            <div className="request-unit-toggle" role="group" aria-label="Единица анализа"><button type="button" className={unit==="requests"?"active":""} onClick={()=>setUnit("requests")}>Заявки</button><button type="button" className={unit==="headcount"?"active":""} onClick={()=>setUnit("headcount")}>Численность</button></div>
+            <div className="request-unit-toggle" role="group" aria-label="Единица анализа"><button type="button" className={unit==="requests"?"active":""} aria-pressed={unit==="requests"} onClick={()=>setUnit("requests")}>Заявки</button><button type="button" className={unit==="headcount"?"active":""} aria-pressed={unit==="headcount"} onClick={()=>setUnit("headcount")}>Численность</button></div>
             <div className="request-mini-segments" role="group" aria-label="Режим воронки">{([
               ["share","Доля"],["conversion","Конверсия"],["not_advanced","Не перешли"],["time","Среднее время"],
-            ] as const).map(([value,label])=><button type="button" key={value} className={mode===value?"active":""} onClick={()=>setMode(value)}>{label}</button>)}</div>
+            ] as const).map(([value,label])=><button type="button" key={value} className={mode===value?"active":""} aria-pressed={mode===value} onClick={()=>setMode(value)}>{label}</button>)}</div>
           </div>
         </div>
-        <div className="request-funnel-columns"><span>Этап</span><span>{unit==="requests"?"Заявки":"Чел."}</span><span>{funnelModeLabel(mode)}</span></div>
-        <SalesFunnel label="Коммерческая воронка заявок" steps={funnelSteps} onStep={onStage} showIndex/>
+        <div className="request-funnel-readable" aria-label="Коммерческая воронка заявок">
+          <div className="request-funnel-readable-head"><span>Этап</span><span>{unit==="requests"?"Заявки":"Численность"}</span><span>{funnelModeLabel(mode)}</span></div>
+          {funnelSteps.map((step,index)=>{
+            const width=100-index*58/Math.max(funnelSteps.length-1,1),nextWidth=100-(index+1)*58/Math.max(funnelSteps.length-1,1),inset=(100-width)/2,nextInset=(100-nextWidth)/2;
+            return <button type="button" className="request-funnel-readable-row" key={step.key} onClick={()=>onStage(step.key,step.requestIds)} aria-label={`${step.label}: ${step.value}. Показать заявки`}>
+              <span className="request-funnel-stage-name"><i>{index+1}</i><span><strong>{step.label}</strong><small>{step.note}</small></span></span>
+              <span className="request-funnel-polygon"><i style={{clipPath:`polygon(${inset}% 0,${100-inset}% 0,${100-nextInset}% 100%,${nextInset}% 100%)`}}/><strong>{step.value}</strong></span>
+              <span className="request-funnel-result">{step.aside}</span>
+            </button>;
+          })}
+        </div>
       </section>
 
-      <aside className="request-kpi-panel">
-        <div className="request-kpi-title"><span>Ключевые показатели</span><div><small>{formatRange(filters.from,filters.to)}</small>{canConfigureMetrics&&<button type="button" className="icon-button" onClick={openMetricSettings} aria-label="Настроить показатели"><Settings2 size={15}/></button>}</div></div>
-        <div className="request-kpi-grid">{visibleMetrics.map(item=>{
-          const definition=requestAnalyticsMetricDefinition(item.key),current=metricRaw(item.key,true),previous=definition.comparison?metricRaw(item.key,false):null;
-          const delta=definition.comparison&&current!=null&&previous!=null?metricTrend(current,previous,definition.direction,definition.format):null;
-          return <div className="request-kpi-card" key={item.key}><span className="request-kpi-icon">{metricIcon(item.key)}</span><div><span>{item.label}</span><strong>{formatMetricValue(current,definition.format)}</strong><small className={delta?.tone??"neutral"}>{metricFootnote(item,definition,delta?.text??null)}</small></div></div>;
-        })}</div>
-      </aside>
+
     </div>
 
     <div className="request-analytics-secondary-grid">
       <section className="request-analytics-card request-gap-card">
-        <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Разрыв между достигнутыми этапами. Это не всегда проигрыш — часть заявок ещё в работе.</p></div></div>
-        <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Разрывов между этапами нет" text="Переходы появятся после движения заявок по воронке."/>}</div>
+        <div className="request-analytics-card-head"><div><h3>Где застревают заявки?</h3><p>Не зафиксирован следующий этап. В работе и несогласованные заявки показаны отдельно; пропуск этапа также входит в разрыв.</p></div></div>
+        <div className="request-gap-list">{gaps.length?gaps.map((item,index)=><div className="request-gap-row" key={`${item.from}-${item.to}`}><span className="request-gap-rank">{index+1}</span><span className="request-gap-copy"><strong>{item.from} → {item.to}</strong><small>В работе: {item.pending} · Не согласовано: {item.lost}</small><i><span style={{width:`${item.rate}%`}}/></i></span><b>{item.count} <small>({item.rate}%)</small></b></div>):<SalesEmpty title="Разрывов между этапами нет" text="Переходы появятся после движения заявок по воронке."/>}</div>
       </section>
 
       <RequestAnalyticsTrendChart rows={analytics.daily} comparisonRows={analytics.comparisonDaily} unit={unit}/>
@@ -221,7 +232,7 @@ export function RequestInsights({analytics,options,metricPreferences,canConfigur
       </section>
     </div>
 
-    {showMetrics&&<div className="recruiting-modal analytics-settings-backdrop" onMouseDown={event=>{if(event.currentTarget===event.target)setShowMetrics(false)}}><div className="recruiting-modal-card needs-metric-settings"><div className="recruiting-modal-head needs-metric-settings-head"><div><h2>Настроить показатели</h2><p>Формулы системные. Настройте состав, порядок, подпись и целевое значение.</p></div><button type="button" className="icon-button" onClick={()=>setShowMetrics(false)}><X size={17}/></button></div><div className="needs-metric-settings-body">{metricError&&<div className="recruiting-error">{metricError}</div>}<div className="needs-metric-settings-toolbar"><span>Показывается <strong>{draftPreferences.filter(item=>item.visible).length}</strong> из {draftPreferences.length}</span><small>Порядок строк соответствует порядку карточек.</small></div><div className="needs-metric-settings-list">{draftPreferences.map((item,index)=>{const definition=requestAnalyticsMetricDefinition(item.key);return <div className={`needs-metric-setting-row ${item.visible?"is-visible":"is-hidden"}`} key={item.key}><label className="needs-metric-visible"><input type="checkbox" checked={item.visible} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,visible:event.target.checked}:row))}/><span className="needs-metric-title"><strong>{definition.label}</strong><small>{definition.description}</small></span></label><label className="needs-metric-field"><span>Название в карточке</span><input className="needs-metric-label-input" value={item.label} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,label:event.target.value}:row))}/></label><label className="needs-metric-field needs-metric-target"><span>Цель</span><div><input className="needs-metric-target-input" type="number" step="0.1" value={item.targetValue??""} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,targetValue:event.target.value===""?null:Number(event.target.value)}:row))} placeholder="—"/><small>{metricTargetUnit(definition.format)}</small></div></label><div className="needs-metric-order"><button type="button" className="icon-button" disabled={index===0} onClick={()=>moveMetric(index,-1)}><ChevronUp size={14}/></button><button type="button" className="icon-button" disabled={index===draftPreferences.length-1} onClick={()=>moveMetric(index,1)}><ChevronDown size={14}/></button></div></div>})}</div></div><div className="recruiting-form-actions needs-metric-settings-footer"><button type="button" className="button needs-metric-reset" onClick={()=>setDraftPreferences(defaultRequestAnalyticsMetricPreferences())}>Сбросить к стандарту</button><span/><button type="button" className="button" onClick={()=>setShowMetrics(false)}>Отмена</button><button type="button" className="button primary" disabled={savingMetrics} onClick={()=>void saveMetricSettings()}>{savingMetrics?"Сохраняю…":"Сохранить"}</button></div></div></div>}
+    {showMetrics&&<div className="recruiting-modal analytics-settings-backdrop" onMouseDown={event=>{if(event.currentTarget===event.target)setShowMetrics(false)}}><div className="recruiting-modal-card needs-metric-settings"><div className="recruiting-modal-head needs-metric-settings-head"><div><h2>Настроить показатели</h2><p>Формулы системные. Настройте состав, порядок, подпись и целевое значение.</p></div><button type="button" className="icon-button" aria-label="Закрыть настройки показателей" onClick={()=>setShowMetrics(false)}><X size={17}/></button></div><div className="needs-metric-settings-body">{metricError&&<div className="recruiting-error">{metricError}</div>}<div className="needs-metric-settings-toolbar"><span>Показывается <strong>{draftPreferences.filter(item=>item.visible).length}</strong> из {draftPreferences.length}</span><small>Порядок строк соответствует порядку карточек.</small></div><div className="needs-metric-settings-list">{draftPreferences.map((item,index)=>{const definition=requestAnalyticsMetricDefinition(item.key);return <div className={`needs-metric-setting-row ${item.visible?"is-visible":"is-hidden"}`} key={item.key}><label className="needs-metric-visible"><input type="checkbox" checked={item.visible} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,visible:event.target.checked}:row))}/><span className="needs-metric-title"><strong>{definition.label}</strong><small>{definition.description}</small></span></label><label className="needs-metric-field"><span>Название в карточке</span><input className="needs-metric-label-input" value={item.label} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,label:event.target.value}:row))}/></label><label className="needs-metric-field needs-metric-target"><span>Цель</span><div><input className="needs-metric-target-input" type="number" step="0.1" value={item.targetValue??""} onChange={event=>setDraftPreferences(current=>current.map(row=>row.key===item.key?{...row,targetValue:event.target.value===""?null:Number(event.target.value)}:row))} placeholder="—"/><small>{metricTargetUnit(definition.format)}</small></div></label><div className="needs-metric-order"><button type="button" className="icon-button" disabled={index===0} onClick={()=>moveMetric(index,-1)}><ChevronUp size={14}/></button><button type="button" className="icon-button" disabled={index===draftPreferences.length-1} onClick={()=>moveMetric(index,1)}><ChevronDown size={14}/></button></div></div>})}</div></div><div className="recruiting-form-actions needs-metric-settings-footer"><button type="button" className="button needs-metric-reset" onClick={()=>setDraftPreferences(defaultRequestAnalyticsMetricPreferences())}>Сбросить к стандарту</button><span/><button type="button" className="button" onClick={()=>setShowMetrics(false)}>Отмена</button><button type="button" className="button primary" disabled={savingMetrics} onClick={()=>void saveMetricSettings()}>{savingMetrics?"Сохраняю…":"Сохранить"}</button></div></div></div>}
   </div>;
 }
 
@@ -261,7 +272,6 @@ function metricFootnote(item:RequestAnalyticsMetricPreference,definition:ReturnT
   const target=item.targetValue!=null?`цель ${formatMetricValue(item.targetValue,definition.format)}`:null;
   if(target&&delta)return`${delta} · ${target}`;if(target)return target;if(delta)return delta;return definition.description;
 }
-function sourceLabel(value:string){return value==="manual"?"Ручной ввод":value==="public_form"?"Внешняя форма":value}
 function funnelModeLabel(mode:FunnelMode){return mode==="share"?"Доля":mode==="conversion"?"Конверсия":mode==="not_advanced"?"Не перешли":"Среднее время"}
 function formatNumber(value:number){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1}).format(value)}
 function formatDuration(hours:number|null){if(hours==null)return"—";return hours<24?`${formatNumber(hours)} ч`:`${formatNumber(hours/24)} дн.`}
