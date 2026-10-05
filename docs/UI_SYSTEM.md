@@ -102,6 +102,37 @@ host flag, retaining native Next behavior; `terminal.local` is an allowed develo
 origin only. Local demo environment settings are ignored, never published as secrets.
 
 
+## Tenders alignment with registry standard v1.3 (5 October 2026)
+
+The dated 5 October amendment extends the shared registry geometry and controls to
+`/tenders`; it does not imply a portfolio-wide visual migration. Tenders retain all
+20 domain columns (the original 8 in the default view), domain workflows, detailed server/API forms
+and the existing nine board stages. Tables use 42 px headers and 60 px rows, identity
+13 px / 600 and secondary text 12 px. The shared column/group controls and viewport
+scroll dock are used. Saved browser-scoped views include layout, filters and sorting,
+exclude free-text query, and support two grouping levels. The top modes are Table,
+Board and Analytics; KPI summaries stay inside Analytics.
+
+The tender board uses 228 px columns on desktop and 210 px at viewport widths up to
+600 px. Keyboard moves require effective `sales.tender.edit` plus row-level access;
+moving into Submitted additionally requires `sales.tender.submit`. Completion is an
+explicit card action with a required result, not a board drag. The native modal
+commercial drawer is 490 px wide (max 100vw).
+
+Analytics uses persisted stage events: the creation cohort is based on tenders created
+inside the selected period, while calendar activity can include older tenders. No
+synthetic demo history is generated; unverified backfill is excluded. Missing budget or
+headcount means an unknown denominator (`—`). A legacy trigger did not record a history
+event when the latest stored outcome was cleared, so exact clear dates cannot be
+reconstructed or invented. Demo additions live only in page memory, disappear on reload
+and are excluded from analytics. No domain API, database schema or migration changed.
+
+Production `main` is unchanged; branch `ui/tenders-registry-standard` is based on
+`beta` SHA `6c5d8f1`. Preview is for verification, not promotion. Do not infer current QA
+from historical Workers/Requests verification counts; tender QA status is reported
+separately after checks actually run.
+
+
 ## Sidebar and portfolio (10 September 2026)
 
 - Preserve the 238 px runtime sidebar, existing Russian three-level manifest and
@@ -201,7 +232,8 @@ Analytics uses funnel/gaps and inflow/outcomes grids; event charts compare calen
 
 The user-approved October amendment takes precedence over September dimensions only
 for migrated Workers and Requests. Code is implementation evidence, not automatic
-approval of every visual change. `docs/OPERIS_UI_STANDARD.md` v1.2 and the autonomous
+approval of every visual change. The 4 October scope is recorded in standard v1.2; the
+5 October tender extension is recorded in v1.3 and the autonomous
 `public/references/operis-ui-standard.html` catalogue document this scoped contract.
 
 - Header 42 px, row 60 px, identity 13 px / 600 and secondary line 12 px. Summary

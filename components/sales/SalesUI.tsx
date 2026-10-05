@@ -42,7 +42,7 @@ export function SalesEmpty({ title = "Ничего не найдено", text = 
 }
 
 // Native modal supplies focus containment, Escape, inert background and focus return.
-export function SalesDrawer({ title, subtitle, children, footer, onClose }: { title: string; subtitle?: string; children: ReactNode; footer?: ReactNode; onClose: () => void }) {
+export function SalesDrawer({ title, subtitle, children, footer, onClose, overline = "Быстрый просмотр" }: { title: string; subtitle?: string; children: ReactNode; footer?: ReactNode; onClose: () => void; overline?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -54,6 +54,6 @@ export function SalesDrawer({ title, subtitle, children, footer, onClose }: { ti
     return () => { dialog?.close(); document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
   return <dialog ref={ref} className="sales-drawer" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) { const box = event.currentTarget.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) onClose(); } }}>
-    <div className="sales-drawer-content"><header><div><span className="sales-overline">Быстрый просмотр</span><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button autoFocus type="button" className="icon-button" onClick={onClose} aria-label="Закрыть просмотр"><X size={18}/></button></header><div className="sales-drawer-body">{children}</div>{footer && <footer>{footer}</footer>}</div>
+    <div className="sales-drawer-content"><header><div><span className="sales-overline">{overline}</span><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button autoFocus type="button" className="icon-button" onClick={onClose} aria-label="Закрыть просмотр"><X size={18}/></button></header><div className="sales-drawer-body">{children}</div>{footer && <footer>{footer}</footer>}</div>
   </dialog>;
 }
