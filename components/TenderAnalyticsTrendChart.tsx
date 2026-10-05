@@ -1,151 +1,63 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as echarts from "echarts";
 import type { TenderAnalyticsDaily, TenderAnalyticsUnit } from "@/lib/tenders/analytics";
+import { bucketTenderActivity, tenderPercent, tenderActivityTooltip, type TenderActivityPoint } from "@/lib/tenders/analytics-presentation.mjs";
 
-type Metric="new"|"participate"|"submitted"|"won"|"win_rate";
-type ChartPoint={
-  label:string;
-  newTenders:number;newValue:number;newHeadcount:number;
-  participateTenders:number;participateValue:number;participateHeadcount:number;
-  submittedTenders:number;submittedValue:number;submittedHeadcount:number;
-  wonTenders:number;wonValue:number;wonHeadcount:number;
-  winRateTenders:number;winRateValue:number;winRateHeadcount:number;
-};
-
-const metricLabels:Record<Metric,string>={new:"Новые",participate:"Участвуем",submitted:"Подано",won:"Выиграно",win_rate:"Win rate"};
-
-export function TenderAnalyticsTrendChart({rows,comparisonRows,unit}:{rows:TenderAnalyticsDaily[];comparisonRows:TenderAnalyticsDaily[];unit:TenderAnalyticsUnit}){
+const activity=[{key:"new",label:"Новые",token:"--soft"},{key:"participate",label:"Решили участвовать",token:"--info"},{key:"submitted",label:"Подано",token:"--accent"},{key:"won",label:"Выиграно",token:"--good"}] as const;
+type Props={rows:TenderAnalyticsDaily[];comparisonRows:TenderAnalyticsDaily[];unit:TenderAnalyticsUnit;headcountAvailable?:boolean;budgetAvailable?:boolean};
+export function TenderAnalyticsTrendChart({rows,comparisonRows,unit,headcountAvailable=true,budgetAvailable=true}:Props){
+  const points=useMemo(()=>bucketTenderActivity(rows),[rows]);
+  const previous=useMemo(()=>bucketTenderActivity(comparisonRows),[comparisonRows]);
+  const suffix=unit==="tenders"?"Tenders":unit==="value"?"Value":"Headcount";
+  const totals=activity.map(item=>({label:item.label,value:points.reduce((sum,point)=>sum+Number(point[`${item.key}${suffix}` as keyof TenderActivityPoint]),0)}));
+  const unavailable=(unit==="headcount"&&!headcountAvailable)||(unit==="value"&&!budgetAvailable);
+  const hasActivity=!unavailable&&totals.some(item=>item.value>0);
+  const rateKey=`winRate${suffix}` as "winRateTenders"|"winRateValue"|"winRateHeadcount";
+  const hasRate=!unavailable&&[...points,...previous].some(point=>point[rateKey]!=null);
+  return <div className="tender-analytics-chart-grid">
+    <section className="request-analytics-card tender-calendar-card">
+      <div className="request-analytics-card-head"><div><h3>Календарная активность</h3><p>События периода по всем тендерам, включая созданные раньше.</p><p>{rows[0]?.date} — {rows.at(-1)?.date}</p></div></div>
+      <div className="request-trend-summary">{totals.map(item=><div key={item.label}><span>{item.label}</span><strong>{unavailable?"—":formatValue(item.value,unit)}</strong></div>)}</div>
+      {hasActivity?<Chart points={points} previous={previous} unit={unit} rate={false}/>:<p className="request-analytics-empty">{unavailable?"Выбранная единица не указана в тендерах.":"За период нет новых тендеров, решений участвовать, подач и побед для выбранной единицы."}</p>}
+      <small className="tender-chart-note">Суммы и численность — по заполненным текущим полям бюджета и потребности, без исторических снимков.</small>
+    </section>
+    <section className="request-analytics-card tender-win-rate-card">
+      <div className="request-analytics-card-head"><div><h3>Накопленная доля побед</h3><p>Победы / (победы + проигрыши), с начала календарного периода.</p></div></div>
+      <div className="request-trend-summary"><div><span>Текущий период</span><strong>{unavailable?"—":tenderPercent(points.at(-1)?.[rateKey])}</strong></div><div><span>Предыдущий равный период</span><strong>{unavailable?"—":tenderPercent(previous.at(-1)?.[rateKey])}</strong></div></div>
+      {hasRate?<Chart points={points} previous={previous} unit={unit} rate/>:<p className="request-analytics-empty">{unavailable?"Выбранная единица не указана.":"Нет записанных побед и проигрышей для расчёта доли."}</p>}
+      <small className="tender-chart-note">Результат учитывается один раз по последней записи на конец периода. Даты предыдущего периода сопоставлены по номеру дня.</small>
+    </section>
+  </div>;
+}
+function Chart({points,previous,unit,rate}:{points:TenderActivityPoint[];previous:TenderActivityPoint[];unit:TenderAnalyticsUnit;rate:boolean}){
   const ref=useRef<HTMLDivElement>(null);
-  const [metric,setMetric]=useState<Metric>("new");
-  const points=useMemo(()=>bucketRows(rows),[rows]);
-  const comparisonPoints=useMemo(()=>bucketRows(comparisonRows),[comparisonRows]);
-  const currentValue=useMemo(()=>metricValue(metric,unit,points),[metric,unit,points]);
-  const previousValue=useMemo(()=>metricValue(metric,unit,comparisonPoints),[metric,unit,comparisonPoints]);
-  const delta=useMemo(()=>metricDelta(metric,currentValue,previousValue),[metric,currentValue,previousValue]);
-
   useEffect(()=>{
     if(!ref.current)return;
-    const node=ref.current;
-    const chart=echarts.init(node,undefined,{renderer:"canvas"});
+    const chart=echarts.init(ref.current,undefined,{renderer:"canvas"});
+    const suffix=unit==="tenders"?"Tenders":unit==="value"?"Value":"Headcount";
     const draw=()=>{
-      const css=getComputedStyle(document.documentElement);
-      const text=css.getPropertyValue("--text").trim();
-      const muted=css.getPropertyValue("--muted").trim();
-      const soft=css.getPropertyValue("--soft").trim()||muted;
-      const border=css.getPropertyValue("--border").trim();
-      const accent=css.getPropertyValue("--accent").trim();
-      const panel=css.getPropertyValue("--panel").trim();
-      const isPercent=metric==="win_rate";
-      const currentData=points.map(point=>pointValue(metric,unit,point));
-      const previousData=points.map((_,index)=>comparisonPoints[index]?pointValue(metric,unit,comparisonPoints[index]):null);
-      chart.setOption({
-        animationDuration:220,
-        aria:{enabled:true,description:`Динамика тендерного показателя «${metricLabels[metric]}» по текущему и предыдущему периоду`},
-        grid:{left:10,right:14,top:34,bottom:10,containLabel:true},
-        tooltip:{
-          trigger:"axis",
-          backgroundColor:panel,
-          borderColor:border,
-          borderWidth:1,
-          padding:[8,10],
-          textStyle:{color:text,fontSize:10},
-          axisPointer:{type:"line",lineStyle:{color:border,width:1}},
-          valueFormatter:(value:unknown)=>isPercent?`${value}%`:unit==="value"?formatCurrency(Number(value)):String(value),
-        },
-        legend:{top:2,left:4,itemWidth:16,itemHeight:7,itemGap:16,textStyle:{color:muted,fontSize:9.5},data:["Текущий период","Предыдущий период"]},
-        xAxis:{type:"category",boundaryGap:false,data:points.map(point=>point.label),axisLine:{lineStyle:{color:border}},axisTick:{show:false},axisLabel:{color:muted,fontSize:9,interval:Math.max(0,Math.ceil(points.length/7)-1),hideOverlap:true}},
-        yAxis:{type:"value",min:0,max:isPercent?100:undefined,minInterval:unit==="tenders"||unit==="headcount"?1:undefined,splitNumber:4,splitLine:{lineStyle:{color:border,type:"dashed",opacity:.55}},axisLine:{show:false},axisTick:{show:false},axisLabel:{color:muted,fontSize:9,formatter:isPercent?"{value}%":unit==="value"?(value:number)=>formatCurrency(value,true):"{value}"}},
-        series:[
-          {name:"Текущий период",type:"line",smooth:.28,showSymbol:false,symbol:"circle",symbolSize:6,data:currentData,lineStyle:{width:2.2,color:accent},itemStyle:{color:accent},areaStyle:isPercent?undefined:{color:accent,opacity:.055},emphasis:{focus:"series",scale:true}},
-          {name:"Предыдущий период",type:"line",smooth:.28,showSymbol:false,symbol:"circle",symbolSize:5,data:previousData,lineStyle:{width:1.6,color:soft,type:"dashed"},itemStyle:{color:soft},emphasis:{focus:"series",scale:true},connectNulls:false},
-        ],
+      const css=getComputedStyle(document.documentElement),token=(name:string)=>css.getPropertyValue(name).trim();
+      const text=token("--text"),muted=token("--muted"),border=token("--border"),panel=token("--panel");
+      const rateKey=`winRate${suffix}` as "winRateTenders"|"winRateValue"|"winRateHeadcount";
+      const series=rate?[
+        {name:"Текущий период",type:"line",data:points.map(point=>point[rateKey]),lineStyle:{color:token("--accent"),width:2},itemStyle:{color:token("--accent")},showSymbol:false,connectNulls:false},
+        {name:"Предыдущий период",type:"line",data:points.map((_,index)=>previous[index]?.[rateKey]??null),lineStyle:{color:token("--soft"),width:1.5,type:"dashed"},itemStyle:{color:token("--soft")},showSymbol:false,connectNulls:false},
+      ]:activity.map(item=>({name:item.label,type:"bar",barMaxWidth:18,data:points.map(point=>point[`${item.key}${suffix}` as keyof TenderActivityPoint]),itemStyle:{color:token(item.token)},emphasis:{focus:"series"}}));
+      chart.setOption({animationDuration:180,aria:{enabled:true,description:rate?"Накопленная доля побед по записанным результатам":"Новые тендеры, решения участвовать, подачи и победы по календарным датам"},
+        grid:{left:12,right:12,top:48,bottom:12,containLabel:true},
+        legend:{top:4,left:12,itemWidth:12,itemHeight:8,textStyle:{color:muted,fontSize:12}},
+        tooltip:{trigger:"axis",backgroundColor:panel,borderColor:border,textStyle:{color:text,fontSize:12},axisPointer:{type:rate?"line":"shadow"},formatter:(raw:unknown)=>{const params=(Array.isArray(raw)?raw[0]:raw) as {dataIndex?:number}|undefined;const index=params?.dataIndex??0;return tenderActivityTooltip(points[index],previous[index],unit,rate)}},
+        xAxis:{type:"category",boundaryGap:!rate,data:points.map(point=>point.label),axisLine:{lineStyle:{color:border}},axisTick:{show:false},axisLabel:{color:muted,fontSize:12,interval:Math.max(0,Math.ceil(points.length/6)-1),hideOverlap:true}},
+        yAxis:{type:"value",min:0,max:rate?100:undefined,minInterval:unit==="value"?undefined:1,splitNumber:4,splitLine:{lineStyle:{color:border,type:"dashed"}},axisLabel:{color:muted,fontSize:12,formatter:rate?"{value}%":unit==="value"?(value:number)=>new Intl.NumberFormat("ru-RU",{notation:"compact",maximumFractionDigits:1}).format(value):"{value}"}},series,
       },true);
     };
     draw();
-    const resize=()=>chart.resize();
-    const observer=new MutationObserver(draw);
-    observer.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
-    window.addEventListener("resize",resize);
-    return()=>{window.removeEventListener("resize",resize);observer.disconnect();chart.dispose()};
-  },[points,comparisonPoints,metric,unit]);
-
-  return <section className="request-analytics-card request-trend-card tender-trend-card">
-    <div className="request-analytics-card-head">
-      <div><h3>Динамика тендерной воронки</h3><p>Текущий период против предыдущего равного периода.</p></div>
-      <div className="request-mini-segments" role="group" aria-label="Показатель графика">
-        {(Object.keys(metricLabels) as Metric[]).map(value=><button type="button" key={value} className={metric===value?"active":""} onClick={()=>setMetric(value)}>{metricLabels[value]}</button>)}
-      </div>
-    </div>
-    <div className="request-trend-summary">
-      <div><span>{metricLabels[metric]} · текущий</span><strong>{formatMetric(metric,unit,currentValue)}</strong></div>
-      <div><span>Предыдущий период</span><strong>{formatMetric(metric,unit,previousValue)}</strong></div>
-      <div className={`request-trend-delta ${delta.tone}`}><span>Изменение</span><strong>{delta.text}</strong></div>
-    </div>
-    <div ref={ref} className="request-trend-chart"/>
-  </section>;
+    const themeObserver=new MutationObserver(draw);themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+    const resizeObserver=new ResizeObserver(()=>chart.resize());resizeObserver.observe(ref.current);
+    return()=>{resizeObserver.disconnect();themeObserver.disconnect();chart.dispose()};
+  },[points,previous,unit,rate]);
+  return <div ref={ref} className="request-trend-chart" role="img" aria-label={rate?"График накопленной доли побед":"Группированные столбцы календарной активности"}/>;
 }
-
-function pointValue(metric:Metric,unit:TenderAnalyticsUnit,point:ChartPoint){
-  const suffix=unit==="tenders"?"Tenders":unit==="value"?"Value":"Headcount";
-  if(metric==="new")return point[`new${suffix}` as keyof ChartPoint] as number;
-  if(metric==="participate")return point[`participate${suffix}` as keyof ChartPoint] as number;
-  if(metric==="submitted")return point[`submitted${suffix}` as keyof ChartPoint] as number;
-  if(metric==="won")return point[`won${suffix}` as keyof ChartPoint] as number;
-  return unit==="tenders"?point.winRateTenders:unit==="value"?point.winRateValue:point.winRateHeadcount;
-}
-function metricValue(metric:Metric,unit:TenderAnalyticsUnit,points:ChartPoint[]){
-  if(!points.length)return 0;
-  if(metric==="win_rate")return pointValue(metric,unit,points.at(-1)!);
-  return points.reduce((sum,point)=>sum+pointValue(metric,unit,point),0);
-}
-function metricDelta(metric:Metric,current:number,previous:number){
-  const diff=current-previous;
-  if(diff===0)return{text:"без изменений",tone:"neutral"};
-  if(metric==="win_rate")return{text:`${diff>0?"+":""}${formatNumber(diff)} п.п.`,tone:diff>0?"good":"bad"};
-  if(previous===0)return{text:current>0?"новое значение":"—",tone:"neutral"};
-  const percent=diff/previous*100;
-  return{text:`${percent>0?"+":""}${formatNumber(percent)}%`,tone:"neutral"};
-}
-function formatMetric(metric:Metric,unit:TenderAnalyticsUnit,value:number){
-  if(metric==="win_rate")return`${formatNumber(value)}%`;
-  if(unit==="value")return formatCurrency(value);
-  return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(value);
-}
-function formatNumber(value:number){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1}).format(value)}
-function formatCurrency(value:number,compact=false){
-  if(compact)return new Intl.NumberFormat("ru-RU",{notation:"compact",maximumFractionDigits:1}).format(value);
-  return new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(value);
-}
-function bucketRows(rows:TenderAnalyticsDaily[]):ChartPoint[]{
-  if(!rows.length)return[];
-  const size=rows.length<=14?1:rows.length<=45?3:rows.length<=120?7:14;
-  const formatter=new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"short",timeZone:"UTC"});
-  const result:ChartPoint[]=[];
-  for(let index=0;index<rows.length;index+=size){
-    const bucket=rows.slice(index,index+size);
-    const first=new Date(`${bucket[0].date}T00:00:00.000Z`),last=new Date(`${bucket[bucket.length-1].date}T00:00:00.000Z`);
-    const label=bucket.length===1?formatter.format(first):`${formatter.format(first)}–${formatter.format(last)}`;
-    const tail=bucket[bucket.length-1];
-    result.push({
-      label,
-      newTenders:bucket.reduce((sum,row)=>sum+row.newTenders,0),
-      newValue:bucket.reduce((sum,row)=>sum+row.newValue,0),
-      newHeadcount:bucket.reduce((sum,row)=>sum+row.newHeadcount,0),
-      participateTenders:bucket.reduce((sum,row)=>sum+row.participateTenders,0),
-      participateValue:bucket.reduce((sum,row)=>sum+row.participateValue,0),
-      participateHeadcount:bucket.reduce((sum,row)=>sum+row.participateHeadcount,0),
-      submittedTenders:bucket.reduce((sum,row)=>sum+row.submittedTenders,0),
-      submittedValue:bucket.reduce((sum,row)=>sum+row.submittedValue,0),
-      submittedHeadcount:bucket.reduce((sum,row)=>sum+row.submittedHeadcount,0),
-      wonTenders:bucket.reduce((sum,row)=>sum+row.wonTenders,0),
-      wonValue:bucket.reduce((sum,row)=>sum+row.wonValue,0),
-      wonHeadcount:bucket.reduce((sum,row)=>sum+row.wonHeadcount,0),
-      winRateTenders:tail.winRateTenders,
-      winRateValue:tail.winRateValue,
-      winRateHeadcount:tail.winRateHeadcount,
-    });
-  }
-  return result;
-}
+function formatValue(value:number,unit:TenderAnalyticsUnit){return new Intl.NumberFormat("ru-RU",unit==="value"?{style:"currency",currency:"RUB",notation:"compact",maximumFractionDigits:1}:{maximumFractionDigits:0}).format(value)}

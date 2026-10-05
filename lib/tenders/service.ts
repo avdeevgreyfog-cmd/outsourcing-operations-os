@@ -3,6 +3,9 @@ import { requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
+// Pass one server snapshot to the client so deadline labels hydrate consistently.
+export function getTenderSnapshotTime() { return Date.now(); }
+
 export type TenderRow={
   id:string;organizationId:string;title:string;customer:string;clientId:string|null;platform:string|null;procedureNumber:string|null;sourceUrl:string|null;sourceName:string|null;
   publicationDate:string|null;submissionDeadline:string|null;initialPrice:number|string|null;billingUnit:string;stage:string;decision:string;result:string|null;closeReason:string|null;noBidReasonCode:string|null;noBidComment:string|null;resultReasonCode:string|null;

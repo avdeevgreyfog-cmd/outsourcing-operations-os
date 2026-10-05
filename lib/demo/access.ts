@@ -69,5 +69,15 @@ DEMO_ACTORS.recruiter_staff_3 = {
   email:"recruiter3@beta.local",
 };
 
-export function getDemoActor(code = "director") { return DEMO_ACTORS[code] ?? DEMO_ACTORS.director; }
+export function getDemoActor(code = "director") {
+  const actor = structuredClone(DEMO_ACTORS[code] ?? DEMO_ACTORS.director);
+  // Tender fixtures follow the same commercial read scope as request fixtures.
+  // This only supplies demo permissions; live access is loaded from the database.
+  const requestScopes = actor.access.scopes["sales.request.read"];
+  if (requestScopes && !actor.access.denies.includes("sales.tender.read")) {
+    actor.access.capabilities.push("sales.tender.read");
+    actor.access.scopes["sales.tender.read"] = structuredClone(requestScopes);
+  }
+  return actor;
+}
 export function demoActors() { return Object.entries(DEMO_ACTORS).filter(([code])=>code!=="finance").map(([code, actor]) => ({ code, name: actor.displayName, role: actor.roleName })); }
