@@ -3,6 +3,7 @@ import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
 import {AccessDeniedError,requireCapability} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
+import {tenderStageLabel} from "@/lib/tenders/model";
 import {withTenant} from "@/lib/db/client";
 
 const nullableText=(max:number)=>z.string().trim().max(max).nullable().optional();
@@ -25,12 +26,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       if(body.action==="core"){
         await tx`UPDATE tenders SET title=${body.title},customer_name=${body.customerName??null},client_company_id=${body.clientId??null}::uuid,platform=${body.platform??null},procedure_number=${body.procedureNumber??null},source_url=${body.sourceUrl??null},source_name=${body.sourceName??null},publication_date=${body.publicationDate??null}::date,submission_deadline=${body.submissionDeadline??null}::timestamptz,initial_price=${body.initialPrice??null},billing_unit=${body.billingUnit},priority=${body.priority},potential=${body.potential},region_id=${body.regionId??null}::uuid,legal_entity_id=${body.legalEntityId??null}::uuid,next_action_text=${body.nextActionText??null},next_action_at=${body.nextActionAt??null}::timestamptz,updated_at=now() WHERE id=${id}::uuid`;summary="Обновлены основные данные тендера";
       }else if(body.action==="analysis"){
-        await tx`UPDATE tenders SET analysis_summary=${body.analysisSummary??null},conditions_json=${sql.json(body.conditions)},updated_at=now() WHERE id=${id}::uuid`;summary="Обновлено аналитическое заключение";
+        await tx`UPDATE tenders SET analysis_summary=${body.analysisSummary??null},conditions_json=conditions_json || ${sql.json(body.conditions)}::jsonb,updated_at=now() WHERE id=${id}::uuid`;summary="Обновлено аналитическое заключение";
       }else if(body.action==="stage"){
         if(body.stage==="submitted")requireCapability(actor,"sales.tender.submit");
         if(body.stage==="completed")requireCapability(actor,"sales.tender.result");
         const decision=body.decision??(body.result==="no_bid"?"no_bid":undefined);
         const resultValue=body.result===undefined?scope.result:body.result;
+        if(resultValue!==scope.result)requireCapability(actor,"sales.tender.result");
         if(body.stage==="completed"&&!resultValue)throw new Error("Для завершения тендера укажите результат");
 
         if(decision==="no_bid"){
@@ -76,7 +78,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           close_reason=${body.closeReason??null},
           updated_at=now()
         WHERE id=${id}::uuid`;
-        summary=`Этап тендера изменён на ${body.stage}`;
+        summary=`Этап тендера изменён на «${tenderStageLabel(body.stage)}»`;
       }else{
         if(body.markSubmitted)requireCapability(actor,"sales.tender.submit");
         await tx`UPDATE tenders SET final_bid_value=${body.finalBidValue??null},bid_reference=${body.bidReference??null},submission_note=${body.submissionNote??null},submission_checklist=${sql.json(body.checklist)},submitted_at=CASE WHEN ${body.markSubmitted??false} THEN COALESCE(submitted_at,now()) ELSE submitted_at END,submitted_by_user_id=CASE WHEN ${body.markSubmitted??false} THEN ${actor.userId}::uuid ELSE submitted_by_user_id END,stage=CASE WHEN ${body.markSubmitted??false} THEN 'submitted' ELSE stage END,updated_at=now() WHERE id=${id}::uuid`;summary=body.markSubmitted?"Тендер отмечен как поданный":"Обновлена подготовка к подаче";
