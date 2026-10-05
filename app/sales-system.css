@@ -4098,3 +4098,27 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .tender-preview-facts>div{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px}
 .tender-preview-facts dt{color:var(--muted)}.tender-preview-facts dd{margin:0;overflow-wrap:anywhere}
 @media(max-width:600px){.sales-workspace .tender-registry .tender-table :is(td,th).registry-pinned-cell{position:static;box-shadow:none}.sales-workspace .tender-registry .tender-board-column{flex-basis:210px;width:210px;min-width:210px}.tender-preview-facts>div{grid-template-columns:120px minmax(0,1fr)}}
+
+/* Tender entity: shared sales surfaces; wide work tabs and compact overview rail. */
+.sales-workspace .tender-entity{min-width:0}
+.sales-workspace .tender-entity .tender-overview-grid{align-items:start}
+.sales-workspace .tender-entity :is(.request-entity-main,.request-entity-side,.section,.form-grid){min-width:0}
+.sales-workspace .tender-entity .request-entity-side{position:static}
+.sales-workspace .tender-entity :is(.page-header h1,.request-entity-facts strong,.key-value strong,.tender-overview-summary,.tender-document-list strong){overflow-wrap:anywhere}
+.sales-workspace .tender-entity .status{display:inline-flex;gap:6px;padding:0;background:transparent;border:0;border-radius:0;font-size:12px}
+.sales-workspace .tender-entity .status i{width:6px;height:6px;flex:0 0 6px}
+.sales-workspace .tender-entity :is(input,select,textarea){max-width:100%;min-width:0}
+.sales-workspace .tender-entity .grid-scroll{max-width:100%;overflow-x:auto}
+.sales-workspace .tender-entity .tender-doc-checklist{min-width:840px}
+.sales-workspace .tender-entity .tender-responsibility-list{margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr}
+.sales-workspace .tender-entity .tender-responsibility-list>div{padding:12px 18px;border-bottom:1px solid var(--border)}
+.sales-workspace .tender-entity .tender-responsibility-list dt{color:var(--muted);font-size:12px}
+.sales-workspace .tender-entity .tender-responsibility-list dd{margin:4px 0 0;font-size:13px;overflow-wrap:anywhere}
+@media(max-width:1150px){.sales-workspace .tender-entity .request-entity-side{grid-template-columns:1fr}}
+@media(max-width:760px){.sales-workspace .tender-entity .tender-responsibility-list{grid-template-columns:1fr}.sales-workspace .tender-entity .tender-document-list article{flex-wrap:wrap}.sales-workspace .tender-entity .form-grid.two{grid-template-columns:1fr}.sales-workspace .tender-entity .form-grid.two .span-2{grid-column:auto}}
+
+.sales-workspace .tender-entity .section>.tender-overview-summary{padding:16px 18px}
+.sales-workspace .tender-entity .section>.tender-open-questions{margin:0 18px 16px}
+.sales-workspace .tender-entity .section:has(>h3){padding:16px 18px}
+.sales-workspace .tender-entity .section:has(>.tender-analysis-head){padding:18px}
+.sales-workspace .tender-entity .tender-comments header{flex-wrap:wrap}

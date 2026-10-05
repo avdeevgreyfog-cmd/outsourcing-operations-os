@@ -1,6 +1,6 @@
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
-import { canReadRow } from "@/lib/core/access.mjs";
+import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
 // Pass one server snapshot to the client so deadline labels hydrate consistently.
@@ -19,7 +19,8 @@ export type TenderSourceDocument={id:string;name:string;documentType:string;sour
 export type TenderRequirement={id:string;name:string;category:string;required:boolean;status:string;companyDocumentId:string|null;companyDocument:string|null;companyDocumentStatus:string|null;companyDocumentExpiresAt:string|null;ownerUserId:string|null;owner:string|null;dueAt:string|null;notes:string|null};
 export type TenderComment={id:string;body:string;createdAt:string;createdBy:string;createdByUserId:string};
 export type TenderApproval={id:string;processCode:string;status:string;requestedAt:string;completedAt:string|null;requestedBy:string;approver:string|null;decisionComment:string|null};
-export type TenderCalculation={id:string;scenarioId:string;roleId:string;role:string;name:string;status:string;clientRate:number|string;clientRateGross:number|string|null;marginPct:number|string;billingUnit:string;model:string};
+export type TenderCalculation={id:string;scenarioId:string;roleId:string;role:string;name:string;status:string;clientRate:number|string|null;clientRateGross:number|string|null;marginPct:number|string|null;billingUnit:string;model:string};
+type ScopedTenderCalculation=TenderCalculation & {organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null};
 export type TenderDetail=TenderRow&{conditions:Record<string,unknown>;submissionChecklist:Array<{id:string;label:string;done:boolean}>;bidReference:string|null;submissionNote:string|null;submittedBy:string|null;roles:TenderRole[];assignments:TenderAssignment[];sourceDocuments:TenderSourceDocument[];requirements:TenderRequirement[];comments:TenderComment[];approvals:TenderApproval[];calculations:TenderCalculation[]};
 export type TenderOptions={
   clients:Array<{id:string;name:string}>;regions:Array<{id:string;name:string}>;specialties:Array<{id:string;name:string}>;
@@ -71,7 +72,8 @@ function demoDetail(row:TenderRow):TenderDetail{
 
 export async function getTender(actor:Actor,id:string):Promise<TenderDetail|null>{
   const summary=(await listTenders(actor)).find(row=>row.id===id);if(!summary)return null;
-  if(actor.demo)return demoDetail(summary);
+  const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");
+  if(actor.demo){const detail=demoDetail(summary);return {...detail,calculations:canReadCalculations?detail.calculations:[]};}
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [base]=await sql<Array<{conditions:Record<string,unknown>;submissionChecklist:Array<{id:string;label:string;done:boolean}>;bidReference:string|null;submissionNote:string|null;submittedBy:string|null}>>`
       SELECT conditions_json conditions,submission_checklist "submissionChecklist",bid_reference "bidReference",submission_note "submissionNote",su.display_name "submittedBy"
@@ -85,9 +87,10 @@ export async function getTender(actor:Actor,id:string):Promise<TenderDetail|null
       sql<TenderRequirement[]>`SELECT dr.id,dr.name,dr.category,dr.required,dr.status,dr.company_document_id "companyDocumentId",cd.name "companyDocument",cd.status "companyDocumentStatus",cd.expires_at::text "companyDocumentExpiresAt",dr.owner_user_id "ownerUserId",u.display_name owner,dr.due_at::text "dueAt",dr.notes FROM tender_document_requirements dr LEFT JOIN company_documents cd ON cd.id=dr.company_document_id LEFT JOIN app_users u ON u.id=dr.owner_user_id WHERE dr.tender_id=${id}::uuid ORDER BY dr.required DESC,dr.created_at`,
       sql<TenderComment[]>`SELECT c.id,c.body,to_char(c.created_at,'DD.MM.YYYY HH24:MI') "createdAt",u.display_name "createdBy",c.created_by_user_id "createdByUserId" FROM comments c JOIN app_users u ON u.id=c.created_by_user_id WHERE c.entity_type='tender' AND c.entity_id=${id}::uuid ORDER BY c.created_at DESC`,
       sql<TenderApproval[]>`SELECT ai.id,ai.process_code "processCode",ai.status,to_char(ai.submitted_at,'DD.MM.YYYY HH24:MI') "requestedAt",ai.completed_at::text "completedAt",rq.display_name "requestedBy",ap.display_name approver,st.decision_comment "decisionComment" FROM approval_instances ai JOIN app_users rq ON rq.id=ai.requested_by_user_id LEFT JOIN approval_steps st ON st.approval_id=ai.id AND st.step_order=1 LEFT JOIN app_users ap ON ap.id=st.approver_user_id WHERE ai.subject_type='tender' AND ai.subject_id=${id}::uuid ORDER BY ai.submitted_at DESC`,
-      sql<TenderCalculation[]>`SELECT calc.id,cs.id "scenarioId",tr.id "roleId",tr.title role,cs.name,cs.status,COALESCE((cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric,0) "clientRate",(cs.result_snapshot->>'clientRateGross')::numeric "clientRateGross",COALESCE((cs.result_snapshot->>'marginPct')::numeric,0) "marginPct",COALESCE(cs.result_snapshot->>'billingUnit','hour') "billingUnit",cm.name model FROM calculations calc JOIN calculation_scenarios cs ON cs.calculation_id=calc.id JOIN tender_roles tr ON tr.id=cs.tender_role_id JOIN calculation_models cm ON cm.id=cs.model_id WHERE calc.tender_id=${id}::uuid ORDER BY cs.created_at DESC`,
+      canReadCalculations?sql<ScopedTenderCalculation[]>`SELECT calc.organization_id "organizationId",calc.owner_user_id "ownerUserId",cs.created_by_user_id "createdByUserId",calc.id,cs.id "scenarioId",tr.id "roleId",tr.title role,cs.name,cs.status,COALESCE((cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric) "clientRate",(cs.result_snapshot->>'clientRateGross')::numeric "clientRateGross",(cs.result_snapshot->>'marginPct')::numeric "marginPct",COALESCE(cs.result_snapshot->>'billingUnit','hour') "billingUnit",cm.name model FROM calculations calc JOIN calculation_scenarios cs ON cs.calculation_id=calc.id JOIN tender_roles tr ON tr.id=cs.tender_role_id JOIN calculation_models cm ON cm.id=cs.model_id WHERE calc.tender_id=${id}::uuid ORDER BY cs.created_at DESC`:Promise.resolve<ScopedTenderCalculation[]>([]),
     ]);
-    return {...summary,...base,roles,assignments,sourceDocuments,requirements,comments,approvals,calculations};
+    const visibleCalculations=calculations.filter(row=>canReadRow(actor.access,"calculation.scenario.read",{...summary,...row},actor)).map(row=>({id:row.id,scenarioId:row.scenarioId,roleId:row.roleId,role:row.role,name:row.name,status:row.status,clientRate:row.clientRate,clientRateGross:row.clientRateGross,marginPct:row.marginPct,billingUnit:row.billingUnit,model:row.model}));
+    return {...summary,...base,roles,assignments,sourceDocuments,requirements,comments,approvals,calculations:visibleCalculations};
   });
 }
 
