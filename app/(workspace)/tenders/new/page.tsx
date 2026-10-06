@@ -7,5 +7,5 @@ import {TenderCreateForm} from "@/components/TenderCreateForm";
 
 export default async function NewTenderPage(){
   const actor=await requireActor();requireCapability(actor,"sales.tender.create");const options=await getTenderOptions(actor);
-  return <><PageHeader eyebrow="Коммерция → Тендеры" title="Новый тендер" subtitle="Зарегистрируйте найденную закупку. Полный анализ, документы и экономика заполняются уже в карточке тендера." actions={<Link className="button" href="/tenders">К реестру</Link>} breadcrumbs={[{label:"Тендеры",href:"/tenders"},{label:"Новый тендер"}]}/><div className="request-final-editor-shell"><div className="request-final-editor-main"><TenderCreateForm options={options} demo={actor.demo}/></div></div></>;
+  return <><PageHeader eyebrow="Коммерция → Тендеры" title="Новый тендер" subtitle="Зарегистрируйте найденную закупку. Полный анализ, документы и экономика заполняются уже в карточке тендера." actions={<Link className="button" href="/tenders">К реестру</Link>} breadcrumbs={[{label:"Тендеры",href:"/tenders"},{label:"Новый тендер"}]}/><div className="request-final-editor-shell request-baseline-editor request-intake-unified"><div className="request-final-editor-main"><TenderCreateForm options={options} demo={actor.demo}/></div></div></>;
 }
