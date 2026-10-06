@@ -4075,7 +4075,7 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .tender-status>i{display:inline-block;width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:var(--soft)}
 .tender-status-good>i{background:var(--good)}.tender-status-warn>i{background:var(--warn)}.tender-status-bad>i{background:var(--bad)}
 .tender-registry .tender-deadline.danger{color:var(--bad)}.tender-registry .tender-deadline.warn,.tender-registry .tender-blocker-count{color:var(--warn)}
-.sales-workspace .tender-registry .tender-board{align-items:flex-start;min-width:0}
+.sales-workspace .tender-registry .tender-board{align-items:stretch;min-width:0}
 .sales-workspace .tender-registry .tender-board-column{flex:0 0 228px;width:228px;min-width:228px;background:var(--panel);min-height:240px}
 .sales-workspace .tender-registry .tender-board-column>header{height:auto;min-height:54px;gap:8px}
 .sales-workspace .tender-registry .tender-board-column>header .tender-status{white-space:normal;font-size:12px;color:var(--text)}
