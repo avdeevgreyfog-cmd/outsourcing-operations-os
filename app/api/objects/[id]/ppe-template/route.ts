@@ -22,7 +22,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
       const [specialty]=await tx<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE id=${body.specialtyId}::uuid AND active`;
       if(!specialty)throw new Error("Специальность не найдена");
       const itemIds=[...new Set(body.items.map(item=>item.itemId))];
-      if(itemIds.length){const valid=await tx<Array<{id:string}>>`SELECT id FROM inventory_items WHERE id=ANY(${itemIds}::uuid[]) AND active AND category IN ('workwear','ppe','tool','equipment','consumable','other')`;if(valid.length!==itemIds.length)throw new Error("В норме есть недоступная позиция");}
+      if(itemIds.length){const valid=await tx<Array<{id:string}>>`SELECT id FROM inventory_items WHERE id=ANY(${itemIds}::uuid[]) AND active AND category IN ('workwear','ppe','tool','equipment','other')`;if(valid.length!==itemIds.length)throw new Error("В норме есть недоступная или расходная позиция");}
       let [template]=await tx<Array<{id:string}>>`SELECT id FROM object_ppe_templates WHERE object_id=${id}::uuid AND specialty_id=${body.specialtyId}::uuid AND active FOR UPDATE`;
       if(!template){[template]=await tx<Array<{id:string}>>`INSERT INTO object_ppe_templates(organization_id,object_id,specialty_id,name,created_by_user_id,updated_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${body.specialtyId}::uuid,${`Норма объекта: ${specialty.name}`},${actor.userId}::uuid,${actor.userId}::uuid) RETURNING id`;}
       await tx`DELETE FROM object_ppe_template_items WHERE template_id=${template.id}::uuid`;

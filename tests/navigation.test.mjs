@@ -78,16 +78,10 @@ test("inventory stays active while crews stay out of operational navigation", ()
 
 test("operations supply and staffing workspaces are active", () => {
   const items = flattenNavigation();
-  for (const href of ["/staffing-plan","/supply/housing","/assets","/operations/analytics"]) {
+  for (const href of ["/staffing-plan","/supply/housing","/assets","/procurement","/operations/analytics"]) {
     const item=items.find((entry)=>entry.href===href);
     assert.ok(item, "missing "+href);
     assert.equal(item.status, undefined, href+" must not fall back to foundation");
     assert.equal(item.sectionId, "operations");
   }
-  const internalRequests=items.find((entry)=>entry.href==="/procurement");
-  assert.ok(internalRequests,"missing shared internal request workspace");
-  assert.equal(internalRequests.status,undefined);
-  assert.equal(internalRequests.sectionId,"home");
-  assert.equal(internalRequests.groupId,"my-work");
-  assert.equal(internalRequests.label,"Внутренние заявки");
 });

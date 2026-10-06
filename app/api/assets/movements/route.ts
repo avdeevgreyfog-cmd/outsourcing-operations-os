@@ -6,41 +6,26 @@ import { withTenant } from "@/lib/db/client";
 import { canReadRow } from "@/lib/core/access.mjs";
 import type { Sql } from "postgres";
 
-const condition=z.enum(["new","good","worn","damaged","unusable"]);
 const schema=z.object({
   itemId:z.string().uuid(),
   variant:z.string().trim().max(80).default(""),
-  variantId:z.string().uuid().nullable().optional(),
-  movementType:z.enum(["opening","receipt","transfer","issue","return","writeoff","adjustment_in","adjustment_out","recondition"]),
+  movementType:z.enum(["opening","receipt","transfer","issue","return","writeoff","adjustment_in","adjustment_out"]),
   quantity:z.number().positive(),
   fromLocationId:z.string().uuid().nullable().optional(),
   toLocationId:z.string().uuid().nullable().optional(),
   workerId:z.string().uuid().nullable().optional(),
-  sourceCondition:condition.nullable().optional(),
-  targetCondition:condition.nullable().optional(),
-  condition:condition.nullable().optional(),
+  condition:z.enum(["new","good","worn","damaged","unusable"]).nullable().optional(),
   note:z.string().trim().max(1500).nullable().optional(),
   unitCost:z.number().min(0).nullable().optional(),
   writeoffAfterReturn:z.boolean().optional(),
 });
 
-function inboundTypes(type:string){return ["opening","receipt","transfer","return","adjustment_in","recondition"].includes(type)}
-function outboundTypes(type:string){return ["transfer","issue","writeoff","adjustment_out","recondition"].includes(type)}
-
-async function locationConditionBalance(tx:Sql,itemId:string,variant:string,locationId:string,conditionValue:string){
+async function locationBalance(tx:Sql,itemId:string,variant:string,locationId:string){
   const [row]=await tx<Array<{quantity:number}>>`
     WITH deltas AS (
-      SELECT quantity delta
-      FROM inventory_movements
-      WHERE item_id=${itemId}::uuid AND variant=${variant} AND to_location_id=${locationId}::uuid
-        AND movement_type IN ('opening','receipt','transfer','return','adjustment_in')
-        AND COALESCE(target_condition,item_condition,CASE WHEN movement_type IN ('opening','receipt') THEN 'new' ELSE 'good' END)=${conditionValue}
+      SELECT quantity delta FROM inventory_movements WHERE item_id=${itemId}::uuid AND variant=${variant} AND to_location_id=${locationId}::uuid AND movement_type IN ('opening','receipt','transfer','return','adjustment_in')
       UNION ALL
-      SELECT -quantity delta
-      FROM inventory_movements
-      WHERE item_id=${itemId}::uuid AND variant=${variant} AND from_location_id=${locationId}::uuid
-        AND movement_type IN ('transfer','issue','writeoff','adjustment_out')
-        AND COALESCE(source_condition,item_condition,'good')=${conditionValue}
+      SELECT -quantity delta FROM inventory_movements WHERE item_id=${itemId}::uuid AND variant=${variant} AND from_location_id=${locationId}::uuid AND movement_type IN ('transfer','issue','writeoff','adjustment_out')
     ) SELECT COALESCE(sum(delta),0)::numeric quantity FROM deltas
   `;return Number(row?.quantity??0);
 }
@@ -65,19 +50,7 @@ export async function POST(request:Request){
     if(["issue","return"].includes(type)&&!body.workerId)return NextResponse.json({error:"Укажите сотрудника"},{status:400});
     if(type==="return"&&!body.toLocationId)return NextResponse.json({error:"Укажите место возврата"},{status:400});
     if(type==="writeoff"&&!body.fromLocationId&&!body.workerId)return NextResponse.json({error:"Укажите место хранения или сотрудника"},{status:400});
-    if(type==="recondition"&&(!body.fromLocationId||!body.toLocationId||body.fromLocationId!==body.toLocationId))return NextResponse.json({error:"Изменение состояния выполняется внутри одного места хранения"},{status:400});
-
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      let variant=body.variant;
-      const variantId=body.variantId??null;
-      if(variantId){
-        const [variantRow]=await tx<Array<{id:string;label:string}>>`
-          SELECT id,label FROM inventory_item_variants WHERE id=${variantId}::uuid AND item_id=${body.itemId}::uuid AND active
-        `;
-        if(!variantRow)throw new Error("Размер или вариант не относится к товару");
-        variant=variantRow.label;
-      }
-
       const locationIds=[body.fromLocationId,body.toLocationId].filter((value):value is string=>Boolean(value));
       if(locationIds.length){
         const locations=await tx<Array<{id:string;organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
@@ -106,74 +79,27 @@ export async function POST(request:Request){
         `;
         if(!worker||!canReadRow(actor.access,"assets.manage",{...worker,objectId:worker.objectId??undefined,ownerUserId:worker.ownerUserId??undefined,regionId:worker.regionId??undefined},actor))throw new AccessDeniedError("assets.manage");
       }
-
-      const sourceCondition=outboundTypes(type)?(body.sourceCondition??body.condition??"good"):null;
-      const targetCondition=inboundTypes(type)?(
-        body.targetCondition??body.condition??(type==="opening"||type==="receipt"?"new":type==="transfer"?sourceCondition??"good":"good")
-      ):null;
-      if(type==="recondition"&&sourceCondition===targetCondition)throw new Error("Укажите новое состояние вещи");
-
-      if(body.fromLocationId&&outboundTypes(type)){
-        const balance=await locationConditionBalance(tx,body.itemId,variant,body.fromLocationId,sourceCondition??"good");
-        if(balance<body.quantity)throw new Error(`Недостаточный остаток в выбранном состоянии: доступно ${balance}`);
+      if(body.fromLocationId&&["transfer","issue","writeoff","adjustment_out"].includes(type)){
+        const balance=await locationBalance(tx,body.itemId,body.variant,body.fromLocationId);
+        if(balance<body.quantity)throw new Error(`Недостаточный остаток: доступно ${balance}`);
       }
       if(body.workerId&&["return","writeoff"].includes(type)&&!body.fromLocationId){
-        const outstanding=await workerOutstanding(tx,body.itemId,variant,body.workerId);
+        const outstanding=await workerOutstanding(tx,body.itemId,body.variant,body.workerId);
         if(outstanding<body.quantity)throw new Error(`У сотрудника учтено только ${outstanding}`);
       }
-
-      const compatibilityCondition=targetCondition??sourceCondition??body.condition??null;
-      if(type==="recondition"){
-        const [operation]=await tx<Array<{reference:string}>>`SELECT 'recondition:'||gen_random_uuid()::text reference`;
-        await tx`
-          INSERT INTO inventory_movements(
-            organization_id,item_id,variant,variant_id,movement_type,quantity,from_location_id,
-            item_condition,source_condition,note,reference,created_by_user_id
-          )
-          VALUES(
-            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,'adjustment_out',${body.quantity},${body.fromLocationId!}::uuid,
-            ${sourceCondition},${sourceCondition},${body.note??null},${operation.reference},${actor.userId}::uuid
-          )
-        `;
-        await tx`
-          INSERT INTO inventory_movements(
-            organization_id,item_id,variant,variant_id,movement_type,quantity,to_location_id,
-            item_condition,target_condition,note,reference,created_by_user_id
-          )
-          VALUES(
-            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,'adjustment_in',${body.quantity},${body.toLocationId!}::uuid,
-            ${targetCondition},${targetCondition},${body.note??null},${operation.reference},${actor.userId}::uuid
-          )
-        `;
-      }else{
-        await tx`
-          INSERT INTO inventory_movements(
-            organization_id,item_id,variant,variant_id,movement_type,quantity,from_location_id,to_location_id,worker_id,
-            item_condition,source_condition,target_condition,unit_cost,note,created_by_user_id
-          )
-          VALUES(
-            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,${type},${body.quantity},
-            ${body.fromLocationId??null}::uuid,${body.toLocationId??null}::uuid,${body.workerId??null}::uuid,
-            ${compatibilityCondition},${sourceCondition},${targetCondition},${body.unitCost??null},${body.note??null},${actor.userId}::uuid
-          )
-        `;
-      }
+      await tx`
+        INSERT INTO inventory_movements(organization_id,item_id,variant,movement_type,quantity,from_location_id,to_location_id,worker_id,item_condition,unit_cost,note,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${body.itemId}::uuid,${body.variant},${type},${body.quantity},${body.fromLocationId??null}::uuid,${body.toLocationId??null}::uuid,${body.workerId??null}::uuid,${body.condition??null},${body.unitCost??null},${body.note??null},${actor.userId}::uuid)
+      `;
       if(type==="return"&&body.writeoffAfterReturn){
         await tx`
-          INSERT INTO inventory_movements(
-            organization_id,item_id,variant,variant_id,movement_type,quantity,from_location_id,item_condition,source_condition,note,created_by_user_id
-          )
-          VALUES(
-            ${actor.organizationId}::uuid,${body.itemId}::uuid,${variant},${variantId}::uuid,'writeoff',${body.quantity},
-            ${body.toLocationId!}::uuid,${targetCondition??"unusable"},${targetCondition??"unusable"},
-            ${body.note?body.note+" · Списание после возврата":"Списание после возврата"},${actor.userId}::uuid
-          )
+          INSERT INTO inventory_movements(organization_id,item_id,variant,movement_type,quantity,from_location_id,item_condition,note,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${body.itemId}::uuid,${body.variant},'writeoff',${body.quantity},${body.toLocationId!}::uuid,${body.condition??"unusable"},${body.note?body.note+" · Списание после возврата":"Списание после возврата"},${actor.userId}::uuid)
         `;
       }
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'inventory','movement',${"Движение имущества: "+type},
-          ${tx.json({itemId:body.itemId,variant,variantId,quantity:body.quantity,fromLocationId:body.fromLocationId??null,toLocationId:body.toLocationId??null,workerId:body.workerId??null,sourceCondition,targetCondition,writeoffAfterReturn:Boolean(body.writeoffAfterReturn)})})
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'inventory','movement',${`Движение имущества: ${type}`},${tx.json({itemId:body.itemId,variant:body.variant,quantity:body.quantity,fromLocationId:body.fromLocationId??null,toLocationId:body.toLocationId??null,workerId:body.workerId??null,writeoffAfterReturn:Boolean(body.writeoffAfterReturn)})})
       `;
     }));
     return NextResponse.json({ok:true},{status:201});

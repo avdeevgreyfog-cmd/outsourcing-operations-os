@@ -363,42 +363,6 @@ BEGIN
   FROM permission_definitions WHERE capability IN (
     'finance.worker_accrual.read','finance.worker_accrual.edit','finance.payments.read','finance.payments.edit','finance.pnl.read'
   ) ON CONFLICT DO NOTHING;
-
-  -- Cross-functional internal requests: creators can submit their own needs,
-  -- while supply executes and finance alone records payment facts.
-  INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
-  SELECT org_id,r.id,'procurement.create','allow',
-    CASE WHEN r.code IN ('director','operations_head','supply_specialist') THEN 'all_org' ELSE 'assigned_to_me' END,
-    '{}'::uuid[]
-  FROM role_templates r
-  WHERE r.code IN ('director','operations_head','object_manager','supply_specialist')
-  ON CONFLICT DO NOTHING;
-
-  INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
-  SELECT org_id,r.id,p.capability,'allow','own_created','{}'::uuid[]
-  FROM role_templates r
-  JOIN permission_definitions p ON p.capability IN ('procurement.read','procurement.create')
-  WHERE r.code IN ('commercial_lead','client_manager','recruitment_head','recruiter')
-  ON CONFLICT DO NOTHING;
-
-  INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
-  SELECT org_id,r.id,p.capability,'allow','all_org','{}'::uuid[]
-  FROM role_templates r
-  JOIN permission_definitions p ON p.capability IN ('procurement.read','procurement.finance')
-  WHERE r.code='finance_economist'
-  ON CONFLICT DO NOTHING;
-
-  INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
-  SELECT org_id,r.id,'procurement.create','allow','own_created','{}'::uuid[]
-  FROM role_templates r
-  WHERE r.code='finance_economist'
-  ON CONFLICT DO NOTHING;
-
-  INSERT INTO permission_grants(organization_id,role_template_id,capability,effect,scope_type,scope_ids)
-  SELECT org_id,r.id,'procurement.finance','allow','all_org','{}'::uuid[]
-  FROM role_templates r
-  WHERE r.code='director'
-  ON CONFLICT DO NOTHING;
 END $$;
 
 COMMIT;

@@ -38,22 +38,6 @@ export type RateReference = {
   confidence: string;
 };
 
-export type SupplyKitReference = {
-  templateId:string;
-  specialtyId:string;
-  specialty:string;
-  items:Array<{
-    itemId:string;
-    item:string;
-    quantity:number;
-    unit:string;
-    replacementCycleDays:number|null;
-    unitCost:number|null;
-    priceId:string|null;
-    priceEffectiveFrom:string|null;
-  }>;
-};
-
 export type CalculationScenarioSeed = {
   id: string;
   organizationId: string;
@@ -107,60 +91,6 @@ export async function getCalculationScenarioSeed(actor: Actor, scenarioId: strin
     `;
     if (!row || !canReadRow(actor.access, "calculation.scenario.read", row, actor)) return null;
     return row;
-  });
-}
-
-export async function getSupplyKitReferencesForRoles(
-  actor: Actor,
-  roles: Array<{ id:string; specialtyId:string|null|undefined; specialty:string }>,
-  effectiveDate?: string | null,
-): Promise<Record<string,SupplyKitReference>> {
-  requireCapability(actor,"calculation.scenario.read");
-  const output:Record<string,SupplyKitReference>={};
-  if(actor.demo){
-    for(const role of roles){
-      if(!role.specialtyId)continue;
-      output[role.id]={
-        templateId:"demo-supply-kit-"+role.specialtyId,specialtyId:role.specialtyId,specialty:role.specialty,
-        items:[
-          {itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",replacementCycleDays:180,unitCost:4200,priceId:"demo-price-jacket",priceEffectiveFrom:"2026-09-01"},
-          {itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",replacementCycleDays:180,unitCost:3200,priceId:"demo-price-boots",priceEffectiveFrom:"2026-09-01"},
-          {itemId:"demo-item-gloves",item:"Перчатки рабочие",quantity:1,unit:"пар",replacementCycleDays:7,unitCost:120,priceId:"demo-price-gloves",priceEffectiveFrom:"2026-09-01"},
-        ],
-      };
-    }
-    return output;
-  }
-  const date=effectiveDate&&/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)?effectiveDate:null;
-  return withTenant(actor.organizationId,actor.userId,async sql=>{
-    for(const role of roles){
-      if(!role.specialtyId)continue;
-      const [row]=await sql<Array<SupplyKitReference>>`
-        SELECT t.id "templateId",t.specialty_id "specialtyId",s.name specialty,
-          COALESCE(jsonb_agg(jsonb_build_object(
-            'itemId',i.id,'item',i.name,'quantity',ti.quantity::numeric,'unit',i.unit,
-            'replacementCycleDays',COALESCE(ti.replacement_cycle_days,i.default_replacement_cycle_days),
-            'unitCost',price.unit_cost::numeric,'priceId',price.id,'priceEffectiveFrom',price.effective_from::text
-          ) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
-        FROM object_ppe_templates t
-        JOIN specialties s ON s.id=t.specialty_id
-        LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id
-        LEFT JOIN inventory_items i ON i.id=ti.item_id
-        LEFT JOIN LATERAL (
-          SELECT p.id,p.unit_cost,p.effective_from
-          FROM inventory_item_prices p
-          WHERE p.item_id=i.id AND p.variant_id IS NULL
-            AND p.effective_from<=COALESCE(${date}::date,current_date)
-            AND (p.effective_to IS NULL OR p.effective_to>=COALESCE(${date}::date,current_date))
-          ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1
-        ) price ON true
-        WHERE t.object_id IS NULL AND t.specialty_id=${role.specialtyId}::uuid AND t.active
-        GROUP BY t.id,t.specialty_id,s.name
-        ORDER BY t.updated_at DESC LIMIT 1
-      `;
-      if(row)output[role.id]={...row,items:row.items.map(item=>({...item,quantity:Number(item.quantity),unitCost:item.unitCost==null?null:Number(item.unitCost)}))};
-    }
-    return output;
   });
 }
 

@@ -44,7 +44,6 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         if(!exit)throw new Error("План завершения работы не найден");
         const [exitMeta]=await tx<Array<{replacementNeedId:string|null}>>`SELECT replacement_need_id "replacementNeedId" FROM worker_exit_processes WHERE id=${exit.id}::uuid`;
         await tx`UPDATE worker_exit_processes SET status='cancelled',updated_at=now() WHERE id=${exit.id}::uuid`;
-        await tx`UPDATE housing_stays SET exit_process_id=NULL,updated_by_user_id=${actor.userId}::uuid,updated_at=now() WHERE worker_id=${id}::uuid AND exit_process_id=${exit.id}::uuid AND status IN ('planned','active')`;
         if(exitMeta?.replacementNeedId)await tx`UPDATE needs SET status='cancelled',closed_at=now() WHERE id=${exitMeta.replacementNeedId}::uuid AND status NOT IN ('filled','archived')`;
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
           VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'exit_cancelled','План завершения работы отменён',${tx.json({exitId:exit.id})})`;
@@ -101,15 +100,6 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         }else if(replacementNeedId){
           await tx`UPDATE needs SET status='cancelled',closed_at=now() WHERE id=${replacementNeedId}::uuid AND status NOT IN ('filled','archived')`;
         }
-        const housingRows=await tx<Array<{id:string;siteId:string}>>`
-          UPDATE housing_stays SET exit_process_id=${exitId}::uuid,updated_by_user_id=${actor.userId}::uuid,updated_at=now()
-          WHERE worker_id=${id}::uuid AND status IN ('planned','active')
-          RETURNING id,site_id "siteId"
-        `;
-        for(const stay of housingRows){
-          await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-            VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'housing_stay',${stay.id}::uuid,'worker_exit_linked','Запланировано увольнение проживающего сотрудника',${tx.json({siteId:stay.siteId,workerId:id,exitId,effectiveDate:body.effectiveDate})})`;
-        }
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
           VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'exit_planned',${"Запланировано завершение работы: "+body.effectiveDate},${tx.json({exitId,reasonCode:body.reasonCode,replacementRequired:body.replacementRequired,replacementNeedId})})`;
         return {status:"planned",exitId,replacementNeedId};
@@ -163,18 +153,13 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           updated_by_user_id=${actor.userId}::uuid,updated_at=now()
         WHERE worker_id=${id}::uuid AND status IN ('tentative','confirmed')
       `;
-      const housingOnExit=await tx<Array<{id:string;siteId:string;status:string}>>`
+      await tx`
         UPDATE housing_stays SET
-          status=CASE WHEN status='planned' AND check_in>${body.effectiveDate}::date THEN 'cancelled' ELSE status END,
-          exit_process_id=${exitId}::uuid,
-          updated_by_user_id=${actor.userId}::uuid,updated_at=now()
+          check_out=CASE WHEN check_in<=${body.effectiveDate}::date THEN ${body.effectiveDate}::date ELSE check_out END,
+          status=CASE WHEN check_in>${body.effectiveDate}::date THEN 'cancelled' ELSE 'completed' END,
+          updated_at=now()
         WHERE worker_id=${id}::uuid AND status IN ('planned','active')
-        RETURNING id,site_id "siteId",status
       `;
-      for(const stay of housingOnExit){
-        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'housing_stay',${stay.id}::uuid,'worker_offboarded',${stay.status==='cancelled'?'Будущее заселение отменено при увольнении':'Работа сотрудника завершена — требуется подтвердить выселение'},${tx.json({siteId:stay.siteId,workerId:id,exitId,effectiveDate:body.effectiveDate})})`;
-      }
 
       const futureShiftIds=await tx<Array<{id:string}>>`
         SELECT DISTINCT sh.id FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id

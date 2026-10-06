@@ -7,13 +7,13 @@ import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
 import type { CalculationModelOption } from "@/lib/commercial/calculation-models";
 import type { ExpenseStandard, ScheduleStandard } from "@/lib/commercial/calculation-standards";
 import { defaultCommercialPolicy, loadCompanyRulesDraft, subscribeCompanyRulesDraft } from "@/lib/commercial/company-rules-client";
-import type { RateReference, SupplyKitReference } from "@/lib/commercial/calculation-workspace";
+import type { RateReference } from "@/lib/commercial/calculation-workspace";
 import { pct, rub } from "@/lib/ui/format";
 
 type Base = "per_hour" | "per_shift" | "per_worker_month" | "per_worker_period" | "percent_of_worker_pay" | "role_month" | "role_fixed" | "project_month" | "project_fixed" | "per_unit";
 type CostScope = "worker" | "role" | "project";
 type CostSource = "manual" | "request" | "rule" | "reference";
-type Cost = { id: string; group: string; label: string; amount: number; base: Base; enabled: boolean; scope: CostScope; source: CostSource; amortizationMonths?:number|null; standardId?:string; standardVersion?:number; referenceSnapshot?:Record<string,unknown> };
+type Cost = { id: string; group: string; label: string; amount: number; base: Base; enabled: boolean; scope: CostScope; source: CostSource; amortizationMonths?:number|null; standardId?:string; standardVersion?:number };
 type BillingUnit = "hour" | "shift" | "unit" | "worker_month" | "project_month" | "project_fixed" | "mixed";
 type WorkerPayUnit = "hour" | "shift" | "month" | "unit";
 type PricingMode = "target_margin" | "target_profit" | "client_limit";
@@ -26,7 +26,6 @@ type ContextRole = {
   schedule?: Record<string, unknown>;
   targetClientRate?: number | string | null;
   reference?: RateReference | null;
-  supplyKit?: SupplyKitReference | null;
 };
 
 type ScenarioSeed = {
@@ -103,7 +102,7 @@ const baseLabels: Record<Base, string> = {
   per_hour: "₽/ч/сотр.",per_shift: "₽/смену/сотр.",per_worker_month: "₽/сотр./мес.",per_worker_period:"на сотр. / период",percent_of_worker_pay:"% выплаты",role_month:"₽/позицию/мес.",role_fixed:"₽/позицию разово",project_month: "₽/проект/мес.",project_fixed:"₽/проект разово",per_unit: "₽/единицу",
 };
 const scopeLabels: Record<CostScope, string> = { worker: "Сотрудник", role: "Позиция", project: "Проект" };
-const sourceLabels: Record<CostSource, string> = { manual: "Вручную", request: "Из заявки", rule: "Из норматива", reference:"Из склада и норм" };
+const sourceLabels: Record<CostSource, string> = { manual: "Вручную", request: "Из заявки", rule: "Из норматива", reference:"Из базы" };
 
 function positive(value: unknown, fallback: number) { const n=Number(value);return Number.isFinite(n)&&n>0?n:fallback; }
 function nonNegative(value: unknown, fallback=0) { const n=Number(value);return Number.isFinite(n)&&n>=0?n:fallback; }
@@ -119,8 +118,7 @@ function normalizeCost(raw:Record<string,unknown>):Cost|null {
   const rawSource=str(raw.source,"manual");const source:CostSource=["request","rule","reference"].includes(rawSource)?rawSource as CostSource:"manual";
   const rawBase=str(raw.base,"per_hour");const allowed=Object.keys(baseLabels);const base:Base=allowed.includes(rawBase)?rawBase as Base:(scope==="project"?"project_month":scope==="role"?"role_month":"per_hour");
   const amount=scope==="project"?nonNegative(raw.enteredAmount,nonNegative(raw.amount)):nonNegative(raw.amount);
-  const referenceSnapshot=raw.referenceSnapshot&&typeof raw.referenceSnapshot==="object"&&!Array.isArray(raw.referenceSnapshot)?raw.referenceSnapshot as Record<string,unknown>:undefined;
-  return {id,group:str(raw.group,groups[4]),label,amount,base,enabled:raw.enabled!==false,scope,source,amortizationMonths:raw.amortizationMonths==null?null:nonNegative(raw.amortizationMonths),standardId:str(raw.standardId)||undefined,standardVersion:raw.standardVersion==null?undefined:nonNegative(raw.standardVersion),referenceSnapshot};
+  return {id,group:str(raw.group,groups[4]),label,amount,base,enabled:raw.enabled!==false,scope,source,amortizationMonths:raw.amortizationMonths==null?null:nonNegative(raw.amortizationMonths),standardId:str(raw.standardId)||undefined,standardVersion:raw.standardVersion==null?undefined:nonNegative(raw.standardVersion)};
 }
 
 function buildInitialCosts(projectCosts?:Array<Record<string,unknown>>,seedCosts?:Array<Record<string,unknown>>,standards?:ExpenseStandard[]) {
@@ -170,23 +168,6 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const [shifts, setShifts] = useState(initialShifts);
   const [scheduleStandardId,setScheduleStandardId]=useState("");
   const [projectMonths, setProjectMonths] = useState(positive(seedInputs.projectMonths,1));
-  const supplyKitEstimate=useMemo(()=>{
-    const kit=selectedRole?.supplyKit;
-    if(!kit)return null;
-    const projectDays=Math.max(projectMonths*30,1);
-    const rows=kit.items.map(item=>{
-      const cycle=item.replacementCycleDays&&item.replacementCycleDays>0?item.replacementCycleDays:null;
-      const factor=cycle?projectDays/cycle:1;
-      const amount=item.unitCost==null?null:item.unitCost*item.quantity*factor;
-      return {...item,factor,amount};
-    });
-    return {
-      kit,
-      rows,
-      total:rows.reduce((sum,row)=>sum+(row.amount??0),0),
-      missing:rows.filter(row=>row.unitCost==null).map(row=>row.item),
-    };
-  },[selectedRole?.supplyKit,projectMonths]);
   const [pricingMode, setPricingMode] = useState<PricingMode>(pricing(seedInputs.pricingMode));
   const [margin, setMargin] = useState(nonNegative(seedInputs.targetMarginPct,commercialPolicy.recommendedMarginPct));
   const [targetContribution, setTargetContribution] = useState(nonNegative(seedInputs.targetMonthlyContribution,0));
@@ -260,26 +241,6 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   }), [workers,hours,shiftHours,shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,margin,targetContribution,clientLimit,clientLimitVatMode,billingUnit,variableBillingUnit,volumeUnitCode,unitLabel,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model,calculatedCosts,scenarioRules]);
 
   function updateCost(id:string,patch:Partial<Cost>){setCosts(current=>current.map(cost=>cost.id===id?{...cost,...patch}:cost));}
-  function applySupplyKitCost(){
-    if(!supplyKitEstimate||supplyKitEstimate.total<=0)return;
-    const cost:Cost={
-      id:"ppe",group:groups[1],label:"Комплект обеспечения · "+(selectedRole?.specialty??"специальность"),
-      amount:supplyKitEstimate.total,base:"per_worker_period",enabled:true,scope:"worker",source:"reference",amortizationMonths:Math.max(projectMonths,1),
-      referenceSnapshot:{
-        templateId:supplyKitEstimate.kit.templateId,
-        specialtyId:supplyKitEstimate.kit.specialtyId,
-        specialty:supplyKitEstimate.kit.specialty,
-        economicsDate:context?.economicsDate??null,
-        projectMonths,
-        calculatedAmount:supplyKitEstimate.total,
-        items:supplyKitEstimate.rows.map(row=>({
-          itemId:row.itemId,item:row.item,quantity:row.quantity,unit:row.unit,replacementCycleDays:row.replacementCycleDays,
-          unitCost:row.unitCost,priceId:row.priceId,priceEffectiveFrom:row.priceEffectiveFrom,factor:row.factor,amount:row.amount,
-        })),
-      },
-    };
-    setCosts(current=>current.some(item=>item.id==="ppe")?current.map(item=>item.id==="ppe"?cost:item):[...current,cost]);
-  }
   function setCostScope(cost:Cost,scope:CostScope){const allowed=basesForScope(scope);updateCost(cost.id,{scope,base:allowed.includes(cost.base)?cost.base:allowed[0]});}
   function addCost(group:string){setCosts(current=>[...current,{id:crypto.randomUUID(),group,label:"Новая статья",amount:0,base:"per_hour",enabled:true,scope:"worker",source:"manual"}]);}
   function duplicateCost(cost:Cost){setCosts(current=>[...current,{...cost,id:crypto.randomUUID(),label:`${cost.label} — копия`,source:"manual"}]);}
@@ -396,7 +357,6 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
         <CalcInput label="Оплачиваемых часов / смену" note={context?"Из графика, можно скорректировать":"Вручную"} value={shiftHours} onChange={setShiftHours} unit="ч"/>
         <CalcInput label="Смен на сотрудника / месяц" value={shifts} onChange={setShifts} unit="смен"/>
         <CalcInput label="Расчётный срок проекта" value={projectMonths} onChange={setProjectMonths} unit="мес"/>
-        {supplyKitEstimate&&<div className="calc-reference calculation-supply-kit-reference"><div><span>Комплект обеспечения · {selectedRole?.specialty}</span><strong>{rub(supplyKitEstimate.total)} / сотрудника на {projectMonths} мес.</strong><small>{supplyKitEstimate.rows.length} позиций · стоимость рассчитана по срокам повторной выдачи{context?.economicsDate?" · цены на "+(displayDate(context.economicsDate)??context.economicsDate):""}</small>{supplyKitEstimate.missing.length>0&&<small>Без действующей цены: {supplyKitEstimate.missing.join(", ")}</small>}</div><div><button type="button" className="button" disabled={supplyKitEstimate.total<=0||supplyKitEstimate.missing.length>0} onClick={applySupplyKitCost}>Подставить в расходы</button></div></div>}
       </details>
 
       <details className="calc-group" open>

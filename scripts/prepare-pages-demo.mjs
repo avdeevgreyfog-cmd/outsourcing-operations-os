@@ -6,7 +6,6 @@ const routes = {
   "app/(workspace)/clients/[id]/page.tsx": "clients",
   "app/(workspace)/contracts/[id]/page.tsx": "contracts",
   "app/(workspace)/objects/[id]/page.tsx": "objects",
-  "app/(workspace)/supply/housing/[id]/page.tsx": "housing",
   "app/(workspace)/proposals/[id]/page.tsx": "proposals",
   "app/(workspace)/requests/[id]/page.tsx": "requests",
   "app/(workspace)/tenders/[id]/page.tsx": "tenders",

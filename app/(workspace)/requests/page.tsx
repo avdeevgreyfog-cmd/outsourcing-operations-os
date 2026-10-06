@@ -45,7 +45,6 @@ export default async function RequestsPage({searchParams}:{searchParams:Promise<
       canEdit={hasCapability(actor.access,"sales.request.edit")}
       now={getRequestSnapshotTime()}
       demo={actor.demo}
-      preferenceScope={`${actor.organizationId}:${actor.membershipId}`}
     />
   </>;
 }

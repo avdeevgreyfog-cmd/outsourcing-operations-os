@@ -3,7 +3,6 @@ import { requireCapability } from "@/lib/access/server";
 import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
-import { companyProfile as demoCompanyProfile, organizationUnits as demoOrganizationUnits } from "@/lib/demo/organization";
 
 export type OperationsAnalyticsRow = {
   organizationId:string;
@@ -46,27 +45,6 @@ export type StorageLocationRow = {
   description:string|null;
 };
 
-export type InventoryVariantRow = {
-  id:string;
-  itemId:string;
-  code:string|null;
-  label:string;
-  sortOrder:number;
-  active:boolean;
-};
-
-export type InventoryPriceRow = {
-  id:string;
-  itemId:string;
-  variantId:string|null;
-  unitCost:number;
-  effectiveFrom:string;
-  effectiveTo:string|null;
-  source:string;
-  partnerId:string|null;
-  partner:string|null;
-};
-
 export type InventoryItemRow = {
   id:string;
   name:string;
@@ -75,12 +53,6 @@ export type InventoryItemRow = {
   unit:string;
   returnable:boolean;
   tracksVariant:boolean;
-  sizeMode:"none"|"clothing"|"shoe"|"manual";
-  defaultReplacementCycleDays:number|null;
-  notes:string|null;
-  currentPrice:number|null;
-  currentPriceId:string|null;
-  currentPriceEffectiveFrom:string|null;
 };
 
 export type InventoryBalanceRow = {
@@ -92,7 +64,6 @@ export type InventoryBalanceRow = {
   returnable:boolean;
   tracksVariant:boolean;
   variant:string;
-  variantId:string|null;
   locationId:string;
   location:string;
   locationKind:string;
@@ -100,32 +71,23 @@ export type InventoryBalanceRow = {
   ownerUserId:string|null;
   assigneeUserIds:string[];
   quantity:number;
-  usableQuantity:number;
-  newQuantity:number;
-  goodQuantity:number;
-  serviceQuantity:number;
-  repairQuantity:number;
-  unusableQuantity:number;
   minQuantity:number;
 };
 
 export type InventorySnapshot = {
   locations:StorageLocationRow[];
   items:InventoryItemRow[];
-  variants:InventoryVariantRow[];
-  prices:InventoryPriceRow[];
   balances:InventoryBalanceRow[];
 };
 
-export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string;replacementCycleDays:number|null;unitCost:number|null;priceId:string|null;priceEffectiveFrom:string|null};
+export type ObjectPpeTemplateItemRow={itemId:string;item:string;quantity:number;unit:string;sizeSource:"none"|"clothing"|"shoe"|"manual";variant:string;replacementCycleDays:number|null};
 export type ObjectPpeTemplateRow={id:string;objectId:string|null;specialtyId:string;specialty:string;name:string;source:"global"|"object";items:ObjectPpeTemplateItemRow[]};
 
 function demoSupplyTemplate(specialtyId:string,specialty:string):ObjectPpeTemplateRow{
   return {id:`demo-ppe-global-${specialtyId}`,objectId:null,specialtyId,specialty,name:"Базовая норма",source:"global",items:[
-    {itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:"",replacementCycleDays:180,unitCost:4200,priceId:"demo-price-jacket",priceEffectiveFrom:"2026-09-01"},
-    {itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:"",replacementCycleDays:180,unitCost:3200,priceId:"demo-price-boots",priceEffectiveFrom:"2026-09-01"},
-    {itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:"",replacementCycleDays:365,unitCost:900,priceId:"demo-price-helmet",priceEffectiveFrom:"2026-09-01"},
-    {itemId:"demo-item-gloves",item:"Перчатки рабочие",quantity:1,unit:"пар",sizeSource:"none",variant:"",replacementCycleDays:7,unitCost:120,priceId:"demo-price-gloves",priceEffectiveFrom:"2026-09-01"},
+    {itemId:"demo-item-jacket",item:"Куртка рабочая",quantity:1,unit:"шт",sizeSource:"clothing",variant:"",replacementCycleDays:180},
+    {itemId:"demo-item-boots",item:"Ботинки рабочие",quantity:1,unit:"пар",sizeSource:"shoe",variant:"",replacementCycleDays:365},
+    {itemId:"demo-item-helmet",item:"Каска",quantity:1,unit:"шт",sizeSource:"none",variant:"",replacementCycleDays:null},
   ]};
 }
 function demoSpecialtyOptions(actor:Actor){
@@ -139,13 +101,7 @@ export async function listGlobalPpeTemplates(actor:Actor):Promise<ObjectPpeTempl
   if(actor.demo)return demoSpecialtyOptions(actor).map(item=>demoSupplyTemplate(item.id,item.name));
   return withTenant(actor.organizationId,actor.userId,async sql=>sql<ObjectPpeTemplateRow[]>`
     SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,'global'::text source,
-      COALESCE(jsonb_agg(jsonb_build_object(
-        'itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,
-        'replacementCycleDays',COALESCE(ti.replacement_cycle_days,i.default_replacement_cycle_days),
-        'unitCost',(SELECT p.unit_cost::numeric FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
-        'priceId',(SELECT p.id FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
-        'priceEffectiveFrom',(SELECT p.effective_from::text FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1)
-      ) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
+      COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,'replacementCycleDays',ti.replacement_cycle_days) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
     FROM object_ppe_templates t
     JOIN specialties s ON s.id=t.specialty_id
     LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id
@@ -178,13 +134,7 @@ export async function listObjectPpeTemplates(actor:Actor,objectId:string):Promis
       )
       SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.name,
         CASE WHEN t.object_id IS NULL THEN 'global' ELSE 'object' END source,
-        COALESCE(jsonb_agg(jsonb_build_object(
-        'itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,
-        'replacementCycleDays',COALESCE(ti.replacement_cycle_days,i.default_replacement_cycle_days),
-        'unitCost',(SELECT p.unit_cost::numeric FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
-        'priceId',(SELECT p.id FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1),
-        'priceEffectiveFrom',(SELECT p.effective_from::text FROM inventory_item_prices p WHERE p.item_id=i.id AND p.variant_id IS NULL AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date) ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1)
-      ) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
+        COALESCE(jsonb_agg(jsonb_build_object('itemId',i.id,'item',i.name,'quantity',ti.quantity,'unit',i.unit,'sizeSource',ti.size_source,'variant',ti.variant,'replacementCycleDays',ti.replacement_cycle_days) ORDER BY i.name) FILTER (WHERE ti.id IS NOT NULL),'[]'::jsonb) items
       FROM ranked t
       JOIN specialties s ON s.id=t.specialty_id
       LEFT JOIN object_ppe_template_items ti ON ti.template_id=t.id
@@ -450,7 +400,6 @@ export async function listStorageLocations(actor:Actor):Promise<StorageLocationR
     return [
       {id:"demo-location-manager",organizationId:object.organizationId,name:"Запас менеджера",kind:"manager",objectId:null,object:null,responsibleUserId:actor.userId,responsible:actor.displayName,ownerUserId:actor.userId,assigneeUserIds:[actor.userId],description:"Личный операционный запас менеджера"},
       {id:"demo-location-object",organizationId:object.organizationId,name:`${object.name} · запас`,kind:"object",objectId:object.id,object:object.name,responsibleUserId:object.ownerUserId??null,responsible:null,ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],description:"Запас непосредственно на объекте"},
-      {id:"demo-location-office",organizationId:object.organizationId,name:"Центральный склад компании",kind:"office",objectId:null,object:null,responsibleUserId:null,responsible:null,ownerUserId:null,assigneeUserIds:[],description:"Общий запас компании, доступный для просмотра менеджерам"},
     ];
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
@@ -468,7 +417,7 @@ export async function listStorageLocations(actor:Actor):Promise<StorageLocationR
       WHERE l.active
       ORDER BY l.name
     `;
-    return rows.filter(row=>row.kind==="office"||canReadRow(actor.access,"assets.read",row,actor));
+    return rows.filter(row=>canReadRow(actor.access,"assets.read",row,actor));
   });
 }
 
@@ -477,97 +426,50 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
   if(actor.demo){
     const locations=await listStorageLocations(actor);
     const items:InventoryItemRow[]=[
-      {id:"demo-item-boots",name:"Ботинки рабочие",code:"BOOT",category:"workwear",unit:"пар",returnable:true,tracksVariant:true,sizeMode:"shoe",defaultReplacementCycleDays:180,notes:null,currentPrice:3200,currentPriceId:"demo-price-boots",currentPriceEffectiveFrom:"2026-09-01"},
-      {id:"demo-item-jacket",name:"Куртка рабочая",code:"JACKET",category:"workwear",unit:"шт",returnable:true,tracksVariant:true,sizeMode:"clothing",defaultReplacementCycleDays:180,notes:null,currentPrice:4200,currentPriceId:"demo-price-jacket",currentPriceEffectiveFrom:"2026-09-01"},
-      {id:"demo-item-helmet",name:"Каска",code:"HELMET",category:"ppe",unit:"шт",returnable:true,tracksVariant:false,sizeMode:"none",defaultReplacementCycleDays:365,notes:null,currentPrice:900,currentPriceId:"demo-price-helmet",currentPriceEffectiveFrom:"2026-09-01"},
-      {id:"demo-item-gloves",name:"Перчатки рабочие",code:"GLOVES",category:"consumable",unit:"пар",returnable:false,tracksVariant:false,sizeMode:"none",defaultReplacementCycleDays:7,notes:null,currentPrice:120,currentPriceId:"demo-price-gloves",currentPriceEffectiveFrom:"2026-09-01"},
+      {id:"demo-item-boots",name:"Ботинки рабочие",code:"BOOT",category:"workwear",unit:"пар",returnable:true,tracksVariant:true},
+      {id:"demo-item-jacket",name:"Куртка рабочая",code:"JACKET",category:"workwear",unit:"шт",returnable:true,tracksVariant:true},
+      {id:"demo-item-helmet",name:"Каска",code:"HELMET",category:"ppe",unit:"шт",returnable:true,tracksVariant:false},
+      {id:"demo-item-gloves",name:"Перчатки рабочие",code:"GLOVES",category:"consumable",unit:"пар",returnable:false,tracksVariant:false},
     ];
-    const variants:InventoryVariantRow[]=[
-      {id:"demo-variant-boots-43",itemId:items[0].id,code:"43",label:"43",sortOrder:43,active:true},
-      {id:"demo-variant-boots-44",itemId:items[0].id,code:"44",label:"44",sortOrder:44,active:true},
-      {id:"demo-variant-jacket-52",itemId:items[1].id,code:"52",label:"52",sortOrder:52,active:true},
-      {id:"demo-variant-jacket-54",itemId:items[1].id,code:"54",label:"54",sortOrder:54,active:true},
-    ];
-    const prices:InventoryPriceRow[]=items.map(item=>({id:item.currentPriceId!,itemId:item.id,variantId:null,unitCost:item.currentPrice!,effectiveFrom:item.currentPriceEffectiveFrom!,effectiveTo:null,source:"manual",partnerId:null,partner:null}));
     const balances:InventoryBalanceRow[]=[
-      {...items[0],itemId:items[0].id,item:items[0].name,variant:"43",variantId:variants[0].id,locationId:locations[0].id,location:locations[0].name,locationKind:locations[0].kind,objectId:locations[0].objectId,ownerUserId:locations[0].ownerUserId,assigneeUserIds:locations[0].assigneeUserIds,quantity:3,usableQuantity:3,newQuantity:2,goodQuantity:1,serviceQuantity:0,repairQuantity:0,unusableQuantity:0,minQuantity:2},
-      {...items[1],itemId:items[1].id,item:items[1].name,variant:"52",variantId:variants[2].id,locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:4,usableQuantity:3,newQuantity:2,goodQuantity:1,serviceQuantity:1,repairQuantity:0,unusableQuantity:0,minQuantity:3},
-      {...items[2],itemId:items[2].id,item:items[2].name,variant:"",variantId:null,locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:6,usableQuantity:5,newQuantity:3,goodQuantity:2,serviceQuantity:0,repairQuantity:1,unusableQuantity:0,minQuantity:5},
-      {...items[3],itemId:items[3].id,item:items[3].name,variant:"",variantId:null,locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:80,usableQuantity:80,newQuantity:80,goodQuantity:0,serviceQuantity:0,repairQuantity:0,unusableQuantity:0,minQuantity:100},
+      {...items[0],itemId:items[0].id,item:items[0].name,variant:"43",locationId:locations[0].id,location:locations[0].name,locationKind:locations[0].kind,objectId:locations[0].objectId,ownerUserId:locations[0].ownerUserId,assigneeUserIds:locations[0].assigneeUserIds,quantity:3,minQuantity:2},
+      {...items[1],itemId:items[1].id,item:items[1].name,variant:"52",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:4,minQuantity:3},
+      {...items[2],itemId:items[2].id,item:items[2].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:6,minQuantity:5},
+      {...items[3],itemId:items[3].id,item:items[3].name,variant:"",locationId:locations[1].id,location:locations[1].name,locationKind:locations[1].kind,objectId:locations[1].objectId,ownerUserId:locations[1].ownerUserId,assigneeUserIds:locations[1].assigneeUserIds,quantity:80,minQuantity:100},
     ];
-    return {locations,items,variants,prices,balances};
+    return {locations,items,balances};
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const [locations,items,variants,prices,rawBalances]=await Promise.all([
+    const [locations,items,rawBalances]=await Promise.all([
       listStorageLocations(actor),
       sql<InventoryItemRow[]>`
-        SELECT i.id,i.name,i.code,i.category,i.unit,i.returnable,i.tracks_variant "tracksVariant",
-          i.size_mode "sizeMode",i.default_replacement_cycle_days "defaultReplacementCycleDays",i.notes,
-          current_price.unit_cost::numeric "currentPrice",current_price.id "currentPriceId",current_price.effective_from::text "currentPriceEffectiveFrom"
-        FROM inventory_items i
-        LEFT JOIN LATERAL (
-          SELECT p.id,p.unit_cost,p.effective_from
-          FROM inventory_item_prices p
-          WHERE p.item_id=i.id AND p.variant_id IS NULL
-            AND p.effective_from<=current_date AND (p.effective_to IS NULL OR p.effective_to>=current_date)
-          ORDER BY p.effective_from DESC,p.created_at DESC LIMIT 1
-        ) current_price ON true
-        WHERE i.active ORDER BY i.name
-      `,
-      sql<InventoryVariantRow[]>`
-        SELECT id,item_id "itemId",code,label,sort_order "sortOrder",active
-        FROM inventory_item_variants WHERE active
-        ORDER BY item_id,sort_order,label
-      `,
-      sql<InventoryPriceRow[]>`
-        SELECT p.id,p.item_id "itemId",p.variant_id "variantId",p.unit_cost::numeric "unitCost",
-          p.effective_from::text "effectiveFrom",p.effective_to::text "effectiveTo",p.source,p.partner_id "partnerId",sp.name partner
-        FROM inventory_item_prices p
-        LEFT JOIN supply_partners sp ON sp.id=p.partner_id
-        ORDER BY p.effective_from DESC,p.created_at DESC
+        SELECT id,name,code,category,unit,returnable,tracks_variant "tracksVariant"
+        FROM inventory_items WHERE active ORDER BY name
       `,
       sql<Array<InventoryBalanceRow & {organizationId:string}>>`
         WITH deltas AS (
-          SELECT m.organization_id,m.item_id,m.variant,m.variant_id,m.to_location_id location_id,
-            COALESCE(m.target_condition,m.item_condition,CASE WHEN m.movement_type IN ('opening','receipt') THEN 'new' ELSE 'good' END) condition,
-            m.quantity delta
+          SELECT m.organization_id,m.item_id,m.variant,m.to_location_id location_id,m.quantity delta
           FROM inventory_movements m
           WHERE m.to_location_id IS NOT NULL AND m.movement_type IN ('opening','receipt','transfer','return','adjustment_in')
           UNION ALL
-          SELECT m.organization_id,m.item_id,m.variant,m.variant_id,m.from_location_id location_id,
-            COALESCE(m.source_condition,m.item_condition,'good') condition,-m.quantity delta
+          SELECT m.organization_id,m.item_id,m.variant,m.from_location_id location_id,-m.quantity delta
           FROM inventory_movements m
           WHERE m.from_location_id IS NOT NULL AND m.movement_type IN ('transfer','issue','writeoff','adjustment_out')
-        ), condition_balances AS (
-          SELECT organization_id,item_id,variant,variant_id,location_id,condition,sum(delta)::numeric quantity
-          FROM deltas GROUP BY organization_id,item_id,variant,variant_id,location_id,condition
         ), balances AS (
-          SELECT organization_id,item_id,variant,max(variant_id::text)::uuid variant_id,location_id,
-            sum(quantity)::numeric quantity,
-            sum(quantity) FILTER (WHERE condition='new')::numeric "newQuantity",
-            sum(quantity) FILTER (WHERE condition='good')::numeric "goodQuantity",
-            sum(quantity) FILTER (WHERE condition='worn')::numeric "serviceQuantity",
-            sum(quantity) FILTER (WHERE condition='damaged')::numeric "repairQuantity",
-            sum(quantity) FILTER (WHERE condition='unusable')::numeric "unusableQuantity"
-          FROM condition_balances
-          GROUP BY organization_id,item_id,variant,location_id
+          SELECT organization_id,item_id,variant,location_id,sum(delta)::numeric quantity
+          FROM deltas GROUP BY organization_id,item_id,variant,location_id
         ), keys AS (
           SELECT organization_id,item_id,variant,location_id FROM balances
           UNION
           SELECT organization_id,item_id,variant,location_id FROM inventory_stock_limits
         )
         SELECT i.id "itemId",i.name item,i.code,i.category,i.unit,i.returnable,i.tracks_variant "tracksVariant",
-          k.variant,b.variant_id "variantId",l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
+          k.variant,l.id "locationId",l.name location,l.kind "locationKind",l.object_id "objectId",
           COALESCE(l.responsible_user_id,o.owner_user_id) "ownerUserId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa
             WHERE oa.object_id=l.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
             || CASE WHEN l.responsible_user_id IS NULL THEN ARRAY[]::text[] ELSE ARRAY[l.responsible_user_id::text] END "assigneeUserIds",
-          COALESCE(b.quantity,0)::numeric quantity,
-          (COALESCE(b."newQuantity",0)+COALESCE(b."goodQuantity",0))::numeric "usableQuantity",
-          COALESCE(b."newQuantity",0)::numeric "newQuantity",COALESCE(b."goodQuantity",0)::numeric "goodQuantity",
-          COALESCE(b."serviceQuantity",0)::numeric "serviceQuantity",COALESCE(b."repairQuantity",0)::numeric "repairQuantity",
-          COALESCE(b."unusableQuantity",0)::numeric "unusableQuantity",
-          COALESCE(lim.min_quantity,0)::numeric "minQuantity",k.organization_id "organizationId"
+          COALESCE(b.quantity,0)::numeric quantity,COALESCE(lim.min_quantity,0)::numeric "minQuantity",k.organization_id "organizationId"
         FROM keys k
         JOIN inventory_items i ON i.id=k.item_id
         JOIN storage_locations l ON l.id=k.location_id
@@ -580,19 +482,9 @@ export async function getInventorySnapshot(actor:Actor):Promise<InventorySnapsho
     ]);
     const visibleLocationIds=new Set(locations.map(row=>row.id));
     const balances=rawBalances
-      .filter(row=>visibleLocationIds.has(row.locationId))
-      .map(({organizationId:_,...row})=>({
-        ...row,
-        quantity:Number(row.quantity),usableQuantity:Number(row.usableQuantity),newQuantity:Number(row.newQuantity),goodQuantity:Number(row.goodQuantity),
-        serviceQuantity:Number(row.serviceQuantity),repairQuantity:Number(row.repairQuantity),unusableQuantity:Number(row.unusableQuantity),minQuantity:Number(row.minQuantity),
-      }));
-    return {
-      locations,
-      items:items.map(row=>({...row,currentPrice:row.currentPrice==null?null:Number(row.currentPrice)})),
-      variants,
-      prices:prices.map(row=>({...row,unitCost:Number(row.unitCost)})),
-      balances,
-    };
+      .filter(row=>visibleLocationIds.has(row.locationId)&&canReadRow(actor.access,"assets.read",row,actor))
+      .map(({organizationId:_,...row})=>({...row,quantity:Number(row.quantity),minQuantity:Number(row.minQuantity)}));
+    return {locations,items,balances};
   });
 }
 
@@ -709,7 +601,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
       ) units ON true
       LEFT JOIN LATERAL (
         SELECT count(*)::int occupied FROM housing_stays st
-        WHERE st.site_id=hs.id AND st.status='active' AND st.check_in<=current_date AND st.actual_check_out IS NULL
+        WHERE st.site_id=hs.id AND st.status='active' AND st.check_in<=current_date AND (st.check_out IS NULL OR st.check_out>=current_date)
       ) occupancy ON true
       WHERE hs.active
       ORDER BY hs.name
@@ -720,7 +612,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
     const stays=await sql<HousingStayRow[]>`
       SELECT st.id,st.organization_id "organizationId",st.worker_id "workerId",w.full_name worker,
         st.object_id "objectId",o.name object,st.site_id "siteId",hs.name site,st.unit_id "unitId",hu.name unit,st.bed_label "bedLabel",
-        to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(COALESCE(st.actual_check_out,st.planned_check_out,st.check_out),'DD.MM.YYYY') "checkOut",st.status,
+        to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status,
         COALESCE(o.owner_user_id,hs.responsible_user_id) "ownerUserId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=st.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
@@ -791,24 +683,12 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
 }
 
 
-export type InternalRequestReferenceData={
-  legalEntities:Array<{id:string;name:string;shortName:string|null;primary:boolean}>;
-  orgUnits:Array<{id:string;name:string;kind:string}>;
-};
-
 export type SupplyRequestRow={
   id:string;
   organizationId:string;
   objectId:string|null;
   object:string|null;
-  legalEntityId:string|null;
-  legalEntity:string|null;
-  orgUnitId:string|null;
-  orgUnit:string|null;
   requestType:"purchase"|"payment"|"compensation"|"service";
-  categoryCode:string;
-  priority:"normal"|"urgent"|"critical";
-  urgencyReason:string|null;
   title:string;
   description:string|null;
   itemId:string|null;
@@ -816,24 +696,13 @@ export type SupplyRequestRow={
   locationId:string|null;
   location:string|null;
   quantity:number|null;
-  fulfilledQuantity:number|null;
   unit:string|null;
   amount:number|null;
-  approvedAmount:number|null;
-  actualAmount:number|null;
   vendor:string|null;
-  partnerId:string|null;
-  partner:string|null;
-  sourceName:string|null;
-  sourceUrl:string|null;
   neededBy:string|null;
   status:string;
-  paymentStatus:"not_required"|"pending"|"paid"|"cancelled";
-  paidAt:string|null;
-  paymentReference:string|null;
   approvalId:string|null;
   approvalStatus:string|null;
-  createdByUserId:string;
   createdBy:string;
   assignedTo:string|null;
   createdAt:string;
@@ -841,78 +710,30 @@ export type SupplyRequestRow={
   assigneeUserIds:string[];
 };
 
-export async function getInternalRequestReferenceData(actor:Actor):Promise<InternalRequestReferenceData>{
-  requireCapability(actor,"procurement.read");
-  if(actor.demo){
-    const unitIds=new Set(actor.orgUnitIds??[]);
-    const allOrg=actor.access.allOrg||actor.access.scopes["procurement.read"]?.some(scope=>scope.type==="all_org");
-    return {
-      legalEntities:demoCompanyProfile.legalEntities.map(row=>({id:row.id,name:row.name,shortName:row.shortName??null,primary:row.primary})),
-      orgUnits:demoOrganizationUnits.filter(row=>allOrg||unitIds.has(row.id)).map(row=>({id:row.id,name:row.name,kind:row.kind})),
-    };
-  }
-  return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const legalEntities=await sql<Array<{id:string;name:string;shortName:string|null;primary:boolean}>>`
-      SELECT id,name,short_name "shortName",is_primary "primary" FROM legal_entities WHERE active ORDER BY is_primary DESC,name
-    `;
-    const allOrg=actor.access.allOrg||actor.access.scopes["procurement.read"]?.some(scope=>scope.type==="all_org");
-    const ids=actor.orgUnitIds??[];
-    const orgUnits=allOrg
-      ? await sql<Array<{id:string;name:string;kind:string}>>`SELECT id,name,kind FROM organization_units WHERE active ORDER BY sort_order,name`
-      : ids.length
-        ? await sql<Array<{id:string;name:string;kind:string}>>`SELECT id,name,kind FROM organization_units WHERE active AND id=ANY(${ids}::uuid[]) ORDER BY sort_order,name`
-        : [];
-    return {legalEntities,orgUnits};
-  });
-}
-
 export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]>{
   requireCapability(actor,"procurement.read");
   if(actor.demo){
     const object=demo.objects.find(row=>canReadRow(actor.access,"operations.object.read",row,actor))??demo.objects[0];
-    const legalEntity=demoCompanyProfile.legalEntities[0];
-    const ownUnit=demoOrganizationUnits.find(row=>actor.orgUnitIds.includes(row.id))??demoOrganizationUnits[0];
-    const rows:SupplyRequestRow[]=[
-      {
-        id:"demo-supply-request-1",organizationId:object.organizationId,objectId:object.id,object:object.name,legalEntityId:legalEntity.id,legalEntity:legalEntity.shortName??legalEntity.name,orgUnitId:"21000000-0000-4000-8000-000000000007",orgUnit:"Обеспечение",
-        requestType:"purchase",categoryCode:"workwear_ppe",priority:"urgent",urgencyReason:"Новые сотрудники выходят на объект",title:"Рабочая обувь для новых сотрудников",description:"Нужны размеры 42–44",itemId:"demo-item-boots",item:"Ботинки рабочие",locationId:null,location:null,
-        quantity:6,fulfilledQuantity:0,unit:"пар",amount:19200,approvedAmount:19200,actualAmount:null,vendor:null,partnerId:null,partner:null,sourceName:"Ozon",sourceUrl:"https://www.ozon.ru/",neededBy:"06.10.2026",status:"approved",paymentStatus:"pending",paidAt:null,paymentReference:null,approvalId:"demo-approval-supply-1",approvalStatus:"approved",
-        createdByUserId:"10000000-0000-4000-8000-000000000004",createdBy:"Дмитрий Орлов",assignedTo:"Ирина Белова",createdAt:"02.10.2026",ownerUserId:"10000000-0000-4000-8000-000000000011",assigneeUserIds:["10000000-0000-4000-8000-000000000004","10000000-0000-4000-8000-000000000011"],
-      },
-      {
-        id:"demo-supply-request-2",organizationId:object.organizationId,objectId:null,object:null,legalEntityId:legalEntity.id,legalEntity:legalEntity.shortName??legalEntity.name,orgUnitId:"21000000-0000-4000-8000-000000000009",orgUnit:"Группа подбора",
-        requestType:"payment",categoryCode:"recruiting_advertising",priority:"normal",urgencyReason:null,title:"Пополнение рекламного кабинета Avito",description:"Продвижение вакансий электромонтажников",itemId:null,item:null,locationId:null,location:null,
-        quantity:null,fulfilledQuantity:null,unit:null,amount:30000,approvedAmount:30000,actualAmount:null,vendor:"Avito",partnerId:null,partner:null,sourceName:"Avito",sourceUrl:"https://www.avito.ru/",neededBy:"07.10.2026",status:"approved",paymentStatus:"pending",paidAt:null,paymentReference:null,approvalId:"demo-approval-supply-2",approvalStatus:"approved",
-        createdByUserId:"10000000-0000-4000-8000-000000000012",createdBy:"Ольга Зайцева",assignedTo:"Елена Котова",createdAt:"03.10.2026",ownerUserId:"10000000-0000-4000-8000-000000000006",assigneeUserIds:["10000000-0000-4000-8000-000000000012","10000000-0000-4000-8000-000000000006"],
-      },
-      {
-        id:"demo-supply-request-3",organizationId:object.organizationId,objectId:object.id,object:object.name,legalEntityId:legalEntity.id,legalEntity:legalEntity.shortName??legalEntity.name,orgUnitId:"21000000-0000-4000-8000-000000000005",orgUnit:"Операции",
-        requestType:"service",categoryCode:"housing",priority:"normal",urgencyReason:null,title:"Продлить проживание сотрудников",description:"Общежитие на октябрь, 8 койко-мест",itemId:null,item:null,locationId:null,location:null,
-        quantity:8,fulfilledQuantity:8,unit:"мест",amount:64000,approvedAmount:64000,actualAmount:64000,vendor:"Общежитие Север",partnerId:null,partner:"Общежитие Север",sourceName:null,sourceUrl:null,neededBy:"05.10.2026",status:"received",paymentStatus:"paid",paidAt:"03.10.2026",paymentReference:"ПП 418",approvalId:"demo-approval-supply-3",approvalStatus:"approved",
-        createdByUserId:"10000000-0000-4000-8000-000000000003",createdBy:"Алексей Громов",assignedTo:"Ирина Белова",createdAt:"28.09.2026",ownerUserId:"10000000-0000-4000-8000-000000000011",assigneeUserIds:["10000000-0000-4000-8000-000000000003","10000000-0000-4000-8000-000000000011"],
-      },
-    ];
-    return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor));
+    return [{
+      id:"demo-supply-request-1",organizationId:object.organizationId,objectId:object.id,object:object.name,requestType:"purchase",
+      title:"Пополнить рабочую обувь",description:"Дефицит размера 43",itemId:"demo-item-boots",item:"Ботинки рабочие",locationId:null,location:null,
+      quantity:6,unit:"пар",amount:null,vendor:null,neededBy:"25.09.2026",status:"submitted",approvalId:null,approvalStatus:null,createdBy:actor.displayName,assignedTo:null,createdAt:"20.09.2026",
+      ownerUserId:object.ownerUserId??null,assigneeUserIds:object.assigneeUserIds??[],
+    }];
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<SupplyRequestRow[]>`
-      SELECT r.id,r.organization_id "organizationId",r.object_id "objectId",o.name object,
-        r.legal_entity_id "legalEntityId",COALESCE(le.short_name,le.name) "legalEntity",
-        r.organization_unit_id "orgUnitId",ou.name "orgUnit",r.request_type "requestType",r.category_code "categoryCode",r.priority,r.urgency_reason "urgencyReason",
+      SELECT r.id,r.organization_id "organizationId",r.object_id "objectId",o.name object,r.request_type "requestType",
         r.title,r.description,r.item_id "itemId",i.name item,r.location_id "locationId",l.name location,
-        r.quantity::numeric quantity,r.fulfilled_quantity::numeric "fulfilledQuantity",r.unit,r.amount::numeric amount,r.approved_amount::numeric "approvedAmount",r.actual_amount::numeric "actualAmount",
-        r.vendor,r.partner_id "partnerId",sp.name partner,r.source_name "sourceName",r.source_url "sourceUrl",to_char(r.needed_by,'DD.MM.YYYY') "neededBy",
-        r.status,r.payment_status "paymentStatus",to_char(r.paid_at,'DD.MM.YYYY') "paidAt",r.payment_reference "paymentReference",
-        approval.id "approvalId",approval.status "approvalStatus",r.created_by_user_id "createdByUserId",creator.display_name "createdBy",assignee.display_name "assignedTo",to_char(r.created_at,'DD.MM.YYYY') "createdAt",
-        COALESCE(r.assigned_to_user_id,o.owner_user_id,r.created_by_user_id) "ownerUserId",
-        ARRAY_REMOVE(ARRAY[r.created_by_user_id::text,r.assigned_to_user_id::text,o.owner_user_id::text],NULL) "assigneeUserIds"
+        r.quantity::numeric quantity,r.unit,r.amount::numeric amount,r.vendor,to_char(r.needed_by,'DD.MM.YYYY') "neededBy",
+        r.status,approval.id "approvalId",approval.status "approvalStatus",creator.display_name "createdBy",assignee.display_name "assignedTo",to_char(r.created_at,'DD.MM.YYYY') "createdAt",
+        COALESCE(o.owner_user_id,r.created_by_user_id) "ownerUserId",
+        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
+          WHERE oa.object_id=r.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
+          || ARRAY[r.created_by_user_id::text] "assigneeUserIds"
       FROM supply_requests r
-      LEFT JOIN objects o ON o.id=r.object_id
-      LEFT JOIN legal_entities le ON le.id=r.legal_entity_id
-      LEFT JOIN organization_units ou ON ou.id=r.organization_unit_id
-      LEFT JOIN inventory_items i ON i.id=r.item_id
+      LEFT JOIN objects o ON o.id=r.object_id LEFT JOIN inventory_items i ON i.id=r.item_id
       LEFT JOIN storage_locations l ON l.id=r.location_id
-      LEFT JOIN supply_partners sp ON sp.id=r.partner_id
       JOIN app_users creator ON creator.id=r.created_by_user_id
       LEFT JOIN app_users assignee ON assignee.id=r.assigned_to_user_id
       LEFT JOIN LATERAL (
@@ -920,18 +741,12 @@ export async function listSupplyRequests(actor:Actor):Promise<SupplyRequestRow[]
         WHERE ai.subject_type='supply_request' AND ai.subject_id=r.id
         ORDER BY ai.submitted_at DESC LIMIT 1
       ) approval ON true
-      ORDER BY r.status IN ('closed','rejected'),r.payment_status='pending' DESC,r.needed_by NULLS LAST,r.created_at DESC
+      ORDER BY r.status IN ('closed','rejected'),r.needed_by NULLS LAST,r.created_at DESC
     `;
-    return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor)).map(row=>({
-      ...row,
-      quantity:row.quantity==null?null:Number(row.quantity),
-      fulfilledQuantity:row.fulfilledQuantity==null?null:Number(row.fulfilledQuantity),
-      amount:row.amount==null?null:Number(row.amount),
-      approvedAmount:row.approvedAmount==null?null:Number(row.approvedAmount),
-      actualAmount:row.actualAmount==null?null:Number(row.actualAmount),
-    }));
+    return rows.filter(row=>canReadRow(actor.access,"procurement.read",row,actor)).map(row=>({...row,quantity:row.quantity==null?null:Number(row.quantity),amount:row.amount==null?null:Number(row.amount)}));
   });
 }
+
 
 export type WorkerOutstandingAsset={itemId:string;item:string;variant:string;quantity:number;unit:string};
 export type WorkerExitHistoryRow={id:string;effectiveDate:string;reasonCode:string;reason:string|null;status:string;createdAt:string;replacementRequired:boolean;returnToRecruiting:boolean;replacementNeedId:string|null;replacementWorkerId:string|null;replacementWorker:string|null};
@@ -978,7 +793,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
       ORDER BY i.name,m.variant
     `:[] as Array<WorkerOutstandingAsset & {quantity:number|string}>;
     const housing=hasCapability(actor.access,"supply.housing.read")?await sql<Array<{id:string;site:string;checkIn:string;checkOut:string|null;status:string}>>`
-      SELECT st.id,hs.name site,to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(COALESCE(st.actual_check_out,st.planned_check_out,st.check_out),'DD.MM.YYYY') "checkOut",st.status
+      SELECT st.id,hs.name site,to_char(st.check_in,'DD.MM.YYYY') "checkIn",to_char(st.check_out,'DD.MM.YYYY') "checkOut",st.status
       FROM housing_stays st JOIN housing_sites hs ON hs.id=st.site_id
       WHERE st.worker_id=${workerId}::uuid AND st.status IN ('planned','active')
       ORDER BY st.check_in DESC
@@ -995,8 +810,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
 
 export type StaffingForecastRow={
   organizationId:string;objectId:string;object:string;specialtyId:string;specialty:string;needIds:string[];editableNeedId:string|null;
-  planTargetIds:string[];planSource:"target"|"legacy_need";openNeedCount:number;openNeedVolume:number;
-  required:number;working:number;preparing:number;confirmedStarts:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;replacementNeeds:number;replacementReady:number;
+  required:number;working:number;preparing:number;confirmedAbsences:number;tentativeAbsences:number;plannedExits:number;replacementNeeds:number;replacementReady:number;
   projectedAvailable:number;projectedDeficit:number;ownerUserId:string|null;assigneeUserIds:string[];regionId:string|null;
 };
 
@@ -1011,122 +825,49 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       const object=demo.objects.find(row=>row.id===need.objectId);
       const workers=demo.workers.filter(worker=>worker.objectId===need.objectId&&worker.specialty===need.specialty&&worker.status==="active");
       const working=workers.length;
-      const related=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&candidate.need===need.specialty);
-      const preparing=related.filter(candidate=>["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
-      const confirmedStarts=related.filter(candidate=>candidate.stage==="first_shift").length;
-      const absences=workers.filter(worker=>worker.absenceStatus&&worker.absenceFrom&&worker.absenceFrom<=horizonEnd&&(!worker.absenceTo||worker.absenceTo>=horizonEnd));
+      const preparing=demo.candidates.filter(candidate=>candidate.objectId===need.objectId&&candidate.need===need.specialty&&["documents","clearance","preparation","first_shift"].includes(candidate.stage)).length;
+      const absences=workers.filter(worker=>worker.absenceStatus&&worker.absenceFrom&&worker.absenceFrom<=horizonEnd&&(!worker.absenceTo||worker.absenceTo>=today));
       const confirmedAbsences=absences.filter(worker=>worker.absenceStatus==="confirmed").length;
       const tentativeAbsences=absences.filter(worker=>worker.absenceStatus==="tentative").length;
-      const plannedExits=0;
-      const projectedAvailable=Math.max(working-confirmedAbsences-plannedExits+confirmedStarts,0);
-      const row:StaffingForecastRow={
-        organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,
-        specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,
-        planTargetIds:[],planSource:"legacy_need",openNeedCount:1,openNeedVolume:Number(need.required),
-        required:Number(need.required),working,preparing,confirmedStarts,confirmedAbsences,tentativeAbsences,plannedExits,
-        replacementNeeds:0,replacementReady:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),
-        ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null
-      };
+      const projectedAvailable=Math.max(working-confirmedAbsences+preparing,0);
+      const row:StaffingForecastRow={organizationId:object?.organizationId??actor.organizationId,objectId:need.objectId,object:need.object,specialtyId:"demo-specialty-"+index,specialty:need.specialty,needIds:[need.id],editableNeedId:need.id,required:Number(need.required),working,preparing,confirmedAbsences,tentativeAbsences,plannedExits:0,replacementNeeds:0,replacementReady:0,projectedAvailable,projectedDeficit:Math.max(Number(need.required)-projectedAvailable,0),ownerUserId:object?.ownerUserId??null,assigneeUserIds:object?.assigneeUserIds??[],regionId:object?.regionId??null};
       return row;
     }).filter(row=>canReadRow(actor.access,"operations.need.read",row,actor));
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<StaffingForecastRow[]>`
-      WITH ranked_targets AS (
-        SELECT t.*,
-          row_number() OVER (
-            PARTITION BY t.object_id,t.specialty_id,t.shift_kind
-            ORDER BY t.effective_from DESC,t.created_at DESC
-          ) rn
-        FROM staffing_plan_targets t
-        WHERE t.effective_from<=current_date+${horizon}::int
-          AND (t.effective_to IS NULL OR t.effective_to>=current_date+${horizon}::int)
-      ),
-      target_demand AS (
-        SELECT object_id,specialty_id,sum(planned_count)::int required,
-          array_agg(id::text ORDER BY effective_from,created_at) "planTargetIds"
-        FROM ranked_targets WHERE rn=1
-        GROUP BY object_id,specialty_id
-      ),
-      legacy_need_demand AS (
-        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required
+      WITH demand AS (
+        SELECT n.object_id,n.specialty_id,sum(n.count_required)::int required,array_agg(n.id ORDER BY n.created_at) need_ids,count(*)::int need_count
         FROM needs n
-        WHERE n.object_id IS NOT NULL
-          AND n.source_kind<>'replacement'
-          AND n.status NOT IN ('cancelled','archived','closed')
-          AND NOT EXISTS (
-            SELECT 1 FROM target_demand td
-            WHERE td.object_id=n.object_id AND td.specialty_id=n.specialty_id
-          )
-        GROUP BY n.object_id,n.specialty_id
-      ),
-      demand AS (
-        SELECT object_id,specialty_id,required,"planTargetIds",'target'::text "planSource"
-        FROM target_demand
-        UNION ALL
-        SELECT object_id,specialty_id,required,ARRAY[]::text[] "planTargetIds",'legacy_need'::text "planSource"
-        FROM legacy_need_demand
-      ),
-      need_context AS (
-        SELECT n.object_id,n.specialty_id,
-          array_agg(n.id::text ORDER BY n.created_at) need_ids,
-          count(*)::int need_count,
-          sum(n.count_required)::int need_volume
-        FROM needs n
-        WHERE n.object_id IS NOT NULL
-          AND n.source_kind<>'replacement'
-          AND n.status NOT IN ('cancelled','archived','closed')
+        WHERE n.object_id IS NOT NULL AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')
         GROUP BY n.object_id,n.specialty_id
       )
       SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
-        COALESCE(nc.need_ids,ARRAY[]::text[]) "needIds",
-        CASE WHEN nc.need_count=1 THEN nc.need_ids[1] ELSE NULL END "editableNeedId",
-        d."planTargetIds",d."planSource",
-        COALESCE(nc.need_count,0)::int "openNeedCount",COALESCE(nc.need_volume,0)::int "openNeedVolume",
-        d.required,
+        d.need_ids::text[] "needIds",CASE WHEN d.need_count=1 THEN d.need_ids[1] ELSE NULL END "editableNeedId",d.required,
         COALESCE(workforce.working,0)::int working,
         COALESCE(incoming.preparing,0)::int preparing,
-        COALESCE(incoming.confirmed,0)::int "confirmedStarts",
         COALESCE(absences.confirmed,0)::int "confirmedAbsences",
         COALESCE(absences.tentative,0)::int "tentativeAbsences",
         COALESCE(exits.planned,0)::int "plannedExits",
         COALESCE(replacements.open_count,0)::int "replacementNeeds",
         COALESCE(replacements.ready_count,0)::int "replacementReady",
-        GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.confirmed,0),0)::int "projectedAvailable",
-        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.confirmed,0),0),0)::int "projectedDeficit",
+        GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0)::int "projectedAvailable",
+        GREATEST(d.required-GREATEST(COALESCE(workforce.working,0)-COALESCE(unavailable.count,0)+COALESCE(incoming.preparing,0),0),0)::int "projectedDeficit",
         o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-      FROM demand d
-      JOIN objects o ON o.id=d.object_id
-      JOIN specialties s ON s.id=d.specialty_id
-      LEFT JOIN need_context nc ON nc.object_id=d.object_id AND nc.specialty_id=d.specialty_id
+      FROM demand d JOIN objects o ON o.id=d.object_id JOIN specialties s ON s.id=d.specialty_id
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT a.worker_id)::int working
-        FROM worker_object_assignments a
-        JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-        WHERE a.object_id=o.id AND a.specialty_id=d.specialty_id
-          AND a.effective_from<=current_date
-          AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+        FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
+        WHERE a.object_id=o.id AND a.specialty_id=d.specialty_id AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       ) workforce ON true
       LEFT JOIN LATERAL (
-        SELECT
-          count(DISTINCT ca.candidate_id) FILTER (
-            WHERE ca.stage IN ('documents','clearance','preparation','ready','first_shift','started')
-              AND ca.actual_start_at IS NULL
-              AND (
-                ca.stage IN ('preparation','ready','first_shift','started')
-                OR ca.planned_start_date<=current_date+${horizon}::int
-              )
-          )::int preparing,
-          count(DISTINCT ca.candidate_id) FILTER (
-            WHERE ca.stage IN ('first_shift','started')
-              AND ca.actual_start_at IS NULL
-              AND ca.planned_start_date IS NOT NULL
-              AND ca.planned_start_date BETWEEN current_date AND current_date+${horizon}::int
-          )::int confirmed
+        SELECT count(DISTINCT ca.candidate_id)::int preparing
         FROM candidate_applications ca
         JOIN needs cn ON cn.id=ca.need_id
-        WHERE ca.object_id=o.id AND cn.specialty_id=d.specialty_id
+        WHERE ca.object_id=o.id AND cn.specialty_id=d.specialty_id AND ca.stage IN ('documents','clearance','preparation','first_shift')
+          AND ca.actual_start_at IS NULL
+          AND ((ca.planned_start_date IS NOT NULL AND ca.planned_start_date<=current_date+${horizon}::int) OR ca.stage IN ('preparation','first_shift'))
       ) incoming ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT CASE WHEN ap.status='confirmed' THEN ap.worker_id END)::int confirmed,
@@ -1135,9 +876,9 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
         WHERE ap.status IN ('confirmed','tentative')
           AND a.effective_from<=current_date+${horizon}::int
-          AND (a.effective_to IS NULL OR a.effective_to>=current_date+${horizon}::int)
+          AND (a.effective_to IS NULL OR a.effective_to>=current_date)
           AND ap.planned_from<=current_date+${horizon}::int
-          AND (ap.planned_to IS NULL OR ap.planned_to>=current_date+${horizon}::int)
+          AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
       ) absences ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT ep.worker_id)::int planned
@@ -1151,8 +892,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
       LEFT JOIN LATERAL (
         SELECT count(*) FILTER (WHERE n.status NOT IN ('filled','cancelled','archived'))::int open_count,
                count(*) FILTER (WHERE n.status='filled' OR ep.replacement_worker_id IS NOT NULL)::int ready_count
-        FROM needs n
-        LEFT JOIN worker_exit_processes ep ON ep.id=n.replacement_exit_id
+        FROM needs n LEFT JOIN worker_exit_processes ep ON ep.id=n.replacement_exit_id
         WHERE n.object_id=o.id AND n.specialty_id=d.specialty_id AND n.source_kind='replacement'
       ) replacements ON true
       LEFT JOIN LATERAL (
@@ -1163,9 +903,9 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
           JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
           WHERE ap.status='confirmed'
             AND a.effective_from<=current_date+${horizon}::int
-            AND (a.effective_to IS NULL OR a.effective_to>=current_date+${horizon}::int)
+            AND (a.effective_to IS NULL OR a.effective_to>=current_date)
             AND ap.planned_from<=current_date+${horizon}::int
-            AND (ap.planned_to IS NULL OR ap.planned_to>=current_date+${horizon}::int)
+            AND (ap.planned_to IS NULL OR ap.planned_to>=current_date)
           UNION
           SELECT ep.worker_id
           FROM worker_exit_processes ep

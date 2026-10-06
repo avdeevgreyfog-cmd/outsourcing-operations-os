@@ -1,24 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import {Fragment,useEffect,useMemo,useRef,useState,type ReactNode} from "react";
+import { SalesMetrics, SalesSearch, SalesSegments } from "@/components/sales/SalesUI";
+import {useEffect,useMemo,useState} from "react";
 import {useRouter} from "next/navigation";
-import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Plus,X,Eye,ChevronRight,ArrowDownUp,ArrowUpRight,ExternalLink,RotateCcw} from "lucide-react";
-import {SalesDrawer,SalesEmpty,SalesSegments} from "@/components/sales/SalesUI";
-import {TenderRegistryControls,useTenderRegistryPreferences} from "@/components/sales/TenderRegistryControls";
-import {HorizontalScrollDock} from "@/components/registry/HorizontalScrollDock";
-import {orderedRegistryColumns,registryPinnedOffset,registryWidth} from "@/lib/ui/registry-layout";
-import {tenderColumns,tenderCustomerKey,type TenderColumnId,type TenderGroupId} from "@/lib/tenders/registry";
+import * as XLSX from "xlsx";
+import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Plus,X} from "lucide-react";
 import type {TenderOptions,TenderRow} from "@/lib/tenders/service";
 import type {TenderAnalyticsData} from "@/lib/tenders/analytics";
 import type {TenderAnalyticsMetricPreference} from "@/lib/tenders/analytics-metric-registry";
 import {TenderAnalytics} from "@/components/TenderAnalytics";
-import {tenderBillingLabels,tenderDeadlineState,tenderDecisionLabels,tenderPotentialLabels,tenderResultLabels,tenderStageLabel,tenderStages} from "@/lib/tenders/model";
+import {tenderBillingLabels,tenderDeadlineState,tenderDecisionLabels,tenderResultLabels,tenderStageLabel,tenderStages} from "@/lib/tenders/model";
 import {rub} from "@/lib/ui/format";
 import {TenderImportPanel,type TenderImportRow,type TenderImportResult} from "@/components/TenderImportPanel";
-import {TenderCreateForm,type TenderCreateDraft} from "@/components/TenderCreateForm";
 
 type View="list"|"board"|"analytics";
+type Bucket="active"|"completed";
+type DeadlineFilter="all"|"today"|"3d"|"7d";
+const DEMO_STORAGE="operis.demo.tenders.v1";
 
 function formatDate(value:string|null){
   if(!value)return "—";
@@ -32,6 +31,7 @@ function uniqueKey(row:Pick<TenderRow,"platform"|"procedureNumber"|"sourceUrl"|"
   if(row.platform&&row.procedureNumber)return `procedure:${row.platform.toLowerCase()}:${row.procedureNumber.toLowerCase()}`;
   return `fallback:${row.title.toLowerCase()}:${row.customer.toLowerCase()}`;
 }
+function toIso(value:string){if(!value)return null;const date=new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString();}
 function toDemoRow(item:TenderImportRow):TenderRow{
   const now=new Date().toISOString();
   return {
@@ -78,180 +78,164 @@ function toDemoRow(item:TenderImportRow):TenderRow{
   };
 }
 
-function toDemoCreatedRow(item:TenderCreateDraft,options:TenderOptions):TenderRow{
-  const base=toDemoRow({
-    title:item.title,
-    customerName:item.customerName,
-    platform:item.platform,
-    procedureNumber:item.procedureNumber,
-    sourceUrl:item.sourceUrl,
-    publicationDate:item.publicationDate,
-    submissionDeadline:item.submissionDeadline,
-    initialPrice:item.initialPrice,
-    comment:item.comment,
-    sourceName:item.sourceName??"Ручной ввод",
-  });
-  const linkedClient=item.clientId?options.clients.find(client=>client.id===item.clientId):null;
-  return {...base,customer:linkedClient?.name??item.customerName??"Заказчик не указан",clientId:item.clientId,regionId:item.regionId,legalEntityId:item.legalEntityId};
-}
-
-function TenderStatus({row}:{row:TenderRow}) {
-  const tone=row.stage==="completed"?(row.result==="won"?"good":row.result==="lost"?"bad":"neutral"):row.stage==="clarification"?"warn":row.stage==="submitted"?"good":"neutral";
-  return <span className={`tender-status tender-status-${tone}`}><i aria-hidden="true"/>{row.stage==="completed"?(row.result?tenderResultLabels[row.result]??"Результат уточняется":"Завершён"):tenderStages.find(stage=>stage.code===row.stage)?.label??"Этап уточняется"}</span>;
-}
-function sourceHref(value:string|null){try {const url=new URL(value??"");return ["http:","https:"].includes(url.protocol)?url.href:null;}catch{return null;}}
-function TenderTitle({row}:{row:TenderRow}) {
-  return isClientDemoRow(row)?<strong className="cell-title" title={row.title}>{row.title}</strong>:<Link href={`/tenders/${row.id}`} className="cell-title" title={row.title}>{row.title}</Link>;
-}
-const numeric=(value:unknown)=>value===null||value===undefined||value===""?null:Number.isFinite(Number(value))?Number(value):null;
-const dateNumber=(value:string|null)=>value&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
-
-export function TendersWorkspace({rows,options,analytics,metricPreferences,canConfigureAnalytics,demo,canCreate,canImport,canEdit,canSubmit=false,editableIds=[],preferenceScope,now,initialView="list"}: {
-  rows:TenderRow[];options:TenderOptions;analytics:TenderAnalyticsData;metricPreferences:TenderAnalyticsMetricPreference[];canConfigureAnalytics:boolean;
-  demo:boolean;canCreate:boolean;canImport:boolean;canEdit:boolean;canSubmit?:boolean;editableIds?:string[];preferenceScope:string;now:number;initialView?:View;
-}) {
+export function TendersWorkspace({rows,options,analytics,metricPreferences,canConfigureAnalytics,demo,canCreate,canImport,canEdit,initialView="list"}:{rows:TenderRow[];options:TenderOptions;analytics:TenderAnalyticsData;metricPreferences:TenderAnalyticsMetricPreference[];canConfigureAnalytics:boolean;demo:boolean;canCreate:boolean;canImport:boolean;canEdit:boolean;initialView?:View}){
   const router=useRouter();
-  const preferences=useTenderRegistryPreferences(preferenceScope);
-  const {settings,update}=preferences;
-  const [localRows,setLocalRows]=useState<TenderRow[]>([]);
+  const [items,setItems]=useState<TenderRow[]>(rows);
   const [view,setView]=useState<View>(initialView);
+  const [bucket,setBucket]=useState<Bucket>("active");
+  const [deadline,setDeadline]=useState<DeadlineFilter>("all");
   const [query,setQuery]=useState("");
+  const [dragId,setDragId]=useState<string|null>(null);
   const [busyId,setBusyId]=useState<string|null>(null);
-  const [error,setError]=useState("");
   const [demoCreateOpen,setDemoCreateOpen]=useState(false);
-  const [selectedId,setSelectedId]=useState<string|null>(null);
-  const [collapsedGroups,setCollapsedGroups]=useState<string[]>([]);
-  const tableRef=useRef<HTMLDivElement>(null),boardRef=useRef<HTMLDivElement>(null);
-  const resizing=useRef<{id:TenderColumnId;x:number;width:number}|null>(null);
-  useEffect(()=>{let cancelled=false;queueMicrotask(()=>{if(!cancelled)setView(initialView);});return()=>{cancelled=true;};},[initialView]);
-  const items=useMemo(()=>demo?[...localRows,...rows]:rows,[demo,localRows,rows]);
-  const editable=new Set(editableIds);
-  const selected=items.find(row=>row.id===selectedId);
-  const currentDate=useMemo(()=>new Date(now),[now]);
-  function addDemoRows(imported:TenderImportRow[]):TenderImportResult {
-    const keys=new Set(items.map(uniqueKey));const created:TenderRow[]=[];let skipped=0;
-    for(const item of imported){const candidate=toDemoRow(item);const key=uniqueKey(candidate);if(keys.has(key)){skipped++;continue;}keys.add(key);created.push(candidate);}
-    setLocalRows(current=>[...created,...current]);return {imported:created.length,skipped};
+
+  useEffect(()=>{
+    const timer=window.setTimeout(()=>{
+      if(!demo){setItems(rows);return;}
+      try{
+        const stored=JSON.parse(window.localStorage.getItem(DEMO_STORAGE)||"[]") as TenderRow[];
+        const valid=Array.isArray(stored)?stored.filter(item=>item&&typeof item.id==="string"&&item.id.startsWith("demo-local-")&&typeof item.title==="string"):[];
+        const ids=new Set(valid.map(item=>item.id));
+        setItems([...valid,...rows.filter(item=>!ids.has(item.id))]);
+      }catch{setItems(rows);}
+    },0);
+    return()=>window.clearTimeout(timer);
+  },[rows,demo]);
+
+  function saveDemoLocal(next:TenderRow[]){
+    if(!demo)return;
+    const local=next.filter(row=>row.id.startsWith("demo-local-"));
+    window.localStorage.setItem(DEMO_STORAGE,JSON.stringify(local));
   }
-  function addDemoTender(draft:TenderCreateDraft){
-    const candidate=toDemoCreatedRow(draft,options);
-    const key=uniqueKey(candidate);
-    if(items.some(row=>uniqueKey(row)===key)){setError("Такой тендер уже есть в текущем реестре.");return false;}
-    setLocalRows(current=>[candidate,...current]);setError("");return true;
+
+  function addDemoRows(imported:TenderImportRow[]):TenderImportResult{
+    const keys=new Set(items.map(uniqueKey));
+    const created:TenderRow[]=[];
+    let skipped=0;
+    for(const item of imported){
+      const candidate=toDemoRow(item);const key=uniqueKey(candidate);
+      if(keys.has(key)){skipped++;continue;}
+      keys.add(key);created.push(candidate);
+    }
+    const next=[...created,...items];setItems(next);saveDemoLocal(next);
+    return {imported:created.length,skipped};
   }
-  const filtered=useMemo(()=>{
-    const result=items.filter(row=>{
-      if((row.stage==="completed")!==(settings.bucket==="completed"))return false;
-      if(settings.stage&&row.stage!==settings.stage)return false;
-      if(settings.owner&&(row.ownerUserId??"unassigned")!==settings.owner)return false;
-      if(settings.customer&&tenderCustomerKey(row)!==settings.customer)return false;
-      if(settings.platform&&row.platform!==settings.platform)return false;
-      if(settings.source&&row.sourceName!==settings.source)return false;
-      if(settings.decision&&row.decision!==settings.decision)return false;
-      const state=tenderDeadlineState(row.submissionDeadline,currentDate);
-      if(settings.deadline==="today"&&!["overdue","today"].includes(state.key))return false;
-      if(settings.deadline==="3d"&&!["overdue","today","urgent"].includes(state.key))return false;
-      if(settings.deadline==="7d"&&(state.days==null||state.days>7))return false;
-      return [row.title,row.customer,row.platform,row.procedureNumber,row.owner,row.sourceName,row.nextActionText].filter(Boolean).join(" ").toLocaleLowerCase("ru-RU").includes(query.trim().toLocaleLowerCase("ru-RU"));
-    });
-    const field=(row:TenderRow):string|number|null=>{
-      switch(settings.sort){
-        case "identity":return row.title;case "customer":return row.customer;case "commerce":return numeric(row.initialPrice);
-        case "deadline":case "remaining":return dateNumber(row.submissionDeadline);case "stage":return tenderStages.findIndex(stage=>stage.code===row.stage);
-        case "blockers":return row.blockerCount;case "owner":return row.owner;case "platform":return row.platform;case "procedure":return row.procedureNumber;
-        case "decision":return tenderDecisionLabels[row.decision]??null;case "potential":return tenderPotentialLabels[row.potential]??null;
-        case "billing":return tenderBillingLabels[row.billingUnit]??null;case "source":return row.sourceName;case "publication":return dateNumber(row.publicationDate);
-        case "roles":return row.roleCount;case "calculations":return row.calculationCount;case "action":return row.nextActionText;case "result":return row.result?tenderResultLabels[row.result]??null:null;
-        default:return dateNumber(row.updatedAt);
-      }
-    };
-    return result.sort((a,b)=>{const left=field(a),right=field(b);if(left===null||right===null)return left===right?a.id.localeCompare(b.id):left===null?1:-1;
-      const comparison=typeof left==="number"&&typeof right==="number"?left-right:String(left).localeCompare(String(right),"ru");return (settings.direction==="asc"?comparison:-comparison)||a.id.localeCompare(b.id);});
-  },[items,settings,query,currentDate]);
-  const columns=orderedRegistryColumns(tenderColumns,settings);
-  const columnWidth=(id:TenderColumnId)=>settings.widths[id]??tenderColumns.find(column=>column.id===id)!.width;
-  const pinnedStyle=(id:TenderColumnId)=>settings.pinned.includes(id)?{left:registryPinnedOffset(id,tenderColumns,settings)}:undefined;
-  const stages=tenderStages.filter(stage=>(settings.bucket==="completed"?stage.code==="completed":stage.code!=="completed")&&(!settings.stage||stage.code===settings.stage)&&(!settings.hideEmpty||filtered.some(row=>row.stage===stage.code)));
-  const resetFilters=()=>{setQuery("");update({stage:"",owner:"",customer:"",platform:"",source:"",decision:"",deadline:"all"});};
-  const hasFilters=Boolean(query||settings.stage||settings.owner||settings.customer||settings.platform||settings.source||settings.decision||settings.deadline!=="all");
-  async function exportExcel(){
-    const XLSX=await import("xlsx");
-    const safe=(value:string|null)=>{const text=value??"";return /^[=+\-@\t\r]/.test(text)?`'${text}`:text;};
-    const data=filtered.map(row=>({"Название":safe(row.title),"Заказчик":safe(row.customer),"Площадка":safe(row.platform),"Номер торга":safe(row.procedureNumber),"Ссылка":safe(row.sourceUrl),"Дата публикации":formatDate(row.publicationDate),"Срок":formatDate(row.submissionDeadline),"Цена в ₽":numeric(row.initialPrice)??"","Этап":tenderStageLabel(row.stage),"Решение":tenderDecisionLabels[row.decision]??"Уточняется","Ответственный":safe(row.owner),"Следующее действие":safe(row.nextActionText),"Источник":safe(row.sourceName),"Блокеры":row.blockerCount,"Результат":row.result?tenderResultLabels[row.result]??"Уточняется":""}));
-    const sheet=XLSX.utils.json_to_sheet(data);sheet["!cols"]=[{wch:48},{wch:28},{wch:20},{wch:20},{wch:48},{wch:22},{wch:22},{wch:16},{wch:18},{wch:18},{wch:24},{wch:34},{wch:26}];
+
+  const now=new Date();
+  const activeRows=items.filter(row=>row.stage!=="completed");
+  const urgent=activeRows.filter(row=>["overdue","today","urgent"].includes(tenderDeadlineState(row.submissionDeadline,now).key));
+  const newRows=activeRows.filter(row=>row.stage==="new");
+  const analysisRows=activeRows.filter(row=>["analysis","clarification"].includes(row.stage));
+  const participating=activeRows.filter(row=>row.decision==="participate");
+
+  const filtered=useMemo(()=>items
+    .filter(row=>bucket==="completed"?row.stage==="completed":row.stage!=="completed")
+    .filter(row=>{const normalized=query.trim().toLowerCase();return !normalized||[row.title,row.customer,row.platform??"",row.procedureNumber??"",row.owner??""].some(value=>value.toLowerCase().includes(normalized));})
+    .filter(row=>{
+      if(deadline==="all")return true;
+      const state=tenderDeadlineState(row.submissionDeadline);
+      if(deadline==="today")return ["overdue","today"].includes(state.key);
+      if(deadline==="3d")return ["overdue","today","urgent"].includes(state.key);
+      return state.days!=null&&state.days<=7;
+    }),[items,bucket,query,deadline]);
+
+  function exportExcel(){
+    const data=filtered.map(row=>({
+      "Название":row.title,
+      "Заказчик":row.customer,
+      "Площадка":row.platform??"",
+      "Номер торга":row.procedureNumber??"",
+      "Ссылка":row.sourceUrl??"",
+      "Дата публикации":row.publicationDate?new Date(row.publicationDate).toLocaleDateString("ru-RU"):"",
+      "Срок":row.submissionDeadline?new Date(row.submissionDeadline).toLocaleString("ru-RU"):"",
+      "Цена в ₽":row.initialPrice==null?"":Number(row.initialPrice),
+      "Этап":tenderStageLabel(row.stage),
+      "Решение":tenderDecisionLabels[row.decision]??row.decision,
+      "Ответственный":row.owner??"",
+      "Следующее действие":row.nextActionText??"",
+      "Источник":row.sourceName??"",
+    }));
+    const sheet=XLSX.utils.json_to_sheet(data);sheet["!cols"]=[{wch:48},{wch:28},{wch:20},{wch:20},{wch:48},{wch:18},{wch:22},{wch:16},{wch:18},{wch:18},{wch:24},{wch:34},{wch:26}];
     const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"Тендеры");XLSX.writeFile(book,"OPERIS_тендеры.xlsx");
   }
-  function mayEdit(row:TenderRow){return !demo&&canEdit&&editable.has(row.id)&&row.stage!=="completed";}
-  async function move(row:TenderRow,stage:string){
-    if(busyId||!mayEdit(row)||stage==="completed"||(stage==="submitted"&&!canSubmit)||row.stage===stage)return;
-    setBusyId(row.id);setError("");
-    try{const response=await fetch(`/api/tenders/${row.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"stage",stage})});
-      if(!response.ok){const json=await response.json().catch(()=>({}));throw new Error(json.error??"Не удалось изменить этап");}router.refresh();
-    }catch(cause){setError(cause instanceof Error?cause.message:"Не удалось изменить этап");}finally{setBusyId(null);}
+
+  async function move(id:string,stage:string){
+    if(!canEdit||stage==="completed"||id.startsWith("sample-user-")||id.startsWith("demo-local-"))return;
+    setBusyId(id);
+    try{
+      const response=await fetch(`/api/tenders/${id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"stage",stage})});
+      if(!response.ok){const json=await response.json().catch(()=>({}));throw new Error(json.error??"Не удалось изменить этап");}
+      router.refresh();
+    }catch(error){window.alert(error instanceof Error?error.message:"Не удалось изменить этап");}
+    finally{setBusyId(null);}
   }
-  function renderCell(row:TenderRow,column:TenderColumnId):ReactNode {
-    const deadline=tenderDeadlineState(row.submissionDeadline,currentDate);
-    switch(column){
-      case "identity":return <><TenderTitle row={row}/><span className="cell-sub">{[row.platform,row.procedureNumber].filter(Boolean).join(" · ")||"Площадка не указана"}</span></>;
-      case "customer":return <><span title={row.customer}>{row.customer}</span><span className="cell-sub">{row.sourceName??"Источник не указан"}</span></>;
-      case "commerce":return <><strong>{numeric(row.initialPrice)===null?"Цена не указана":rub(row.initialPrice!)}</strong><span className="cell-sub">{tenderBillingLabels[row.billingUnit]??"Формат уточняется"} · {tenderPotentialLabels[row.potential]??"Потенциал уточняется"}</span></>;
-      case "deadline":return <><strong>{formatDate(row.submissionDeadline)}</strong><span className="cell-sub">{row.roleCount?`Позиции: ${row.roleCount}`:"Позиции не разобраны"}{row.calculationCount?` · расчётов: ${row.calculationCount}`:""}</span></>;
-      case "remaining":return <span className={`tender-deadline ${deadlineClass(deadline.key)}`}><CalendarClock size={13}/>{deadline.label}</span>;
-      case "stage":return <><TenderStatus row={row}/><span className="cell-sub">{tenderDecisionLabels[row.decision]??"Решение уточняется"}</span></>;
-      case "blockers":return row.blockerCount>0?<><strong className="tender-blocker-count">{row.blockerCount}</strong><span className="cell-sub">по документам</span></>:"—";
-      case "owner":return <>{row.owner??"Не назначен"}<span className="cell-sub" title={row.nextActionText??undefined}>{row.nextActionText??"Нет следующего действия"}</span></>;
-      case "platform":return row.platform??"—";case "procedure":return row.procedureNumber??"—";case "decision":return tenderDecisionLabels[row.decision]??"Уточняется";
-      case "potential":return tenderPotentialLabels[row.potential]??"Уточняется";case "billing":return tenderBillingLabels[row.billingUnit]??"Уточняется";
-      case "source":return row.sourceName??"—";case "publication":return formatDate(row.publicationDate);case "roles":return row.roleCount;case "calculations":return row.calculationCount;
-      case "action":return row.nextActionText??"—";case "updated":return formatDate(row.updatedAt);case "result":return row.result?tenderResultLabels[row.result]??"Уточняется":"—";
-    }
-  }
-  function renderRows(groupRows:TenderRow[],level=0,path:string[]=[]):ReactNode {
-    const field:TenderGroupId=level===0?settings.group:level===1?settings.subgroup:"none";
-    if(field==="none")return groupRows.map(row=><tr key={row.id}>{columns.map(column=><td key={column.id} style={pinnedStyle(column.id)} className={settings.pinned.includes(column.id)?"registry-pinned-cell":""}><div className="requests-cell-content">{renderCell(row,column.id)}</div></td>)}<td><button type="button" className="icon-button sales-preview-button" aria-label={`Просмотр: ${row.title}`} onClick={()=>setSelectedId(row.id)}><Eye size={17}/></button></td></tr>);
-    const groups=new Map<string,{label:string;rows:TenderRow[]}>();
-    for(const row of groupRows){const key=field==="owner"?row.ownerUserId??"unassigned":field==="customer"?tenderCustomerKey(row):field==="platform"?row.platform??"none":field==="decision"?row.decision:row.stage;
-      const label=field==="owner"?row.owner??"Не назначен":field==="customer"?row.customer:field==="platform"?row.platform??"Площадка не указана":field==="decision"?tenderDecisionLabels[row.decision]??"Уточняется":tenderStages.find(stage=>stage.code===row.stage)?.label??"Этап уточняется";
-      if(!groups.has(key))groups.set(key,{label,rows:[]});groups.get(key)!.rows.push(row);}
-    return [...groups].map(([id,group])=>{const nextPath=[...path,`${field}:${id}`],key=JSON.stringify(nextPath),collapsed=collapsedGroups.includes(key);
-      return <Fragment key={key}><tr className="requests-group-row"><th colSpan={columns.length+1} scope="rowgroup"><button type="button" style={{paddingLeft:14+level*22}} aria-expanded={!collapsed} onClick={()=>setCollapsedGroups(current=>collapsed?current.filter(item=>item!==key):[...current,key])}><ChevronRight size={14} className={collapsed?"":"expanded"}/>{group.label}<small>{group.rows.length} тенд.</small></button></th></tr>{!collapsed&&renderRows(group.rows,level+1,nextPath)}</Fragment>;});
-  }
-  return <div className="requests-registry request-baseline-registry tender-registry">
-    <div className="sales-toolbar requests-registry-toolbar">
-      <SalesSegments<View> label="Вид тендеров" value={view} variant="navigation" onChange={value=>{setView(value);router.replace(value==="list"?"/tenders":`/tenders?view=${value}`,{scroll:false});}} items={[{value:"list",label:"Таблица",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>},{value:"analytics",label:"Аналитика",icon:<ChartNoAxesCombined size={15}/>}]}/>
-      <div className="sales-toolbar-actions"><button className="button" type="button" onClick={()=>void exportExcel()}><Download size={14}/> Выгрузить Excel</button>{canImport&&<TenderImportPanel canImport={canImport} demo={demo} onDemoImport={addDemoRows}/>}{canCreate&&(demo?<button className="button primary" type="button" onClick={()=>setDemoCreateOpen(true)}><Plus size={14}/> Добавить тендер</button>:<Link className="button primary" href="/tenders/new"><Plus size={14}/> Добавить тендер</Link>)}</div>
-    </div>
-    {demo&&<p className="tender-demo-notice" role="note">Демонстрационные данные. Добавление и импорт доступны для проверки интерфейса; новые записи исчезнут после перезагрузки. В аналитике они не учитываются.</p>}
-    {error&&<div className="inline-message danger" role="alert">{error}<button className="icon-button" aria-label="Скрыть ошибку" onClick={()=>setError("")}><X size={15}/></button></div>}
+
+  return <div className="request-baseline-registry tender-registry">
+    {view!=="analytics"&&<SalesMetrics label="Сводка по тендерам" items={[
+      {label:"Новые",value:newRows.length,note:"ещё не разобраны"},
+      {label:"На анализе",value:analysisRows.length,note:"изучаем условия"},
+      {label:"Участвуем",value:participating.length,note:"решение принято"},
+      {label:"Срок до 3 дней",value:urgent.length,note:"требуют внимания"},
+    ]}/>}
+
+    <div className="sales-toolbar">
+      <SalesSegments<View> label="Вид тендеров" value={view} variant="navigation" onChange={value=>{setView(value);router.replace(value==="analytics"?"/tenders?view=analytics":value==="board"?"/tenders?view=board":"/tenders",{scroll:false})}} items={[{value:"list",label:"Список",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>},{value:"analytics",label:"Аналитика",icon:<ChartNoAxesCombined size={15}/>}]}/>
+      <div className="sales-toolbar-actions">
+      <div className="toolbar-spacer"/>
+      <button className="button" type="button" onClick={exportExcel}><Download size={14}/> Выгрузить Excel</button>
+      {canImport&&<TenderImportPanel canImport={canImport} demo={demo} onDemoImport={addDemoRows}/>} 
+      {canCreate&&(demo?<button className="button primary" type="button" onClick={()=>setDemoCreateOpen(true)}><Plus size={14}/> Добавить тендер</button>:<Link className="button primary" href="/tenders/new"><Plus size={14}/> Добавить тендер</Link>)}
+    </div></div>
     {view!=="analytics"&&<>
-      <TenderRegistryControls {...preferences} rows={items} options={options} query={query} onQuery={setQuery} onExpandGroups={()=>setCollapsedGroups([])} board={view==="board"}/>
-      <div className="sales-results" aria-live="polite">Показано {filtered.length}{hasFilters&&<button className="button" onClick={resetFilters}><RotateCcw size={13}/> Сбросить фильтры</button>}</div>
-      {!filtered.length?<SalesEmpty title="Тендеры не найдены" text={hasFilters?"Измените условия поиска или сбросьте фильтры.":"В выбранном виде пока нет тендеров."} onReset={hasFilters?resetFilters:undefined}/>:view==="list"?<div key="tender-table" ref={tableRef} className="sales-table-wrap"><table className="data-table sales-request-table tender-table" style={{width:52+columns.reduce((sum,column)=>sum+columnWidth(column.id),0)}}><colgroup>{columns.map(column=><col key={column.id} style={{width:columnWidth(column.id)}}/>)}<col style={{width:52}}/></colgroup><thead><tr>{columns.map(column=><th key={column.id} scope="col" aria-label={column.label} style={pinnedStyle(column.id)} className={settings.pinned.includes(column.id)?"registry-pinned-cell":""} aria-sort={settings.sort===column.id?settings.direction==="asc"?"ascending":"descending":"none"}><button className="requests-column-sort" type="button" onClick={()=>update({sort:column.id,direction:settings.sort===column.id&&settings.direction==="asc"?"desc":"asc"})}><span>{column.label}</span><ArrowDownUp size={12}/></button><span className="requests-column-resize" role="separator" aria-label={`Ширина: ${column.label}`} aria-orientation="vertical" aria-valuemin={110} aria-valuemax={480} aria-valuenow={columnWidth(column.id)} tabIndex={0} onPointerDown={event=>{event.preventDefault();resizing.current={id:column.id,x:event.clientX,width:columnWidth(column.id)};event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{const drag=resizing.current;if(drag?.id===column.id)update({widths:{...settings.widths,[column.id]:registryWidth(drag.width+event.clientX-drag.x)}});}} onPointerUp={()=>{resizing.current=null;}} onPointerCancel={()=>{resizing.current=null;}} onLostPointerCapture={()=>{resizing.current=null;}} onKeyDown={event=>{if(["ArrowLeft","ArrowRight"].includes(event.key)){event.preventDefault();update({widths:{...settings.widths,[column.id]:registryWidth(columnWidth(column.id)+(event.key==="ArrowLeft"?-10:10))}});}}}/></th>)}<th scope="col"><span className="sales-sr-only">Просмотр</span></th></tr></thead><tbody>{renderRows(filtered)}</tbody></table></div>:<div key="tender-board" ref={boardRef} className="sales-board requests-board tender-board" aria-label="Доска тендеров">{stages.map(stage=>{
-        const stageRows=filtered.filter(row=>row.stage===stage.code),dropAllowed=!demo&&canEdit&&!busyId&&stage.code!=="completed"&&(stage.code!=="submitted"||canSubmit);
-        return <section className="sales-board-column tender-board-column" key={stage.code} onDragOver={event=>{if(dropAllowed)event.preventDefault();}} onDrop={event=>{if(!dropAllowed)return;event.preventDefault();const row=items.find(item=>item.id===event.dataTransfer.getData("text/tender-id"));if(row)void move(row,stage.code);}}><header><span className="tender-status"><i aria-hidden="true"/>{stage.label}</span><b>{stageRows.length}</b></header><div className="sales-board-cards">{stageRows.map(row=>{const deadline=tenderDeadlineState(row.submissionDeadline,currentDate);return <article key={row.id} className="sales-board-card tender-board-card" aria-busy={busyId===row.id} draggable={mayEdit(row)&&!busyId} onDragStart={event=>event.dataTransfer.setData("text/tender-id",row.id)}>
-          <div className="sales-card-heading"><TenderTitle row={row}/><button className="icon-button" aria-label={`Просмотр: ${row.title}`} onClick={()=>setSelectedId(row.id)}><Eye size={15}/></button></div><p>{row.customer}</p><div className="tender-card-finance"><span>{numeric(row.initialPrice)===null?"Цена не указана":rub(row.initialPrice!)}</span></div><span className="tender-card-decision">{tenderDecisionLabels[row.decision]??"Решение уточняется"}</span><div className="sales-card-facts"><span className={`tender-deadline ${deadlineClass(deadline.key)}`}><CalendarClock size={13}/>{deadline.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<p className="tender-card-action">{row.nextActionText}</p>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<small className="tender-blocker-count">{row.blockerCount} блок.</small>}</footer>{mayEdit(row)&&<select className="tender-card-stage-select" aria-label={`Изменить этап: ${row.title}`} value={row.stage} disabled={Boolean(busyId)} onChange={event=>void move(row,event.target.value)}>{tenderStages.filter(item=>item.code!=="completed").map(item=><option key={item.code} value={item.code} disabled={item.code==="submitted"&&!canSubmit}>{item.label}</option>)}</select>}
-        </article>;})}{!stageRows.length&&<div className="sales-board-empty">Нет тендеров</div>}</div></section>;})}</div>}
-      <HorizontalScrollDock scrollRef={view==="list"?tableRef:boardRef} disabled={Boolean(selected)||demoCreateOpen||!filtered.length} revision={`${view}:${settings.columns.join(",")}:${settings.group}:${settings.subgroup}:${filtered.map(row=>row.id).join(",")}`} label={view==="list"?"Горизонтальная прокрутка тендеров":"Горизонтальная прокрутка доски тендеров"}/>
+      <div className="sales-filterbar">
+        <SalesSegments<Bucket> label="Раздел тендеров" value={bucket} onChange={setBucket} items={[{value:"active",label:"Активные"},{value:"completed",label:"Завершённые"}]}/>
+        <select aria-label="Срок подачи" value={deadline} onChange={event=>setDeadline(event.target.value as DeadlineFilter)}><option value="all">Все сроки</option><option value="today">Сегодня / просрочено</option><option value="3d">До 3 дней</option><option value="7d">До 7 дней</option></select>
+        <SalesSearch value={query} onChange={setQuery} placeholder="Поиск по тендерам"/>
+      </div>
+      <div className="sales-results" aria-live="polite">Показано {filtered.length}</div>
+      {view==="list"?<TenderList rows={filtered}/>:<TenderBoard rows={filtered} bucket={bucket} canEdit={canEdit} busyId={busyId} dragId={dragId} setDragId={setDragId} onMove={move}/>}
     </>}
-    {view==="analytics"&&<TenderAnalytics data={analytics} options={options} metricPreferences={metricPreferences} canConfigure={canConfigureAnalytics} demo={demo}/>}
-    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<>{!isClientDemoRow(selected)&&<Link className="button primary" href={`/tenders/${selected.id}`} onClick={()=>setSelectedId(null)}>Открыть карточку<ArrowUpRight size={15}/></Link>}{sourceHref(selected.sourceUrl)&&<a className="button" href={sourceHref(selected.sourceUrl)!} target="_blank" rel="noreferrer">Закупка на площадке<ExternalLink size={14}/></a>}</>}>
-      <section className="tender-preview-section"><h3>Состояние и подача</h3><TenderStatus row={selected}/><dl className="tender-preview-facts"><div><dt>Решение</dt><dd>{tenderDecisionLabels[selected.decision]??"Уточняется"}</dd></div><div><dt>Подача до</dt><dd>{formatDate(selected.submissionDeadline)}</dd></div><div><dt>Срок</dt><dd>{tenderDeadlineState(selected.submissionDeadline,currentDate).label}</dd></div><div><dt>Ответственный</dt><dd>{selected.owner??"Не назначен"}</dd></div><div><dt>Следующее действие</dt><dd>{selected.nextActionText??"—"}</dd></div><div><dt>Дата действия</dt><dd>{formatDate(selected.nextActionAt)}</dd></div></dl></section>
-      <section className="tender-preview-section"><h3>Условия закупки</h3><dl className="tender-preview-facts"><div><dt>Начальная цена</dt><dd>{numeric(selected.initialPrice)===null?"—":rub(selected.initialPrice!)}</dd></div><div><dt>Тарификация</dt><dd>{tenderBillingLabels[selected.billingUnit]??"Уточняется"}</dd></div><div><dt>Потенциал</dt><dd>{tenderPotentialLabels[selected.potential]??"Уточняется"}</dd></div><div><dt>Площадка</dt><dd>{selected.platform??"—"}</dd></div><div><dt>Номер торга</dt><dd>{selected.procedureNumber??"—"}</dd></div><div><dt>Источник</dt><dd>{selected.sourceName??"—"}</dd></div></dl></section>
-      <section className="tender-preview-section"><h3>Готовность</h3><dl className="tender-preview-facts"><div><dt>Позиции / расчёты</dt><dd>{selected.roleCount} / {selected.calculationCount}</dd></div><div><dt>Документы готовы</dt><dd>{selected.requirementCount?`${selected.readyRequirementCount} из ${selected.requirementCount}`:"Требования не заданы"}</dd></div><div><dt>Блокеры</dt><dd>{selected.blockerCount}</dd></div></dl>{selected.analysisSummary&&<p>{selected.analysisSummary}</p>}{selected.closeReason&&<p>{selected.closeReason}</p>}</section>
-    </SalesDrawer>}
-    {demo&&demoCreateOpen&&<DemoTenderCreateDrawer options={options} onClose={()=>setDemoCreateOpen(false)} onCreate={draft=>{if(addDemoTender(draft))setDemoCreateOpen(false);}}/>}
+    {view==="analytics"&&<TenderAnalytics data={analytics} options={options} metricPreferences={metricPreferences} canConfigure={canConfigureAnalytics} demo={demo}/>} 
+    {demo&&demoCreateOpen&&<DemoTenderCreateDrawer onClose={()=>setDemoCreateOpen(false)} onCreate={item=>{addDemoRows([item]);setDemoCreateOpen(false);}}/>}
   </div>;
 }
 
-function DemoTenderCreateDrawer({options,onClose,onCreate}:{options:TenderOptions;onClose:()=>void;onCreate:(draft:TenderCreateDraft)=>void}) {
-  const [valid,setValid]=useState(false);
-  return <SalesDrawer
-    title="Добавить тендер"
-    overline="Создание тендера"
-    subtitle="Зафиксируйте закупку по той же логике, что и рабочую заявку. Демонстрационная запись исчезнет после перезагрузки."
-    onClose={onClose}
-    footer={<><button className="button" type="button" onClick={onClose}>Отмена</button><button className="button primary" form="demo-tender-create" type="submit" disabled={!valid}>Добавить тендер</button></>}
-  >
-    <TenderCreateForm options={options} variant="drawer" formId="demo-tender-create" onDemoCreate={onCreate} onCancel={onClose} onValidityChange={setValid}/>
-  </SalesDrawer>;
+function TenderTitle({row}:{row:TenderRow}){
+  if(isClientDemoRow(row))return row.sourceUrl?<a href={row.sourceUrl} target="_blank" rel="noreferrer" className="cell-title">{row.title}</a>:<strong className="cell-title">{row.title}</strong>;
+  return <Link href={`/tenders/${row.id}`} className="cell-title">{row.title}</Link>;
+}
+
+function TenderList({rows}:{rows:TenderRow[]}){
+  return <div className="request-table-wrap"><table className="data-table request-registry-table tender-table"><thead><tr><th>Тендер</th><th>Заказчик</th><th>Коммерция</th><th>Подача до</th><th>Осталось</th><th>Этап / решение</th><th>Блокеры</th><th>Ответственный</th></tr></thead><tbody>
+    {rows.length?rows.map(row=>{const deadline=tenderDeadlineState(row.submissionDeadline);return <tr key={row.id}>
+      <td><TenderTitle row={row}/><span className="cell-sub">{[row.platform,row.procedureNumber].filter(Boolean).join(" · ")||"Площадка не указана"}</span></td>
+      <td>{row.customer}<span className="cell-sub">{row.sourceName??"Источник не указан"}</span></td>
+      <td><strong>{row.initialPrice?rub(row.initialPrice):"Цена не указана"}</strong><span className="cell-sub">{row.billingUnit!=="unknown"?tenderBillingLabels[row.billingUnit]:"Формат цены не определён"} · Потенциал: {row.potential==="high"?"высокий":row.potential==="low"?"низкий":"средний"}</span></td>
+      <td><strong>{formatDate(row.submissionDeadline)}</strong><span className="cell-sub">{row.roleCount?`Позиции: ${row.roleCount}`:"Позиции не разобраны"}{row.calculationCount?` · расчётов: ${row.calculationCount}`:""}</span></td>
+      <td><span className={`tender-deadline ${deadlineClass(deadline.key)}`}><CalendarClock size={13}/>{deadline.label}</span></td>
+      <td><span className="status status-neutral"><i/>{row.stage==="completed"?(row.result?tenderResultLabels[row.result]:"Завершён"):tenderStageLabel(row.stage)}</span><span className="cell-sub">{tenderDecisionLabels[row.decision]}</span></td>
+      <td>{row.blockerCount>0?<><strong className="tender-blocker-count">{row.blockerCount}</strong><span className="cell-sub">по документам</span></>:"—"}</td>
+      <td>{row.owner??"Не назначен"}<span className="cell-sub">{row.nextActionText??"Нет следующего действия"}</span></td>
+    </tr>}):<tr><td colSpan={8}><div className="commercial-empty">По выбранным фильтрам тендеров нет</div></td></tr>}
+  </tbody></table></div>;
+}
+
+function TenderBoard({rows,bucket,canEdit,busyId,dragId,setDragId,onMove}:{rows:TenderRow[];bucket:Bucket;canEdit:boolean;busyId:string|null;dragId:string|null;setDragId:(id:string|null)=>void;onMove:(id:string,stage:string)=>Promise<void>}){
+  const stages=tenderStages.filter(stage=>bucket==="completed"?stage.code==="completed":stage.code!=="completed");
+  return <div className="sales-board tender-board" aria-label="Доска тендеров">{stages.map(stage=>{
+    const stageItems=rows.filter(row=>row.stage===stage.code);
+    return <section className="sales-board-column tender-board-column" key={stage.code} onDragOver={event=>{if(canEdit&&stage.code!=="completed")event.preventDefault();}} onDrop={()=>{if(dragId)void onMove(dragId,stage.code);setDragId(null);}}>
+      <header><span>{stage.label}</span><b>{stageItems.length}</b></header>
+      <div className="sales-board-cards tender-board-stack">{stageItems.map(row=>{const state=tenderDeadlineState(row.submissionDeadline);const content=<><strong>{row.title}</strong><span>{row.customer}</span><div className="tender-card-finance"><span>{row.initialPrice?rub(row.initialPrice):"Цена не указана"}</span><small>{tenderDecisionLabels[row.decision]}</small></div><div className="tender-card-meta"><span className={`tender-deadline ${deadlineClass(state.key)}`}>{state.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<small>{row.nextActionText}</small>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<b>{row.blockerCount} блок.</b>}</footer></>;
+        return <article key={row.id} draggable={canEdit&&!isClientDemoRow(row)&&row.stage!=="completed"} onDragStart={()=>setDragId(row.id)} onDragEnd={()=>setDragId(null)} aria-busy={busyId===row.id} className={`sales-board-card tender-board-card${busyId===row.id?" busy":""}`}>{isClientDemoRow(row)?(row.sourceUrl?<a href={row.sourceUrl} target="_blank" rel="noreferrer">{content}</a>:<div className="tender-board-static">{content}</div>):<Link href={`/tenders/${row.id}`}>{content}</Link>}</article>;
+      })}{!stageItems.length&&<div className="sales-board-empty">Нет тендеров</div>}</div>
+    </section>;
+  })}</div>;
+}
+
+function DemoTenderCreateDrawer({onClose,onCreate}:{onClose:()=>void;onCreate:(item:TenderImportRow)=>void}){
+  const [form,setForm]=useState({title:"",customerName:"",platform:"",procedureNumber:"",sourceUrl:"",publicationDate:"",submissionDeadline:"",initialPrice:"",comment:""});
+  function update(key:keyof typeof form,value:string){setForm(current=>({...current,[key]:value}));}
+  function submit(event:React.FormEvent){event.preventDefault();if(!form.title.trim())return;onCreate({title:form.title.trim(),customerName:form.customerName.trim()||null,platform:form.platform.trim()||null,procedureNumber:form.procedureNumber.trim()||null,sourceUrl:form.sourceUrl.trim()||null,publicationDate:form.publicationDate||null,submissionDeadline:toIso(form.submissionDeadline),initialPrice:form.initialPrice?Number(form.initialPrice):null,comment:form.comment.trim()||null,sourceName:"Ручной ввод"});}
+  return <div className="drawer-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)onClose();}}><aside className="drawer tender-create-drawer"><div className="drawer-head"><div><strong>Добавить тендер</strong><span>Для регистрации достаточно названия. Остальное можно заполнить сразу или позже.</span></div><button className="icon-button" type="button" onClick={onClose} aria-label="Закрыть"><X size={16}/></button></div><form onSubmit={submit}><div className="drawer-body"><div className="form-grid two"><label className="span-2"><span>Название тендера *</span><input autoFocus required value={form.title} onChange={event=>update("title",event.target.value)}/></label><label><span>Заказчик</span><input value={form.customerName} onChange={event=>update("customerName",event.target.value)}/></label><label><span>Площадка</span><input value={form.platform} onChange={event=>update("platform",event.target.value)} placeholder="ЕИС, B2B-Center, Bidzaar…"/></label><label><span>Номер торга</span><input value={form.procedureNumber} onChange={event=>update("procedureNumber",event.target.value)}/></label><label><span>Начальная цена, ₽</span><input type="number" min="0" value={form.initialPrice} onChange={event=>update("initialPrice",event.target.value)}/></label><label><span>Дата публикации</span><input type="date" value={form.publicationDate} onChange={event=>update("publicationDate",event.target.value)}/></label><label><span>Подача до</span><input type="datetime-local" value={form.submissionDeadline} onChange={event=>update("submissionDeadline",event.target.value)}/></label><label className="span-2"><span>Ссылка на закупку</span><input type="url" value={form.sourceUrl} onChange={event=>update("sourceUrl",event.target.value)}/></label><label className="span-2"><span>Комментарий</span><textarea rows={4} value={form.comment} onChange={event=>update("comment",event.target.value)}/></label></div></div><div className="drawer-footer"><button className="button" type="button" onClick={onClose}>Отмена</button><button className="button primary" type="submit" disabled={!form.title.trim()}>Добавить тендер</button></div></form></aside></div>;
 }

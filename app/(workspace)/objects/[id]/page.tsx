@@ -19,13 +19,11 @@ import { ObjectStaffingWorkspace } from "@/components/ObjectStaffingWorkspace";
 import { ObjectFinanceWorkspace } from "@/components/ObjectFinanceWorkspace";
 import { ObjectDocumentsWorkspace } from "@/components/ObjectDocumentsWorkspace";
 import { ObjectQualityWorkspace } from "@/components/ObjectQualityWorkspace";
-import { ObjectAnalyticsWorkspace, type ObjectAnalyticsView } from "@/components/ObjectAnalyticsWorkspace";
 import { TimesheetWorkspace } from "@/components/TimesheetWorkspace";
 import { listRecruitingApplications } from "@/lib/recruiting/service";
 import { listContracts } from "@/lib/commercial/contracts";
 import { pct,rub } from "@/lib/ui/format";
 import { absenceTypeLabel } from "@/lib/operations/workforce-status";
-import { getObjectAnalyticsDetail } from "@/lib/operations/object-analytics";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -36,25 +34,21 @@ const labels:Record<string,string>={
   timesheets:"Табели",
   supply:"Обеспечение",
   quality:"Инциденты",
-  analytics:"Аналитика",
   contacts:"Контакты",
   finance:"Финансы",
   documents:"Документы",
   settings:"Настройки",
   history:"История",
 };
-const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history",stats:"analytics"};
+const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history"};
 const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 
-export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string;analyticsView?:string;period?:string}>}) {
+export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string}>}) {
   const {id}=await params;
   const staticDemo=isGithubPagesDemo();
-  const {tab:rawTab,month,analyticsView:rawAnalyticsView,period:rawAnalyticsPeriod}=staticDemo?{}:await searchParams;
+  const {tab:rawTab,month}=staticDemo?{}:await searchParams;
   const requested=rawTab?(aliases[rawTab]??rawTab):"overview";
-  const analyticsPeriod=["7","30","month","90"].includes(rawAnalyticsPeriod??"")?rawAnalyticsPeriod!:"30";
-  const analyticsTo=new Date().toISOString().slice(0,10);
-  const analyticsFrom=analyticsPeriod==="month"?analyticsTo.slice(0,7)+"-01":addDaysIso(analyticsTo,-(Number(analyticsPeriod)-1));
   const actor=await requireActor();
   const objects=await listObjects(actor);
   const object=objects.find(row=>row.id===id);
@@ -62,9 +56,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
   const canNeeds=hasCapability(actor.access,"operations.need.read");
   const canEditNeeds=hasCapability(actor.access,"operations.need.edit");
-  const canEditStaffingPlan=hasCapability(actor.access,"operations.staffing_plan.edit")
-    ?canReadRow(actor.access,"operations.staffing_plan.edit",object,actor)
-    :canEditNeeds&&canReadRow(actor.access,"operations.need.edit",object,actor);
   const canWorkers=hasCapability(actor.access,"worker.read");
   const canShifts=hasCapability(actor.access,"operations.shift.read");
   const canPnl=hasCapability(actor.access,"finance.pnl.read");
@@ -78,8 +69,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canManageAssets=hasCapability(actor.access,"assets.manage")&&canReadRow(actor.access,"assets.manage",object,actor);
   const canEditShifts=hasCapability(actor.access,"operations.shift.edit")&&canReadRow(actor.access,"operations.shift.edit",object,actor);
   const canFinance=canPnl||canAccruals||canPayments;
-  const analyticsView=(["summary","workforce","attendance","timesheet","quality","economics"].includes(rawAnalyticsView??"")?rawAnalyticsView:"summary") as ObjectAnalyticsView;
-  const effectiveAnalyticsView=analyticsView==="economics"&&!canPnl?"summary":analyticsView;
   const canRecruiting=hasCapability(actor.access,"recruiting.candidate.read");
   const canTimesheets=hasCapability(actor.access,"time.timesheet.read");
   const canAssets=hasCapability(actor.access,"assets.read");
@@ -96,7 +85,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   // The object shell is a control surface over many independent modules. One optional
   // module must never take the entire object page down. Keep the object identity
   // critical, but contain downstream loader failures and report their module name.
-  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,ppeTemplates,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions,workforceOptions,objectAnalyticsDetail]=await Promise.all([
+  const [workers,shifts,finance,accruals,payments,dailyPayments,objectDocuments,ppeTemplates,candidates,launchTasks,incidents,analytics,forecast,inventory,housing,supplyRequests,objectContacts,objectTimesheet,timesheetOptions,workforceOptions]=await Promise.all([
     canWorkers?safeObjectLoad(id,"workers",()=>listWorkers(actor),[]):Promise.resolve([]),
     canShifts?safeObjectLoad(id,"shifts",()=>listShifts(actor),[]):Promise.resolve([]),
     canPnl?safeObjectLoad(id,"finance",()=>listFinance(actor),[]):Promise.resolve([]),
@@ -110,14 +99,13 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     safeObjectLoad(id,"incidents",()=>listIncidents(actor),[]),
     safeObjectLoad(id,"analytics",()=>listOperationsAnalytics(actor),[]),
     canNeeds?safeObjectLoad(id,"staffing-forecast",()=>listStaffingForecast(actor,30),[]):Promise.resolve([]),
-    canAssets?safeObjectLoad(id,"inventory",()=>getInventorySnapshot(actor),{locations:[],items:[],variants:[],prices:[],balances:[]}):Promise.resolve({locations:[],items:[],variants:[],prices:[],balances:[]}),
+    canAssets?safeObjectLoad(id,"inventory",()=>getInventorySnapshot(actor),{locations:[],items:[],balances:[]}):Promise.resolve({locations:[],items:[],balances:[]}),
     canHousing?safeObjectLoad(id,"housing",()=>getHousingSnapshot(actor),{sites:[],stays:[]}):Promise.resolve({sites:[],stays:[]}),
     canProcurement?safeObjectLoad(id,"supply-requests",()=>listSupplyRequests(actor),[]):Promise.resolve([]),
     safeObjectLoad(id,"contacts",()=>getObjectContacts(actor,id),{assigned:[],contacts:[]}),
     canTimesheets?safeObjectLoad(id,"timesheet",()=>getTimesheet(actor,{objectId:id,month:month??null}),null):Promise.resolve(null),
     canTimesheets?safeObjectLoad(id,"timesheet-options",()=>getOperationsReferenceData(actor,"time.timesheet.read",{includeWorkers:false,includeSpecialties:false}),{objects:[],specialties:[],workers:[]}):Promise.resolve({objects:[],specialties:[],workers:[]}),
     (canWorkers||canAssets)?safeObjectLoad(id,"workforce-options",()=>getOperationsReferenceData(actor,canWorkers?"worker.read":"assets.read",{includeWorkers:false,includeSpecialties:true}),{objects:[],specialties:[],workers:[]}):Promise.resolve({objects:[],specialties:[],workers:[]}),
-    safeObjectLoad(id,"object-analytics",()=>getObjectAnalyticsDetail(actor,id,analyticsFrom,analyticsTo),null),
   ]);
 
   const objectWorkers=workers.filter(row=>row.objectId===id);
@@ -135,8 +123,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const objectHousing=housing.sites.filter(row=>row.objectId===id);
   const objectSupplyRequests=supplyRequests.filter(row=>row.objectId===id);
   const objectAnalytics=analytics.find(row=>row.objectId===id);
-  const objectFinanceHistory=finance.filter(row=>row.objectId===id);
-  const objFinance=objectFinanceHistory[0]??null;
+  const objFinance=finance.find(row=>row.objectId===id)??null;
   const objectAccruals=accruals.filter(row=>row.objectId===id);
   const objectPayments=payments.filter(row=>row.objectId===id);
   const objectContracts=hasCapability(actor.access,"contract.read")
@@ -185,7 +172,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   if(!canFinance)delete visibleLabels.finance;
   if(!canEditObject)delete visibleLabels.settings;
   const tab=visibleLabels[requested]?requested:"overview";
-  const tabOrder=["overview",...(showLaunch?["launch"]:[]),"workforce","staffing","shifts","timesheets","supply","contacts","finance","documents","quality","analytics","settings","history"];
+  const tabOrder=["overview",...(showLaunch?["launch"]:[]),"workforce","staffing","shifts","timesheets","supply","contacts","finance","documents","quality","settings","history"];
   const tabs=tabOrder.filter(key=>visibleLabels[key]).map(key=>({
     label:visibleLabels[key],
     href:`/objects/${id}?tab=${key}${month?`&month=${encodeURIComponent(month)}`:""}`,
@@ -302,7 +289,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       </Section>
     </>)}
 
-    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} facts={objectFacts} today={todayIso} canEditPlan={canEditStaffingPlan} canFeedback={canEditObject} demo={actor.demo}/>)}
+    {panel("staffing",<ObjectStaffingWorkspace objectId={id} forecast={objectForecast} applications={objectCandidates} workers={objectWorkers} facts={objectFacts} today={todayIso} canEditNeed={canEditNeeds} canFeedback={canEditObject} demo={actor.demo}/>)}
 
     {panel("workforce",<div className="object-module-shell"><div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} objectId={id} objectName={object.name} objects={workforceOptions.objects} canEdit={canEditWorkers} canOffboard={canOffboard} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</div>)}
 
@@ -330,18 +317,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
       <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
       <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} canFinance={canFinanceAdjust} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
     </>)}
-
-    {panel("analytics",objectAnalyticsDetail?<ObjectAnalyticsWorkspace
-      objectId={id}
-      data={objectAnalyticsDetail}
-      forecast={objectForecast}
-      timesheet={objectTimesheet}
-      finance={objectFinanceHistory}
-      incidents={objectIncidents}
-      view={effectiveAnalyticsView}
-      period={analyticsPeriod}
-      canFinance={canPnl}
-    />:<Empty title="Аналитика пока недоступна" text="Не удалось собрать аналитический срез объекта из текущих операционных данных."/>)}
 
     {panel("contacts",<ObjectContactsWorkspace objectId={id} assigned={objectContacts.assigned} contacts={objectContacts.contacts} canEdit={canEditObject} demo={actor.demo}/>)}
 

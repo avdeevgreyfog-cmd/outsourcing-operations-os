@@ -21,12 +21,12 @@ export async function PATCH(request: Request) {
     const body = schema.parse(await request.json());
     const codes = new Set(body.stages.map((stage) => stage.code));
     if (!codes.has("new") || !codes.has("agreed") || !codes.has("not_agreed")) return NextResponse.json({ error: "Системные этапы Новая, Согласовано и Не согласовано нельзя удалить" }, { status: 400 });
-    await withTenant(actor.organizationId, actor.userId, async (tx) => {
+    await withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
       for (const stage of body.stages) await tx`
         UPDATE request_stage_definitions SET label=${stage.label},color=${stage.color},active=${stage.active},sort_order=${stage.sortOrder},updated_at=now()
         WHERE organization_id=${actor.organizationId}::uuid AND code=${stage.code}
       `;
-    });
+    }));
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Проверьте настройки этапов" }, { status: 400 });

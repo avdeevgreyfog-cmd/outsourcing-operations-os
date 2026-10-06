@@ -51,7 +51,7 @@ export async function POST(request:Request){
         if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
         if(!["draft","negotiation","rejected"].includes(context.status))throw new Error("На согласование можно отправить только черновик или договор после переговоров");
       }else if(body.subjectType==="supply_request"){
-        capability="procurement.create";processCode="supply_request";stepCode="supply_request_approval";requireCapability(actor,capability);
+        capability="procurement.manage";processCode="supply_request";stepCode="supply_request_approval";requireCapability(actor,capability);
         const [row]=await tx<Array<SubjectContext>>`
           SELECT 'supply_request' "sourceType",r.id "sourceId",o.region_id "regionId",r.organization_id "organizationId",
             COALESCE(o.owner_user_id,r.created_by_user_id) "ownerUserId",r.created_by_user_id "createdByUserId",
@@ -62,7 +62,7 @@ export async function POST(request:Request){
           FROM supply_requests r LEFT JOIN objects o ON o.id=r.object_id
           WHERE r.id=${body.subjectId}::uuid
         `;context=row;
-        if(!context)throw new Error("Внутренняя заявка не найдена");
+        if(!context)throw new Error("Заявка на обеспечение не найдена");
         if(!canReadRow(actor.access,capability,context,actor))throw new AccessDeniedError(capability);
         if(!["submitted","rejected"].includes(context.status))throw new Error("На согласование можно отправить только поданную или отклонённую заявку");
       }else{

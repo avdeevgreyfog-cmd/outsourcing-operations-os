@@ -26,7 +26,7 @@ export function ObjectSupplyWorkspace({
   demo:boolean;
 }){
   const missingWorkers=workers.filter(worker=>(worker.ppeMissingNames?.length??0)>0);
-  const lowStock=balances.filter(row=>row.minQuantity>0&&row.usableQuantity<=row.minQuantity);
+  const lowStock=balances.filter(row=>row.minQuantity>0&&row.quantity<=row.minQuantity);
   const consumables=balances.filter(row=>row.category==="consumable");
   const individualStock=balances.filter(row=>row.category!=="consumable");
   const openRequests=requests.filter(row=>!["closed","rejected"].includes(row.status));
@@ -47,7 +47,7 @@ export function ObjectSupplyWorkspace({
       </div>
     </div>
 
-    {canAssets&&<Section title="Требует выдачи сотрудникам" note="Показываются индивидуально учитываемые позиции по комплекту специальности. Расходники с периодической выдачей планируются через тот же комплект.">
+    {canAssets&&<Section title="Требует выдачи сотрудникам" note="Показываются только индивидуально учитываемые позиции по норме специальности. Расходники сюда не входят.">
       <div className="request-table-wrap"><table className="data-table object-supply-workers">
         <thead><tr><th>Сотрудник</th><th>Специальность</th><th>Размеры</th><th>Выдано</th><th>Не хватает</th><th></th></tr></thead>
         <tbody>{missingWorkers.map(worker=><tr key={worker.id}>
@@ -65,10 +65,10 @@ export function ObjectSupplyWorkspace({
       <Section title="Запас объекта" note="Размеры и варианты показываются отдельными строками.">
         <div className="request-table-wrap"><table className="data-table">
           <thead><tr><th>Позиция</th><th>Размер / вариант</th><th>Остаток</th><th>Минимум</th><th>Состояние</th></tr></thead>
-          <tbody>{individualStock.slice(0,14).map(row=>{const low=row.minQuantity>0&&row.usableQuantity<=row.minQuantity;return <tr key={row.locationId+row.itemId+row.variant}>
+          <tbody>{individualStock.slice(0,14).map(row=>{const low=row.minQuantity>0&&row.quantity<=row.minQuantity;return <tr key={row.locationId+row.itemId+row.variant}>
             <td><strong className="cell-title">{row.item}</strong><span className="cell-sub">{row.location}</span></td>
-            <td>{row.variant||"—"}</td><td className="num">{row.usableQuantity} {row.unit}<span className="cell-sub">новое {row.newQuantity} · б/у {row.goodQuantity}</span></td><td className="num">{row.minQuantity||"—"}</td>
-            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}&quantity=${encodeURIComponent(String(Math.max(row.minQuantity-row.usableQuantity,1)))}&create=1`}>Пополнить · {Math.max(row.minQuantity-row.usableQuantity,1)} {row.unit}</Link>:<Status tone={low?"warn":"good"}>{low?"Пополнить":"В норме"}</Status>}</td>
+            <td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td><td className="num">{row.minQuantity||"—"}</td>
+            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}&quantity=${encodeURIComponent(String(Math.max(row.minQuantity-row.quantity,1)))}&create=1`}>Пополнить · {Math.max(row.minQuantity-row.quantity,1)} {row.unit}</Link>:<Status tone={low?"warn":"good"}>{low?"Пополнить":"В норме"}</Status>}</td>
           </tr>})}</tbody>
         </table>{!individualStock.length&&<div className="empty-inline">Остатки индивидуального имущества на объекте пока не заведены.</div>}</div>
         <div className="section-actions"><Link className="button" href={`/assets?object=${objectId}`}>Все остатки и движения</Link></div>
@@ -77,16 +77,16 @@ export function ObjectSupplyWorkspace({
       <Section title="Расходники объекта" note="Выдаются на объект без привязки к конкретному сотруднику.">
         <div className="request-table-wrap"><table className="data-table">
           <thead><tr><th>Расходник</th><th>Вариант</th><th>Остаток</th><th>Минимум</th><th></th></tr></thead>
-          <tbody>{consumables.map(row=>{const low=row.minQuantity>0&&row.usableQuantity<=row.minQuantity;return <tr key={row.locationId+row.itemId+row.variant}>
+          <tbody>{consumables.map(row=>{const low=row.minQuantity>0&&row.quantity<=row.minQuantity;return <tr key={row.locationId+row.itemId+row.variant}>
             <td><strong className="cell-title">{row.item}</strong><span className="cell-sub">{row.location}</span></td>
-            <td>{row.variant||"—"}</td><td className="num">{row.usableQuantity} {row.unit}<span className="cell-sub">новое {row.newQuantity} · б/у {row.goodQuantity}</span></td><td className="num">{row.minQuantity||"—"}</td>
-            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}&quantity=${encodeURIComponent(String(Math.max(row.minQuantity-row.usableQuantity,1)))}&create=1`}>Пополнить</Link>:<Status tone={low?"warn":"good"}>{low?"Мало":"В норме"}</Status>}</td>
+            <td>{row.variant||"—"}</td><td className="num">{row.quantity} {row.unit}</td><td className="num">{row.minQuantity||"—"}</td>
+            <td>{low&&canProcurement?<Link className="table-link" href={`/procurement?object=${objectId}&item=${row.itemId}&location=${row.locationId}&quantity=${encodeURIComponent(String(Math.max(row.minQuantity-row.quantity,1)))}&create=1`}>Пополнить</Link>:<Status tone={low?"warn":"good"}>{low?"Мало":"В норме"}</Status>}</td>
           </tr>})}</tbody>
         </table>{!consumables.length&&<div className="empty-inline">Расходные материалы на объекте пока не заведены.</div>}</div>
       </Section>
     </div>}
 
-    {canAssets&&<Section title="Комплекты и нормы по специальностям объекта" note="Базовый комплект приходит из общего контура обеспечения; здесь можно создать локальное переопределение состава и периодов выдачи.">
+    {canAssets&&<Section title="Нормы выдачи по специальностям объекта" note="Показываются только специальности этого объекта. Базовая норма приходит из общего контура обеспечения; здесь можно создать локальное переопределение.">
       <ObjectPpeTemplatesWorkspace objectId={objectId} templates={templates} inventoryItems={inventoryItems} specialties={specialties} canManage={canManageAssets} demo={demo}/>
     </Section>}
 

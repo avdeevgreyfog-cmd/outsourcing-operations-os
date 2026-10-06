@@ -12,12 +12,9 @@ import "./tender-core.css";
 import "./tender-demo.css";
 import "./tender-final.css";
 import "./sales-system.css";
-import "./request-analytics.css";
 import "./calculation-economics.css";
 import "./economics-workspaces.css";
 import "./navigation-shell.css";
-import "./workers-registry.css";
-import "./registry-patterns.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
