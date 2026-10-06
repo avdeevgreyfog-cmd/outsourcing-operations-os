@@ -234,3 +234,7 @@
   .tender-analytics-screen.request-analytics-unified .tender-operational-grid,
   .tender-analytics-screen.request-analytics-unified .tender-outcome-grid{grid-template-columns:1fr}
 }
+
+@media(max-width:780px){
+  .tender-analytics-screen.request-analytics-unified .request-auto-compare{flex:1 1 140px;min-width:100px;max-width:100%}
+}
