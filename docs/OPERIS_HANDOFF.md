@@ -1,8 +1,8 @@
 # OPERIS · Тендеры: создание и аналитика
 
 Дата: 06.10.2026. База: beta `6956a32a2da9cac14e8f2295d2be360bca67d173`.
-Рабочая ветка: `feat/tender-create-analytics-20261006`. Интеграция — draft PR #71 в `beta`;
-`main` / production этой итерацией не изменяются.
+Продуктовая ветка: `feat/tender-create-analytics-20261006`. PR #71 объединён в `beta`;
+merge SHA `b3ed9ec38a0866e0698f09ef7f83f2715ddc3160`. `main` / production этой итерацией не изменяются.
 
 ## Решения и изменения
 
@@ -30,8 +30,9 @@ No Bid и проигрыша, площадки, заказчики и ответ
 ## Проверки
 
 Проверенный продуктовый SHA: `f36b77da18e432d317be7240e68f2cba6e24c2f8`.
-Последующие commits удаляют только временный QA workflow и обновляют этот handoff;
-runtime-код после browser QA не менялся.
+Финальный feature head: `4afad98fc098337338a52d16d8d852c680809546`; beta merge:
+`b3ed9ec38a0866e0698f09ef7f83f2715ddc3160`. Между browser QA и merge менялись
+только временный QA workflow и handoff; runtime-код не менялся.
 
 - GitHub CI run `37429294385`: `verify`, `postgres-integration`,
   `pages-demo` — success. В `verify` прошли unit/contract tests, TypeScript,
