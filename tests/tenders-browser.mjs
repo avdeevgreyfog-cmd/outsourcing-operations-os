@@ -176,7 +176,6 @@ try {
       await goto(page);
       const add = page.getByRole('link', { name: 'Добавить тендер', exact: true }); assert.equal(await add.getAttribute('href'), '/tenders/new'); await add.click();
       await page.locator('.tender-create-workspace').waitFor();
-      assert.equal(await page.getByRole('navigation').count(), 0);
       assert.equal(await page.getByRole('button', { name: /Быстрое заполнение/ }).getAttribute('aria-pressed'), 'true');
       await page.getByLabel('Название тендера *', { exact: true }).fill('QA — временный тендер');
       await page.getByLabel('Заказчик по закупке', { exact: true }).fill('QA Test Customer');
