@@ -1,3 +1,52 @@
+# OPERIS · Исправление создания и доски тендеров
+
+Дата: 06.10.2026. База: beta `518297cd65d6b8728a0810a16d7d3016773d8d27`.
+Рабочая ветка: `fix/tender-create-board-alignment-20261006`. PR #74 → `beta`.
+Production / `main` не изменяются: выпуск заблокирован до физического разделения staging и production PostgreSQL.
+
+## Что исправлено
+
+- «Добавить тендер» больше не открывает отдельную упрощённую форму в drawer.
+  Кнопка ведёт на `/tenders/new`, как «Новая заявка» ведёт на `/requests/new`.
+- Новый тендер использует существующий request editor pattern:
+  `request-final-editor-shell`, `request-v2-layout`, боковую навигацию,
+  «Быстрое заполнение», смысловые секции и sticky actions.
+- Поля тендера не копируют заявку по смыслу: сохранены закупка, заказчик,
+  площадка, номер процедуры, публикация, срок подачи, НМЦК, регион, юрлицо,
+  источник, ссылка и первичная заметка.
+- Demo-создание остаётся синтетическим: draft временно передаётся через
+  sessionStorage только между `/tenders/new` и `/tenders`, после чтения
+  удаляется и не отправляется в business API / PostgreSQL.
+- Доска тендеров снова использует общий `requests-board` visual contract:
+  ширина колонки 228 px на desktop, min-height 360 px, общая геометрия карточек,
+  stage-dot badge и preview action как в заявках.
+- Убраны отдельный `tender-board-column` adapter и select смены этапа из каждой
+  карточки тендера. Доменные данные карточки сохранены.
+- Аналитика тендеров в этой исправляющей итерации не менялась.
+
+## Проверки
+
+Проверенный runtime/test SHA до удаления временного workflow:
+`ada6fb671ef2ecb8ec6f224a1040716ea80ab198`.
+Удаление временного QA workflow не меняет runtime-код.
+
+- 115 unit / contract tests: pass, 0 fail.
+- TypeScript: pass.
+- ESLint: pass; остаются ранее существовавшие warnings в соседних модулях.
+- Production build: pass.
+- PostgreSQL integration / Pages demo в штатном CI: pass.
+- Playwright tender browser QA: 13/13.
+- Responsive: 1440 / 1024 / 768 / 390 px, light и dark.
+- Проверены table / board / analytics / preview / `/tenders/new`,
+  ephemeral demo create, Excel, saved views и overflow.
+- Тест доски отдельно проверяет request geometry: desktop column width ≈228 px
+  и min-height не меньше 360 px.
+- Нет uncaught JavaScript errors и business-write requests в demo QA.
+
+---
+
+## Предыдущий checkpoint
+
 # OPERIS · Тендеры: создание и аналитика
 
 Дата: 06.10.2026. База: beta `6956a32a2da9cac14e8f2295d2be360bca67d173`.
