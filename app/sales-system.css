@@ -4100,9 +4100,19 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 @media(max-width:600px){.sales-workspace .tender-registry .tender-table :is(td,th).registry-pinned-cell{position:static;box-shadow:none}.sales-workspace .tender-registry .tender-board-column{flex-basis:210px;width:210px;min-width:210px}.tender-preview-facts>div{grid-template-columns:120px minmax(0,1fr)}}
 
 /* Tender entity: shared sales surfaces; wide work tabs and compact overview rail. */
+/* Tender text-flow guards: creation and all entity tabs must wrap instead of colliding. */
+.sales-workspace .request-intake-unified .tender-create-workspace :is(.request-v2-nav-summary,.request-v2-section>header,.request-v2-section>header>div:first-child){min-width:0}
+.sales-workspace .request-intake-unified .tender-create-workspace .request-v2-nav-summary :is(strong,span),
+.sales-workspace .request-intake-unified .tender-create-workspace .request-v2-section>header :is(h2,p){min-width:0;overflow-wrap:anywhere}
+.sales-workspace .request-intake-unified .tender-create-workspace .request-v2-sticky>div{min-width:0;flex-wrap:wrap}
+.sales-workspace .request-intake-unified .tender-create-workspace .request-v2-sticky :is(span,small){overflow-wrap:anywhere}
 .sales-workspace .tender-entity{min-width:0}
 .sales-workspace .tender-entity .tender-overview-grid{align-items:start}
 .sales-workspace .tender-entity :is(.request-entity-main,.request-entity-side,.section,.form-grid){min-width:0}
+.sales-workspace .tender-entity :is(.section-head,.tender-analysis-head,.tender-section-head,.tender-submission-head)>div{min-width:0}
+.sales-workspace .tender-entity :is(.section-head,.tender-analysis-head,.tender-section-head,.tender-submission-head) :is(h2,h3,p,strong){min-width:0;overflow-wrap:anywhere}
+.sales-workspace .tender-entity .tender-analysis-summary-strip>div{min-width:0}
+.sales-workspace .tender-entity .tender-analysis-summary-strip :is(strong,span){overflow-wrap:anywhere}
 .sales-workspace .tender-entity .request-entity-side{position:static}
 .sales-workspace .tender-entity :is(.page-header h1,.request-entity-facts strong,.key-value strong,.tender-overview-summary,.tender-document-list strong){overflow-wrap:anywhere}
 .sales-workspace .tender-entity .status{display:inline-flex;gap:6px;padding:0;background:transparent;border:0;border-radius:0;font-size:12px}
