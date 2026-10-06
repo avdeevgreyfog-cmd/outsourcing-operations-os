@@ -39,6 +39,41 @@ async function bounded(page, name) {
   await page.screenshot({ path: `${output}/${name}.png`, fullPage: true });
   assert.ok(sizes.actual <= sizes.width + 1, `${name}: document overflow ${JSON.stringify(sizes)}`);
 }
+async function assertCleanTextFlow(page, scope, name) {
+  const issues = await page.locator(scope).evaluate(root => {
+    const containers = [
+      ...root.querySelectorAll('.request-v2-nav-summary,.request-v2-section>header,.section-head,.tender-analysis-head,.tender-section-head,.tender-submission-head,.tender-comments header')
+    ].filter(element => {
+      const style=getComputedStyle(element), rect=element.getBoundingClientRect();
+      return style.display!=='none' && style.visibility!=='hidden' && rect.width>0 && rect.height>0;
+    });
+    const selectors='h1,h2,h3,h4,p,strong,span,small';
+    const collisions=[];
+    for (const container of containers) {
+      const candidates=[...container.querySelectorAll(selectors)].filter(element => {
+        if (element.closest('[hidden]')) return false;
+        const style=getComputedStyle(element), rect=element.getBoundingClientRect();
+        return style.display!=='none' && style.visibility!=='hidden' && rect.width>0 && rect.height>0 && (element.textContent??'').trim();
+      });
+      for (let i=0;i<candidates.length;i++) for (let j=i+1;j<candidates.length;j++) {
+        const a=candidates[i], b=candidates[j];
+        if (a.contains(b)||b.contains(a)) continue;
+        const ar=a.getBoundingClientRect(), br=b.getBoundingClientRect();
+        const overlapX=Math.min(ar.right,br.right)-Math.max(ar.left,br.left);
+        const overlapY=Math.min(ar.bottom,br.bottom)-Math.max(ar.top,br.top);
+        if (overlapX>1 && overlapY>1) collisions.push({
+          container:container.className||container.tagName,
+          a:(a.textContent??'').trim().slice(0,80),
+          b:(b.textContent??'').trim().slice(0,80),
+          overlapX:Math.round(overlapX*10)/10,
+          overlapY:Math.round(overlapY*10)/10
+        });
+      }
+    }
+    return collisions.slice(0,20);
+  });
+  assert.deepEqual(issues, [], `${name}: text blocks overlap ${JSON.stringify(issues)}`);
+}
 async function layout(page) {
   return page.locator('.tender-table').evaluate(table => ({
     headers: Array.from(table.querySelectorAll('thead th')).map(cell => cell.getAttribute('aria-label') ?? cell.textContent.trim()),
@@ -207,6 +242,36 @@ try {
       await page.getByLabel('Скрыть пустые колонки', { exact: true }).uncheck(); await dock(page, '.tender-board', 'Горизонтальная прокрутка доски тендеров');
     } finally { await context.close(); }
   });
+  await scenario('tender create sections and entity tabs have clean text flow', async () => {
+    for (const width of [1440, 390]) {
+      const context = await contextFor(width, 'light'); const page = await context.newPage();
+      try {
+        await goto(page, '/tenders/new');
+        const createTabs = [
+          ['Быстрое заполнение', 'quick'],
+          ['Закупка', 'purchase'],
+          ['Условия и привязка', 'conditions'],
+        ];
+        for (const [label, key] of createTabs) {
+          await page.locator('.request-v2-nav').getByRole('button', { name: new RegExp(label) }).click();
+          await page.locator('.tender-create-workspace .request-v2-section').waitFor();
+          await assertCleanTextFlow(page, '.tender-create-workspace', `create-${key}-${width}`);
+          await bounded(page, `create-${key}-${width}-light`);
+        }
+
+        await goto(page);
+        const href = await page.locator('.tender-table tbody a.cell-title').first().getAttribute('href');
+        assert.ok(href?.startsWith('/tenders/'));
+        for (const tab of ['overview','analysis','documents','calculations','approvals','submission','history']) {
+          await goto(page, `${href}?tab=${tab}`);
+          await page.locator('.tender-entity').waitFor();
+          await assertCleanTextFlow(page, '.tender-entity', `entity-${tab}-${width}`);
+          await bounded(page, `entity-${tab}-${width}-light`);
+        }
+      } finally { await context.close(); }
+    }
+  });
+
   for (const storageMode of ['malformed', 'blocked']) await scenario(`${storageMode} view preference storage`, async () => {
     const context = await contextFor();
     await context.addInitScript(({ mode, prefix }) => {
