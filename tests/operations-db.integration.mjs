@@ -18,20 +18,38 @@ try{
         AND c.column_name='organization_id'
         AND t.table_type='BASE TABLE'
         AND c.table_name<>'sessions'
+    ),
+    policies AS (
+      SELECT tablename,
+        count(*)::int policy_count,
+        bool_or(
+          COALESCE(qual,'') ILIKE '%app_current_organization_id()%'
+          AND COALESCE(with_check,qual,'') ILIKE '%app_current_organization_id()%'
+        ) tenant_policy
+      FROM pg_policies
+      WHERE schemaname='public'
+      GROUP BY tablename
     )
-    SELECT tt.table_name,pc.relrowsecurity rls_enabled,count(pp.policyname)::int policy_count
+    SELECT tt.table_name,
+      pc.relrowsecurity rls_enabled,
+      pc.relforcerowsecurity rls_forced,
+      COALESCE(p.policy_count,0)::int policy_count,
+      COALESCE(p.tenant_policy,false) tenant_policy
     FROM tenant_tables tt
     JOIN pg_class pc ON pc.relname=tt.table_name
     JOIN pg_namespace pn ON pn.oid=pc.relnamespace AND pn.nspname='public'
-    LEFT JOIN pg_policies pp ON pp.schemaname='public' AND pp.tablename=tt.table_name
-    GROUP BY tt.table_name,pc.relrowsecurity
-    HAVING NOT pc.relrowsecurity OR count(pp.policyname)=0
+    LEFT JOIN policies p ON p.tablename=tt.table_name
+    WHERE NOT pc.relrowsecurity
+       OR NOT pc.relforcerowsecurity
+       OR COALESCE(p.policy_count,0)=0
+       OR NOT COALESCE(p.tenant_policy,false)
     ORDER BY tt.table_name
   `;
+  if(tenantRlsRows.length)console.error("Tenant RLS violations:",JSON.stringify(tenantRlsRows,null,2));
   assert.equal(
     tenantRlsRows.length,
     0,
-    "Every tenant table with organization_id must enable RLS and define at least one tenant policy",
+    "Every tenant table with organization_id must FORCE RLS and define a policy bound to app_current_organization_id() for reads and writes",
   );
 
   const migrations=await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
@@ -44,6 +62,7 @@ try{
   assert.ok(migrations.some(row=>row.filename==="0048_supply_norm_inheritance.sql"),"supply norm inheritance migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0049_object_finance_incident_workflows.sql"),"object finance/incident workflow migration must be applied");
   assert.ok(migrations.some(row=>row.filename==="0050_object_document_metadata.sql"),"object document metadata migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0065_internal_requests_and_expense_flow.sql"),"internal request / expense flow migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const [object]=await sql`SELECT id,owner_user_id,client_company_id FROM objects WHERE organization_id=${org}::uuid ORDER BY created_at LIMIT 1`;
@@ -353,6 +372,62 @@ try{
   const [approvalRow]=await sql`SELECT subject_type,status FROM approval_instances WHERE id=${approval}::uuid`;
   assert.equal(approvalRow.subject_type,"supply_request");
   assert.equal(approvalRow.status,"pending");
+
+  const [legalEntity]=await sql`SELECT id FROM legal_entities WHERE organization_id=${org}::uuid AND active ORDER BY is_primary DESC,name LIMIT 1`;
+  const [orgUnit]=await sql`SELECT id FROM organization_units WHERE organization_id=${org}::uuid AND active ORDER BY sort_order,name LIMIT 1`;
+  assert.ok(legalEntity?.id&&orgUnit?.id,"internal request context must provide legal entity and organization unit");
+
+  const internalPayment=randomUUID();
+  await sql`
+    INSERT INTO supply_requests(
+      id,organization_id,object_id,legal_entity_id,organization_unit_id,request_type,category_code,priority,urgency_reason,title,description,
+      amount,vendor,source_name,source_url,needed_by,status,payment_status,created_by_user_id
+    )
+    VALUES(
+      ${internalPayment}::uuid,${org}::uuid,NULL,${legalEntity.id}::uuid,${orgUnit.id}::uuid,'payment','recruiting_advertising','urgent','Integration deadline',
+      'Integration Avito payment','Recruiting advertising balance',30000,'Avito','Avito','https://www.avito.ru/',current_date+3,
+      'approved','pending',${director}::uuid
+    )
+  `;
+  const [internalPaymentRow]=await sql`
+    SELECT object_id "objectId",category_code "categoryCode",payment_status "paymentStatus",legal_entity_id "legalEntityId",organization_unit_id "orgUnitId"
+    FROM supply_requests WHERE id=${internalPayment}::uuid
+  `;
+  assert.equal(internalPaymentRow.objectId,null,"company/department expense request must not require an object");
+  assert.equal(internalPaymentRow.categoryCode,"recruiting_advertising");
+  assert.equal(internalPaymentRow.paymentStatus,"pending");
+  assert.equal(internalPaymentRow.legalEntityId,legalEntity.id);
+  assert.equal(internalPaymentRow.orgUnitId,orgUnit.id);
+
+  const internalExpense=randomUUID();
+  await sql`
+    INSERT INTO company_expenses(
+      id,organization_id,legal_entity_id,organization_unit_id,expense_date,category,amount,vendor,reference,plan_fact,created_by_user_id,supply_request_id
+    )
+    VALUES(
+      ${internalExpense}::uuid,${org}::uuid,${legalEntity.id}::uuid,${orgUnit.id}::uuid,current_date,'recruiting_advertising',30000,
+      'Avito','Integration internal request fact','fact',${director}::uuid,${internalPayment}::uuid
+    )
+  `;
+  const [expenseContext]=await sql`
+    SELECT legal_entity_id "legalEntityId",organization_unit_id "orgUnitId",supply_request_id "supplyRequestId"
+    FROM company_expenses WHERE id=${internalExpense}::uuid
+  `;
+  assert.equal(expenseContext.legalEntityId,legalEntity.id,"company expense must preserve payer legal entity");
+  assert.equal(expenseContext.orgUnitId,orgUnit.id,"company expense must preserve cost center");
+  assert.equal(expenseContext.supplyRequestId,internalPayment);
+
+  const requestRoleGrants=await sql`
+    SELECT rt.code,pg.capability,pg.scope_type
+    FROM permission_grants pg JOIN role_templates rt ON rt.id=pg.role_template_id
+    WHERE rt.organization_id=${org}::uuid AND (
+      (rt.code='recruiter' AND pg.capability IN ('procurement.read','procurement.create'))
+      OR (rt.code='finance_economist' AND pg.capability IN ('procurement.read','procurement.create','procurement.finance'))
+    )
+  `;
+  assert.ok(requestRoleGrants.some(row=>row.code==="recruiter"&&row.capability==="procurement.create"&&row.scope_type==="own_created"),"recruiter must create only own internal requests");
+  assert.ok(requestRoleGrants.some(row=>row.code==="recruiter"&&row.capability==="procurement.read"&&row.scope_type==="own_created"),"recruiter must follow own internal requests");
+  assert.ok(requestRoleGrants.some(row=>row.code==="finance_economist"&&row.capability==="procurement.finance"&&row.scope_type==="all_org"),"finance must own the payment queue");
 
   const exit=randomUUID();
   await sql`

@@ -99,3 +99,9 @@ export function requestBucket(row: Pick<RequestBoardRow,"archivedAt"|"workflowSt
 export function stageByCode(stages: RequestStageDefinition[], code: string) {
   return stages.find((stage) => stage.code === code) ?? defaultRequestStages.find((stage) => stage.code === code) ?? defaultRequestStages[0];
 }
+
+/** Consistent labels for built-in sources; custom Russian labels remain intact. */
+export function requestSourceLabel(source: string | null) {
+  const labels: Record<string, string> = { manual: "Менеджер", public_form: "Внешняя форма", referral: "Рекомендация", website: "Сайт", email: "Почта", phone: "Телефон" };
+  return source ? labels[source] ?? (source.includes("_") ? "Другой источник" : source) : "Не указан";
+}

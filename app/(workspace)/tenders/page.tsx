@@ -1,7 +1,7 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import {requireActor} from "@/lib/auth/server";
-import {hasCapability} from "@/lib/core/access.mjs";
-import {getTenderOptions,listTenders} from "@/lib/tenders/service";
+import {canReadRow,hasCapability} from "@/lib/core/access.mjs";
+import {getTenderOptions,listTenders,getTenderSnapshotTime} from "@/lib/tenders/service";
 import {getTenderAnalytics,normalizeTenderAnalyticsFilters} from "@/lib/tenders/analytics";
 import {canConfigureTenderAnalytics,getTenderAnalyticsMetricPreferences} from "@/lib/tenders/analytics-metrics";
 import {userTenderSamples} from "@/lib/tenders/demo-user-samples";
@@ -35,10 +35,10 @@ export default async function TendersPage({searchParams}:{searchParams:Promise<S
     getTenderAnalytics(actor,analyticsFilters),
     getTenderAnalyticsMetricPreferences(actor),
   ]);
-  const visibleRows=actor.demo?[...userTenderSamples,...rows]:rows;
+  const visibleRows=actor.demo?[...userTenderSamples.filter(row=>canReadRow(actor.access,"sales.tender.read",row,actor)),...rows]:rows;
   const initialView=params.view==="analytics"?"analytics":params.view==="board"?"board":"list";
   return <>
-    <PageHeader eyebrow="Коммерция → Продажи" title="Тендеры" subtitle="Реестр закупок: анализ условий, Bid / No Bid, расчёт, согласование, подготовка, подача и результат." breadcrumbs={[{label:"Коммерция"},{label:"Тендеры"}]}/>
+    <PageHeader eyebrow="Коммерция → Продажи" title="Тендеры" subtitle="Реестр закупок: анализ условий, решение об участии, расчёт, согласование, подготовка, подача и результат." breadcrumbs={[{label:"Коммерция"},{label:"Тендеры"}]}/>
     <TendersWorkspace
       rows={visibleRows}
       options={options}
@@ -47,6 +47,10 @@ export default async function TendersPage({searchParams}:{searchParams:Promise<S
       canConfigureAnalytics={canConfigureTenderAnalytics(actor)}
       initialView={initialView}
       demo={actor.demo}
+      now={getTenderSnapshotTime()}
+      preferenceScope={`${actor.organizationId}:${actor.membershipId}:${actor.roleCode}:${actor.demo?"demo":"live"}:${actor.access.capabilities.filter(cap=>cap==="*"||cap.startsWith("sales.tender.")).sort().join(",")}:${actor.access.denies?.filter(cap=>cap.startsWith("sales.tender.")).sort().join(",")??""}:${actor.accessPreview?.targetType??"self"}:${actor.accessPreview?.targetId??"self"}`}
+      canSubmit={hasCapability(actor.access,"sales.tender.submit")}
+      editableIds={actor.demo?[]:visibleRows.filter(row=>canReadRow(actor.access,"sales.tender.edit",row,actor)).map(row=>row.id)}
       canCreate={actor.demo||hasCapability(actor.access,"sales.tender.create")}
       canImport={actor.demo||hasCapability(actor.access,"sales.tender.import")}
       canEdit={hasCapability(actor.access,"sales.tender.edit")}

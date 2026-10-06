@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import type { Actor } from "@/lib/access/types";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
-import { db, withTenant } from "@/lib/db/client";
+import { withTenant } from "@/lib/db/client";
+import { registerPublicRequestToken, resolvePublicRequestToken } from "@/lib/commercial/public-request-token-directory";
 import { getCommercialRequest } from "@/lib/commercial/service";
 import {
   normalizeRequestIntake,
@@ -72,7 +73,7 @@ export async function createRequestPublicLink(actor: Actor, requestId: string, e
   if (!request) throw new Error("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", request, actor)) throw new AccessDeniedError("sales.request.edit");
   const token = randomBytes(24).toString("base64url");
-  return withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+  return withTenant(actor.organizationId, actor.userId, async (tx) => {
     await tx`UPDATE request_public_links SET revoked_at=COALESCE(revoked_at,now()) WHERE request_id=${requestId}::uuid AND revoked_at IS NULL`;
     const [row] = await tx<Array<{id:string;expiresAt:string|null}>>`
       INSERT INTO request_public_links(organization_id,request_id,token,created_by_user_id,expires_at)
@@ -80,8 +81,9 @@ export async function createRequestPublicLink(actor: Actor, requestId: string, e
         CASE WHEN ${expiresInDays}::int IS NULL THEN NULL ELSE now()+(${expiresInDays}::int * interval '1 day') END)
       RETURNING id,expires_at::text "expiresAt"
     `;
+    await registerPublicRequestToken(tx,token,actor.organizationId,actor.userId,"request_public_link",row.id);
     return { ...row, path: `/request-form/${token}` };
-  }));
+  });
 }
 
 export async function revokeRequestPublicLink(actor: Actor, requestId: string, linkId: string) {
@@ -97,16 +99,17 @@ export async function revokeRequestPublicLink(actor: Actor, requestId: string, l
 }
 
 export async function getPublicRequestContext(token: string): Promise<PublicRequestContext | null> {
-  const sql = db();
-  const [link] = await sql<Array<{id:string;organizationId:string;requestId:string;createdByUserId:string;expiresAt:string|null}>>`
-    SELECT id,organization_id "organizationId",request_id "requestId",created_by_user_id "createdByUserId",expires_at::text "expiresAt"
-    FROM request_public_links
-    WHERE token=${token} AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now())
-    LIMIT 1
-  `;
-  if (!link) return null;
-  await sql`UPDATE request_public_links SET last_opened_at=now() WHERE id=${link.id}::uuid`;
-  return withTenant(link.organizationId, link.createdByUserId, async (tenantSql) => {
+  const resolved=await resolvePublicRequestToken(token,"request_public_link");
+  if(!resolved)return null;
+  return withTenant(resolved.tenantId,resolved.actorUserId,async(tenantSql)=>{
+    const [link]=await tenantSql<Array<{id:string;requestId:string;expiresAt:string|null}>>`
+      SELECT id,request_id "requestId",expires_at::text "expiresAt"
+      FROM request_public_links
+      WHERE id=${resolved.linkId}::uuid AND token=${token} AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now())
+      LIMIT 1
+    `;
+    if(!link)return null;
+    await tenantSql`UPDATE request_public_links SET last_opened_at=now() WHERE id=${link.id}::uuid`;
     const [request] = await tenantSql<Array<{
       organizationName:string;requestId:string;title:string;company:string;location:string;regionId:string|null;startDate:string|null;durationText:string|null;
       schedule:Record<string,unknown>;lunchPaid:boolean;vatMode:string|null;housingRule:string|null;travelRule:string|null;shuttleRule:string|null;ppeRule:string|null;
@@ -133,18 +136,24 @@ export async function getPublicRequestContext(token: string): Promise<PublicRequ
 }
 
 export async function submitPublicRequest(token: string, payload: PublicRequestSubmissionPayload) {
-  const sql = db();
-  const [link] = await sql<Array<{id:string;organizationId:string;requestId:string}>>`
-    SELECT id,organization_id "organizationId",request_id "requestId"
-    FROM request_public_links WHERE token=${token} AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now()) LIMIT 1
-  `;
-  if (!link) throw new Error("Ссылка недействительна или срок её действия истёк");
-  const [row] = await sql<Array<{id:string}>>`
-    INSERT INTO request_public_submissions(organization_id,request_id,public_link_id,payload)
-    VALUES (${link.organizationId}::uuid,${link.requestId}::uuid,${link.id}::uuid,${sql.json(toJsonValue(payload))}) RETURNING id
-  `;
-  await sql`UPDATE request_public_links SET submitted_at=now() WHERE id=${link.id}::uuid`;
-  return row;
+  const resolved=await resolvePublicRequestToken(token,"request_public_link");
+  if(!resolved)throw new Error("Ссылка недействительна или срок её действия истёк");
+  return withTenant(resolved.tenantId,resolved.actorUserId,async(sql)=>{
+    const [link]=await sql<Array<{id:string;requestId:string}>>`
+      SELECT id,request_id "requestId"
+      FROM request_public_links
+      WHERE id=${resolved.linkId}::uuid AND token=${token} AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now())
+      LIMIT 1
+    `;
+    if(!link)throw new Error("Ссылка недействительна или срок её действия истёк");
+    const [row]=await sql<Array<{id:string}>>`
+      INSERT INTO request_public_submissions(organization_id,request_id,public_link_id,payload)
+      VALUES (${resolved.tenantId}::uuid,${link.requestId}::uuid,${link.id}::uuid,${sql.json(toJsonValue(payload))})
+      RETURNING id
+    `;
+    await sql`UPDATE request_public_links SET submitted_at=now() WHERE id=${link.id}::uuid`;
+    return row;
+  });
 }
 
 export async function reviewPublicSubmission(actor: Actor, requestId: string, submissionId: string, decision: "accept" | "reject", comment: string | null) {
@@ -155,7 +164,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
   if (!canReadRow(actor.access, "sales.request.edit", current, actor)) throw new AccessDeniedError("sales.request.edit");
   if (current.archivedAt || ["accepted","launched"].includes(current.status)) throw new Error("Зафиксированную заявку нельзя обновить из внешней формы");
 
-  return withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+  return withTenant(actor.organizationId, actor.userId, async (tx) => {
     const [submission] = await tx<Array<{status:string;payload:PublicRequestSubmissionPayload}>>`
       SELECT status,payload FROM request_public_submissions WHERE id=${submissionId}::uuid AND request_id=${requestId}::uuid FOR UPDATE
     `;
@@ -175,10 +184,10 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
 
     await tx`
       UPDATE requests SET title=${payload.title},location_text=${payload.location},region_id=${payload.regionId}::uuid,
-        expected_start_date=${payload.startDate}::date,duration_text=${payload.durationText},schedule_json=${sql.json(toJsonValue(payload.schedule))},lunch_paid=${payload.lunchPaid},
+        expected_start_date=${payload.startDate}::date,duration_text=${payload.durationText},schedule_json=${tx.json(toJsonValue(payload.schedule))},lunch_paid=${payload.lunchPaid},
         vat_mode=${payload.vatMode},housing_rule=${payload.housingRule},travel_rule=${payload.travelRule},shuttle_rule=${payload.shuttleRule},ppe_rule=${payload.ppeRule},
         medical_rule=${payload.medicalRule},citizenship_rule=${payload.citizenshipRule},tools_rule=${payload.toolsRule},comments=${payload.comments},
-        intake_json=${sql.json(toJsonValue(payload.intake))},updated_at=now()
+        intake_json=${tx.json(toJsonValue(payload.intake))},updated_at=now()
       WHERE id=${requestId}::uuid
     `;
 
@@ -193,14 +202,14 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
           throw new Error("Нельзя менять специальность позиции, по которой уже создан расчёт");
         }
         await tx`
-          UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${sql.json(toJsonValue(role.schedule))},
-            requirements_json=${sql.json(toJsonValue(role.requirements))},target_client_rate=${role.targetClientRate}
+          UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${tx.json(toJsonValue(role.schedule))},
+            requirements_json=${tx.json(toJsonValue(role.requirements))},target_client_rate=${role.targetClientRate}
           WHERE id=${role.id}::uuid AND request_id=${requestId}::uuid
         `;
       } else {
         await tx`
           INSERT INTO request_roles(organization_id,request_id,specialty_id,count_required,schedule_json,requirements_json,target_client_rate)
-          VALUES (${actor.organizationId}::uuid,${requestId}::uuid,${role.specialtyId}::uuid,${role.count},${sql.json(toJsonValue(role.schedule))},${sql.json(toJsonValue(role.requirements))},${role.targetClientRate})
+          VALUES (${actor.organizationId}::uuid,${requestId}::uuid,${role.specialtyId}::uuid,${role.count},${tx.json(toJsonValue(role.schedule))},${tx.json(toJsonValue(role.requirements))},${role.targetClientRate})
         `;
       }
     }
@@ -212,5 +221,5 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
 
     await tx`UPDATE request_public_submissions SET status='accepted',reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),review_comment=${comment} WHERE id=${submissionId}::uuid`;
     return { status: "accepted" };
-  }));
+  });
 }

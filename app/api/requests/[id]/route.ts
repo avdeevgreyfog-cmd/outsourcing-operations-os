@@ -57,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     requireCapability(actor, capability);
     if (!canReadRow(actor.access, capability, current, actor)) throw new AccessDeniedError(capability);
 
-    const result = await withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+    const result = await withTenant(actor.organizationId, actor.userId, async (tx) => {
       if (body.action === "archive") {
         if (current.archivedAt) return { id, status: current.status, archived: true };
         await tx`UPDATE requests SET archived_at=now(),archived_by_user_id=${actor.userId}::uuid,updated_at=now() WHERE id=${id}::uuid`;
@@ -88,8 +88,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           location_text=${body.location ?? current.location},region_id=${body.regionId === undefined ? current.regionId : body.regionId}::uuid,
           expected_start_date=${body.startDate === undefined ? current.startDate : body.startDate}::date,
           duration_text=${body.durationText === undefined ? current.durationText : body.durationText},
-          schedule_json=${sql.json(asJsonValue(body.schedule ?? current.schedule))},
-          intake_json=CASE WHEN ${body.intake === undefined} THEN intake_json ELSE ${sql.json(asJsonValue(body.intake ?? {}))} END,
+          schedule_json=${tx.json(asJsonValue(body.schedule ?? current.schedule))},
+          intake_json=CASE WHEN ${body.intake === undefined} THEN intake_json ELSE ${tx.json(asJsonValue(body.intake ?? {}))} END,
           lunch_paid=${body.lunchPaid === undefined ? current.lunchPaid : body.lunchPaid},
           vat_mode=${body.vatMode === undefined ? current.vatMode : body.vatMode},housing_rule=${body.housingRule === undefined ? current.housingRule : body.housingRule},
           travel_rule=${body.travelRule === undefined ? current.travelRule : body.travelRule},shuttle_rule=${body.shuttleRule === undefined ? current.shuttleRule : body.shuttleRule},
@@ -111,14 +111,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               throw new Error("Нельзя менять профессию позиции после создания расчёта. Добавьте новую позицию, чтобы сохранить историю");
             }
             await tx`
-              UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${sql.json(role.schedule)},
-                requirements_json=${sql.json(role.requirements)},target_client_rate=${role.targetClientRate ?? null}
+              UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${tx.json(role.schedule)},
+                requirements_json=${tx.json(role.requirements)},target_client_rate=${role.targetClientRate ?? null}
               WHERE id=${role.id}::uuid AND request_id=${id}::uuid
             `;
           } else {
             await tx`
               INSERT INTO request_roles(organization_id,request_id,specialty_id,count_required,schedule_json,requirements_json,target_client_rate)
-              VALUES (${actor.organizationId}::uuid,${id}::uuid,${role.specialtyId}::uuid,${role.count},${sql.json(role.schedule)},${sql.json(role.requirements)},${role.targetClientRate ?? null})
+              VALUES (${actor.organizationId}::uuid,${id}::uuid,${role.specialtyId}::uuid,${role.count},${tx.json(role.schedule)},${tx.json(role.requirements)},${role.targetClientRate ?? null})
             `;
           }
         }
@@ -131,7 +131,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       }
       return { id, status: current.status, archived: false };
-    }));
+    });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Проверьте заполнение полей", issues: error.issues }, { status: 400 });

@@ -5,8 +5,8 @@
 - **Thesis:** dense, quiet Russian operations software for an eight-hour workday.
 - **Signature:** object-centric contextual workspaces that keep lineage visible without expanding the global navigation.
 - **Palette:** white canvas, neutral gray hierarchy, orange action accent; green/amber/red/blue only for semantics.
-- **Typography:** Segoe UI Variable with verified Cyrillic coverage; 12–14 px working text, 24 px page headings.
-- **Layout:** desktop-first, 252 px hierarchical sidebar, compact 68 px mode, maximum working width 1680 px.
+- **Typography:** Segoe UI Variable with verified Cyrillic coverage; 12–14 px working text, 28 px page headings in the migrated commercial/registry scope; preserve other module contexts until reviewed.
+- **Layout:** desktop-first, 238 px hierarchical sidebar, compact 68 px mode, maximum working width 1680 px.
 - **Surfaces:** 7 px controls, 9 px panels, borders before shadows, cards only for bounded working surfaces.
 - **Motion:** short state transitions only; reduced-motion respected.
 
@@ -24,7 +24,7 @@ Organization Core uses two complementary working modes inside the existing shell
 
 ## Data grid
 
-Current foundation supports sticky headings and identity column, search, sorting, selection, show/hide columns and row navigation. Column resize/reorder, saved views, grouping and virtualization remain Phase 3.
+Workers and Requests implement resize/reorder, saved views, pinning and two-level grouping through shared registry controls. Other grids retain their existing capabilities until explicitly migrated; virtualization is not implied by this adoption. Selection and pagination remain module-specific. The dated October amendment in `docs/OPERIS_PROJECT_VISUAL_BASELINE.md` governs migrated geometry; historical phase labels do not override implemented and approved scope.
 
 ## States
 
@@ -46,12 +46,14 @@ Requests → Analytics. No second command center has been introduced.
 
 ### Contract
 
-- Existing Segoe UI family and Cyrillic content. Page title 28 px, entity title / main
-  table identity 14 px, working controls 13 px, supporting metadata 12 px.
+- Existing Segoe UI family and Cyrillic content. Page title 28 px, entity title 14 px,
+  working controls 13 px and supporting metadata 12 px. The migrated October registry
+  identity is 13 px / 600; historical 14 px table identity remains outside that scope.
 - Existing canvas, panel and semantic tokens. Light-theme primary button uses dark
   orange with white text; dark-theme primary uses orange with near-black text.
-- Four unboxed metrics with quiet separators, consistent across the sales registries.
-  No outcomes means “—”, not a fabricated 0% success rate.
+- Historical sales screens use four unboxed metrics with quiet separators. Metrics
+  are not mandatory above every registry: Requests places them in Analytics, without
+  a duplicate registry KPI row. No denominator means “—”, not a fabricated 0% rate.
 - A view/action toolbar, followed by filters when needed. Search has a visible icon,
   accessible name and clear action. Segment buttons expose `aria-pressed`.
 - Panels 10 px, controls 7 px, spaces 12 / 18 / 20 px. Border-only default panels.
@@ -98,6 +100,37 @@ scrolling. Preserve the document preview's separate white print surface.
 Development remains Next.js. `scripts/dev.mjs` translates the supervised preview's
 host flag, retaining native Next behavior; `terminal.local` is an allowed development
 origin only. Local demo environment settings are ignored, never published as secrets.
+
+
+## Tenders alignment with registry standard v1.3 (5 October 2026)
+
+The dated 5 October amendment extends the shared registry geometry and controls to
+`/tenders`; it does not imply a portfolio-wide visual migration. Tenders retain all
+20 domain columns (the original 8 in the default view), domain workflows, detailed server/API forms
+and the existing nine board stages. Tables use 42 px headers and 60 px rows, identity
+13 px / 600 and secondary text 12 px. The shared column/group controls and viewport
+scroll dock are used. Saved browser-scoped views include layout, filters and sorting,
+exclude free-text query, and support two grouping levels. The top modes are Table,
+Board and Analytics; KPI summaries stay inside Analytics.
+
+The tender board uses 228 px columns on desktop and 210 px at viewport widths up to
+600 px. Keyboard moves require effective `sales.tender.edit` plus row-level access;
+moving into Submitted additionally requires `sales.tender.submit`. Completion is an
+explicit card action with a required result, not a board drag. The native modal
+commercial drawer is 490 px wide (max 100vw).
+
+Analytics uses persisted stage events: the creation cohort is based on tenders created
+inside the selected period, while calendar activity can include older tenders. No
+synthetic demo history is generated; unverified backfill is excluded. Missing budget or
+headcount means an unknown denominator (`—`). A legacy trigger did not record a history
+event when the latest stored outcome was cleared, so exact clear dates cannot be
+reconstructed or invented. Demo additions live only in page memory, disappear on reload
+and are excluded from analytics. No domain API, database schema or migration changed.
+
+Production `main` is unchanged; branch `ui/tenders-registry-standard` is based on
+`beta` SHA `6c5d8f1`. Preview is for verification, not promotion. Do not infer current QA
+from historical Workers/Requests verification counts; tender QA status is reported
+separately after checks actually run.
 
 
 ## Sidebar and portfolio (10 September 2026)
@@ -151,3 +184,69 @@ origin only. Local demo environment settings are ignored, never published as sec
   are used instead of CSS inversion.
 - The product symbol is intentionally compact and name-agnostic. It is safe for the
   30 px collapsed sidebar mark while the final product name remains a separate decision.
+
+
+## Requests pattern (4 October 2026)
+
+- Keep Table, Board and Analytics in the top navigation with principal actions.
+  KPI belongs in Analytics. The registry control bar places search, stage and extra
+  filters on the left; saved view, grouping, columns, sorting and save controls on
+  the right. At narrower widths the same bar wraps without duplicate controls.
+  This replaces the earlier primary/secondary-row proposal.
+- Controls expand inline and return focus on Escape. Stage is the primary quick
+  filter; terminal stages select the completed bucket. Active, Completed, Archive
+  and Unassigned presets remain available. Preferences are versioned, scoped to
+  organization/membership and hydrated before writing; search is not persisted.
+- The board reuses the recruiting board's quiet columns, counts, compact cards and
+  semantic stage dots. Empty columns can be hidden. Archive is read-only; existing
+  stage permissions and the required loss-reason workflow still govern changes.
+- Analytics retains the trapezoid funnel with readable labels outside the shape.
+  Calendar events include older requests; cohort conversions use the selected new
+  requests. Only recorded stages count as reached. Pending and lost are separate.
+  Drilldown uses exact scoped request IDs. Demo analytics uses the same merged demo
+  records as the registry and explicitly identifies absent historical events.
+- Manager entry starts with a compact call form and shares state with the six
+  detailed sections. Drafts may be incomplete; saving is explicit. Unsaved edits
+  warn on reload or link navigation. All commercial fields, imports, role schedules
+  and calculations remain available; there is no second editor or inferred pricing.
+- External new-request intake uses the existing single active organization link.
+  Show its owner, actual expiry and submission count; only its creator or an
+  authorized pipeline administrator may revoke it. Clarifying an existing request
+  remains a separate action in its card. Public contact validation requires a usable
+  phone or email. Tenant checks and creation reuse one transaction; no schema change.
+- Verification: 71 unit/contract tests, TypeScript, ESLint and production build;
+  browser workflows and 1440/1024/768/390 light/dark captures on isolated demo.
+  The four public intake steps were checked using an isolated local fixture and
+  intercepted submission (16 additional captures). Database-backed external
+  submission is not covered by that browser run.
+
+
+### Requests alignment with registry v4 (4 October 2026)
+
+Requests and Workers share column/grouping controls and the viewport horizontal scroll dock. Persisted layouts are normalized against each module's permitted columns; order, width (110–480 px), pinning and two grouping levels survive reload. Saved views include filters and sorting but exclude free-text search. Requests keep summary cells to two lines and expose client/location/roles as optional independent columns. Board scrolling uses the same dock without replacing its native scrollbar.
+
+Analytics uses funnel/gaps and inflow/outcomes grids; event charts compare calendar buckets as grouped bars, while cumulative cohort conversion is a separate unsmoothed line. Tooltips show the actual date intervals for both series. Unknown denominators stay unavailable. Stage details remain accessible in an expandable full-width section. The alignment iteration changes presentation and preferences, with no API, database or migration changes.
+
+
+### Canonical registry amendment (4 October 2026)
+
+The user-approved October amendment takes precedence over September dimensions only
+for migrated Workers and Requests. Code is implementation evidence, not automatic
+approval of every visual change. The 4 October scope is recorded in standard v1.2; the
+5 October tender extension is recorded in v1.3 and the autonomous
+`public/references/operis-ui-standard.html` catalogue document this scoped contract.
+
+- Header 42 px, row 60 px, identity 13 px / 600 and secondary line 12 px. Summary
+  cells contain at most two lines; independent domain columns remain available.
+- Controls 38 px with 7 px radius; tables 8 px and semantic panels 8–10 px by role.
+  Status is a semantic dot plus a Russian label, without a badge background.
+- All migrated surfaces and registry drawers inherit the light/dark tokens from
+  `app/globals.css`. Fixed light-only colors must not override the active theme.
+  The catalogue demonstrates tokens; it has no business-data persistence.
+- Requests board columns are 228 px desktop and 210 px at widths up to 600 px.
+  Other boards remain unchanged until individually reviewed. The viewport dock
+  augments native overflow and hides when no scrolling is needed or a modal opens.
+- Saved views persist preferences in the current browser, within existing scope
+  and capabilities. They do not synchronize devices or substitute server records.
+- `main` remains production; `beta` and feature Preview are review environments.
+  QA counts above describe dated iterations, not a guarantee about a newer release.

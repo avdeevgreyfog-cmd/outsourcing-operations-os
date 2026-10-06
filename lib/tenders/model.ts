@@ -31,8 +31,21 @@ export const tenderAssignmentLabels:Record<string,string>={
 export const tenderDocumentStatusLabels:Record<string,string>={
   available:"Есть в компании",update_needed:"Нужно обновить",prepare:"Нужно подготовить",requested:"Запрошен",ready:"Готов",not_required:"Не требуется",
 };
+export const tenderCalculationStatusLabels:Record<string,string>={
+  draft:"Черновик",review:"На проверке",accepted:"Принят",rejected:"Отклонён",superseded:"Заменён",
+};
+export const tenderApprovalStatusLabels:Record<string,string>={
+  pending:"На согласовании",approved:"Согласовано",rejected:"Отклонено",cancelled:"Отменено",
+};
+export const tenderApprovalProcessLabels:Record<string,string>={
+  tender_participation:"Участие",tender_bid:"Цена",tender_submission:"Подача",
+};
 
-export function tenderStageLabel(code:string){return tenderStages.find(item=>item.code===code)?.label??code;}
+export function tenderEnumLabel(labels:Record<string,string>,code:string|null|undefined,fallback="Не определено"){
+  return code?labels[code]??fallback:fallback;
+}
+
+export function tenderStageLabel(code:string){return tenderStages.find(item=>item.code===code)?.label??"Этап не определён";}
 
 export type DeadlineState={key:"overdue"|"today"|"urgent"|"week"|"later"|"none";label:string;days:number|null};
 export function tenderDeadlineState(value:string|null|undefined,now=new Date()):DeadlineState{

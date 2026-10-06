@@ -8,7 +8,7 @@ import { listCommercialCalculations } from "@/lib/commercial/calculation-list";
 import { getCalculationModels } from "@/lib/commercial/calculation-models";
 import { getCommercialRequest, listApprovals } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
-import { getCalculationScenarioSeed, getCalculationWorkspaceMeta, getRateReferencesForRoles, type CalculationWorkspaceMeta } from "@/lib/commercial/calculation-workspace";
+import { getCalculationScenarioSeed, getCalculationWorkspaceMeta, getRateReferencesForRoles, getSupplyKitReferencesForRoles, type CalculationWorkspaceMeta } from "@/lib/commercial/calculation-workspace";
 import { getCalculationStandards } from "@/lib/commercial/calculation-standards";
 import { PageHeader, Section, Status, EntityTabs } from "@/components/UI";
 import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
@@ -52,10 +52,13 @@ export default async function CalculationWorkspace({params,searchParams}:{params
     : tender
       ? tender.roles.map(role=>({id:role.id,specialtyId:role.specialtyId,specialty:role.title,count:role.count??1,schedule:role.schedule,targetClientRate:role.targetClientRate}))
       : [];
-  const rateReferences=hasCapability(actor.access,"calculation.rate_reference.read")
-    ? await getRateReferencesForRoles(actor,baseRoles,request?.regionId??tender?.regionId??meta.regionId,economicsDate)
-    : {};
-  const roles=baseRoles.map(role=>({...role,reference:rateReferences[role.id]??null}));
+  const [rateReferences,supplyKitReferences]=await Promise.all([
+    hasCapability(actor.access,"calculation.rate_reference.read")
+      ? getRateReferencesForRoles(actor,baseRoles,request?.regionId??tender?.regionId??meta.regionId,economicsDate)
+      : Promise.resolve({} as Awaited<ReturnType<typeof getRateReferencesForRoles>>),
+    getSupplyKitReferencesForRoles(actor,baseRoles,economicsDate),
+  ]);
+  const roles=baseRoles.map(role=>({...role,reference:rateReferences[role.id]??null,supplyKit:supplyKitReferences[role.id]??null}));
   const projectWorkers=roles.reduce((sum,role)=>sum+Number(role.count||0),0);
   const vatMode=request?.vatMode??(typeof tender?.conditions?.vatMode==="string"?tender.conditions.vatMode:null);
   const schedule=request?.schedule??{};
