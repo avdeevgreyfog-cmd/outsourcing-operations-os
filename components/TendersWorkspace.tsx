@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {Fragment,useEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from "react";
+import {Fragment,useEffect,useMemo,useRef,useState,type ReactNode} from "react";
 import {useRouter} from "next/navigation";
 import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Plus,X,Eye,ChevronRight,ArrowDownUp,ArrowUpRight,ExternalLink,RotateCcw} from "lucide-react";
 import {SalesDrawer,SalesEmpty,SalesSegments} from "@/components/sales/SalesUI";
@@ -16,6 +16,7 @@ import {TenderAnalytics} from "@/components/TenderAnalytics";
 import {tenderBillingLabels,tenderDeadlineState,tenderDecisionLabels,tenderPotentialLabels,tenderResultLabels,tenderStageLabel,tenderStages} from "@/lib/tenders/model";
 import {rub} from "@/lib/ui/format";
 import {TenderImportPanel,type TenderImportRow,type TenderImportResult} from "@/components/TenderImportPanel";
+import {TenderCreateForm,type TenderCreateDraft} from "@/components/TenderCreateForm";
 
 type View="list"|"board"|"analytics";
 
@@ -31,7 +32,6 @@ function uniqueKey(row:Pick<TenderRow,"platform"|"procedureNumber"|"sourceUrl"|"
   if(row.platform&&row.procedureNumber)return `procedure:${row.platform.toLowerCase()}:${row.procedureNumber.toLowerCase()}`;
   return `fallback:${row.title.toLowerCase()}:${row.customer.toLowerCase()}`;
 }
-function toIso(value:string){if(!value)return null;const date=new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString();}
 function toDemoRow(item:TenderImportRow):TenderRow{
   const now=new Date().toISOString();
   return {
@@ -78,6 +78,23 @@ function toDemoRow(item:TenderImportRow):TenderRow{
   };
 }
 
+function toDemoCreatedRow(item:TenderCreateDraft,options:TenderOptions):TenderRow{
+  const base=toDemoRow({
+    title:item.title,
+    customerName:item.customerName,
+    platform:item.platform,
+    procedureNumber:item.procedureNumber,
+    sourceUrl:item.sourceUrl,
+    publicationDate:item.publicationDate,
+    submissionDeadline:item.submissionDeadline,
+    initialPrice:item.initialPrice,
+    comment:item.comment,
+    sourceName:item.sourceName??"Ручной ввод",
+  });
+  const linkedClient=item.clientId?options.clients.find(client=>client.id===item.clientId):null;
+  return {...base,customer:linkedClient?.name??item.customerName??"Заказчик не указан",clientId:item.clientId,regionId:item.regionId,legalEntityId:item.legalEntityId};
+}
+
 function TenderStatus({row}:{row:TenderRow}) {
   const tone=row.stage==="completed"?(row.result==="won"?"good":row.result==="lost"?"bad":"neutral"):row.stage==="clarification"?"warn":row.stage==="submitted"?"good":"neutral";
   return <span className={`tender-status tender-status-${tone}`}><i aria-hidden="true"/>{row.stage==="completed"?(row.result?tenderResultLabels[row.result]??"Результат уточняется":"Завершён"):tenderStages.find(stage=>stage.code===row.stage)?.label??"Этап уточняется"}</span>;
@@ -115,6 +132,12 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     const keys=new Set(items.map(uniqueKey));const created:TenderRow[]=[];let skipped=0;
     for(const item of imported){const candidate=toDemoRow(item);const key=uniqueKey(candidate);if(keys.has(key)){skipped++;continue;}keys.add(key);created.push(candidate);}
     setLocalRows(current=>[...created,...current]);return {imported:created.length,skipped};
+  }
+  function addDemoTender(draft:TenderCreateDraft){
+    const candidate=toDemoCreatedRow(draft,options);
+    const key=uniqueKey(candidate);
+    if(items.some(row=>uniqueKey(row)===key)){setError("Такой тендер уже есть в текущем реестре.");return false;}
+    setLocalRows(current=>[candidate,...current]);setError("");return true;
   }
   const filtered=useMemo(()=>{
     const result=items.filter(row=>{
@@ -216,13 +239,19 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       <section className="tender-preview-section"><h3>Условия закупки</h3><dl className="tender-preview-facts"><div><dt>Начальная цена</dt><dd>{numeric(selected.initialPrice)===null?"—":rub(selected.initialPrice!)}</dd></div><div><dt>Тарификация</dt><dd>{tenderBillingLabels[selected.billingUnit]??"Уточняется"}</dd></div><div><dt>Потенциал</dt><dd>{tenderPotentialLabels[selected.potential]??"Уточняется"}</dd></div><div><dt>Площадка</dt><dd>{selected.platform??"—"}</dd></div><div><dt>Номер торга</dt><dd>{selected.procedureNumber??"—"}</dd></div><div><dt>Источник</dt><dd>{selected.sourceName??"—"}</dd></div></dl></section>
       <section className="tender-preview-section"><h3>Готовность</h3><dl className="tender-preview-facts"><div><dt>Позиции / расчёты</dt><dd>{selected.roleCount} / {selected.calculationCount}</dd></div><div><dt>Документы готовы</dt><dd>{selected.requirementCount?`${selected.readyRequirementCount} из ${selected.requirementCount}`:"Требования не заданы"}</dd></div><div><dt>Блокеры</dt><dd>{selected.blockerCount}</dd></div></dl>{selected.analysisSummary&&<p>{selected.analysisSummary}</p>}{selected.closeReason&&<p>{selected.closeReason}</p>}</section>
     </SalesDrawer>}
-    {demo&&demoCreateOpen&&<DemoTenderCreateDrawer onClose={()=>setDemoCreateOpen(false)} onCreate={item=>{addDemoRows([item]);setDemoCreateOpen(false);}}/>}
+    {demo&&demoCreateOpen&&<DemoTenderCreateDrawer options={options} onClose={()=>setDemoCreateOpen(false)} onCreate={draft=>{if(addDemoTender(draft))setDemoCreateOpen(false);}}/>}
   </div>;
 }
 
-function DemoTenderCreateDrawer({onClose,onCreate}:{onClose:()=>void;onCreate:(item:TenderImportRow)=>void}) {
-  const [form,setForm]=useState({title:"",customerName:"",platform:"",procedureNumber:"",sourceUrl:"",publicationDate:"",submissionDeadline:"",initialPrice:"",comment:""});
-  function update(key:keyof typeof form,value:string){setForm(current=>({...current,[key]:value}));}
-  function submit(event:FormEvent){event.preventDefault();if(form.title.trim().length<3)return;onCreate({title:form.title.trim(),customerName:form.customerName.trim()||null,platform:form.platform.trim()||null,procedureNumber:form.procedureNumber.trim()||null,sourceUrl:form.sourceUrl.trim()||null,publicationDate:form.publicationDate||null,submissionDeadline:toIso(form.submissionDeadline),initialPrice:form.initialPrice?Number(form.initialPrice):null,comment:form.comment.trim()||null,sourceName:"Ручной ввод"});}
-  return <SalesDrawer title="Добавить тендер" overline="Создание тендера" subtitle="Демонстрационная запись исчезнет после перезагрузки." onClose={onClose} footer={<><button className="button" type="button" onClick={onClose}>Отмена</button><button className="button primary" form="demo-tender-create" type="submit" disabled={form.title.trim().length<3}>Добавить тендер</button></>}><form id="demo-tender-create" onSubmit={submit}><div className="form-grid two"><label className="span-2"><span>Название тендера *</span><input required minLength={3} maxLength={300} value={form.title} onChange={event=>update("title",event.target.value)}/></label><label><span>Заказчик</span><input value={form.customerName} onChange={event=>update("customerName",event.target.value)}/></label><label><span>Площадка</span><input value={form.platform} onChange={event=>update("platform",event.target.value)}/></label><label><span>Номер торга</span><input value={form.procedureNumber} onChange={event=>update("procedureNumber",event.target.value)}/></label><label><span>Начальная цена, ₽</span><input type="number" min="0" step="any" value={form.initialPrice} onChange={event=>update("initialPrice",event.target.value)}/></label><label><span>Дата публикации</span><input type="date" value={form.publicationDate} onChange={event=>update("publicationDate",event.target.value)}/></label><label><span>Подача до</span><input type="datetime-local" value={form.submissionDeadline} onChange={event=>update("submissionDeadline",event.target.value)}/></label><label className="span-2"><span>Ссылка на закупку</span><input type="url" value={form.sourceUrl} onChange={event=>update("sourceUrl",event.target.value)}/></label><label className="span-2"><span>Комментарий</span><textarea rows={4} value={form.comment} onChange={event=>update("comment",event.target.value)}/></label></div></form></SalesDrawer>;
+function DemoTenderCreateDrawer({options,onClose,onCreate}:{options:TenderOptions;onClose:()=>void;onCreate:(draft:TenderCreateDraft)=>void}) {
+  const [valid,setValid]=useState(false);
+  return <SalesDrawer
+    title="Добавить тендер"
+    overline="Создание тендера"
+    subtitle="Зафиксируйте закупку по той же логике, что и рабочую заявку. Демонстрационная запись исчезнет после перезагрузки."
+    onClose={onClose}
+    footer={<><button className="button" type="button" onClick={onClose}>Отмена</button><button className="button primary" form="demo-tender-create" type="submit" disabled={!valid}>Добавить тендер</button></>}
+  >
+    <TenderCreateForm options={options} variant="drawer" formId="demo-tender-create" onDemoCreate={onCreate} onCancel={onClose} onValidityChange={setValid}/>
+  </SalesDrawer>;
 }
