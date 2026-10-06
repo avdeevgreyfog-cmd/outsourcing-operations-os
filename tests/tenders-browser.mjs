@@ -176,8 +176,10 @@ try {
       await goto(page);
       const add = page.getByRole('button', { name: 'Добавить тендер', exact: true }); await add.click(); await drawer(page, 1440);
       assert.equal(await page.getByRole('dialog').getByRole('button', { name: 'Добавить тендер', exact: true }).isDisabled(), true);
-      await page.getByLabel('Название тендера *', { exact: true }).fill('QA — временный тендер'); await page.getByRole('dialog').getByRole('textbox', { name: 'Заказчик', exact: true }).fill('QA Test Customer');
-      await page.getByLabel('Начальная цена, ₽', { exact: true }).fill('13579'); await bounded(page, 'create-1440-light');
+      await page.getByLabel('Название тендера *', { exact: true }).fill('QA — временный тендер'); await page.getByRole('dialog').getByLabel('Заказчик по закупке', { exact: true }).fill('QA Test Customer');
+      await page.getByLabel('НМЦК / начальная цена, ₽', { exact: true }).fill('13579'); await bounded(page, 'create-1440-light');
+      const createFields = await page.getByRole('dialog').locator('.tender-create-fields>label').evaluateAll(labels => labels.map(label => { const control=label.querySelector('input,select,textarea'); const outer=label.getBoundingClientRect(); const inner=control?.getBoundingClientRect(); return inner ? { left:inner.left,right:inner.right,top:inner.top,outerLeft:outer.left,outerRight:outer.right,outerTop:outer.top } : null; }).filter(Boolean));
+      assert.ok(createFields.length >= 8 && createFields.every(item => item.left >= item.outerLeft - 1 && item.right <= item.outerRight + 1 && item.top > item.outerTop), 'Tender create controls remain inside labelled fields');
       await page.getByRole('dialog').getByRole('button', { name: 'Добавить тендер', exact: true }).click();
       await page.locator('.tender-table .cell-title').filter({ hasText: 'QA — временный тендер' }).waitFor();
       const storage = await page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
@@ -224,7 +226,7 @@ try {
       await page.getByRole('group', { name: 'Вид тендеров', exact: true }).getByRole('button', { name: 'Доска', exact: true }).click(); await page.locator('.tender-board').waitFor();
       assert.equal(await page.locator('.tender-board').evaluate(el => el.scrollLeft), 0, 'Board begins at first stage');
       await page.locator('.tender-board').evaluate(el => { el.scrollLeft = 0; }); await bounded(page, `board-${width}-${theme}`);
-      await page.getByRole('group', { name: 'Вид тендеров', exact: true }).getByRole('button', { name: 'Аналитика', exact: true }).click(); await page.locator('.tender-funnel-row').first().waitFor(); await bounded(page, `analytics-${width}-${theme}`);
+      await page.getByRole('group', { name: 'Вид тендеров', exact: true }).getByRole('button', { name: 'Аналитика', exact: true }).click(); await page.locator('.request-funnel-readable-row').first().waitFor(); await bounded(page, `analytics-${width}-${theme}`);
       assert.equal(await page.locator('.tender-kpi-overview').count(), 1);
       const activeMetric = page.locator('.request-kpi-card').filter({ has: page.getByText('Активные тендеры', { exact: true }) });
       assert.equal(Number(await activeMetric.locator('strong').textContent()), activeCount, 'Operational analytics and registry share the same demo scope');
@@ -235,7 +237,7 @@ try {
       await page.getByRole('group', { name: 'Единица анализа', exact: true }).getByRole('button', { name: 'Численность', exact: true }).click();
       assert.ok((await page.locator('.tender-funnel-polygon strong').allTextContents()).every(text => text === '—'), 'Missing demo headcount remains unknown');
       const details = page.locator('.request-stage-details'); assert.equal(await details.getAttribute('open'), null); await details.locator('summary').click();
-      assert.equal(await details.locator('tbody tr').count(), await page.locator('.tender-funnel-row').count()); await bounded(page, `analytics-details-${width}-${theme}`);
+      assert.equal(await details.locator('tbody tr').count(), await page.locator('.request-funnel-readable-row').count()); await bounded(page, `analytics-details-${width}-${theme}`);
       await details.locator('summary').click();
     } finally { await context.close(); }
   });
