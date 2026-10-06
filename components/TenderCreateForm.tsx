@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect,useMemo,useState} from "react";
+import {useEffect,useMemo,useState,type FormEvent} from "react";
 import {useRouter} from "next/navigation";
 import type {TenderOptions} from "@/lib/tenders/service";
 
@@ -111,7 +111,7 @@ export function TenderCreateForm({
       comment:nullable(form.comment),
     };
   }
-  async function submit(event:React.FormEvent){
+  async function submit(event:FormEvent){
     event.preventDefault();
     if(busy||!valid)return;
     const payload=draft();
