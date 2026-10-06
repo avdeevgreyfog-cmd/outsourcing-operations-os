@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import XLSX from 'xlsx';
 
 // Run only against an isolated server with DEMO_MODE=true. All business write
-// requests are blocked: creation/import remain ephemeral React state.
+// requests are blocked: demo creation/import remain ephemeral browser state.
 const baseURL = process.env.BASE_URL ?? 'http://127.0.0.1:3000';
 const output = process.env.TENDERS_QA_OUTPUT ?? 'artifacts/tenders-qa';
 await mkdir(output, { recursive: true });
@@ -174,16 +174,20 @@ try {
       await page.keyboard.press('Escape');
       await goto(page, fullHref); await page.getByRole('heading', { name: title, exact: true }).waitFor();
       await goto(page);
-      const add = page.getByRole('button', { name: 'Добавить тендер', exact: true }); await add.click(); await drawer(page, 1440);
-      assert.equal(await page.getByRole('dialog').getByRole('button', { name: 'Добавить тендер', exact: true }).isDisabled(), true);
-      await page.getByLabel('Название тендера *', { exact: true }).fill('QA — временный тендер'); await page.getByRole('dialog').getByLabel('Заказчик по закупке', { exact: true }).fill('QA Test Customer');
-      await page.getByLabel('НМЦК / начальная цена, ₽', { exact: true }).fill('13579'); await bounded(page, 'create-1440-light');
-      const createFields = await page.getByRole('dialog').locator('.tender-create-fields>label').evaluateAll(labels => labels.map(label => { const control=label.querySelector('input,select,textarea'); const outer=label.getBoundingClientRect(); const inner=control?.getBoundingClientRect(); return inner ? { left:inner.left,right:inner.right,top:inner.top,outerLeft:outer.left,outerRight:outer.right,outerTop:outer.top } : null; }).filter(Boolean));
+      const add = page.getByRole('link', { name: 'Добавить тендер', exact: true }); assert.equal(await add.getAttribute('href'), '/tenders/new'); await add.click();
+      await page.locator('.tender-create-workspace').waitFor();
+      assert.equal(await page.getByRole('navigation').count(), 0);
+      assert.equal(await page.getByRole('button', { name: /Быстрое заполнение/ }).getAttribute('aria-pressed'), 'true');
+      await page.getByLabel('Название тендера *', { exact: true }).fill('QA — временный тендер');
+      await page.getByLabel('Заказчик по закупке', { exact: true }).fill('QA Test Customer');
+      await page.getByLabel('НМЦК / начальная цена, ₽', { exact: true }).fill('13579');
+      const createFields = await page.locator('.tender-create-workspace label').evaluateAll(labels => labels.map(label => { const control=label.querySelector('input,select,textarea'); const outer=label.getBoundingClientRect(); const inner=control?.getBoundingClientRect(); return inner ? { left:inner.left,right:inner.right,top:inner.top,outerLeft:outer.left,outerRight:outer.right,outerTop:outer.top } : null; }).filter(Boolean));
       assert.ok(createFields.length >= 8 && createFields.every(item => item.left >= item.outerLeft - 1 && item.right <= item.outerRight + 1 && item.top > item.outerTop), 'Tender create controls remain inside labelled fields');
-      await page.getByRole('dialog').getByRole('button', { name: 'Добавить тендер', exact: true }).click();
+      await bounded(page, 'create-1440-light');
+      await page.getByRole('button', { name: 'Добавить тендер', exact: true }).click();
       await page.locator('.tender-table .cell-title').filter({ hasText: 'QA — временный тендер' }).waitFor();
-      const storage = await page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
-      assert.ok(!storage.includes('QA — временный тендер') && !storage.includes('QA Test Customer') && !storage.includes('13579'));
+      const localStorageDump = await page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
+      assert.ok(!localStorageDump.includes('QA — временный тендер') && !localStorageDump.includes('QA Test Customer') && !localStorageDump.includes('13579'));
       const downloadPromise = page.waitForEvent('download'); await page.getByRole('button', { name: 'Выгрузить Excel', exact: true }).click();
       const download = await downloadPromise; assert.equal(download.suggestedFilename(), 'OPERIS_тендеры.xlsx');
       const path = `${output}/tenders-export.xlsx`; await download.saveAs(path);
@@ -194,10 +198,12 @@ try {
       await page.getByRole('group', { name: 'Вид тендеров', exact: true }).getByRole('button', { name: 'Доска', exact: true }).click(); await page.locator('.tender-board').waitFor();
       assert.equal(await page.locator('.tender-board').evaluate(el => el.scrollLeft), 0, 'Board starts with its first stage after table preview');
       assert.equal(await page.locator('.tender-board [draggable="true"],.tender-card-stage-select').count(), 0, 'Demo board offers no live stage mutations');
+      const boardGeometry = await page.locator('.tender-board > .sales-board-column').evaluateAll(columns => columns.map(column => ({ width: column.getBoundingClientRect().width, minHeight: getComputedStyle(column).minHeight })));
+      assert.ok(boardGeometry.length > 0 && boardGeometry.every(item => Math.abs(item.width - 228) <= 1 && Number.parseFloat(item.minHeight) >= 360), `Tender board follows Requests geometry ${JSON.stringify(boardGeometry)}`);
       const boardLink = page.locator('.tender-board a.cell-title').first(); assert.ok((await boardLink.getAttribute('href')).startsWith('/tenders/'));
-      const all = await page.locator('.tender-board-column').count();
+      const all = await page.locator('.tender-board > .sales-board-column').count();
       await page.getByLabel('Скрыть пустые колонки', { exact: true }).check();
-      assert.ok(await page.locator('.tender-board-column').count() < all); assert.equal(await page.locator('.sales-board-empty').count(), 0);
+      assert.ok(await page.locator('.tender-board > .sales-board-column').count() < all); assert.equal(await page.locator('.sales-board-empty').count(), 0);
       await bounded(page, 'occupied-board-1440-light');
       await page.getByLabel('Скрыть пустые колонки', { exact: true }).uncheck(); await dock(page, '.tender-board', 'Горизонтальная прокрутка доски тендеров');
     } finally { await context.close(); }
@@ -222,7 +228,8 @@ try {
       observations[`${width}-${theme}`] = { activeCount, completedCount };
       assert.equal(await page.locator('.tender-kpi-overview').count(), 0);
       await page.getByRole('button', { name: /^Просмотр:/ }).first().click(); await drawer(page, width); await bounded(page, `preview-${width}-${theme}`); await page.keyboard.press('Escape');
-      await page.getByRole('button', { name: 'Добавить тендер', exact: true }).click(); await drawer(page, width); await bounded(page, `create-${width}-${theme}`); await page.keyboard.press('Escape');
+      await page.getByRole('link', { name: 'Добавить тендер', exact: true }).click(); await page.locator('.tender-create-workspace').waitFor(); await bounded(page, `create-${width}-${theme}`);
+      await goto(page);
       await page.getByRole('group', { name: 'Вид тендеров', exact: true }).getByRole('button', { name: 'Доска', exact: true }).click(); await page.locator('.tender-board').waitFor();
       assert.equal(await page.locator('.tender-board').evaluate(el => el.scrollLeft), 0, 'Board begins at first stage');
       await page.locator('.tender-board').evaluate(el => { el.scrollLeft = 0; }); await bounded(page, `board-${width}-${theme}`);
