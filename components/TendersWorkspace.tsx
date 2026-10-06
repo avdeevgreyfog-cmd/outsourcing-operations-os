@@ -131,13 +131,18 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     const raw=window.sessionStorage.getItem(DEMO_TENDER_STORAGE_KEY);
     if(!raw)return;
     window.sessionStorage.removeItem(DEMO_TENDER_STORAGE_KEY);
-    try{
-      const draft=JSON.parse(raw) as TenderCreateDraft;
-      const candidate=toDemoCreatedRow(draft,options);
-      setLocalRows(current=>current.some(row=>uniqueKey(row)===uniqueKey(candidate))?current:[candidate,...current]);
-    }catch{
-      setError("Не удалось восстановить демонстрационный тендер после создания.");
-    }
+    let cancelled=false;
+    queueMicrotask(()=>{
+      if(cancelled)return;
+      try{
+        const draft=JSON.parse(raw) as TenderCreateDraft;
+        const candidate=toDemoCreatedRow(draft,options);
+        setLocalRows(current=>current.some(row=>uniqueKey(row)===uniqueKey(candidate))?current:[candidate,...current]);
+      }catch{
+        setError("Не удалось восстановить демонстрационный тендер после создания.");
+      }
+    });
+    return()=>{cancelled=true;};
   },[demo,options]);
   const items=useMemo(()=>demo?[...localRows,...rows]:rows,[demo,localRows,rows]);
   const editable=new Set(editableIds);
