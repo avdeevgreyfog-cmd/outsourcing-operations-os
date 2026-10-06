@@ -1,0 +1,48 @@
+name: Tender Browser QA Temporary
+
+on:
+  pull_request:
+    branches: [beta]
+
+jobs:
+  tender-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DEMO_MODE: "true"
+      SESSION_SECRET: "browser-qa-only-demo-mode"
+      TENDERS_QA_OUTPUT: "artifacts/tenders-qa"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build demo app
+        run: npm run build
+      - name: Run tender browser matrix
+        run: |
+          npm start > /tmp/operis-tender-browser.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/tenders >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = "60" ]; then
+              cat /tmp/operis-tender-browser.log
+              exit 1
+            fi
+            sleep 1
+          done
+          node tests/tenders-browser.mjs
+      - name: Upload tender QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tender-browser-qa
+          path: artifacts/tenders-qa
+          retention-days: 2
