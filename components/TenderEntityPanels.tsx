@@ -10,6 +10,9 @@ import {tenderAssignmentLabels,tenderBillingLabels,tenderDocumentStatusLabels,te
 const iso=tenderDateTimeIso;
 async function jsonRequest(url:string,method:string,body:unknown){const response=await fetch(url,{method,headers:{"content-type":"application/json"},body:JSON.stringify(body)});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось сохранить изменения");return json;}
 function condition(value:unknown){return typeof value==="string"?value:"";}
+const tenderBidVatModeLabels:Record<string,string>={unknown:"Не определено",with_vat:"С НДС",without_vat:"Без НДС",not_applicable:"НДС не применяется"};
+const tenderBidSourceLabels:Record<string,string>={submission:"Подача",auction:"Торги",correction:"Исправление",manual:"Ручная фиксация"};
+function tenderMoney(value:number|string|null|undefined){if(value==null)return "—";return new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(value));}
 
 export function TenderCoreEditor({tender,options,canEdit,canResult,canSubmit,mode="all"}:{tender:TenderDetail;options:TenderOptions;canEdit:boolean;canResult:boolean;canSubmit:boolean;mode?:"all"|"core"|"workflow"}){
   const router=useRouter();const [error,setError]=useState("");const [busy,setBusy]=useState(false);const [noBidOpen,setNoBidOpen]=useState(false);const [noBidReasonCode,setNoBidReasonCode]=useState(tender.noBidReasonCode??"");const [noBidComment,setNoBidComment]=useState(tender.noBidComment??"");
@@ -90,6 +93,87 @@ export function TenderDocumentsPanel({tender,options,canEdit}:{tender:TenderDeta
 
 export function TenderApprovalActions({tender,canEdit}:{tender:TenderDetail;canEdit:boolean}){const router=useRouter();const [state,setState]=useState("");const pending=tender.approvals.some(a=>a.status==="pending");async function submit(processCode:string){try{setState("Отправка…");await jsonRequest("/api/approvals","POST",{subjectType:"tender",subjectId:tender.id,processCode});setState("Отправлено на согласование");router.refresh();}catch(e){setState(e instanceof Error?e.message:"Ошибка");}}if(!canEdit)return null;return <section className="section"><h3>Новое согласование</h3><p className="muted">Используется общая очередь OPERIS. Согласующий определяется правилами ответственности и организационной структурой.</p><div className="tender-approval-buttons"><button className="button" type="button" disabled={pending} onClick={()=>void submit("tender_participation")}>Согласовать участие</button><button className="button" type="button" disabled={pending} onClick={()=>void submit("tender_bid")}>Согласовать цену</button><button className="button" type="button" disabled={pending} onClick={()=>void submit("tender_submission")}>Разрешить подачу</button></div>{pending&&<p className="muted">По тендеру уже есть активное согласование.</p>}{state&&<p className="muted">{state}</p>}</section>}
 
-export function TenderSubmissionEditor({tender,canEdit,canSubmit}:{tender:TenderDetail;canEdit:boolean;canSubmit:boolean}){const router=useRouter();const defaults=tender.submissionChecklist.length?tender.submissionChecklist:!canEdit?[]:[{id:"calculation",label:"Экономика рассчитана и согласована",done:false},{id:"decision",label:"Решение об участии согласовано",done:false},{id:"documents",label:"Пакет документов готов",done:false},{id:"price",label:"Финальная цена зафиксирована",done:false},{id:"signature",label:"Итоговые файлы подписаны",done:false},{id:"platform",label:"Комплект загружен на площадку",done:false}];const [checklist,setChecklist]=useState(defaults);const [price,setPrice]=useState(tender.finalBidValue==null?"":String(tender.finalBidValue));const [reference,setReference]=useState(tender.bidReference??"");const [note,setNote]=useState(tender.submissionNote??"");const [state,setState]=useState("");const ready=checklist.filter(x=>x.done).length;
-  async function save(markSubmitted=false){try{setState("Сохранение…");await jsonRequest(`/api/tenders/${tender.id}`,"PATCH",{action:"submission",finalBidValue:price?Number(price):null,bidReference:reference||null,submissionNote:note||null,checklist,markSubmitted});setState(markSubmitted?"Подача зафиксирована":"Сохранено");router.refresh();}catch(e){setState(e instanceof Error?e.message:"Ошибка");}}
-  return <section className="section"><div className="tender-submission-head"><div><h3>Готовность к подаче</h3><p>{checklist.length?`${ready} из ${checklist.length} пунктов`:"Чек-лист не задан"}</p></div><strong>{checklist.length?`${Math.round(ready/checklist.length*100)}%`:"—"}</strong></div>{!tender.submissionChecklist.length&&canEdit&&<p className="muted">Предложен начальный чек-лист. Он сохранится после сохранения подготовки.</p>}<div className="tender-submit-checklist">{checklist.map(item=><label key={item.id}><input type="checkbox" checked={item.done} disabled={!canEdit} onChange={e=>setChecklist(v=>v.map(x=>x.id===item.id?{...x,done:e.target.checked}:x))}/><span>{item.label}</span></label>)}</div><div className="form-grid two"><label><span>Финальная цена / сумма</span><input type="number" min="0" disabled={!canEdit} value={price} onChange={e=>setPrice(e.target.value)}/></label><label><span>№ заявки / подтверждение площадки</span><input disabled={!canEdit} value={reference} onChange={e=>setReference(e.target.value)}/></label><label className="span-2"><span>Комментарий по подаче</span><textarea rows={4} disabled={!canEdit} value={note} onChange={e=>setNote(e.target.value)}/></label></div>{canEdit&&<div className="tender-submit-actions"><button className="button" type="button" onClick={()=>void save(false)}>Сохранить подготовку</button>{canSubmit&&tender.stage!=="submitted"&&tender.stage!=="awaiting_result"&&tender.stage!=="completed"&&<button className="button primary" type="button" onClick={()=>void save(true)}><Send size={14}/> Зафиксировать подачу</button>}</div>}{state&&<p className="muted">{state}</p>}{tender.submittedAt&&<p className="form-success"><Check size={14}/> Подано {formatTenderDateTime(tender.submittedAt)}{tender.submittedBy?` · ${tender.submittedBy}`:""}</p>}</section>}
+export function TenderSubmissionEditor({tender,canEdit,canSubmit}:{tender:TenderDetail;canEdit:boolean;canSubmit:boolean}){
+  const router=useRouter();
+  const defaults=tender.submissionChecklist.length?tender.submissionChecklist:!canEdit?[]:[{id:"calculation",label:"Экономика рассчитана и согласована",done:false},{id:"decision",label:"Решение об участии согласовано",done:false},{id:"documents",label:"Пакет документов готов",done:false},{id:"price",label:"Финальная цена зафиксирована",done:false},{id:"signature",label:"Итоговые файлы подписаны",done:false},{id:"platform",label:"Комплект загружен на площадку",done:false}];
+  const initialVatMode=typeof tender.conditions.vatMode==="string"&&tender.conditions.vatMode in tenderBidVatModeLabels?tender.conditions.vatMode:"unknown";
+  const [checklist,setChecklist]=useState(defaults);
+  const [price,setPrice]=useState(tender.finalBidValue==null?"":String(tender.finalBidValue));
+  const [priceVatMode,setPriceVatMode]=useState(initialVatMode);
+  const [reference,setReference]=useState(tender.bidReference??"");
+  const [note,setNote]=useState(tender.submissionNote??"");
+  const [state,setState]=useState("");
+  const ready=checklist.filter(x=>x.done).length;
+  const priceLocked=Boolean(tender.submittedAt);
+  async function save(markSubmitted=false){
+    try{
+      setState("Сохранение…");
+      await jsonRequest(`/api/tenders/${tender.id}`,"PATCH",{action:"submission",finalBidValue:price?Number(price):null,priceVatMode,bidReference:reference||null,submissionNote:note||null,checklist,markSubmitted});
+      setState(markSubmitted?"Подача зафиксирована":"Сохранено");
+      router.refresh();
+    }catch(e){setState(e instanceof Error?e.message:"Ошибка");}
+  }
+  return <section className="section"><div className="tender-submission-head"><div><h3>Готовность к подаче</h3><p>{checklist.length?`${ready} из ${checklist.length} пунктов`:"Чек-лист не задан"}</p></div><strong>{checklist.length?`${Math.round(ready/checklist.length*100)}%`:"—"}</strong></div>
+    {!tender.submissionChecklist.length&&canEdit&&<p className="muted">Предложен начальный чек-лист. Он сохранится после сохранения подготовки.</p>}
+    <div className="tender-submit-checklist">{checklist.map(item=><label key={item.id}><input type="checkbox" checked={item.done} disabled={!canEdit} onChange={e=>setChecklist(v=>v.map(x=>x.id===item.id?{...x,done:e.target.checked}:x))}/><span>{item.label}</span></label>)}</div>
+    <div className="form-grid two">
+      <label><span>Финальная цена / сумма</span><input type="number" min="0" disabled={!canEdit||priceLocked} value={price} onChange={e=>setPrice(e.target.value)}/>{priceLocked&&<small className="muted">После подачи цена изменяется только через вкладку «Торги».</small>}</label>
+      <label><span>НДС в цене</span><select disabled={!canEdit||priceLocked} value={priceVatMode} onChange={e=>setPriceVatMode(e.target.value)}>{Object.entries(tenderBidVatModeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <label><span>№ заявки / подтверждение площадки</span><input disabled={!canEdit} value={reference} onChange={e=>setReference(e.target.value)}/></label>
+      <label className="span-2"><span>Комментарий по подаче</span><textarea rows={4} disabled={!canEdit} value={note} onChange={e=>setNote(e.target.value)}/></label>
+    </div>
+    {canEdit&&<div className="tender-submit-actions"><button className="button" type="button" onClick={()=>void save(false)}>Сохранить подготовку</button>{canSubmit&&tender.stage!=="submitted"&&tender.stage!=="awaiting_result"&&tender.stage!=="completed"&&<button className="button primary" type="button" onClick={()=>void save(true)}><Send size={14}/> Зафиксировать подачу</button>}</div>}
+    {state&&<p className="muted">{state}</p>}
+    {tender.submittedAt&&<p className="form-success"><Check size={14}/> Подано {formatTenderDateTime(tender.submittedAt)}{tender.submittedBy?` · ${tender.submittedBy}`:""}</p>}
+  </section>;
+}
+
+export function TenderTradingPanel({tender,canSubmit,canReadEconomics}:{tender:TenderDetail;canSubmit:boolean;canReadEconomics:boolean}){
+  const router=useRouter();
+  const rounds=useMemo(()=>[...tender.bidRounds].sort((a,b)=>b.roundNumber-a.roundNumber),[tender.bidRounds]);
+  const initialVatMode=typeof tender.conditions.vatMode==="string"&&tender.conditions.vatMode in tenderBidVatModeLabels?tender.conditions.vatMode:"unknown";
+  const [form,setForm]=useState({bidValue:tender.finalBidValue==null?"":String(tender.finalBidValue),priceVatMode:initialVatMode,occurredAt:"",reference:"",note:""});
+  const [state,setState]=useState("");
+  const canTrade=canSubmit&&["submitted","awaiting_result"].includes(tender.stage);
+  const latest=rounds[0]??null;
+  const latestMargin=latest?.economics?.status==="complete"?latest.economics.marginPct:null;
+  function reduction(value:number|string){const initial=Number(tender.initialPrice);const current=Number(value);return Number.isFinite(initial)&&initial>0&&Number.isFinite(current)?(initial-current)/initial*100:null;}
+  const latestCut=latest?reduction(latest.bidValue):null;
+  async function addRound(){
+    try{
+      setState("Сохранение…");
+      await jsonRequest(`/api/tenders/${tender.id}/bids`,"POST",{bidValue:Number(form.bidValue),priceVatMode:form.priceVatMode,occurredAt:tenderDateTimeIso(form.occurredAt),reference:form.reference||null,note:form.note||null});
+      setForm(v=>({...v,occurredAt:"",reference:"",note:""}));
+      setState("Раунд зафиксирован");
+      router.refresh();
+    }catch(e){setState(e instanceof Error?e.message:"Ошибка");}
+  }
+  return <div className="tender-tab-stack">
+    <section className="section">
+      <h3>Торги и история цены</h3>
+      <p className="muted">Каждая фактически поданная цена сохраняется отдельным неизменяемым раундом. Ошибочную запись не переписывают — добавляют новый раунд с пояснением.</p>
+      {!canReadEconomics&&<p className="muted">Цена доступна по тендеру, но для просмотра себестоимости и маржи нужен доступ к расчётам экономики.</p>}
+      <div className="request-entity-facts">
+        <article><span>Текущая цена</span><strong>{tenderMoney(tender.finalBidValue)}</strong><small>{latest?tenderBidVatModeLabels[latest.priceVatMode]??"Режим НДС не определён":"Раундов пока нет"}</small></article>
+        <article><span>Раундов</span><strong>{rounds.length}</strong><small>{latest?`Последний: ${formatTenderDateTime(latest.occurredAt)}`:"История ещё не начата"}</small></article>
+        <article><span>Снижение от НМЦК</span><strong>{latestCut==null?"—":`${latestCut.toFixed(2)}%`}</strong><small>{tender.initialPrice==null?"НМЦК не указана":"По номинальной цене площадки"}</small></article>
+        <article><span>Маржа последнего раунда</span><strong>{latestMargin==null?"—":`${Number(latestMargin).toFixed(2)}%`}</strong><small>{latest?.economics?.status==="incomplete"?"Недостаточно сопоставимой экономики":latestMargin==null?"Нет доступного снимка":"По зафиксированному cost snapshot"}</small></article>
+      </div>
+      {rounds.length?<div className="grid-scroll"><table className="data-table"><thead><tr><th>Раунд</th><th>Время</th><th>Цена</th><th>Снижение от НМЦК</th><th>Маржа</th><th>Источник</th><th>Зафиксировал</th></tr></thead><tbody>{rounds.map(round=>{const cut=reduction(round.bidValue);return <tr key={round.id}><td>№ {round.roundNumber}</td><td>{formatTenderDateTime(round.occurredAt)}</td><td><strong>{tenderMoney(round.bidValue)}</strong><span className="cell-sub">{tenderBidVatModeLabels[round.priceVatMode]??"НДС не определён"}</span></td><td>{cut==null?"—":`${cut.toFixed(2)}%`}</td><td>{round.economics?.status==="complete"&&round.economics.marginPct!=null?<><strong>{Number(round.economics.marginPct).toFixed(2)}%</strong><span className="cell-sub">Себестоимость: {tenderMoney(round.economics.totalCostNet)}</span></>:round.economics?<><span>—</span><span className="cell-sub">{round.economics.missing[0]??"Недостаточно данных"}</span></>:<span>—</span>}</td><td>{tenderBidSourceLabels[round.source]??"Раунд"}{round.reference&&<span className="cell-sub">{round.reference}</span>}{round.note&&<span className="cell-sub">{round.note}</span>}</td><td>{round.recordedBy??"Система"}</td></tr>})}</tbody></table></div>:<p className="muted">История торгов пока пуста. Первая цена будет зафиксирована при подаче или при добавлении раунда.</p>}
+    </section>
+    {canTrade&&<section className="section">
+      <h3>Новый раунд</h3>
+      <p className="muted">Маржа рассчитывается только если у всех позиций есть принятые сценарии утверждённой экономики, сопоставимый объём и единицы тарификации.</p>
+      <div className="form-grid two">
+        <label><span>Цена раунда</span><input type="number" min="0.01" step="0.01" value={form.bidValue} onChange={e=>setForm(v=>({...v,bidValue:e.target.value}))}/></label>
+        <label><span>НДС в цене</span><select value={form.priceVatMode} onChange={e=>setForm(v=>({...v,priceVatMode:e.target.value}))}>{Object.entries(tenderBidVatModeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label><span>Время раунда (МСК)</span><input type="datetime-local" value={form.occurredAt} onChange={e=>setForm(v=>({...v,occurredAt:e.target.value}))}/><small className="muted">Если не заполнить, будет использовано текущее время.</small></label>
+        <label><span>Протокол / номер шага</span><input value={form.reference} onChange={e=>setForm(v=>({...v,reference:e.target.value}))} placeholder="Например, шаг 3 или номер протокола"/></label>
+        <label className="span-2"><span>Комментарий</span><textarea rows={3} value={form.note} onChange={e=>setForm(v=>({...v,note:e.target.value}))} placeholder="Причина изменения цены, контекст торгов…"/></label>
+      </div>
+      <div className="tender-submit-actions"><button className="button primary" type="button" disabled={!form.bidValue||Number(form.bidValue)<=0} onClick={()=>void addRound()}>Зафиксировать раунд</button></div>
+      {state&&<p className={state==="Раунд зафиксирован"?"form-success":"muted"}>{state}</p>}
+    </section>}
+    {canSubmit&&!canTrade&&tender.stage!=="completed"&&<section className="section"><p className="muted">Добавление раундов станет доступно после фиксации подачи тендера.</p></section>}
+  </div>;
+}
