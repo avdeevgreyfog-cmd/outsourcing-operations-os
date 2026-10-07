@@ -73,6 +73,7 @@ jobs:
           set -euo pipefail
           export CI_SMOKE_PASSWORD="$(node -e "process.stdout.write(require('node:crypto').randomBytes(24).toString('hex'))")"
           node scripts/prepare-ci-workspace-smoke.mjs
+          node scripts/prepare-commercial-editability-smoke.mjs
           npm start -- --hostname 127.0.0.1 --port 3100 >/tmp/operis-ci-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT
@@ -83,6 +84,7 @@ jobs:
             sleep 1
           done
           CI_SMOKE_BASE_URL=http://127.0.0.1:3100 node scripts/verify-ci-workspace-smoke.mjs || { echo "----- OPERIS server log -----"; cat /tmp/operis-ci-server.log; exit 1; }
+          CI_SMOKE_BASE_URL=http://127.0.0.1:3100 node scripts/verify-commercial-editability-smoke.mjs || { echo "----- OPERIS server log -----"; cat /tmp/operis-ci-server.log; exit 1; }
 
 
   pages-demo:
