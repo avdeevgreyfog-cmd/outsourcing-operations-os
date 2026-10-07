@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import {Fragment,useEffect,useMemo,useRef,useState,type ReactNode} from "react";
+import {Fragment,useEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from "react";
 import {useRouter} from "next/navigation";
-import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Plus,X,ChevronRight,ArrowDownUp,ArrowUpRight,ExternalLink,RotateCcw} from "lucide-react";
+import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Pencil,Plus,X,ChevronRight,ArrowDownUp,ArrowUpRight,ExternalLink,RotateCcw} from "lucide-react";
 import {SalesDrawer,SalesEmpty,SalesSegments} from "@/components/sales/SalesUI";
 import {TenderRegistryControls,useTenderRegistryPreferences} from "@/components/sales/TenderRegistryControls";
 import {HorizontalScrollDock} from "@/components/registry/HorizontalScrollDock";
@@ -108,6 +108,9 @@ function TenderTitle({row}:{row:TenderRow}) {
 }
 const numeric=(value:unknown)=>value===null||value===undefined||value===""?null:Number.isFinite(Number(value))?Number(value):null;
 const dateNumber=(value:string|null)=>value&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
+function inputDateTime(value:string|null){if(!value)return "";const date=new Date(value);if(Number.isNaN(date.getTime()))return "";const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,16);}
+function inputDate(value:string|null){if(!value)return "";const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toISOString().slice(0,10);}
+function isoDateTime(value:string){if(!value)return null;const date=new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString();}
 
 export function TendersWorkspace({rows,options,analytics,metricPreferences,canConfigureAnalytics,demo,canCreate,canImport,canEdit,canSubmit=false,editableIds=[],preferenceScope,now,initialView="list"}: {
   rows:TenderRow[];options:TenderOptions;analytics:TenderAnalyticsData;metricPreferences:TenderAnalyticsMetricPreference[];canConfigureAnalytics:boolean;
@@ -122,6 +125,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
   const [busyId,setBusyId]=useState<string|null>(null);
   const [error,setError]=useState("");
   const [selectedId,setSelectedId]=useState<string|null>(null);
+  const [demoEditing,setDemoEditing]=useState<TenderRow|null>(null);
   const [collapsedGroups,setCollapsedGroups]=useState<string[]>([]);
   const tableRef=useRef<HTMLDivElement>(null),boardRef=useRef<HTMLDivElement>(null);
   const resizing=useRef<{id:TenderColumnId;x:number;width:number}|null>(null);
@@ -144,7 +148,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     });
     return()=>{cancelled=true;};
   },[demo,options]);
-  const items=useMemo(()=>demo?[...localRows,...rows]:rows,[demo,localRows,rows]);
+  const items=useMemo(()=>{if(!demo)return rows;const overrides=new Set(localRows.map(row=>row.id));return [...localRows,...rows.filter(row=>!overrides.has(row.id))]},[demo,localRows,rows]);
   const editable=new Set(editableIds);
   const selected=items.find(row=>row.id===selectedId);
   const currentDate=useMemo(()=>new Date(now),[now]);
@@ -152,6 +156,29 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     const keys=new Set(items.map(uniqueKey));const created:TenderRow[]=[];let skipped=0;
     for(const item of imported){const candidate=toDemoRow(item);const key=uniqueKey(candidate);if(keys.has(key)){skipped++;continue;}keys.add(key);created.push(candidate);}
     setLocalRows(current=>[...created,...current]);return {imported:created.length,skipped};
+  }
+  function saveDemoEdit(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();if(!demoEditing)return;const fd=new FormData(event.currentTarget);
+    const initialPriceRaw=String(fd.get("initialPrice")??"").trim();
+    const next:TenderRow={...demoEditing,
+      title:String(fd.get("title")??"").trim(),
+      customer:String(fd.get("customer")??"").trim()||"Заказчик не указан",
+      platform:String(fd.get("platform")??"").trim()||null,
+      procedureNumber:String(fd.get("procedureNumber")??"").trim()||null,
+      sourceUrl:String(fd.get("sourceUrl")??"").trim()||null,
+      sourceName:String(fd.get("sourceName")??"").trim()||null,
+      publicationDate:String(fd.get("publicationDate")??"").trim()||null,
+      submissionDeadline:isoDateTime(String(fd.get("submissionDeadline")??"")),
+      initialPrice:initialPriceRaw?Number(initialPriceRaw):null,
+      stage:String(fd.get("stage")??demoEditing.stage) as TenderRow["stage"],
+      decision:String(fd.get("decision")??demoEditing.decision) as TenderRow["decision"],
+      priority:String(fd.get("priority")??demoEditing.priority) as TenderRow["priority"],
+      potential:String(fd.get("potential")??demoEditing.potential) as TenderRow["potential"],
+      nextActionText:String(fd.get("nextActionText")??"").trim()||null,
+      analysisSummary:String(fd.get("analysisSummary")??"").trim()||null,
+      updatedAt:new Date().toISOString(),
+    };
+    setLocalRows(current=>[next,...current.filter(row=>row.id!==next.id)]);setDemoEditing(null);setSelectedId(next.id);
   }
   const filtered=useMemo(()=>{
     const result=items.filter(row=>{
@@ -235,7 +262,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       <SalesSegments<View> label="Вид тендеров" value={view} variant="navigation" onChange={value=>{setView(value);router.replace(value==="list"?"/tenders":`/tenders?view=${value}`,{scroll:false});}} items={[{value:"list",label:"Таблица",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>},{value:"analytics",label:"Аналитика",icon:<ChartNoAxesCombined size={15}/>}]}/>
       <div className="sales-toolbar-actions"><button className="button" type="button" onClick={()=>void exportExcel()}><Download size={14}/> Выгрузить Excel</button>{canImport&&<TenderImportPanel canImport={canImport} demo={demo} onDemoImport={addDemoRows}/>}{canCreate&&<Link className="button primary" href="/tenders/new"><Plus size={14}/> Добавить тендер</Link>}</div>
     </div>
-    {demo&&<p className="tender-demo-notice" role="note">Демонстрационные данные. Добавление и импорт доступны для проверки интерфейса; новые записи исчезнут после перезагрузки. В аналитике они не учитываются.</p>}
+    {demo&&<p className="tender-demo-notice" role="note">Демонстрационные данные. Добавление, импорт и редактирование доступны для проверки интерфейса; изменения исчезнут после перезагрузки. В аналитике локальные изменения не учитываются.</p>}
     {error&&<div className="inline-message danger" role="alert">{error}<button className="icon-button" aria-label="Скрыть ошибку" onClick={()=>setError("")}><X size={15}/></button></div>}
     {view!=="analytics"&&<>
       <TenderRegistryControls {...preferences} rows={items} options={options} query={query} onQuery={setQuery} onExpandGroups={()=>setCollapsedGroups([])} board={view==="board"}/>
@@ -248,10 +275,35 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       <HorizontalScrollDock scrollRef={view==="list"?tableRef:boardRef} disabled={Boolean(selected)||!filtered.length} revision={`${view}:${settings.columns.join(",")}:${settings.group}:${settings.subgroup}:${filtered.map(row=>row.id).join(",")}`} label={view==="list"?"Горизонтальная прокрутка тендеров":"Горизонтальная прокрутка доски тендеров"}/>
     </>}
     {view==="analytics"&&<TenderAnalytics data={analytics} options={options} metricPreferences={metricPreferences} canConfigure={canConfigureAnalytics} demo={demo}/>}
-    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<>{!isClientDemoRow(selected)&&<Link className="button primary" href={`/tenders/${selected.id}`} onClick={()=>setSelectedId(null)}>Открыть карточку<ArrowUpRight size={15}/></Link>}{sourceHref(selected.sourceUrl)&&<a className="button" href={sourceHref(selected.sourceUrl)!} target="_blank" rel="noreferrer">Закупка на площадке<ExternalLink size={14}/></a>}</>}>
+    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<>{demo&&<button className="button" type="button" onClick={()=>{setDemoEditing(selected);setSelectedId(null)}}><Pencil size={14}/> Редактировать</button>}{!isClientDemoRow(selected)&&<Link className="button primary" href={`/tenders/${selected.id}`} onClick={()=>setSelectedId(null)}>Открыть карточку<ArrowUpRight size={15}/></Link>}{sourceHref(selected.sourceUrl)&&<a className="button" href={sourceHref(selected.sourceUrl)!} target="_blank" rel="noreferrer">Закупка на площадке<ExternalLink size={14}/></a>}</>}>
       <section className="tender-preview-section"><h3>Состояние и подача</h3><TenderStatus row={selected}/><dl className="tender-preview-facts"><div><dt>Решение</dt><dd>{tenderDecisionLabels[selected.decision]??"Уточняется"}</dd></div><div><dt>Подача до</dt><dd>{formatDate(selected.submissionDeadline)}</dd></div><div><dt>Срок</dt><dd>{tenderDeadlineState(selected.submissionDeadline,currentDate).label}</dd></div><div><dt>Ответственный</dt><dd>{selected.owner??"Не назначен"}</dd></div><div><dt>Следующее действие</dt><dd>{selected.nextActionText??"—"}</dd></div><div><dt>Дата действия</dt><dd>{formatDate(selected.nextActionAt)}</dd></div></dl></section>
       <section className="tender-preview-section"><h3>Условия закупки</h3><dl className="tender-preview-facts"><div><dt>Начальная цена</dt><dd>{numeric(selected.initialPrice)===null?"—":rub(selected.initialPrice!)}</dd></div><div><dt>Тарификация</dt><dd>{tenderBillingLabels[selected.billingUnit]??"Уточняется"}</dd></div><div><dt>Потенциал</dt><dd>{tenderPotentialLabels[selected.potential]??"Уточняется"}</dd></div><div><dt>Площадка</dt><dd>{selected.platform??"—"}</dd></div><div><dt>Номер торга</dt><dd>{selected.procedureNumber??"—"}</dd></div><div><dt>Источник</dt><dd>{selected.sourceName??"—"}</dd></div></dl></section>
       <section className="tender-preview-section"><h3>Готовность</h3><dl className="tender-preview-facts"><div><dt>Позиции / расчёты</dt><dd>{selected.roleCount} / {selected.calculationCount}</dd></div><div><dt>Документы готовы</dt><dd>{selected.requirementCount?`${selected.readyRequirementCount} из ${selected.requirementCount}`:"Требования не заданы"}</dd></div><div><dt>Блокеры</dt><dd>{selected.blockerCount}</dd></div></dl>{selected.analysisSummary&&<p>{selected.analysisSummary}</p>}{selected.closeReason&&<p>{selected.closeReason}</p>}</section>
+    </SalesDrawer>}
+    {demoEditing&&<SalesDrawer title="Редактировать тендер" subtitle="Демо-изменения действуют только до перезагрузки страницы." overline="Демонстрационный режим" onClose={()=>setDemoEditing(null)}
+      footer={<><button className="button" type="button" onClick={()=>setDemoEditing(null)}>Отмена</button><button className="button primary" type="submit" form="demo-tender-edit-form">Сохранить изменения</button></>}>
+      <form id="demo-tender-edit-form" className="client-create-form client-create-form-unified tender-demo-edit-form" onSubmit={saveDemoEdit}>
+        <section className="client-form-section"><div className="client-form-section-head"><strong>Закупка</strong><span>Основные данные реестра и карточки.</span></div>
+          <label><span>Название тендера <b>*</b></span><input name="title" required minLength={3} maxLength={300} defaultValue={demoEditing.title}/></label>
+          <label><span>Заказчик</span><input name="customer" maxLength={300} defaultValue={demoEditing.customer}/></label>
+          <label><span>Площадка</span><input name="platform" maxLength={160} defaultValue={demoEditing.platform??""}/></label>
+          <label><span>Номер закупки</span><input name="procedureNumber" maxLength={180} defaultValue={demoEditing.procedureNumber??""}/></label>
+          <label><span>Ссылка на закупку</span><input name="sourceUrl" type="url" maxLength={2000} defaultValue={demoEditing.sourceUrl??""}/></label>
+          <label><span>Источник</span><input name="sourceName" maxLength={180} defaultValue={demoEditing.sourceName??""}/></label>
+          <label><span>Дата публикации</span><input name="publicationDate" type="date" defaultValue={inputDate(demoEditing.publicationDate)}/></label>
+          <label><span>Подача до</span><input name="submissionDeadline" type="datetime-local" defaultValue={inputDateTime(demoEditing.submissionDeadline)}/></label>
+          <label><span>НМЦК / начальная цена, ₽</span><input name="initialPrice" type="number" min="0" step="any" defaultValue={demoEditing.initialPrice??""}/></label>
+        </section>
+        <section className="client-form-section"><div className="client-form-section-head"><strong>Рабочее состояние</strong><span>Для проверки воронки можно менять этап и решение.</span></div>
+          <label><span>Этап</span><select name="stage" defaultValue={demoEditing.stage}>{tenderStages.map(stage=><option key={stage.code} value={stage.code}>{stage.label}</option>)}</select></label>
+          <label><span>Решение</span><select name="decision" defaultValue={demoEditing.decision}><option value="undecided">Не определено</option><option value="participate">Участвуем</option><option value="needs_clarification">Нужно уточнение</option><option value="no_bid">Не участвуем</option></select></label>
+          <label><span>Приоритет</span><select name="priority" defaultValue={demoEditing.priority}><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option></select></label>
+          <label><span>Потенциал</span><select name="potential" defaultValue={demoEditing.potential}><option value="low">Низкий</option><option value="medium">Средний</option><option value="high">Высокий</option></select></label>
+          <label><span>Следующее действие</span><input name="nextActionText" maxLength={1000} defaultValue={demoEditing.nextActionText??""}/></label>
+          <label><span>Аналитическая заметка</span><textarea name="analysisSummary" maxLength={12000} defaultValue={demoEditing.analysisSummary??""}/></label>
+        </section>
+        <p className="client-demo-note">В рабочем контуре изменения сохраняются через API и права доступа. Здесь данные меняются только локально для проверки интерфейса.</p>
+      </form>
     </SalesDrawer>}
   </div>;
 }
