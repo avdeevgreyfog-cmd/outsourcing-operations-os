@@ -1,3 +1,34 @@
+# OPERIS · Защита staging-миграций границей БД
+
+Дата: 07.10.2026. База: beta `2ed87ec219184c0636433310b1cd501dd0919f49`.
+Рабочая ветка: `fix/guard-staging-migrations-20261007`. PR #79 → `beta`.
+Production / `main` кодом этой итерации не изменяются.
+
+## Что обнаружено
+
+- Merge PR #78 в `beta` автоматически запустил `staging-database.yml`.
+- `production-database-identity` в отдельном Release Readiness workflow завершился ошибкой: `PRODUCTION_DATABASE_URL` отсутствует в environment `production`.
+- Несмотря на это, старый `staging-database.yml` не зависел от Release Readiness и отдельно применил `0066_tender_bid_rounds.sql` к staging DB.
+- Откат не выполнялся. Это было бы дополнительным destructive-риском.
+- Staging smoke после этого прошёл и подтвердил активный staging commit `2ed87ec...`, `environment=staging`, `schemaVersion=0066_tender_bid_rounds.sql`.
+- Тот же staging smoke не упал на проверке production `schemaVersion===0066_tender_bid_rounds.sql`. Следовательно production runtime тоже видит схему `0066`. Без production database identity это не позволяет доказать, что staging и production физически разные.
+
+## Что исправлено
+
+- `.github/workflows/staging-database.yml` теперь сам вычисляет безопасные identities staging и production PostgreSQL до миграции.
+- `migrate-staging` имеет обязательную зависимость от успешного `verify-database-boundary`.
+- Если production secret отсутствует, identity пустая или identities совпадают, staging migration блокируется.
+- `.github/workflows/release-readiness.yml` запускает boundary-check через `always()`, поэтому отсутствие одной identity отображается как явный failure, а не как skipped.
+- В `tests/migration-safety.test.mjs` добавлены статические регрессионные тесты на эти зависимости.
+
+## Ограничения
+
+- `PRODUCTION_DATABASE_URL` этим изменением не добавляется и credentials не меняются.
+- Физическое разделение staging/production PostgreSQL всё ещё не подтверждено.
+- До подтверждения границы БД не выполнять новые staging/production migrations и не выполнять promotion в `main`.
+
+---
+
 # OPERIS · Тендеры — торги и история цены
 
 Дата: 07.10.2026. База: beta `4a76c372bc4fc2f178c2101ca220ced9ec7b28a7`.

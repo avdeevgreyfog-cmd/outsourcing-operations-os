@@ -40,3 +40,21 @@ test("application build never runs database migrations",()=>{
   const build=readFileSync(fileURLToPath(new URL("../scripts/build.mjs",import.meta.url)),"utf8");
   assert.doesNotMatch(build,/migrate\.mjs|db:migrate/);
 });
+
+
+test("staging migrations are blocked until production and staging database identities are verified",()=>{
+  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-database.yml",import.meta.url)),"utf8");
+  assert.match(workflow,/production-database-identity:/);
+  assert.match(workflow,/PRODUCTION_DATABASE_URL/);
+  assert.match(workflow,/verify-database-boundary:/);
+  assert.match(workflow,/needs:\s*\[staging-database-identity, production-database-identity\]/);
+  assert.match(workflow,/migrate-staging:[\s\S]*needs:\s*\[verify-database-boundary\]/);
+  assert.match(workflow,/Staging and production resolve to the same PostgreSQL database/);
+});
+
+test("release readiness reports an unavailable database identity as a failure instead of skipping boundary verification",()=>{
+  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/release-readiness.yml",import.meta.url)),"utf8");
+  assert.match(workflow,/verify-database-boundary:[\s\S]*if:\s*\$\{\{ always\(\) \}\}/);
+  assert.match(workflow,/PRODUCTION_RESULT/);
+  assert.match(workflow,/Production database identity was not verified/);
+});
