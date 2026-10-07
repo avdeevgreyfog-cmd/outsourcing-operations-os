@@ -53,10 +53,27 @@ const createdTenderRole=await jsonRequest(`/api/tenders/${createdTender.id}/role
   title:"CI Комплектовщик",count:4,volume:null,billingUnit:"hour",targetClientRate:750,notes:"CI новая позиция",
 });
 if(!createdTenderRole.id)throw new Error("Tender role creation did not return id");
+await jsonRequest(`/api/tenders/${createdTender.id}/roles`,"PATCH",{
+  roleId:createdTenderRole.id,title:"CI Комплектовщик обновлён",count:5,volume:550,billingUnit:"hour",targetClientRate:780,notes:"CI позиция обновлена",
+});
+const createdDocument=await jsonRequest(`/api/tenders/${createdTender.id}/documents`,"POST",{
+  name:"CI ТЗ",documentType:"technical_spec",sourceUrl:"https://example.test/ci-tz",notes:"CI исходный документ",
+});
+if(!createdDocument.id)throw new Error("Tender document creation did not return id");
+await jsonRequest(`/api/tenders/${createdTender.id}/documents`,"PATCH",{
+  documentId:createdDocument.id,name:"CI ТЗ обновлён",documentType:"technical_spec",sourceUrl:"https://example.test/ci-tz-v2",notes:"CI документ обновлён",
+});
+const createdRequirement=await jsonRequest(`/api/tenders/${createdTender.id}/requirements`,"POST",{
+  name:"CI Требование",category:"other",required:true,status:"prepare",companyDocumentId:null,ownerUserId:null,dueAt:null,notes:"CI исходное требование",
+});
+if(!createdRequirement.id)throw new Error("Tender requirement creation did not return id");
+await jsonRequest(`/api/tenders/${createdTender.id}/requirements`,"PATCH",{
+  requirementId:createdRequirement.id,name:"CI Требование обновлено",category:"other",required:true,status:"ready",companyDocumentId:null,ownerUserId:null,dueAt:null,notes:"CI требование обновлено",
+});
 
 await page(`/clients/${createdClient.id}`,["CI Новый клиент","ООО «CI Новый клиент»"]);
 await page(`/requests/${createdRequest.id}`,["CI Новая заявка","CI адрес новой заявки"]);
-await page(`/tenders/${createdTender.id}`,["CI Новый тендер","CI создан через API"]);
+await page(`/tenders/${createdTender.id}`,["CI Новый тендер","CI создан через API","CI Комплектовщик обновлён","CI ТЗ обновлён","CI Требование обновлено"]);
 
 await jsonRequest(`/api/clients/${client}`,"PATCH",{
   name:"CI Заказчик обновлён",legalName:"ООО «CI Заказчик»",inn:"7700000901",notes:"CI проверка редактирования клиента",status:"active",
