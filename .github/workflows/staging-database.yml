@@ -9,9 +9,111 @@ on:
       - ".github/workflows/staging-database.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  staging-database-identity:
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      identity: ${{ steps.identity.outputs.identity }}
+    env:
+      DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+    steps:
+      - name: Require staging database secret
+        shell: bash
+        run: |
+          test -n "$DATABASE_URL" || {
+            echo "::error::STAGING_DATABASE_URL is not configured in the staging environment."
+            exit 1
+          }
+
+      - id: identity
+        name: Compute safe staging database identity
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const crypto = require("node:crypto");
+          const raw = process.env.DATABASE_URL;
+          let source;
+          try {
+            const url = new URL(raw);
+            source = `${url.hostname.toLowerCase()}:${url.port || "default"}${url.pathname}`;
+          } catch {
+            source = raw.replace(/\/\/[^@]+@/, "//");
+          }
+          const identity = crypto.createHash("sha256").update(source).digest("hex").slice(0,16);
+          require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `identity=${identity}\n`);
+          NODE
+
+  production-database-identity:
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      identity: ${{ steps.identity.outputs.identity }}
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+    steps:
+      - name: Require production database secret
+        shell: bash
+        run: |
+          test -n "$DATABASE_URL" || {
+            echo "::error::PRODUCTION_DATABASE_URL is not configured in the production environment. Staging migrations are blocked until the database boundary can be verified."
+            exit 1
+          }
+
+      - id: identity
+        name: Compute safe production database identity
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const crypto = require("node:crypto");
+          const raw = process.env.DATABASE_URL;
+          let source;
+          try {
+            const url = new URL(raw);
+            source = `${url.hostname.toLowerCase()}:${url.port || "default"}${url.pathname}`;
+          } catch {
+            source = raw.replace(/\/\/[^@]+@/, "//");
+          }
+          const identity = crypto.createHash("sha256").update(source).digest("hex").slice(0,16);
+          require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `identity=${identity}\n`);
+          NODE
+
+  verify-database-boundary:
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs: [staging-database-identity, production-database-identity]
+    steps:
+      - name: Require distinct PostgreSQL databases
+        env:
+          STAGING_RESULT: ${{ needs.staging-database-identity.result }}
+          PRODUCTION_RESULT: ${{ needs.production-database-identity.result }}
+          STAGING_IDENTITY: ${{ needs.staging-database-identity.outputs.identity }}
+          PRODUCTION_IDENTITY: ${{ needs.production-database-identity.outputs.identity }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$STAGING_RESULT" != "success" ]; then
+            echo "::error::Staging database identity was not verified. Migration is blocked."
+            exit 1
+          fi
+          if [ "$PRODUCTION_RESULT" != "success" ]; then
+            echo "::error::Production database identity was not verified. Migration is blocked."
+            exit 1
+          fi
+          test -n "$STAGING_IDENTITY" || { echo "::error::Staging database identity is empty."; exit 1; }
+          test -n "$PRODUCTION_IDENTITY" || { echo "::error::Production database identity is empty."; exit 1; }
+          if [ "$STAGING_IDENTITY" = "$PRODUCTION_IDENTITY" ]; then
+            echo "::error::Staging and production resolve to the same PostgreSQL database. Migration is blocked."
+            exit 1
+          fi
+          echo "Database boundary verified: staging and production identities are distinct."
+
   migrate-staging:
     runs-on: ubuntu-latest
+    needs: [verify-database-boundary]
     timeout-minutes: 15
     environment: staging
     env:
@@ -20,6 +122,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: beta
+
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -29,7 +132,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$DATABASE_URL" || { echo "::error::STAGING_DATABASE_URL environment secret is required."; exit 1; }
+          test -n "$DATABASE_URL" || {
+            echo "::error::STAGING_DATABASE_URL environment secret is required."
+            exit 1
+          }
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
