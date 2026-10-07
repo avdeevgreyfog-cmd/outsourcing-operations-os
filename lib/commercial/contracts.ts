@@ -25,7 +25,7 @@ export type ContractTerms = {
   notes?: string | null;
   roles?: Array<{ role: string; count: number; rateNet: number; rateGross?: number; unit: string; scenarioId?: string }>;
   proposalSnapshot?: { proposalId: string; proposalVersion: number };
-  tenderSnapshot?: { tenderId:string; calculationId:string; calculationVersion:number; scenarioIds:string[] };
+  tenderSnapshot?: { tenderId:string; calculationId:string; calculationVersion:number; scenarioIds:string[]; finalBidRoundId?:string; finalBidRoundNumber?:number; finalBidValue?:number; priceVatMode?:string; winningRevenueNet?:number|null; scenarioRevenueNet?:number|null };
 };
 
 export type ContractRow = {
