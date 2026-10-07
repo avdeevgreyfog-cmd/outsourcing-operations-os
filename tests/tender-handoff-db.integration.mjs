@@ -39,6 +39,9 @@ try{
   assert.equal(handoff.source_tender_role_id,role);
 
   await assert.rejects(()=>sql`INSERT INTO contracts(organization_id,client_company_id,legal_entity_id,request_id,tender_id,kind,status,title,owner_user_id,created_by_user_id) VALUES(${org}::uuid,${client}::uuid,${legalEntity}::uuid,${request}::uuid,${tender}::uuid,'master','draft','Invalid dual source',${director}::uuid,${director}::uuid)`,error=>error?.code==='23514');
+  const manualObject=randomUUID();
+  await sql`INSERT INTO objects(id,organization_id,client_company_id,legal_entity_id,name,code,status,region_id,owner_user_id,created_by_user_id) VALUES(${manualObject}::uuid,${org}::uuid,${client}::uuid,${legalEntity}::uuid,'Manual source object',${`MAN-${manualObject.slice(0,8)}`},'prelaunch',${region}::uuid,${director}::uuid,${director}::uuid)`;
+  await assert.rejects(()=>sql`INSERT INTO contracts(organization_id,client_company_id,legal_entity_id,request_id,tender_id,object_id,kind,status,title,owner_user_id,created_by_user_id) VALUES(${org}::uuid,${client}::uuid,${legalEntity}::uuid,NULL,${tender}::uuid,${manualObject}::uuid,'master','draft','Tender contract with foreign object source',${director}::uuid,${director}::uuid)`,error=>error?.code==='23514');
   await assert.rejects(()=>sql`INSERT INTO objects(organization_id,client_company_id,legal_entity_id,source_request_id,source_tender_id,name,code,status,region_id,owner_user_id,created_by_user_id) VALUES(${org}::uuid,${client}::uuid,${legalEntity}::uuid,${request}::uuid,${tender}::uuid,'Invalid dual source object',${`BAD-${randomUUID().slice(0,8)}`},'prelaunch',${region}::uuid,${director}::uuid,${director}::uuid)`,error=>error?.code==='23514');
 
   const otherTender=randomUUID();
