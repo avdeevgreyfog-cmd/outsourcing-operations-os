@@ -60,7 +60,7 @@ try{
       await dialog.getByRole("heading",{name:"QA Клиент изменён",exact:true}).waitFor();
       await dialog.getByText("+7 999 111-22-33",{exact:true}).waitFor();
       await page.keyboard.press("Escape");
-      await page.getByRole("button",{name:"QA Клиент изменён",exact:true}).waitFor();
+      await page.locator(".operis-client-name").filter({hasText:"QA Клиент изменён"}).waitFor();
     }finally{await context.close();}
   }
 
