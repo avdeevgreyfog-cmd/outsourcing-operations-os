@@ -4230,3 +4230,7 @@ button.sales-funnel-step:active{transform:translateY(1px)}
   .sales-workspace .client-finance-summary>div{border-right:0;border-bottom:1px solid var(--border)}
   .sales-workspace .client-finance-summary>div:last-child{border-bottom:0}
 }
+
+.sales-workspace .tender-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.sales-workspace .tender-danger-button{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 34%,var(--border))}
+.sales-workspace .tender-danger-button:hover{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 52%,var(--border))}
