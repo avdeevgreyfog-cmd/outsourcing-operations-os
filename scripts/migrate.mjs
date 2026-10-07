@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
+import {isDestructiveMigration} from "./migration-safety.mjs";
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is required for migrations.");
@@ -20,7 +21,6 @@ const files = (await fs.readdir(dir))
   .filter((name) => /^\d{4}_.+\.sql$/.test(name) && !/^9\d{3}_/.test(name))
   .sort();
 
-const destructivePattern=/\b(?:DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+(?:TABLE|SCHEMA|COLUMN)|ALTER\s+TABLE[\s\S]{0,200}\bDROP\b)\b/i;
 const destructiveSafetyBaseline="0058_launch_readiness_gate.sql";
 
 for (const filename of files) {
@@ -28,7 +28,7 @@ for (const filename of files) {
   if (exists) continue;
   const body = await fs.readFile(path.join(dir, filename), "utf8");
 
-  const destructive=destructivePattern.test(body);
+  const destructive=isDestructiveMigration(body);
   const protectedByCurrentPolicy=filename>destructiveSafetyBaseline;
   if(destructive&&protectedByCurrentPolicy){
     const protectedTenants=await sql`
