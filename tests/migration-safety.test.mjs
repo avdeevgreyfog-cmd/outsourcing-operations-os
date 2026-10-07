@@ -68,3 +68,19 @@ test("staging smoke uses independent beta and main schema baselines",()=>{
   assert.match(workflow,/production schema drifted from main/);
   assert.doesNotMatch(workflow,/production\.schemaVersion!==process\.env\.EXPECTED_SCHEMA/);
 });
+
+
+test("staging smoke only requires a new deployment for runtime-affecting beta changes",()=>{
+  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
+  assert.match(workflow,/Determine whether this commit requires a new staging deployment/);
+  assert.match(workflow,/migrations\/\*\|scripts\/migrate\.mjs\|scripts\/migration-safety\.mjs/);
+  assert.match(workflow,/REQUIRE_DEPLOYMENT/);
+  assert.match(workflow,/require_deployment=\$require_deployment/);
+});
+
+test("staging smoke waits for the beta schema independently of Vercel deployment SHA",()=>{
+  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
+  assert.match(workflow,/schema_ready=false/);
+  assert.match(workflow,/Staging schema did not reach the beta baseline in time/);
+  assert.match(workflow,/staging_schema.*staging_expected_schema/);
+});
