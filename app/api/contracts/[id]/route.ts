@@ -28,7 +28,7 @@ const exceptionSchema = z.object({ action: z.literal("launch_exception"), reason
 const schema = z.discriminatedUnion("action", [editSchema, actionSchema, exceptionSchema]);
 
 type ContractScope = {
-  id:string; organizationId:string; clientId:string; requestId:string; proposalId:string|null; objectId:string|null;
+  id:string; organizationId:string; clientId:string; requestId:string|null; tenderId:string|null; proposalId:string|null; objectId:string|null;
   ownerUserId:string|null; createdByUserId:string; status:string; launchGate:string; currentVersionId:string|null;
 };
 
@@ -44,7 +44,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
 
     const result = await withTenant(actor.organizationId, actor.userId, async sql => sql.begin(async tx => {
       const [contract] = await tx<Array<ContractScope>>`
-        SELECT c.id,c.organization_id "organizationId",c.client_company_id "clientId",c.request_id "requestId",c.proposal_id "proposalId",
+        SELECT c.id,c.organization_id "organizationId",c.client_company_id "clientId",c.request_id "requestId",c.tender_id "tenderId",c.proposal_id "proposalId",
           c.object_id "objectId",c.owner_user_id "ownerUserId",c.created_by_user_id "createdByUserId",c.status,c.launch_gate "launchGate",
           c.current_version_id "currentVersionId"
         FROM contracts c WHERE c.id=${id}::uuid FOR UPDATE
@@ -109,7 +109,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
               AND category='contracts' AND status NOT IN ('done','cancelled')
           `;
         }
-        await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
+        if(contract.requestId)await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
       } else if (body.action === "launch_exception") {
         if (contract.status === "signed") throw new Error("Договор уже подписан; исключение не требуется");
         await tx`UPDATE contracts SET launch_gate='exception',launch_exception_reason=${body.reason},launch_exception_by_user_id=${actor.userId}::uuid,launch_exception_at=now(),updated_at=now() WHERE id=${id}::uuid`;
@@ -121,7 +121,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
               AND category='contracts' AND status NOT IN ('done','cancelled')
           `;
         }
-        await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
+        if(contract.requestId)await tx`UPDATE requests SET status='launch_ready',updated_at=now() WHERE id=${contract.requestId}::uuid`;
       } else if (body.action === "terminate") {
         if (contract.status !== "signed") throw new Error("Завершить можно только подписанный договор");
         await tx`UPDATE contracts SET status='terminated',updated_at=now() WHERE id=${id}::uuid`;
@@ -129,6 +129,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{id:
 
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'contract',${id}::uuid,${body.action},${`Действие по договору: ${body.action}`},${sql.json({note:"note" in body ? body.note??null : "reason" in body ? body.reason : null})})`;
+      if(contract.tenderId&&["sign","launch_exception"].includes(body.action)){
+        await tx`
+          INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+          VALUES(
+            ${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${contract.tenderId}::uuid,
+            ${body.action==="sign"?"contract_signed":"launch_exception"},
+            ${body.action==="sign"?"Договор по выигранному тендеру подписан":"Запуск по выигранному тендеру разрешён исключением"},
+            ${sql.json({contractId:id})}
+          )
+        `;
+      }
       return {id,action:body.action};
     }));
     return NextResponse.json(result);
