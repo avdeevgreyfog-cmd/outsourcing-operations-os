@@ -16,7 +16,7 @@ export async function POST(request:Request){
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"sales.tender.create");if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const body=schema.parse(await request.json());
-    const created=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const created=await withTenant(actor.organizationId,actor.userId,async tx=>{
       if(body.clientId){const [client]=await tx`SELECT id FROM client_companies WHERE id=${body.clientId}::uuid`;if(!client)throw new Error("Выбранный клиент не найден");}
       if(body.regionId){const [region]=await tx`SELECT id FROM regions WHERE id=${body.regionId}::uuid`;if(!region)throw new Error("Выбранный регион не найден");}
       if(body.legalEntityId){const [entity]=await tx`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid`;if(!entity)throw new Error("Юридическое лицо не найдено");}
@@ -35,7 +35,7 @@ export async function POST(request:Request){
       if(body.comment)await tx`INSERT INTO comments(organization_id,entity_type,entity_id,body,created_by_user_id) VALUES(${actor.organizationId}::uuid,'tender',${row.id}::uuid,${body.comment},${actor.userId}::uuid)`;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${row.id}::uuid,'created','Создан тендер')`;
       return row;
-    }));
+    });
     return NextResponse.json(created,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные тендера",issues:error.issues},{status:400});
