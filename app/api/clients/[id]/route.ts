@@ -21,7 +21,7 @@ type ScopeRow={
   name:string;legalName:string|null;inn:string|null;notes:string|null;status:string;
 };
 function canAssign(actor:NonNullable<Awaited<ReturnType<typeof getCurrentActor>>>){
-  return actor.roleCode==="director"||actor.access.allOrg||hasCapability(actor.access,"organization.manage");
+  return actor.roleCode==="director"||hasCapability(actor.access,"organization.manage")||(actor.access.scopes["sales.client.edit"]??[]).some(scope=>scope.type==="all_org");
 }
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){

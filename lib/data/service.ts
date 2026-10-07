@@ -104,7 +104,7 @@ export async function listClients(actor: Actor): Promise<ClientRow[]> {
 
 export async function getClientEditOptions(actor: Actor): Promise<ClientEditOptions> {
   requireCapability(actor, "sales.client.edit");
-  const canAssign=actor.roleCode==="director"||actor.access.allOrg||hasCapability(actor.access,"organization.manage");
+  const canAssign=actor.roleCode==="director"||hasCapability(actor.access,"organization.manage")||(actor.access.scopes["sales.client.edit"]??[]).some(scope=>scope.type==="all_org");
   if(actor.demo){
     return {
       members:canAssign?demoOrg.companyEmployees.filter(item=>item.status==="active").map(item=>({id:item.userId,name:item.name})):[],
