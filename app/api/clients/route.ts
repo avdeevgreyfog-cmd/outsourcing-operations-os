@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     if (actor.demo) return NextResponse.json({ error: "Демонстрационные данные доступны только для чтения" }, { status: 409 });
 
     const body = schema.parse(await request.json());
-    const row = await withTenant(actor.organizationId, actor.userId, async (sql) => sql.begin(async (tx) => {
+    const row = await withTenant(actor.organizationId, actor.userId, async (tx) => {
       const [created] = await tx<Array<{ id: string; name: string; legalName: string | null; status: string }>>`
         INSERT INTO client_companies (
           organization_id,name,legal_name,inn,owner_user_id,created_by_user_id,assigned_team_id,region_id
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       }
 
       return created;
-    }));
+    });
 
     return NextResponse.json(row, { status: 201 });
   } catch (error) {
