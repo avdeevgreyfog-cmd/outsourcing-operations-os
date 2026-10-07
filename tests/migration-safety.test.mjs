@@ -68,3 +68,13 @@ test("release readiness reports an unavailable database identity as a failure in
   assert.match(workflow,/PRODUCTION_RESULT/);
   assert.match(workflow,/Production database identity was not verified/);
 });
+
+
+test("staging smoke uses independent beta and main schema baselines",()=>{
+  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
+  assert.match(workflow,/STAGING_EXPECTED_SCHEMA/);
+  assert.match(workflow,/PRODUCTION_EXPECTED_SCHEMA/);
+  assert.match(workflow,/git fetch --no-tags --depth=1 origin main/);
+  assert.match(workflow,/production schema drifted from main/);
+  assert.doesNotMatch(workflow,/production\.schemaVersion!==process\.env\.EXPECTED_SCHEMA/);
+});
