@@ -10,6 +10,7 @@ const model="76000000-0000-4000-8000-000000000001";
 try{
   const migrations=await sql`SELECT filename FROM schema_migrations ORDER BY filename`;
   assert.ok(migrations.some(row=>row.filename==="0016_tender_core.sql"),"Tender Core migration must be applied");
+  assert.ok(migrations.some(row=>row.filename==="0066_tender_bid_rounds.sql"),"Tender bid round migration must be applied");
   await sql`SELECT set_config('app.organization_id',${org},false),set_config('app.user_id',${director},false)`;
 
   const tender=randomUUID();
@@ -40,6 +41,15 @@ try{
   const audit=await sql`SELECT count(*)::int count FROM audit_events WHERE resource_type='tenders' AND resource_id=${tender}::uuid`;
   assert.ok(audit[0].count>=1,"Tender mutations must be audited");
 
+  await sql`UPDATE tenders SET stage='submitted',submitted_at=now(),final_bid_value=900000 WHERE id=${tender}::uuid`;
+  const bidRound=randomUUID();
+  await sql`INSERT INTO tender_bid_rounds(id,organization_id,tender_id,round_number,bid_value,price_vat_mode,source,economics_snapshot,recorded_by_user_id) VALUES(${bidRound}::uuid,${org}::uuid,${tender}::uuid,1,900000,'without_vat','submission','{"status":"complete","revenueNet":900000,"totalCostNet":720000,"marginPct":20,"vatPct":null,"missing":[],"sources":[]}'::jsonb,${director}::uuid)`;
+  const [savedBid]=await sql`SELECT round_number,bid_value,price_vat_mode,economics_snapshot->>'marginPct' margin FROM tender_bid_rounds WHERE id=${bidRound}::uuid`;
+  assert.equal(savedBid.round_number,1);assert.equal(Number(savedBid.bid_value),900000);assert.equal(savedBid.price_vat_mode,"without_vat");assert.equal(Number(savedBid.margin),20);
+  await assert.rejects(()=>sql`UPDATE tender_bid_rounds SET bid_value=850000 WHERE id=${bidRound}::uuid`,error=>error?.code==="55000");
+  const bidAudit=await sql`SELECT count(*)::int count FROM audit_events WHERE resource_type='tender_bid_rounds' AND resource_id=${bidRound}::uuid`;
+  assert.ok(bidAudit[0].count>=1,"Tender bid round inserts must be audited");
+
   await assert.rejects(()=>sql`INSERT INTO calculations(organization_id,status,owner_user_id,created_by_user_id) VALUES(${org}::uuid,'draft',${director}::uuid,${director}::uuid)`,error=>error?.code==="23514");
-  console.log("Tender Core PostgreSQL integration passed: parallel source, tender role scenario, company document checklist, approvals and audit.");
+  console.log("Tender Core PostgreSQL integration passed: parallel source, tender role scenario, company document checklist, approvals, immutable bid rounds and audit.");
 }finally{await sql.end();}
