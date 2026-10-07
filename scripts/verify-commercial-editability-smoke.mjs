@@ -32,6 +32,32 @@ async function page(path,markers){
   for(const marker of markers)if(!html.includes(marker))throw new Error(path+" is missing marker: "+marker);
 }
 
+const createdClient=await jsonRequest("/api/clients","POST",{
+  name:"CI Новый клиент",legalName:"ООО «CI Новый клиент»",inn:"7700000999",regionId:region,
+  contact:{name:"CI Первый контакт",phone:"+7 900 000-09-99",email:"ci-new@example.test"},
+});
+if(!createdClient.id)throw new Error("Client creation did not return id");
+
+const createdRequest=await jsonRequest("/api/requests/v2","POST",{
+  clientId:createdClient.id,title:"CI Новая заявка",source:"manual",location:"CI адрес новой заявки",regionId:region,
+  intake:{},roles:[{specialtyName:"CI Комплектовщик",count:3,schedule:{},requirements:{},targetClientRate:null}],
+});
+if(!createdRequest.id)throw new Error("Request creation did not return id");
+
+const createdTender=await jsonRequest("/api/tenders","POST",{
+  title:"CI Новый тендер",customerName:"CI Новый клиент",clientId:createdClient.id,platform:"CI ЭТП create",
+  procedureNumber:"CI-CREATE-001",sourceName:"CI smoke",regionId:region,comment:"CI создан через API",
+});
+if(!createdTender.id)throw new Error("Tender creation did not return id");
+const createdTenderRole=await jsonRequest(`/api/tenders/${createdTender.id}/roles`,"POST",{
+  title:"CI Комплектовщик",count:4,volume:null,billingUnit:"hour",targetClientRate:750,notes:"CI новая позиция",
+});
+if(!createdTenderRole.id)throw new Error("Tender role creation did not return id");
+
+await page(`/clients/${createdClient.id}`,["CI Новый клиент","ООО «CI Новый клиент»"]);
+await page(`/requests/${createdRequest.id}`,["CI Новая заявка","CI адрес новой заявки"]);
+await page(`/tenders/${createdTender.id}`,["CI Новый тендер","CI создан через API"]);
+
 await jsonRequest(`/api/clients/${client}`,"PATCH",{
   name:"CI Заказчик обновлён",legalName:"ООО «CI Заказчик»",inn:"7700000901",notes:"CI проверка редактирования клиента",status:"active",
 });
