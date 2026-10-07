@@ -10,7 +10,7 @@ type ScopedRow = {
   id?: string; organizationId: string; createdByUserId?: string; ownerUserId?: string; assigneeUserIds?: string[];
   teamId?: string; orgUnitId?: string; regionId?: string; objectId?: string; clientId?: string;
 };
-export type ClientRow = ScopedRow & { id:string; name:string; legalName?:string|null; status:string; contacts:number; requests:number; objects:number };
+export type ClientRow = ScopedRow & { id:string; name:string; legalName?:string|null; inn?:string|null; status:string; ownerName?:string|null; region?:string|null; teamName?:string|null; primaryContactName?:string|null; primaryContactPhone?:string|null; primaryContactEmail?:string|null; latestRequestId?:string|null; latestRequestTitle?:string|null; contacts:number; requests:number; objects:number; activeObjects:number };
 export type ClientContactRow = ScopedRow & { id:string; clientId:string; fullName:string; position?:string|null; phone?:string|null; email?:string|null; telegram?:string|null; whatsapp?:string|null; maxContact?:string|null; preferredChannel?:string|null; objectAssignments:{objectId:string;object:string;roles:string[]}[] };
 export type RequestRoleRow = { name:string; count:number };
 export type RequestRow = ScopedRow & { id:string; title:string; client:string; status:string; location:string; start?:string|null; roles:RequestRoleRow[]; schedule?:unknown; housing?:string|null; vat?:string|null };
@@ -51,18 +51,50 @@ function allowed<T extends Record<string, unknown>>(actor: Actor, capability: st
 }
 
 export async function listClients(actor: Actor): Promise<ClientRow[]> {
-  if (actor.demo) return allowed(actor, "sales.client.read", demo.clients);
+  if (actor.demo) {
+    const rows=demo.clients.map(client=>{
+      const contact=demo.clientContacts.find(item=>item.clientId===client.id);
+      const request=demo.requests.find(item=>item.clientId===client.id);
+      const owner=demoOrg.companyEmployees.find(item=>item.userId===client.ownerUserId);
+      const region=demoOrg.companyProfile.regions.find(item=>item.id===client.regionId);
+      const clientObjects=demo.objects.filter(item=>item.clientId===client.id);
+      return {...client,inn:null,ownerName:owner?.name??null,region:region?.name??null,teamName:"Продажи",primaryContactName:contact?.fullName??null,primaryContactPhone:contact?.phone??null,primaryContactEmail:contact?.email??null,latestRequestId:request?.id??null,latestRequestTitle:request?.title??null,activeObjects:clientObjects.filter(item=>item.status==="active").length};
+    });
+    return allowed(actor, "sales.client.read", rows);
+  }
   requireCapability(actor, "sales.client.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ClientRow[]>`
-      SELECT c.id, c.organization_id "organizationId", c.name, c.legal_name "legalName", c.status,
-             c.owner_user_id "ownerUserId", c.created_by_user_id "createdByUserId", c.assigned_team_id "teamId", c.region_id "regionId",
-             count(DISTINCT ct.id)::int contacts, count(DISTINCT r.id)::int requests, count(DISTINCT o.id)::int objects
+      SELECT c.id, c.organization_id "organizationId", c.name, c.legal_name "legalName", c.inn, c.status,
+             c.owner_user_id "ownerUserId", owner.display_name "ownerName",
+             c.created_by_user_id "createdByUserId", c.assigned_team_id "teamId", team.name "teamName",
+             c.region_id "regionId", region.name region,
+             primary_contact.full_name "primaryContactName", primary_contact.phone "primaryContactPhone", primary_contact.email "primaryContactEmail",
+             latest_request.id "latestRequestId", latest_request.title "latestRequestTitle",
+             count(DISTINCT ct.id)::int contacts, count(DISTINCT r.id)::int requests, count(DISTINCT o.id)::int objects,
+             count(DISTINCT o.id) FILTER (WHERE o.status='active')::int "activeObjects"
       FROM client_companies c
+      LEFT JOIN app_users owner ON owner.id=c.owner_user_id
+      LEFT JOIN teams team ON team.id=c.assigned_team_id
+      LEFT JOIN regions region ON region.id=c.region_id
       LEFT JOIN contacts ct ON ct.client_company_id=c.id
       LEFT JOIN requests r ON r.client_company_id=c.id
       LEFT JOIN objects o ON o.client_company_id=c.id
-      GROUP BY c.id
+      LEFT JOIN LATERAL (
+        SELECT contact.full_name,contact.phone,contact.email
+        FROM contacts contact
+        WHERE contact.client_company_id=c.id
+        ORDER BY contact.created_at,contact.id
+        LIMIT 1
+      ) primary_contact ON true
+      LEFT JOIN LATERAL (
+        SELECT request.id,request.title
+        FROM requests request
+        WHERE request.client_company_id=c.id
+        ORDER BY request.created_at DESC,request.id DESC
+        LIMIT 1
+      ) latest_request ON true
+      GROUP BY c.id,owner.display_name,team.name,region.name,primary_contact.full_name,primary_contact.phone,primary_contact.email,latest_request.id,latest_request.title
       ORDER BY c.name
     `;
     return rows.filter((row) => canReadRow(actor.access, "sales.client.read", row, actor));

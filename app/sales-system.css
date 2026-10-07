@@ -4132,3 +4132,95 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace .tender-entity .section:has(>h3){padding:16px 18px}
 .sales-workspace .tender-entity .section:has(>.tender-analysis-head){padding:18px}
 .sales-workspace .tender-entity .tender-comments header{flex-wrap:wrap}
+
+
+/* Clients registry migration · 07.10.2026. Reuses shared registry geometry and Sales entity patterns. */
+.sales-workspace .operis-client-registry{--registry-accent:var(--registry-action);--registry-border:var(--border);--registry-bg:var(--panel);min-width:0}
+.sales-workspace .operis-client-registry .operis-client-name{display:block;width:100%;min-width:0;border:0;background:transparent;padding:0;text-align:left;color:var(--text);font:inherit;cursor:pointer}
+.sales-workspace .operis-client-registry .operis-client-name>span{display:block;min-width:0}
+.sales-workspace .operis-client-registry .operis-client-name strong,.sales-workspace .operis-client-registry .operis-cell-main{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--registry-identity-size);font-weight:600;color:var(--text)}
+.sales-workspace .operis-client-registry .operis-client-name small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--registry-secondary-size);line-height:18px;color:var(--muted)}
+.sales-workspace .operis-client-registry .operis-number-link{font-variant-numeric:tabular-nums;font-weight:600}
+.sales-workspace .operis-client-registry .operis-client-table td{height:var(--registry-row-height);max-height:var(--registry-row-height)}
+.sales-workspace .operis-client-registry .operis-client-table td[style*="sticky"]{box-shadow:1px 0 0 var(--border)}
+.sales-workspace .operis-client-registry .operis-actions-cell .icon-button{margin:auto}
+.sales-workspace .operis-client-registry .operis-registry-popover:is(.columns,.groups){position:relative;inset:auto;width:100%;max-width:100%;max-height:none;overflow:visible;margin:12px 0;box-shadow:none}
+.sales-workspace .operis-client-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+.sales-workspace .client-quick-status{margin:0 0 22px}
+.sales-workspace .client-quick-section{margin:0 0 26px}
+.sales-workspace .client-quick-section:last-child{margin-bottom:0}
+.sales-workspace .client-quick-section h3{margin:0 0 14px;font-size:14px;font-weight:600}
+.sales-workspace .client-quick-section dl{margin:0}
+.sales-workspace .client-quick-section dl>div{display:grid;grid-template-columns:145px minmax(0,1fr);gap:14px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px}
+.sales-workspace .client-quick-section dl>div:last-child{border-bottom:0}
+.sales-workspace .client-quick-section dt{color:var(--muted)}
+.sales-workspace .client-quick-section dd{margin:0;min-width:0;overflow-wrap:anywhere;color:var(--text)}
+.sales-workspace .client-quick-section dd a,.sales-workspace .client-quick-latest a{color:var(--accent);text-decoration:none}
+.sales-workspace .client-quick-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sales-workspace .client-quick-links>a{display:grid;gap:4px;border:1px solid var(--border);border-radius:7px;padding:10px 11px;color:var(--text);text-decoration:none;background:var(--panel)}
+.sales-workspace .client-quick-links>a:hover{background:var(--panel-2)}
+.sales-workspace .client-quick-links span{font-size:11px;color:var(--muted)}
+.sales-workspace .client-quick-links strong{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
+.sales-workspace .client-quick-latest{margin:14px 0 0;font-size:12px;line-height:1.5;color:var(--muted)}
+
+.sales-workspace .client-create-form-unified{display:grid;gap:20px}
+.sales-workspace .client-create-form-unified .client-form-section{display:grid;gap:13px;border:0;padding:0 0 20px;border-bottom:1px solid var(--border)}
+.sales-workspace .client-create-form-unified .client-form-section:last-of-type{padding-bottom:0;border-bottom:0}
+.sales-workspace .client-create-form-unified .client-form-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;min-width:0}
+.sales-workspace .client-create-form-unified .client-form-section-head>div{min-width:0}
+.sales-workspace .client-create-form-unified .client-form-section-head strong{display:block;font-size:14px;font-weight:600}
+.sales-workspace .client-create-form-unified .client-form-section-head span{display:block;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.sales-workspace .client-create-form-unified label{display:grid;gap:6px;min-width:0;font-size:12px;color:var(--muted)}
+.sales-workspace .client-create-form-unified label>b{color:var(--bad);font-weight:600}
+.sales-workspace .client-create-form-unified :is(input,select,textarea){width:100%;min-width:0;box-sizing:border-box;min-height:38px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);padding:0 10px;font:13px "Segoe UI Variable Text","Segoe UI",Arial,sans-serif}
+.sales-workspace .client-create-form-unified small{font-size:11px;line-height:1.45;color:var(--soft)}
+.sales-workspace .client-create-form-unified .client-contact-fields{display:grid;gap:13px}
+.sales-workspace .client-create-form-unified .client-contact-remove{justify-self:start;border:0;background:none;padding:0;color:var(--muted);font:12px inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.sales-workspace .client-create-form-unified .client-demo-note{margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:12px;line-height:1.5}
+.sales-workspace .sales-drawer .client-demo-note{margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:12px;line-height:1.5}
+.sales-workspace .client-create-form-unified .client-create-error{margin:0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--bad) 45%,var(--border));border-radius:7px;background:var(--bad-bg);color:var(--bad);font-size:12px}
+
+.sales-workspace .client-entity-workspace{min-width:0}
+.sales-workspace .client-entity-workspace .status{height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);font-size:12px;font-weight:500}
+.sales-workspace .client-entity-workspace .status i{width:6px;height:6px;flex:0 0 6px;background:var(--soft)}
+.sales-workspace .client-entity-workspace .status-good i{background:var(--good)}
+.sales-workspace .client-entity-workspace .status-warn i{background:var(--warn)}
+.sales-workspace .client-entity-workspace .status-bad i{background:var(--bad)}
+.sales-workspace .client-entity-workspace .status-info i{background:var(--info)}
+.sales-workspace .client-entity-workspace .entity-tabs{overflow-x:auto;overflow-y:hidden}
+.sales-workspace .client-entity-overview{align-items:start}
+.sales-workspace .client-overview-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+.sales-workspace .client-overview-facts>a{display:grid;align-content:start;min-width:0;padding:16px 18px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);color:var(--text);text-decoration:none}
+.sales-workspace .client-overview-facts>a:nth-child(2n){border-right:0}
+.sales-workspace .client-overview-facts>a:nth-last-child(-n+2){border-bottom:0}
+.sales-workspace .client-overview-facts span{font-size:12px;color:var(--muted)}
+.sales-workspace .client-overview-facts strong{margin-top:4px;font-size:20px;line-height:1.25;font-weight:650;font-variant-numeric:tabular-nums}
+.sales-workspace .client-overview-facts small{margin-top:5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
+.sales-workspace .client-contact-summary{display:grid}
+.sales-workspace .client-contact-summary>div{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,.7fr);gap:20px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--border);min-width:0}
+.sales-workspace .client-contact-summary>div:last-child{border-bottom:0}
+.sales-workspace .client-contact-summary strong{display:block;font-size:13px;font-weight:600}
+.sales-workspace .client-contact-summary small{display:block;margin-top:2px;color:var(--muted);font-size:12px}
+.sales-workspace .client-contact-summary>div>span{min-width:0;overflow-wrap:anywhere;color:var(--muted);font-size:12px;text-align:right}
+.sales-workspace .client-entity-table{min-width:760px}
+.sales-workspace .client-finance-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.sales-workspace .client-finance-summary>div{padding:18px;border-right:1px solid var(--border)}
+.sales-workspace .client-finance-summary>div:last-child{border-right:0}
+.sales-workspace .client-finance-summary span{display:block;font-size:12px;color:var(--muted)}
+.sales-workspace .client-finance-summary strong{display:block;margin-top:5px;font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+
+@media(max-width:1000px){
+  .sales-workspace .operis-client-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:1fr}
+}
+@media(max-width:760px){
+  .sales-workspace .client-quick-section dl>div{grid-template-columns:115px minmax(0,1fr);gap:10px}
+  .sales-workspace .client-quick-links{grid-template-columns:1fr}
+  .sales-workspace .client-overview-facts{grid-template-columns:1fr}
+  .sales-workspace .client-overview-facts>a{border-right:0;border-bottom:1px solid var(--border)!important}
+  .sales-workspace .client-overview-facts>a:last-child{border-bottom:0!important}
+  .sales-workspace .client-contact-summary>div{grid-template-columns:1fr;gap:5px}
+  .sales-workspace .client-contact-summary>div>span{text-align:left}
+  .sales-workspace .client-finance-summary{grid-template-columns:1fr}
+  .sales-workspace .client-finance-summary>div{border-right:0;border-bottom:1px solid var(--border)}
+  .sales-workspace .client-finance-summary>div:last-child{border-bottom:0}
+}
