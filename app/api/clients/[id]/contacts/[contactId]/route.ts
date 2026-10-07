@@ -53,6 +53,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
         WHERE id=${contactId}::uuid AND client_company_id=${id}::uuid
       `;
       await sql`UPDATE client_companies SET updated_at=now() WHERE id=${id}::uuid`;
+      await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'client',${id}::uuid,'contact_updated','Обновлён контакт клиента')`;
       return {id:contactId};
     });
     if(!result)return NextResponse.json({error:"Контакт не найден"},{status:404});
@@ -85,6 +87,8 @@ export async function DELETE(_:Request,{params}:{params:Promise<{id:string;conta
       if((usage?.objectCount??0)>0)throw new Error("Контакт назначен на объект. Сначала снимите его с объекта");
       await tx`DELETE FROM contacts WHERE id=${contactId}::uuid AND client_company_id=${id}::uuid`;
       await tx`UPDATE client_companies SET updated_at=now() WHERE id=${id}::uuid`;
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'client',${id}::uuid,'contact_removed','Удалён контакт клиента')`;
       return {ok:true};
     });
     if(!result)return NextResponse.json({error:"Контакт не найден"},{status:404});
