@@ -24,9 +24,9 @@ export type TenderBidEconomicsSnapshot={
   status:"complete"|"incomplete";revenueNet:number|null;totalCostNet:number|null;marginPct:number|null;vatPct:number|null;missing:string[];
   sources:Array<{roleId:string;scenarioId:string;calculationId:string;calculationVersion:number;scenarioVersion:number;billingUnit:string;volume:number|null;costPerBillingUnit:number|null;vatPct:number|null}>;
 };
-export type TenderBidRound={id:string;roundNumber:number;bidValue:number|string;priceVatMode:string;occurredAt:string;source:string;reference:string|null;note:string|null;economics:TenderBidEconomicsSnapshot|null;recordedBy:string|null};
+export type TenderBidRound={id:string;roundNumber:number;bidValue:number|string;priceVatMode:string;occurredAt:string;source:string;reference:string|null;note:string|null;economics:TenderBidEconomicsSnapshot|null;recordedBy:string|null};\nexport type TenderWinHandoff={contractId:string;contractTitle:string;objectId:string|null;objectName:string|null;objectCode:string|null};
 type ScopedTenderCalculation=TenderCalculation & {organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null};
-export type TenderDetail=TenderRow&{conditions:Record<string,unknown>;submissionChecklist:Array<{id:string;label:string;done:boolean}>;bidReference:string|null;submissionNote:string|null;submittedBy:string|null;roles:TenderRole[];assignments:TenderAssignment[];sourceDocuments:TenderSourceDocument[];requirements:TenderRequirement[];comments:TenderComment[];approvals:TenderApproval[];calculations:TenderCalculation[];bidRounds:TenderBidRound[]};
+export type TenderDetail=TenderRow&{conditions:Record<string,unknown>;submissionChecklist:Array<{id:string;label:string;done:boolean}>;bidReference:string|null;submissionNote:string|null;submittedBy:string|null;roles:TenderRole[];assignments:TenderAssignment[];sourceDocuments:TenderSourceDocument[];requirements:TenderRequirement[];comments:TenderComment[];approvals:TenderApproval[];calculations:TenderCalculation[];bidRounds:TenderBidRound[];winHandoff:TenderWinHandoff|null};
 export type TenderOptions={
   clients:Array<{id:string;name:string}>;regions:Array<{id:string;name:string}>;specialties:Array<{id:string;name:string}>;
   members:Array<{userId:string;membershipId:string;name:string;position:string|null}>;legalEntities:Array<{id:string;name:string}>;
@@ -72,7 +72,7 @@ function demoDetail(row:TenderRow):TenderDetail{
     assignments:[{id:"a3000000-0000-4000-8000-000000000001",roleCode:"owner",userId:"10000000-0000-4000-8000-000000000002",user:"Илья Морозов"},{id:"a3000000-0000-4000-8000-000000000002",roleCode:"calculator",userId:"10000000-0000-4000-8000-000000000006",user:"Елена Котова"}],
     sourceDocuments:[{id:"a4000000-0000-4000-8000-000000000001",name:"Техническое задание.pdf",documentType:"technical_spec",sourceUrl:null,notes:null,createdAt:"07.09.2026 12:20",createdBy:"Илья Морозов"},{id:"a4000000-0000-4000-8000-000000000002",name:"Проект договора.docx",documentType:"contract",sourceUrl:null,notes:null,createdAt:"07.09.2026 12:21",createdBy:"Илья Морозов"}],
     requirements:[{id:"a5000000-0000-4000-8000-000000000001",name:"Устав",category:"corporate",required:true,status:"available",companyDocumentId:null,companyDocument:"Устав ООО «Оперис Персонал»",companyDocumentStatus:"active",companyDocumentExpiresAt:null,ownerUserId:null,owner:null,dueAt:null,notes:null},{id:"a5000000-0000-4000-8000-000000000002",name:"Справка об отсутствии задолженности",category:"tax",required:true,status:"prepare",companyDocumentId:null,companyDocument:null,companyDocumentStatus:null,companyDocumentExpiresAt:null,ownerUserId:"10000000-0000-4000-8000-000000000002",owner:"Илья Морозов",dueAt:"2026-09-12T12:00:00+03:00",notes:"Нужна свежая справка"}],
-    comments:[{id:"a6000000-0000-4000-8000-000000000001",body:"В документации не нашёл гарантированный объём. Нужно запросить разъяснение.",createdAt:"09.09.2026 09:25",createdBy:"Илья Морозов",createdByUserId:"10000000-0000-4000-8000-000000000002"}],approvals:[],calculations:[],bidRounds:[]};
+    comments:[{id:"a6000000-0000-4000-8000-000000000001",body:"В документации не нашёл гарантированный объём. Нужно запросить разъяснение.",createdAt:"09.09.2026 09:25",createdBy:"Илья Морозов",createdByUserId:"10000000-0000-4000-8000-000000000002"}],approvals:[],calculations:[],bidRounds:[],winHandoff:null};
 }
 
 export async function getTender(actor:Actor,id:string):Promise<TenderDetail|null>{
@@ -85,7 +85,7 @@ export async function getTender(actor:Actor,id:string):Promise<TenderDetail|null
       FROM tenders t LEFT JOIN app_users su ON su.id=t.submitted_by_user_id WHERE t.id=${id}::uuid
     `;
     if(!base)return null;
-    const [roles,assignments,sourceDocuments,requirements,comments,approvals,calculations,bidRounds]=await Promise.all([
+    const [roles,assignments,sourceDocuments,requirements,comments,approvals,calculations,bidRounds,winHandoffRows]=await Promise.all([
       sql<TenderRole[]>`SELECT id,specialty_id "specialtyId",title,count_required count,volume,billing_unit "billingUnit",target_client_rate "targetClientRate",schedule_json schedule,requirements_json requirements,notes FROM tender_roles WHERE tender_id=${id}::uuid ORDER BY created_at`,
       sql<TenderAssignment[]>`SELECT ta.id,ta.role_code "roleCode",ta.user_id "userId",u.display_name "user" FROM tender_assignments ta JOIN app_users u ON u.id=ta.user_id WHERE ta.tender_id=${id}::uuid ORDER BY ta.role_code,u.display_name`,
       sql<TenderSourceDocument[]>`SELECT d.id,d.name,d.document_type "documentType",d.source_url "sourceUrl",d.notes,to_char(d.created_at,'DD.MM.YYYY HH24:MI') "createdAt",u.display_name "createdBy" FROM tender_source_documents d JOIN app_users u ON u.id=d.created_by_user_id WHERE d.tender_id=${id}::uuid ORDER BY d.created_at DESC`,
@@ -102,7 +102,7 @@ export async function getTender(actor:Actor,id:string):Promise<TenderDetail|null
       const canReadEconomics=canReadCalculations&&(sources.length===0||sources.every(source=>visibleScenarioIds.has(source.scenarioId)));
       return {...round,economics:canReadEconomics?round.economics:null};
     });
-    return {...summary,...base,roles,assignments,sourceDocuments,requirements,comments,approvals,calculations:visibleCalculations,bidRounds:visibleBidRounds};
+    return {...summary,...base,roles,assignments,sourceDocuments,requirements,comments,approvals,calculations:visibleCalculations,bidRounds:visibleBidRounds,winHandoff:winHandoffRows[0]??null};
   });
 }
 
