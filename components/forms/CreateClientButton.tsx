@@ -66,7 +66,7 @@ export function CreateClientButton({demo=false,onDemoCreate}:{demo?:boolean;onDe
       <form id="client-create-form" className="client-create-form client-create-form-unified" onSubmit={submit}>
         <section className="client-form-section">
           <div className="client-form-section-head"><strong>Основные данные</strong><span>Минимум, необходимый для создания карточки.</span></div>
-          <label><span>Рабочее название <b>*</b></span><input name="name" required minLength={2} maxLength={160} autoFocus placeholder="Например, НордЛог"/><small>Так клиент будет отображаться в реестре и связях.</small></label>
+          <label><span>Рабочее название <b>*</b></span><input name="name" aria-label="Рабочее название *" required minLength={2} maxLength={160} autoFocus placeholder="Например, НордЛог"/><small>Так клиент будет отображаться в реестре и связях.</small></label>
           <label><span>Юридическое наименование</span><input name="legalName" maxLength={240} placeholder="ООО «НордЛог»"/></label>
           <label><span>ИНН</span><input name="inn" inputMode="numeric" maxLength={20} autoComplete="off" placeholder="7701234567"/></label>
         </section>
@@ -77,7 +77,7 @@ export function CreateClientButton({demo=false,onDemoCreate}:{demo?:boolean;onDe
             {!contactOpen&&<button className="button" type="button" onClick={()=>setContactOpen(true)}><UserPlus size={14}/> Добавить контакт</button>}
           </div>
           {contactOpen&&<div className="client-contact-fields">
-            <label><span>Контактное лицо <b>*</b></span><input name="contactName" required placeholder="Имя и фамилия"/></label>
+            <label><span>Контактное лицо <b>*</b></span><input name="contactName" aria-label="Контактное лицо *" required placeholder="Имя и фамилия"/></label>
             <label><span>Телефон</span><input name="contactPhone" type="tel" placeholder="+7 999 000-00-00"/></label>
             <label><span>Эл. почта</span><input name="contactEmail" type="email" placeholder="name@company.ru"/></label>
             <button className="client-contact-remove" type="button" onClick={()=>setContactOpen(false)}>Убрать контакт</button>
