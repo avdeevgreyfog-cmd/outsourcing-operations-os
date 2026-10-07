@@ -51,16 +51,19 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const staticDemo=isGithubPagesDemo();
   const {tab:rawTab}=staticDemo?{}:await searchParams;
   const actor=await requireActor();
+  const canReadRequests=hasCapability(actor.access,"sales.request.read");
+  const canReadObjects=hasCapability(actor.access,"operations.object.read");
+  const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");
   const canReadFinance=hasCapability(actor.access,"finance.pnl.read");
-  const canReadProposals=hasCapability(actor.access,"sales.proposal.read")&&hasCapability(actor.access,"sales.request.read");
+  const canReadProposals=hasCapability(actor.access,"sales.proposal.read")&&canReadRequests;
   const clients=await listClients(actor);
   const client=clients.find(item=>item.id===id);
   if(!client)notFound();
 
   const [requests,objects,calculations,finance,contacts,proposals]=await Promise.all([
-    hasCapability(actor.access,"sales.request.read")?listRequests(actor):Promise.resolve([]),
-    hasCapability(actor.access,"operations.object.read")?listObjects(actor):Promise.resolve([]),
-    hasCapability(actor.access,"calculation.scenario.read")?listCalculations(actor):Promise.resolve([]),
+    canReadRequests?listRequests(actor):Promise.resolve([]),
+    canReadObjects?listObjects(actor):Promise.resolve([]),
+    canReadCalculations?listCalculations(actor):Promise.resolve([]),
     canReadFinance?listFinance(actor):Promise.resolve([]),
     listClientContacts(actor,id),
     canReadProposals?listProposals(actor):Promise.resolve([]),
@@ -79,8 +82,11 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const latestRequest=clientRequests[0]??null;
 
   const visibleTabKeys=Object.keys(labels).filter(key=>{
-    if(key==="finance")return canReadFinance;
+    if(key==="requests")return canReadRequests;
+    if(key==="calculations")return canReadCalculations;
     if(key==="proposals")return canReadProposals;
+    if(key==="objects")return canReadObjects;
+    if(key==="finance")return canReadFinance;
     return true;
   });
   const tab=rawTab&&visibleTabKeys.includes(rawTab)?rawTab:"overview";
@@ -101,16 +107,16 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
       <main className="request-entity-main">
         <Section title="Коммерческий контур" note="Текущие связи клиента с продажами и запуском">
           <div className="client-overview-facts">
-            <Link href={"/clients/"+id+"?tab=requests"}><span>Заявки</span><strong>{clientRequests.length}</strong><small>{latestRequest?.title??"Заявок пока нет"}</small></Link>
-            <Link href={"/clients/"+id+"?tab=calculations"}><span>Расчёты</span><strong>{clientCalculations.length}</strong><small>{acceptedCalculations} принятых сценариев</small></Link>
+            {canReadRequests&&<Link href={"/clients/"+id+"?tab=requests"}><span>Заявки</span><strong>{clientRequests.length}</strong><small>{latestRequest?.title??"Заявок пока нет"}</small></Link>}
+            {canReadCalculations&&<Link href={"/clients/"+id+"?tab=calculations"}><span>Расчёты</span><strong>{clientCalculations.length}</strong><small>{acceptedCalculations} принятых сценариев</small></Link>}
             {canReadProposals&&<Link href={"/clients/"+id+"?tab=proposals"}><span>Коммерческие предложения</span><strong>{clientProposals.length}</strong><small>{clientProposals.length?"Связаны с заявками клиента":"КП пока нет"}</small></Link>}
-            <Link href={"/clients/"+id+"?tab=objects"}><span>Объекты</span><strong>{activeObjects} / {clientObjects.length}</strong><small>активные / всего</small></Link>
+            {canReadObjects&&<Link href={"/clients/"+id+"?tab=objects"}><span>Объекты</span><strong>{activeObjects} / {clientObjects.length}</strong><small>активные / всего</small></Link>}
           </div>
         </Section>
 
-        <Section title="Операционный портфель" note={activeObjects+" действующих объектов"}>
+        {canReadObjects&&<Section title="Операционный портфель" note={activeObjects+" действующих объектов"}>
           <div className="stack-list request-entity-stack">{clientObjects.length?clientObjects.map(item=><Link className="stack-item" href={"/objects/"+item.id} key={item.id}><div><strong>{item.name}</strong><small>{item.region} · укомплектованность {item.coverage}%</small></div><Status tone={item.risk==="critical"?"bad":item.risk==="high"?"warn":tone(item.status)}>{statusLabel(item.status)}</Status></Link>):<Empty title="Объектов пока нет" text="Объекты появятся после передачи согласованного заказа в запуск."/>}</div>
-        </Section>
+        </Section>}
 
         <Section title="Ключевые контакты" note={contacts.length+" контактов"}>
           {contacts.length?<div className="client-contact-summary">{contacts.slice(0,4).map(item=><div key={item.id}><div><strong>{item.fullName}</strong><small>{item.position??"Должность не указана"}</small></div><span>{contactPrimary(item)}</span></div>)}</div>:<Empty title="Контактов пока нет" text="Добавьте контакт клиента, когда появится подтверждённое контактное лицо."/>}
