@@ -1,0 +1,79 @@
+name: Clients Browser QA Temporary
+
+on:
+  push:
+    branches: [feat/clients-registry-standard-20261007]
+
+jobs:
+  clients-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DEMO_MODE: "true"
+      SESSION_SECRET: "clients-browser-qa-only"
+      BASE_URL: "http://127.0.0.1:3000"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run clients visual/browser QA
+        shell: bash
+        run: |
+          npm start -- --hostname 127.0.0.1 --port 3000 >/tmp/clients-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/clients >/dev/null; then break; fi
+            if [ "$attempt" = "60" ]; then cat /tmp/clients-server.log; exit 1; fi
+            sleep 1
+          done
+          node - <<'NODE'
+          const {chromium}=require('playwright');
+          const assert=require('node:assert/strict');
+          const fs=require('node:fs');
+          fs.mkdirSync('artifacts/clients-qa',{recursive:true});
+          const base='http://127.0.0.1:3000';
+          const browser=await chromium.launch({headless:true});
+          const errors=[];const writes=[];
+          async function context(width,theme){
+            const c=await browser.newContext({viewport:{width,height:900},colorScheme:theme});
+            await c.addCookies([{name:'oo_workspace_mode',value:'demo',url:base},{name:'oo_demo_role',value:'director',url:base},{name:'oo_theme',value:theme,url:base}]);
+            c.on('page',p=>{p.on('pageerror',e=>errors.push(e.message));p.on('request',r=>{if(r.url().includes('/api/clients')&&['POST','PUT','PATCH','DELETE'].includes(r.method()))writes.push(r.method())})});
+            return c;
+          }
+          async function go(p,path='/clients'){const r=await p.goto(base+path,{waitUntil:'networkidle'});assert.equal(r?.status(),200);assert.equal(await p.locator('[data-nextjs-dialog]').count(),0)}
+          async function bounded(p,name){const s=await p.evaluate(()=>({w:innerWidth,sw:document.documentElement.scrollWidth}));assert.ok(s.sw<=s.w+1,name+' overflow '+JSON.stringify(s));await p.screenshot({path:'artifacts/clients-qa/'+name+'.png',fullPage:true})}
+          function overlapCheck(p,scope,name){return p.locator(scope).evaluate((root,name)=>{const containers=[...root.querySelectorAll('.operis-registry-header,.client-form-section-head,.section-head,.page-header')];const issues=[];for(const container of containers){const nodes=[...container.querySelectorAll('h1,h2,h3,p,strong,span,small')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.height>0&&(el.textContent||'').trim()});for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const a=nodes[i],b=nodes[j];if(a.contains(b)||b.contains(a))continue;const ar=a.getBoundingClientRect(),br=b.getBoundingClientRect(),x=Math.min(ar.right,br.right)-Math.max(ar.left,br.left),y=Math.min(ar.bottom,br.bottom)-Math.max(ar.top,br.top);if(x>1&&y>1)issues.push({a:(a.textContent||'').trim().slice(0,70),b:(b.textContent||'').trim().slice(0,70),x,y})}}return issues},name).then(issues=>assert.deepEqual(issues,[],name+' overlaps '+JSON.stringify(issues)))}
+          try{
+            const c=await context(1440,'light'),p=await c.newPage();await go(p);const r=p.locator('.operis-client-registry');await r.waitFor();
+            assert.equal(await p.locator('.sales-metrics').count(),0);
+            const geom=await r.locator('.operis-client-table').evaluate(t=>({h:t.querySelector('thead tr').getBoundingClientRect().height,r:t.querySelector('tbody tr:not(.operis-group-row)').getBoundingClientRect().height}));
+            assert.ok(Math.abs(geom.h-42)<=1&&Math.abs(geom.r-60)<=1,JSON.stringify(geom));
+            await r.getByLabel('Поиск клиентов').fill('Север Логистик');assert.equal(await r.locator('.operis-client-name').count(),1);await r.getByRole('button',{name:'Очистить поиск'}).click();
+            await r.getByRole('button',{name:'Колонки',exact:true}).click();await r.getByLabel('ИНН',{exact:true}).check();await r.getByRole('button',{name:'Закрепить: ИНН'}).click();await r.getByRole('button',{name:'Закрыть настройки'}).click();
+            await r.getByRole('button',{name:'Группировка',exact:true}).click();await r.getByRole('combobox',{name:'Первый уровень'}).selectOption('owner');await r.getByRole('combobox',{name:'Второй уровень'}).selectOption('region');await r.getByRole('button',{name:'Закрыть настройки'}).click();assert.ok(await r.locator('.operis-group-row').count()>0);
+            await r.locator('.operis-client-name').first().click();let d=p.getByRole('dialog');assert.ok(Math.abs((await d.boundingBox()).width-490)<=1);await overlapCheck(p,'dialog','quick');await p.keyboard.press('Escape');
+            await r.getByRole('button',{name:'Добавить клиента',exact:true}).click();d=p.getByRole('dialog');assert.ok(Math.abs((await d.boundingBox()).width-490)<=1);await d.getByLabel('Рабочее название *',{exact:true}).fill('Очень длинное демонстрационное название клиента для проверки переноса текста');await overlapCheck(p,'dialog','create');await d.getByRole('button',{name:'Создать клиента',exact:true}).click();assert.deepEqual(writes,[]);await p.keyboard.press('Escape');
+            const href=await r.locator('.operis-actions-cell a').first().getAttribute('href');await go(p,href);const tabs=await p.getByRole('navigation',{name:'Разделы карточки'}).getByRole('link').allTextContents();assert.ok(!tabs.some(x=>x.includes('Документы'))&&!tabs.some(x=>x.includes('Журнал действий')));assert.ok(tabs.some(x=>x.startsWith('КП'))&&tabs.some(x=>x.startsWith('Финансы')));
+            for(const tab of ['overview','contacts','requests','calculations','proposals','objects','finance']){await go(p,href+'?tab='+tab);await overlapCheck(p,'.client-entity-workspace','entity '+tab);await bounded(p,'entity-'+tab+'-1440-light')}
+            await c.close();
+            for(const width of [1440,1024,768,390])for(const theme of ['light','dark']){const cc=await context(width,theme),pp=await cc.newPage();await go(pp);await overlapCheck(pp,'.operis-client-registry','registry '+width+' '+theme);await bounded(pp,'registry-'+width+'-'+theme);await pp.locator('.operis-client-name').first().click();assert.ok((await pp.getByRole('dialog').boundingBox()).width<=width+1);await pp.screenshot({path:'artifacts/clients-qa/quick-'+width+'-'+theme+'.png',fullPage:true});await pp.keyboard.press('Escape');await pp.getByRole('button',{name:'Добавить клиента',exact:true}).click();assert.ok((await pp.getByRole('dialog').boundingBox()).width<=width+1);await overlapCheck(pp,'dialog','create '+width+' '+theme);await pp.screenshot({path:'artifacts/clients-qa/create-'+width+'-'+theme+'.png',fullPage:true});await pp.keyboard.press('Escape');await cc.close()}
+            assert.deepEqual(errors,[]);assert.deepEqual(writes,[]);console.log('CLIENTS_QA_OK');
+          }finally{await browser.close()}
+          NODE
+      - name: Upload clients QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clients-browser-qa
+          path: artifacts/clients-qa
+          retention-days: 2
