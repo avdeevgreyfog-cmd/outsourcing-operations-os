@@ -9,6 +9,7 @@ import type {ClientContactRow,ClientEditOptions,ClientRow} from "@/lib/data/serv
 const statusOptions=[
   ["active","Активен"],
   ["inactive","Неактивен"],
+  ["blocked","Заблокирован"],
   ["archived","Архив"],
 ] as const;
 const channelOptions=[
