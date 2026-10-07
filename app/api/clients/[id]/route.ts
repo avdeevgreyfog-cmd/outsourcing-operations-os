@@ -11,7 +11,7 @@ const schema=z.object({
   legalName:nullableText(240),
   inn:nullableText(20),
   notes:nullableText(5000),
-  status:z.enum(["active","inactive","archived"]),
+  status:z.enum(["active","inactive","blocked","archived"]),
   ownerUserId:z.string().uuid().nullable().optional(),
   regionId:z.string().uuid().nullable().optional(),
   teamId:z.string().uuid().nullable().optional(),
