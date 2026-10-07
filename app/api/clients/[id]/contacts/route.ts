@@ -49,6 +49,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         ) RETURNING id
       `;
       await sql`UPDATE client_companies SET updated_at=now() WHERE id=${id}::uuid`;
+      await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'client',${id}::uuid,'contact_added','Добавлен контакт клиента')`;
       return created;
     });
     return NextResponse.json(row,{status:201});
