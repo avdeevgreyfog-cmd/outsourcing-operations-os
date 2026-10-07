@@ -37,9 +37,9 @@ jobs:
             sleep 1
           done
           node - <<'NODE'
-          const {chromium}=require('playwright');
-          const assert=require('node:assert/strict');
-          const fs=require('node:fs');
+          const {chromium}=await import('playwright');
+          const assert=(await import('node:assert/strict')).default;
+          const fs=await import('node:fs');
           fs.mkdirSync('artifacts/clients-qa',{recursive:true});
           const base='http://127.0.0.1:3000';
           const browser=await chromium.launch({headless:true});
