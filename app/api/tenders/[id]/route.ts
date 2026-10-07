@@ -5,14 +5,15 @@ import {AccessDeniedError,requireCapability} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {tenderStageLabel} from "@/lib/tenders/model";
 import {withTenant} from "@/lib/db/client";
+import {calculateTenderBidEconomics} from "@/lib/tenders/trading.mjs";
 
 const nullableText=(max:number)=>z.string().trim().max(max).nullable().optional();
 const coreSchema=z.object({action:z.literal("core"),title:z.string().trim().min(3).max(300),customerName:nullableText(300),clientId:z.string().uuid().nullable().optional(),platform:nullableText(160),procedureNumber:nullableText(180),sourceUrl:z.string().url().max(2000).nullable().optional(),sourceName:nullableText(180),publicationDate:z.string().date().nullable().optional(),submissionDeadline:z.string().datetime({offset:true}).nullable().optional(),initialPrice:z.number().nonnegative().nullable().optional(),billingUnit:z.enum(["unknown","hour","shift","worker_month","unit","piecework","project","mixed"]),priority:z.enum(["low","normal","high"]),potential:z.enum(["low","medium","high"]),regionId:z.string().uuid().nullable().optional(),legalEntityId:z.string().uuid().nullable().optional(),nextActionText:nullableText(1000),nextActionAt:z.string().datetime({offset:true}).nullable().optional()});
 const analysisSchema=z.object({action:z.literal("analysis"),analysisSummary:nullableText(12000),conditions:z.record(z.string(),z.json())});
 const stageSchema=z.object({action:z.literal("stage"),stage:z.enum(["new","analysis","clarification","calculation","approval","preparation","submitted","awaiting_result","completed"]),decision:z.enum(["undecided","participate","needs_clarification","no_bid"]).optional(),result:z.enum(["won","lost","no_bid","cancelled","failed"]).nullable().optional(),noBidReasonCode:nullableText(80),noBidComment:nullableText(4000),resultReasonCode:nullableText(80),closeReason:nullableText(4000)});
-const submissionSchema=z.object({action:z.literal("submission"),finalBidValue:z.number().nonnegative().nullable().optional(),bidReference:nullableText(500),submissionNote:nullableText(5000),checklist:z.array(z.object({id:z.string().max(100),label:z.string().trim().min(1).max(300),done:z.boolean()})).max(40),markSubmitted:z.boolean().optional()});
+const submissionSchema=z.object({action:z.literal("submission"),finalBidValue:z.number().nonnegative().nullable().optional(),priceVatMode:z.enum(["unknown","with_vat","without_vat","not_applicable"]).optional(),bidReference:nullableText(500),submissionNote:nullableText(5000),checklist:z.array(z.object({id:z.string().max(100),label:z.string().trim().min(1).max(300),done:z.boolean()})).max(40),markSubmitted:z.boolean().optional()});
 const schema=z.discriminatedUnion("action",[coreSchema,analysisSchema,stageSchema,submissionSchema]);
-type ScopeRow={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;stage:string;result:string|null};
+type ScopeRow={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;stage:string;result:string|null;submittedAt:string|null;finalBidValue:number|string|null};
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -20,7 +21,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     requireCapability(actor,"sales.tender.edit");if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
-      const [scope]=await tx<Array<ScopeRow>>`SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,result FROM tenders WHERE id=${id}::uuid FOR UPDATE`;
+      const [scope]=await tx<Array<ScopeRow>>`SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,result,submitted_at::text "submittedAt",final_bid_value "finalBidValue" FROM tenders WHERE id=${id}::uuid FOR UPDATE`;
       if(!scope)throw new Error("Тендер не найден");if(!canReadRow(actor.access,"sales.tender.edit",scope,actor))throw new AccessDeniedError("sales.tender.edit");
       let summary="Тендер обновлён";
       if(body.action==="core"){
@@ -81,7 +82,21 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         summary=`Этап тендера изменён на «${tenderStageLabel(body.stage)}»`;
       }else{
         if(body.markSubmitted)requireCapability(actor,"sales.tender.submit");
-        await tx`UPDATE tenders SET final_bid_value=${body.finalBidValue??null},bid_reference=${body.bidReference??null},submission_note=${body.submissionNote??null},submission_checklist=${tx.json(body.checklist)},submitted_at=CASE WHEN ${body.markSubmitted??false} THEN COALESCE(submitted_at,now()) ELSE submitted_at END,submitted_by_user_id=CASE WHEN ${body.markSubmitted??false} THEN ${actor.userId}::uuid ELSE submitted_by_user_id END,stage=CASE WHEN ${body.markSubmitted??false} THEN 'submitted' ELSE stage END,updated_at=now() WHERE id=${id}::uuid`;summary=body.markSubmitted?"Тендер отмечен как поданный":"Обновлена подготовка к подаче";
+        const previousPrice=scope.finalBidValue==null?null:Number(scope.finalBidValue);
+        const nextPrice=body.finalBidValue==null?null:Number(body.finalBidValue);
+        if(scope.submittedAt&&!body.markSubmitted&&body.finalBidValue!==undefined&&previousPrice!==nextPrice){
+          throw new Error("После подачи цена фиксируется только через вкладку «Торги»");
+        }
+        const shouldCreateInitialRound=Boolean(body.markSubmitted&&!scope.submittedAt&&body.finalBidValue!=null&&Number(body.finalBidValue)>0);
+        const initialEconomics=shouldCreateInitialRound
+          ?await calculateTenderBidEconomics(tx,id,Number(body.finalBidValue),body.priceVatMode??"unknown")
+          :null;
+        await tx`UPDATE tenders SET final_bid_value=${body.finalBidValue??null},bid_reference=${body.bidReference??null},submission_note=${body.submissionNote??null},submission_checklist=${tx.json(body.checklist)},submitted_at=CASE WHEN ${body.markSubmitted??false} THEN COALESCE(submitted_at,now()) ELSE submitted_at END,submitted_by_user_id=CASE WHEN ${body.markSubmitted??false} THEN ${actor.userId}::uuid ELSE submitted_by_user_id END,stage=CASE WHEN ${body.markSubmitted??false} THEN 'submitted' ELSE stage END,updated_at=now() WHERE id=${id}::uuid`;
+        if(initialEconomics&&body.finalBidValue!=null){
+          const [counter]=await tx<Array<{nextRound:number}>>`SELECT COALESCE(max(round_number),0)::int+1 "nextRound" FROM tender_bid_rounds WHERE tender_id=${id}::uuid`;
+          await tx`INSERT INTO tender_bid_rounds(organization_id,tender_id,round_number,bid_value,price_vat_mode,occurred_at,source,reference,note,economics_snapshot,recorded_by_user_id) VALUES(${actor.organizationId}::uuid,${id}::uuid,${counter?.nextRound??1},${body.finalBidValue},${body.priceVatMode??"unknown"},now(),'submission',${body.bidReference??null},${body.submissionNote??null},${tx.json(initialEconomics)},${actor.userId}::uuid)`;
+        }
+        summary=body.markSubmitted?(shouldCreateInitialRound?"Тендер отмечен как поданный; начальная цена зафиксирована в истории торгов":"Тендер отмечен как поданный"):"Обновлена подготовка к подаче";
       }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${id}::uuid,'updated',${summary})`;
       return {id,action:body.action};
