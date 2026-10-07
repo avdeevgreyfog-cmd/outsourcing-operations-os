@@ -55,7 +55,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${id}::uuid,'bid_round_added',${`Зафиксирован раунд торгов №${roundNumber}: ${amount}`})
       `;
-      return {...row,economics};
+      return row;
     });
     return NextResponse.json(result,{status:201});
   }catch(error){
