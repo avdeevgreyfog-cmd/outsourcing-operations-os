@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
 import {canReadRow,hasCapability} from '../lib/core/access.mjs';
+import {validateTenderLaunchPricing} from '../lib/tenders/handoff.mjs';
 const nativeRequire=createRequire(import.meta.url);
 function load(path,deps={}){
   const code=ts.transpileModule(fs.readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -160,6 +161,7 @@ function launchFixture({caps=['sales.tender.read','sales.tender.launch'],rowDeni
     '@/lib/core/access.mjs':{canReadRow},
     '@/lib/db/client':{withTenant:async(org,user,cb)=>cb(sql)},
     '@/lib/operations/launch-checklist':{defaultPrimarySiteVisitChecklist:()=>[]},
+    '@/lib/tenders/handoff.mjs':{validateTenderLaunchPricing},
   });
   return {writes,post:body=>api.POST(new Request('http://localhost/api/tenders/'+id+'/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body??{})}),{params:Promise.resolve({id})})};
 }
