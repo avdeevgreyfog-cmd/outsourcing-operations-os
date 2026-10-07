@@ -4203,6 +4203,12 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace .client-contact-summary small{display:block;margin-top:2px;color:var(--muted);font-size:12px}
 .sales-workspace .client-contact-summary>div>span{min-width:0;overflow-wrap:anywhere;color:var(--muted);font-size:12px;text-align:right}
 .sales-workspace .client-entity-table{min-width:760px}
+.sales-workspace .client-create-form-unified textarea{min-height:96px;padding:9px 10px;resize:vertical;line-height:1.45}
+.sales-workspace .client-overview-note{margin:0;padding:16px 18px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text);font-size:13px;line-height:1.6}
+.sales-workspace .client-contact-table .client-contact-action-cell{width:54px;text-align:right}
+.sales-workspace .client-contact-edit-trigger{margin-left:auto}
+.sales-workspace .client-danger-button{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 34%,var(--border))}
+.sales-workspace .client-danger-button:hover{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 52%,var(--border))}
 .sales-workspace .client-finance-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 .sales-workspace .client-finance-summary>div{padding:18px;border-right:1px solid var(--border)}
 .sales-workspace .client-finance-summary>div:last-child{border-right:0}
