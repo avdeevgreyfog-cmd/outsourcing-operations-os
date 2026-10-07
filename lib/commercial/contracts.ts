@@ -24,7 +24,8 @@ export type ContractTerms = {
   penalties?: string | null;
   notes?: string | null;
   roles?: Array<{ role: string; count: number; rateNet: number; rateGross?: number; unit: string; scenarioId?: string }>;
-  proposalSnapshot?: { proposalId: string; proposalVersion: number };\n  tenderSnapshot?: { tenderId:string; calculationId:string; calculationVersion:number; scenarioIds:string[] };
+  proposalSnapshot?: { proposalId: string; proposalVersion: number };
+  tenderSnapshot?: { tenderId:string; calculationId:string; calculationVersion:number; scenarioIds:string[] };
 };
 
 export type ContractRow = {
@@ -32,8 +33,10 @@ export type ContractRow = {
   organizationId: string;
   clientId: string;
   client: string;
-  requestId: string;
-  request: string;
+  requestId: string | null;
+  request: string | null;
+  tenderId: string | null;
+  tender: string | null;
   proposalId: string | null;
   proposalVersion: number | null;
   objectId: string | null;
@@ -92,6 +95,8 @@ function demoContracts(): ContractRow[] {
     client: request.client,
     requestId: request.id,
     request: request.title,
+    tenderId: null,
+    tender: null,
     proposalId: proposal.id,
     proposalVersion: Number(proposal.version ?? 1),
     objectId: object.id,
