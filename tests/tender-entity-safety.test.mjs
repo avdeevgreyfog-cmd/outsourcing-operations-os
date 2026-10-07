@@ -107,7 +107,7 @@ function bidFixture({caps=['sales.tender.read','sales.tender.edit','sales.tender
     if(query.includes('SELECT COALESCE(max(round_number)'))return [{nextRound:2}];
     if(query.includes('INSERT INTO tender_bid_rounds')){writes.push(query);return [{id:'round-2',roundNumber:2,bidValue:90000,occurredAt:'2026-10-07T18:00:00Z'}];}
     if(query.includes('UPDATE tenders')){writes.push(query);return [];}
-    if(query.startsWith('INSERT INTO activity_events')){writes.push(query);return [];}
+    if(query.includes('INSERT INTO activity_events')){writes.push(query);return [];}
     throw Error('Unexpected SQL '+query);
   };
   tx.json=value=>value;
