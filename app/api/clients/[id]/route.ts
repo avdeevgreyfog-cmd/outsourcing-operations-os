@@ -32,7 +32,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;
     const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [current]=await tx<ScopeRow[]>`
         SELECT id,id "clientId",organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",
           assigned_team_id "teamId",region_id "regionId",name,legal_name "legalName",inn,notes,status
@@ -73,7 +73,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         WHERE id=${id}::uuid
       `;
       return {id};
-    }));
+    });
     if(!result)return NextResponse.json({error:"Клиент не найден"},{status:404});
     return NextResponse.json(result);
   }catch(error){
