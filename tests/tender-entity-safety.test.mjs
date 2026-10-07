@@ -103,7 +103,7 @@ function bidFixture({caps=['sales.tender.read','sales.tender.edit','sales.tender
   const secretEconomics={status:'complete',revenueNet:100000,totalCostNet:70000,marginPct:30,vatPct:20,missing:[],sources:[{scenarioId:'hidden-scenario'}]};
   const tx=async(strings,...values)=>{
     const query=strings.join('?');
-    if(query.startsWith('SELECT organization_id'))return [{organizationId:rowDenied?'other':'org',ownerUserId:'user',createdByUserId:'user',teamId:null,regionId:null,clientId:null,stage}];
+    if(query.includes('SELECT organization_id'))return [{organizationId:rowDenied?'other':'org',ownerUserId:'user',createdByUserId:'user',teamId:null,regionId:null,clientId:null,stage}];
     if(query.includes('SELECT COALESCE(max(round_number)'))return [{nextRound:2}];
     if(query.startsWith('INSERT INTO tender_bid_rounds')){writes.push(query);return [{id:'round-2',roundNumber:2,bidValue:90000,occurredAt:'2026-10-07T18:00:00Z'}];}
     if(query.startsWith('UPDATE tenders')){writes.push(query);return [];}
