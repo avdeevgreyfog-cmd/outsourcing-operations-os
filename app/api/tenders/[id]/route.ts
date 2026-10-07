@@ -19,7 +19,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"sales.tender.edit");if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [scope]=await tx<Array<ScopeRow>>`SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,result FROM tenders WHERE id=${id}::uuid FOR UPDATE`;
       if(!scope)throw new Error("Тендер не найден");if(!canReadRow(actor.access,"sales.tender.edit",scope,actor))throw new AccessDeniedError("sales.tender.edit");
       let summary="Тендер обновлён";
@@ -85,7 +85,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       }
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${id}::uuid,'updated',${summary})`;
       return {id,action:body.action};
-    }));return NextResponse.json(result);
+    });return NextResponse.json(result);
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные тендера",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
