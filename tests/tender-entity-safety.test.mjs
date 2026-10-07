@@ -96,3 +96,49 @@ test('tender details never query or return economics without scenario read capab
 test('tender economics obey scenario row scope and omit internal permission metadata',async()=>{
   const f=serviceFixture({readCalculations:true,ownOnly:true});const row=await f.read();assert.equal(f.queries(),1);assert.equal(row.calculations.length,1);assert.equal(row.calculations[0].scenarioId,'scenario0');assert.equal('createdByUserId' in row.calculations[0],false);
 });
+
+
+function bidFixture({caps=['sales.tender.read','sales.tender.edit','sales.tender.submit'],stage='submitted',rowDenied=false}={}){
+  const a=actor(caps),writes=[];
+  const secretEconomics={status:'complete',revenueNet:100000,totalCostNet:70000,marginPct:30,vatPct:20,missing:[],sources:[{scenarioId:'hidden-scenario'}]};
+  const tx=async(strings,...values)=>{
+    const query=strings.join('?');
+    if(query.startsWith('SELECT organization_id'))return [{organizationId:rowDenied?'other':'org',ownerUserId:'user',createdByUserId:'user',teamId:null,regionId:null,clientId:null,stage}];
+    if(query.includes('SELECT COALESCE(max(round_number)'))return [{nextRound:2}];
+    if(query.startsWith('INSERT INTO tender_bid_rounds')){writes.push(query);return [{id:'round-2',roundNumber:2,bidValue:90000,occurredAt:'2026-10-07T18:00:00Z'}];}
+    if(query.startsWith('UPDATE tenders')){writes.push(query);return [];}
+    if(query.startsWith('INSERT INTO activity_events')){writes.push(query);return [];}
+    throw Error('Unexpected SQL '+query);
+  };
+  tx.json=value=>value;
+  const api=load('app/api/tenders/[id]/bids/route.ts',{
+    'next/server':{NextResponse:{json:(body,{status=200}={})=>({body,status})}},
+    '@/lib/auth/server':{getCurrentActor:async()=>a},
+    '@/lib/access/server':auth,
+    '@/lib/core/access.mjs':{canReadRow},
+    '@/lib/db/client':{withTenant:async(org,user,cb)=>cb(tx)},
+    '@/lib/tenders/trading.mjs':{calculateTenderBidEconomics:async()=>secretEconomics},
+  });
+  return {writes,post:body=>api.POST(new Request('http://localhost/api/tenders/'+id+'/bids',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({id})})};
+}
+test('bid round API stores server economics without returning sensitive snapshot',async()=>{
+  const f=bidFixture();
+  const response=await f.post({bidValue:90000,priceVatMode:'with_vat',reference:'step-2'});
+  assert.equal(response.status,201);
+  assert.equal(response.body.roundNumber,2);
+  assert.equal('economics' in response.body,false);
+  assert.equal(f.writes.length,3);
+});
+test('bid round API requires submit capability, edit row scope and submitted stage',async()=>{
+  const noSubmit=bidFixture({caps:['sales.tender.read','sales.tender.edit']});
+  assert.equal((await noSubmit.post({bidValue:90000,priceVatMode:'without_vat'})).status,403);
+  assert.equal(noSubmit.writes.length,0);
+  const denied=bidFixture({rowDenied:true});
+  assert.equal((await denied.post({bidValue:90000,priceVatMode:'without_vat'})).status,403);
+  assert.equal(denied.writes.length,0);
+  const early=bidFixture({stage:'calculation'});
+  const response=await early.post({bidValue:90000,priceVatMode:'without_vat'});
+  assert.equal(response.status,500);
+  assert.match(response.body.error,/после подачи/i);
+  assert.equal(early.writes.length,0);
+});
