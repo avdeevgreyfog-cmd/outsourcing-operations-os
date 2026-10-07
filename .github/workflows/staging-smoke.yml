@@ -49,24 +49,32 @@ jobs:
           set -euo pipefail
           production_code="$(curl -sS -o /tmp/production-status.json -w '%{http_code}' "$PRODUCTION_BASE_URL/api/system/status")"
           test "$production_code" = "200"
-          expected_schema="$(find migrations -maxdepth 1 -type f -name '[0-8][0-9][0-9][0-9]_*.sql' -printf '%f\n' | sort | tail -n 1)"
-          EXPECTED_SCHEMA="$expected_schema" node - <<'NODE'
+
+          staging_expected_schema="$(find migrations -maxdepth 1 -type f -name '[0-8][0-9][0-9][0-9]_*.sql' -printf '%f\n' | sort | tail -n 1)"
+          git fetch --no-tags --depth=1 origin main
+          production_expected_schema="$(git ls-tree -r --name-only FETCH_HEAD migrations | sed -n 's#^migrations/\([0-8][0-9][0-9][0-9]_.+\.sql\)$#\1#p' | sort | tail -n 1)"
+
+          test -n "$staging_expected_schema" || { echo "::error::Unable to resolve beta schema baseline."; exit 1; }
+          test -n "$production_expected_schema" || { echo "::error::Unable to resolve main schema baseline."; exit 1; }
+
+          STAGING_EXPECTED_SCHEMA="$staging_expected_schema" PRODUCTION_EXPECTED_SCHEMA="$production_expected_schema" node - <<'NODE'
           const fs=require("node:fs");
           const staging=JSON.parse(fs.readFileSync("/tmp/status.json","utf8"));
           const production=JSON.parse(fs.readFileSync("/tmp/production-status.json","utf8"));
           if(staging.ok!==true)throw new Error("staging runtime is unhealthy");
           if(staging.databaseConfigured!==true)throw new Error("staging DATABASE_URL is not configured");
           if(!staging.databaseIdentity)throw new Error("staging database identity is unavailable");
-          if(staging.schemaVersion!==process.env.EXPECTED_SCHEMA){
-            throw new Error(`staging schema is not current; expected=${process.env.EXPECTED_SCHEMA} active=${staging.schemaVersion??"unknown"}`);
+          if(staging.schemaVersion!==process.env.STAGING_EXPECTED_SCHEMA){
+            throw new Error(`staging schema is not current for beta; expected=${process.env.STAGING_EXPECTED_SCHEMA} active=${staging.schemaVersion??"unknown"}`);
           }
           if(staging.environment!=="staging"){
             throw new Error(`staging deployment must report APP_ENVIRONMENT=staging; got ${staging.environment??"unknown"}`);
           }
+
           if(production.ok!==true)throw new Error("production runtime is unhealthy");
           if(production.databaseConfigured!==true)throw new Error("production DATABASE_URL is not configured");
-          if(production.schemaVersion!==process.env.EXPECTED_SCHEMA){
-            throw new Error(`production schema is not current; expected=${process.env.EXPECTED_SCHEMA} active=${production.schemaVersion??"unknown"}`);
+          if(production.schemaVersion!==process.env.PRODUCTION_EXPECTED_SCHEMA){
+            throw new Error(`production schema drifted from main; expected=${process.env.PRODUCTION_EXPECTED_SCHEMA} active=${production.schemaVersion??"unknown"}`);
           }
           if(production.environment!=null&&production.environment!=="production"){
             throw new Error(`production deployment reports an invalid environment: ${production.environment}`);
@@ -75,7 +83,7 @@ jobs:
             throw new Error("staging and production resolve to the same PostgreSQL database");
           }
           if(production.environment==null||production.databaseIdentity==null){
-            console.log("::notice::Production is still on the main status contract; production-smoke will require environment and database identity after promotion.");
+            console.log("::notice::Production runtime does not yet expose full environment/database identity metadata; secret-level boundary verification remains mandatory in Release Readiness.");
           }
           NODE
 
