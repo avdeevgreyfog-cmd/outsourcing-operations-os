@@ -5,6 +5,7 @@ import {AccessDeniedError,requireCapability} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {withTenant} from "@/lib/db/client";
 import {defaultPrimarySiteVisitChecklist} from "@/lib/operations/launch-checklist";
+import {validateTenderLaunchPricing} from "@/lib/tenders/handoff.mjs";
 
 const schema=z.object({
   name:z.string().trim().min(2).max(240).optional(),
@@ -20,8 +21,10 @@ type SourceRow={
 };
 type RoleScenario={
   roleId:string;title:string;countRequired:number|null;specialtyId:string|null;scenarioId:string|null;
-  billingUnit:string;clientRateNet:number|string|null;clientRateGross:number|string|null;vatPct:number|string|null;
+  volume:number|string|null;roleBillingUnit:string;scenarioBillingUnit:string|null;billingUnit:string;
+  clientRateNet:number|string|null;clientRateGross:number|string|null;vatPct:number|string|null;
 };
+type FinalBidRound={id:string;roundNumber:number;bidValue:number|string;priceVatMode:string};
 
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
@@ -60,7 +63,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
 
       const roles=await tx<RoleScenario[]>`
         SELECT tr.id "roleId",tr.title,tr.count_required "countRequired",tr.specialty_id "specialtyId",
-          cs.id "scenarioId",COALESCE(cs.result_snapshot->>'billingUnit',tr.billing_unit) "billingUnit",
+          tr.volume,tr.billing_unit "roleBillingUnit",cs.id "scenarioId",cs.result_snapshot->>'billingUnit' "scenarioBillingUnit",
+          COALESCE(cs.result_snapshot->>'billingUnit',tr.billing_unit) "billingUnit",
           COALESCE((cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric,tr.target_client_rate) "clientRateNet",
           (cs.result_snapshot->>'clientRateGross')::numeric "clientRateGross",
           (cs.result_snapshot->>'vatPct')::numeric "vatPct"
@@ -79,6 +83,23 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(missingScenario)throw new Error(`В утверждённой версии расчёта нет принятого сценария для позиции «${missingScenario.title}»`);
       const missingRate=roles.find(role=>role.clientRateNet==null||Number(role.clientRateNet)<=0);
       if(missingRate)throw new Error(`В принятом сценарии позиции «${missingRate.title}» нет клиентской ставки`);
+
+      const [finalBidRound]=await tx<Array<FinalBidRound>>`
+        SELECT id,round_number "roundNumber",bid_value "bidValue",price_vat_mode "priceVatMode"
+        FROM tender_bid_rounds
+        WHERE tender_id=${id}::uuid
+        ORDER BY round_number DESC,occurred_at DESC
+        LIMIT 1
+      `;
+      if(!finalBidRound)throw new Error("Перед передачей в запуск зафиксируйте финальную цену во вкладке «Подача» или «Торги»");
+      const pricing=validateTenderLaunchPricing({
+        bidValue:finalBidRound.bidValue,
+        priceVatMode:finalBidRound.priceVatMode,
+        roles,
+      });
+      if(pricing.status!=="aligned")throw new Error(
+        `Финальная экономика не готова к запуску. ${pricing.missing[0]??"Сверьте выигрышную цену и ставки по позициям"}`
+      );
 
       const legalEntities=await tx<Array<{id:string;primary:boolean}>>`
         SELECT id,is_primary "primary" FROM legal_entities WHERE active ORDER BY is_primary DESC,name
@@ -278,6 +299,12 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           calculationId:calculation.id,
           calculationVersion:calculation.version,
           scenarioIds:roles.map(role=>role.scenarioId),
+          finalBidRoundId:finalBidRound.id,
+          finalBidRoundNumber:finalBidRound.roundNumber,
+          finalBidValue:Number(finalBidRound.bidValue),
+          priceVatMode:finalBidRound.priceVatMode,
+          winningRevenueNet:pricing.winningRevenueNet,
+          scenarioRevenueNet:pricing.scenarioRevenueNet,
         },
       }));
 
@@ -305,6 +332,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           ${tx.json({
             objectId:object.id,contractId:contract.id,needCount:needs.length,legalEntityId,
             calculationId:calculation.id,calculationVersion:calculation.version,
+            finalBidRoundId:finalBidRound.id,winningRevenueNet:pricing.winningRevenueNet,
+            scenarioRevenueNet:pricing.scenarioRevenueNet,
             recruitingRouteOwnerUserId:recruitingOwner?.userId??null,
           })}
         )
