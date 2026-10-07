@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {buildTenderBidEconomics} from "../lib/tenders/trading.mjs";
+import {buildTenderBidEconomics,calculateTenderBidEconomics} from "../lib/tenders/trading.mjs";
 
 test("tender bid economics calculates margin only from comparable approved scenario snapshots",()=>{
   const snapshot=buildTenderBidEconomics({
@@ -47,4 +47,22 @@ test("mixed or mismatched tariff units keep margin unavailable",()=>{
   assert.equal(snapshot.status,"incomplete");
   assert.equal(snapshot.marginPct,null);
   assert.ok(snapshot.missing.some(item=>item.includes("Смешанная тарификация")));
+});
+
+
+test("bid economics uses one latest approved calculation version for all tender roles",async()=>{
+  let query="";
+  const sql=async(strings)=>{
+    query=strings.join("?");
+    return [
+      {roleId:"1",roleTitle:"Комплектовщик",volume:100,roleBillingUnit:"hour",scenarioId:"s1",calculationId:"c2",calculationVersion:2,scenarioVersion:1,scenarioBillingUnit:"hour",costPerBillingUnit:50,vatPct:20},
+      {roleId:"2",roleTitle:"Грузчик",volume:50,roleBillingUnit:"hour",scenarioId:null,calculationId:null,calculationVersion:null,scenarioVersion:null,scenarioBillingUnit:null,costPerBillingUnit:null,vatPct:null},
+    ];
+  };
+  const snapshot=await calculateTenderBidEconomics(sql,"a1000000-0000-4000-8000-000000000001",12000,"with_vat");
+  assert.match(query,/WITH approved_calc/);
+  assert.match(query,/cs\.calculation_id=ac\.id/);
+  assert.equal(snapshot.status,"incomplete");
+  assert.equal(snapshot.marginPct,null);
+  assert.ok(snapshot.missing.some(item=>item.includes("Грузчик")));
 });
