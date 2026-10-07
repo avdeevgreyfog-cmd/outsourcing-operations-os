@@ -58,7 +58,7 @@ export async function listClients(actor: Actor): Promise<ClientRow[]> {
       const owner=demoOrg.companyEmployees.find(item=>item.userId===client.ownerUserId);
       const region=demoOrg.companyProfile.regions.find(item=>item.id===client.regionId);
       const clientObjects=demo.objects.filter(item=>item.clientId===client.id);
-      return {...client,inn:null,ownerName:owner?.name??null,region:region?.name??null,teamName:"Клиентский сервис",primaryContactName:contact?.fullName??null,primaryContactPhone:contact?.phone??null,primaryContactEmail:contact?.email??null,latestRequestId:request?.id??null,latestRequestTitle:request?.title??null,activeObjects:clientObjects.filter(item=>item.status==="active").length};
+      return {...client,inn:null,ownerName:owner?.name??null,region:region?.name??null,teamName:"Продажи",primaryContactName:contact?.fullName??null,primaryContactPhone:contact?.phone??null,primaryContactEmail:contact?.email??null,latestRequestId:request?.id??null,latestRequestTitle:request?.title??null,activeObjects:clientObjects.filter(item=>item.status==="active").length};
     });
     return allowed(actor, "sales.client.read", rows);
   }
