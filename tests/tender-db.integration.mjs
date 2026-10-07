@@ -52,4 +52,6 @@ try{
 
   await assert.rejects(()=>sql`INSERT INTO calculations(organization_id,status,owner_user_id,created_by_user_id) VALUES(${org}::uuid,'draft',${director}::uuid,${director}::uuid)`,error=>error?.code==="23514");
   console.log("Tender Core PostgreSQL integration passed: parallel source, tender role scenario, company document checklist, approvals, immutable bid rounds and audit.");
-}finally{await sql.end();}\n\nawait import("./tender-handoff-db.integration.mjs");\n
+}finally{await sql.end();}
+
+await import("./tender-handoff-db.integration.mjs");
