@@ -72,6 +72,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           updated_at=now()
         WHERE id=${id}::uuid
       `;
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'client',${id}::uuid,'updated','Обновлены данные клиента')`;
       return {id};
     });
     if(!result)return NextResponse.json({error:"Клиент не найден"},{status:404});
