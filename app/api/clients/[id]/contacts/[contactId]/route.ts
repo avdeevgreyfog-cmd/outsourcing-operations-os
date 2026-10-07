@@ -72,7 +72,7 @@ export async function DELETE(_:Request,{params}:{params:Promise<{id:string;conta
     requireCapability(actor,"sales.client.edit");
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id,contactId}=await params;
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       await assertEditable(actor,id,tx);
       const [contact]=await tx<Array<{id:string}>>`SELECT id FROM contacts WHERE id=${contactId}::uuid AND client_company_id=${id}::uuid FOR UPDATE`;
       if(!contact)return null;
@@ -86,7 +86,7 @@ export async function DELETE(_:Request,{params}:{params:Promise<{id:string;conta
       await tx`DELETE FROM contacts WHERE id=${contactId}::uuid AND client_company_id=${id}::uuid`;
       await tx`UPDATE client_companies SET updated_at=now() WHERE id=${id}::uuid`;
       return {ok:true};
-    }));
+    });
     if(!result)return NextResponse.json({error:"Контакт не найден"},{status:404});
     return NextResponse.json(result);
   }catch(error){
