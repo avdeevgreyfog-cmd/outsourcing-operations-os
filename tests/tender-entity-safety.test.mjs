@@ -46,11 +46,11 @@ function patchFixture({caps,result=null,rowDenied=false}={}){
     if(query.startsWith('INSERT INTO activity_events')){writes.push(query);return [];}
     throw Error('Unexpected SQL '+query);
   };
-  const sql={json:value=>value,begin:callback=>callback(tx)};
+  tx.json=value=>value;
   const api=load('app/api/tenders/[id]/route.ts',{
     'next/server':{NextResponse:{json:(body,{status=200}={})=>({body,status})}},
     '@/lib/auth/server':{getCurrentActor:async()=>a},'@/lib/access/server':auth,
-    '@/lib/tenders/model':load('lib/tenders/model.ts'),'@/lib/core/access.mjs':{canReadRow},'@/lib/db/client':{withTenant:async(org,user,cb)=>cb(sql)},
+    '@/lib/tenders/model':load('lib/tenders/model.ts'),'@/lib/core/access.mjs':{canReadRow},'@/lib/db/client':{withTenant:async(org,user,cb)=>cb(tx)},
   });
   return {writes,conditions:()=>conditions,patch:body=>api.PATCH(new Request('http://localhost/api/tenders/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({id})})};
 }

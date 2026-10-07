@@ -14,7 +14,7 @@ export async function POST(request:Request){
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"sales.tender.import");if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const imported:Array<{index:number;id:string;title:string}>=[];const skipped:Array<{index:number;title:string;reason:string;existingId?:string}>=[];
       for(let index=0;index<body.rows.length;index++){
         const item=body.rows[index];
@@ -34,9 +34,9 @@ export async function POST(request:Request){
         if(item.comment)await tx`INSERT INTO comments(organization_id,entity_type,entity_id,body,created_by_user_id) VALUES(${actor.organizationId}::uuid,'tender',${created.id}::uuid,${item.comment},${actor.userId}::uuid)`;
         imported.push({index,id:created.id,title:item.title});
       }
-      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender_import','imported',${`Импортировано тендеров: ${imported.length}`},${sql.json({imported:imported.length,skipped:skipped.length})})`;
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender_import','imported',${`Импортировано тендеров: ${imported.length}`},${tx.json({imported:imported.length,skipped:skipped.length})})`;
       return {imported,skipped,total:body.rows.length};
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте строки импорта",issues:error.issues},{status:400});

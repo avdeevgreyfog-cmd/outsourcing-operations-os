@@ -1,7 +1,7 @@
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
-import { canReadRow } from "@/lib/core/access.mjs";
+import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import * as demo from "@/lib/demo/data";
 import * as demoOrg from "@/lib/demo/organization";
 import { OWNER_SYSTEM_CAPABILITIES } from "@/lib/access/system";
@@ -10,7 +10,8 @@ type ScopedRow = {
   id?: string; organizationId: string; createdByUserId?: string; ownerUserId?: string; assigneeUserIds?: string[];
   teamId?: string; orgUnitId?: string; regionId?: string; objectId?: string; clientId?: string;
 };
-export type ClientRow = ScopedRow & { id:string; name:string; legalName?:string|null; inn?:string|null; status:string; ownerName?:string|null; region?:string|null; teamName?:string|null; primaryContactName?:string|null; primaryContactPhone?:string|null; primaryContactEmail?:string|null; latestRequestId?:string|null; latestRequestTitle?:string|null; contacts:number; requests:number; objects:number; activeObjects:number };
+export type ClientRow = ScopedRow & { id:string; name:string; legalName?:string|null; inn?:string|null; notes?:string|null; status:string; ownerName?:string|null; region?:string|null; teamName?:string|null; primaryContactName?:string|null; primaryContactPhone?:string|null; primaryContactEmail?:string|null; latestRequestId?:string|null; latestRequestTitle?:string|null; contacts:number; requests:number; objects:number; activeObjects:number };
+export type ClientEditOptions = { members:Array<{id:string;name:string}>; regions:Array<{id:string;name:string}>; teams:Array<{id:string;name:string}>; canAssign:boolean };
 export type ClientContactRow = ScopedRow & { id:string; clientId:string; fullName:string; position?:string|null; phone?:string|null; email?:string|null; telegram?:string|null; whatsapp?:string|null; maxContact?:string|null; preferredChannel?:string|null; objectAssignments:{objectId:string;object:string;roles:string[]}[] };
 export type RequestRoleRow = { name:string; count:number };
 export type RequestRow = ScopedRow & { id:string; title:string; client:string; status:string; location:string; start?:string|null; roles:RequestRoleRow[]; schedule?:unknown; housing?:string|null; vat?:string|null };
@@ -58,14 +59,14 @@ export async function listClients(actor: Actor): Promise<ClientRow[]> {
       const owner=demoOrg.companyEmployees.find(item=>item.userId===client.ownerUserId);
       const region=demoOrg.companyProfile.regions.find(item=>item.id===client.regionId);
       const clientObjects=demo.objects.filter(item=>item.clientId===client.id);
-      return {...client,inn:null,ownerName:owner?.name??null,region:region?.name??null,teamName:"Продажи",primaryContactName:contact?.fullName??null,primaryContactPhone:contact?.phone??null,primaryContactEmail:contact?.email??null,latestRequestId:request?.id??null,latestRequestTitle:request?.title??null,activeObjects:clientObjects.filter(item=>item.status==="active").length};
+      return {...client,clientId:client.id,inn:null,notes:null,ownerName:owner?.name??null,region:region?.name??null,teamName:"Продажи",primaryContactName:contact?.fullName??null,primaryContactPhone:contact?.phone??null,primaryContactEmail:contact?.email??null,latestRequestId:request?.id??null,latestRequestTitle:request?.title??null,activeObjects:clientObjects.filter(item=>item.status==="active").length};
     });
     return allowed(actor, "sales.client.read", rows);
   }
   requireCapability(actor, "sales.client.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ClientRow[]>`
-      SELECT c.id, c.organization_id "organizationId", c.name, c.legal_name "legalName", c.inn, c.status,
+      SELECT c.id, c.id "clientId", c.organization_id "organizationId", c.name, c.legal_name "legalName", c.inn, c.notes, c.status,
              c.owner_user_id "ownerUserId", owner.display_name "ownerName",
              c.created_by_user_id "createdByUserId", c.assigned_team_id "teamId", team.name "teamName",
              c.region_id "regionId", region.name region,
@@ -98,6 +99,25 @@ export async function listClients(actor: Actor): Promise<ClientRow[]> {
       ORDER BY c.name
     `;
     return rows.filter((row) => canReadRow(actor.access, "sales.client.read", row, actor));
+  });
+}
+
+export async function getClientEditOptions(actor: Actor): Promise<ClientEditOptions> {
+  requireCapability(actor, "sales.client.edit");
+  const canAssign=actor.roleCode==="director"||hasCapability(actor.access,"organization.manage")||(actor.access.scopes["sales.client.edit"]??[]).some(scope=>scope.type==="all_org");
+  if(actor.demo){
+    return {
+      members:canAssign?demoOrg.companyEmployees.filter(item=>item.status==="active").map(item=>({id:item.userId,name:item.name})):[],
+      regions:demoOrg.companyProfile.regions.map(item=>({id:item.id,name:item.name})),
+      teams:[{id:"20000000-0000-4000-8000-000000000001",name:"Продажи"}],
+      canAssign,
+    };
+  }
+  return withTenant(actor.organizationId,actor.userId,async sql=>{
+    const members=canAssign?await sql<Array<{id:string;name:string}>>`SELECT m.user_id id,u.display_name name FROM organization_memberships m JOIN app_users u ON u.id=m.user_id WHERE m.status='active' ORDER BY u.display_name`:[];
+    const regions=await sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`;
+    const teams=await sql<Array<{id:string;name:string}>>`SELECT id,name FROM teams ORDER BY name`;
+    return {members,regions,teams,canAssign};
   });
 }
 

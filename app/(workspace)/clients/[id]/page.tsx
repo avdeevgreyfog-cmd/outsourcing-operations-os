@@ -3,11 +3,12 @@ import Link from "next/link";
 import type {ReactNode} from "react";
 import {notFound} from "next/navigation";
 import {requireActor} from "@/lib/auth/server";
-import {listCalculations,listClientContacts,listClients,listFinance,listObjects,listProposals,listRequests} from "@/lib/data/service";
-import {hasCapability} from "@/lib/core/access.mjs";
+import {getClientEditOptions,listCalculations,listClientContacts,listClients,listFinance,listObjects,listProposals,listRequests} from "@/lib/data/service";
+import {canReadRow,hasCapability} from "@/lib/core/access.mjs";
 import {Empty,EntityTabs,KeyValue,PageHeader,Section,Status} from "@/components/UI";
 import {StaticDemoQueryTabsController} from "@/components/StaticDemoQueryTabsController";
 import {modelLabel,pct,rub} from "@/lib/ui/format";
+import {ClientContactEditButton,ClientEditButton} from "@/components/ClientEntityEditor";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -59,6 +60,8 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const clients=await listClients(actor);
   const client=clients.find(item=>item.id===id);
   if(!client)notFound();
+  const canEdit=!actor.demo&&canReadRow(actor.access,"sales.client.edit",client,actor);
+  const clientEditOptions=canEdit?await getClientEditOptions(actor):null;
 
   const [requests,objects,calculations,finance,contacts,proposals]=await Promise.all([
     canReadRequests?listRequests(actor):Promise.resolve([]),
@@ -100,7 +103,7 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   };
 
   const workspace=<div className="client-entity-workspace">
-    <PageHeader title={client.name} subtitle={client.legalName??"Юридическое наименование не указано"} breadcrumbs={[{label:"Коммерция"},{label:"Клиенты",href:"/clients"},{label:client.name}]}/>
+    <PageHeader title={client.name} subtitle={client.legalName??"Юридическое наименование не указано"} breadcrumbs={[{label:"Коммерция"},{label:"Клиенты",href:"/clients"},{label:client.name}]} actions={canEdit&&clientEditOptions?<ClientEditButton client={client} options={clientEditOptions}/>:undefined}/>
     <EntityTabs items={tabs} active={labels[tab]}/>
 
     {panel("overview",<div className="request-entity-tab-content request-entity-overview client-entity-overview">
@@ -118,9 +121,10 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
           <div className="stack-list request-entity-stack">{clientObjects.length?clientObjects.map(item=><Link className="stack-item" href={"/objects/"+item.id} key={item.id}><div><strong>{item.name}</strong><small>{item.region} · укомплектованность {item.coverage}%</small></div><Status tone={item.risk==="critical"?"bad":item.risk==="high"?"warn":tone(item.status)}>{statusLabel(item.status)}</Status></Link>):<Empty title="Объектов пока нет" text="Объекты появятся после передачи согласованного заказа в запуск."/>}</div>
         </Section>}
 
-        <Section title="Ключевые контакты" note={contacts.length+" контактов"}>
+        <Section title="Ключевые контакты" note={contacts.length+" контактов"} actions={canEdit?<ClientContactEditButton clientId={id}/>:undefined}>
           {contacts.length?<div className="client-contact-summary">{contacts.slice(0,4).map(item=><div key={item.id}><div><strong>{item.fullName}</strong><small>{item.position??"Должность не указана"}</small></div><span>{contactPrimary(item)}</span></div>)}</div>:<Empty title="Контактов пока нет" text="Добавьте контакт клиента, когда появится подтверждённое контактное лицо."/>}
         </Section>
+        {client.notes&&<Section title="Комментарий"><p className="client-overview-note">{client.notes}</p></Section>}
       </main>
 
       <aside className="request-entity-side">
@@ -146,8 +150,8 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
       </aside>
     </div>)}
 
-    {panel("contacts",<div className="request-entity-tab-content"><Section title="Контакты клиента" note={contacts.length+" контактов"}>
-      {contacts.length?<div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th></tr></thead><tbody>{contacts.map(item=><tr key={item.id}><td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position??"Должность не указана"}</span></td><td><strong>{contactPrimary(item)}</strong><span className="cell-sub">{contactSecondary(item)}</span></td><td>{item.objectAssignments.length?item.objectAssignments.map(link=><div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role=>contactRoleLabels[role]??role).join(" · ")}</span></div>):"Не привязан к объектам"}</td></tr>)}</tbody></table></div>:<Empty title="Контактов пока нет" text="Контакты можно добавить при создании клиента или из карточки объекта."/>}
+    {panel("contacts",<div className="request-entity-tab-content"><Section title="Контакты клиента" note={contacts.length+" контактов"} actions={canEdit?<ClientContactEditButton clientId={id}/>:undefined}>
+      {contacts.length?<div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table client-contact-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th>{canEdit&&<th aria-label="Действия"/>}</tr></thead><tbody>{contacts.map(item=><tr key={item.id}><td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position??"Должность не указана"}</span></td><td><strong>{contactPrimary(item)}</strong><span className="cell-sub">{contactSecondary(item)}</span></td><td>{item.objectAssignments.length?item.objectAssignments.map(link=><div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role=>contactRoleLabels[role]??role).join(" · ")}</span></div>):"Не привязан к объектам"}</td>{canEdit&&<td className="client-contact-action-cell"><ClientContactEditButton clientId={id} contact={item}/></td>}</tr>)}</tbody></table></div>:<Empty title="Контактов пока нет" text="Контакты можно добавить из этой вкладки или при создании клиента."/>}
     </Section></div>)}
 
     {panel("requests",<div className="request-entity-tab-content"><Section title="Заявки клиента" note={clientRequests.length+" заявок"}>
