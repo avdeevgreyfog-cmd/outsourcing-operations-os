@@ -78,8 +78,8 @@ BEGIN
     IF NEW.request_id IS NOT NULL AND object_request IS NOT NULL AND object_request IS DISTINCT FROM NEW.request_id THEN
       RAISE EXCEPTION 'contract object belongs to another request' USING ERRCODE='23514';
     END IF;
-    IF NEW.tender_id IS NOT NULL AND object_tender IS NOT NULL AND object_tender IS DISTINCT FROM NEW.tender_id THEN
-      RAISE EXCEPTION 'contract object belongs to another tender' USING ERRCODE='23514';
+    IF NEW.tender_id IS NOT NULL AND object_tender IS DISTINCT FROM NEW.tender_id THEN
+      RAISE EXCEPTION 'contract object must originate from the same tender' USING ERRCODE='23514';
     END IF;
   END IF;
 
