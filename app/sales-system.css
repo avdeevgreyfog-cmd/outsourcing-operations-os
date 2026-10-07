@@ -4177,6 +4177,7 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace .client-create-form-unified .client-contact-fields{display:grid;gap:13px}
 .sales-workspace .client-create-form-unified .client-contact-remove{justify-self:start;border:0;background:none;padding:0;color:var(--muted);font:12px inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .sales-workspace .client-create-form-unified .client-demo-note{margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:12px;line-height:1.5}
+.sales-workspace .sales-drawer .client-demo-note{margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--muted);font-size:12px;line-height:1.5}
 .sales-workspace .client-create-form-unified .client-create-error{margin:0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--bad) 45%,var(--border));border-radius:7px;background:var(--bad-bg);color:var(--bad);font-size:12px}
 
 .sales-workspace .client-entity-workspace{min-width:0}
