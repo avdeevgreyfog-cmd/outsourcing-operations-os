@@ -4181,6 +4181,12 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace .client-create-form-unified .client-create-error{margin:0;padding:10px 12px;border:1px solid color-mix(in srgb,var(--bad) 45%,var(--border));border-radius:7px;background:var(--bad-bg);color:var(--bad);font-size:12px}
 
 .sales-workspace .client-entity-workspace{min-width:0}
+.sales-workspace .client-entity-workspace .status{height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);font-size:12px;font-weight:500}
+.sales-workspace .client-entity-workspace .status i{width:6px;height:6px;flex:0 0 6px;background:var(--soft)}
+.sales-workspace .client-entity-workspace .status-good i{background:var(--good)}
+.sales-workspace .client-entity-workspace .status-warn i{background:var(--warn)}
+.sales-workspace .client-entity-workspace .status-bad i{background:var(--bad)}
+.sales-workspace .client-entity-workspace .status-info i{background:var(--info)}
 .sales-workspace .client-entity-workspace .entity-tabs{overflow-x:auto;overflow-y:hidden}
 .sales-workspace .client-entity-overview{align-items:start}
 .sales-workspace .client-overview-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
