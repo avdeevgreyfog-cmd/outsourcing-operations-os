@@ -16,6 +16,29 @@ jobs:
       AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - id: deployment-expectation
+        name: Determine whether this commit requires a new staging deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          require_deployment=false
+          changed_files="$(git diff --name-only HEAD^ HEAD || true)"
+          while IFS= read -r path; do
+            [ -n "$path" ] || continue
+            case "$path" in
+              .github/*|tests/*|docs/*|migrations/*|scripts/migrate.mjs|scripts/migration-safety.mjs|*.md)
+                ;;
+              *)
+                require_deployment=true
+                ;;
+            esac
+          done <<< "$changed_files"
+          echo "require_deployment=$require_deployment" >> "$GITHUB_OUTPUT"
+          echo "require_deployment=$require_deployment"
+          printf '%s\n' "$changed_files"
 
       - name: Check staging configuration
         shell: bash
@@ -26,20 +49,28 @@ jobs:
           test -n "$AUTOMATION_BYPASS_SECRET" || { echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET staging secret is required."; exit 1; }
 
       - name: Wait for staging deployment
+        env:
+          REQUIRE_DEPLOYMENT: ${{ steps.deployment-expectation.outputs.require_deployment }}
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 36); do
             code="$(curl -sS -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -o /tmp/status.json -w '%{http_code}' "$BASE_URL/api/system/status" || true)"
             deployed_sha="$(node -e "try{const s=require('/tmp/status.json');process.stdout.write(s.deploymentSha||'')}catch{}" 2>/dev/null || true)"
-            if [ "$code" = "200" ] && grep -q '"ok":true' /tmp/status.json && [ "$deployed_sha" = "$GITHUB_SHA" ]; then
+            healthy=false
+            if [ "$code" = "200" ] && grep -q '"ok":true' /tmp/status.json; then healthy=true; fi
+            if [ "$healthy" = "true" ] && { [ "$REQUIRE_DEPLOYMENT" != "true" ] || [ "$deployed_sha" = "$GITHUB_SHA" ]; }; then
               cat /tmp/status.json
               exit 0
             fi
-            echo "attempt=$attempt status=$code deployed_sha=$deployed_sha expected_sha=$GITHUB_SHA"
+            echo "attempt=$attempt status=$code deployed_sha=$deployed_sha expected_sha=$GITHUB_SHA require_deployment=$REQUIRE_DEPLOYMENT"
             sleep 10
           done
-          echo "Beta commit did not become active in staging in time."
+          if [ "$REQUIRE_DEPLOYMENT" = "true" ]; then
+            echo "Beta application commit did not become active in staging in time."
+          else
+            echo "Staging runtime did not become healthy in time."
+          fi
           cat /tmp/status.json 2>/dev/null || true
           exit 1
 
@@ -47,15 +78,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          production_code="$(curl -sS -o /tmp/production-status.json -w '%{http_code}' "$PRODUCTION_BASE_URL/api/system/status")"
-          test "$production_code" = "200"
-
           staging_expected_schema="$(find migrations -maxdepth 1 -type f -name '[0-8][0-9][0-9][0-9]_*.sql' -printf '%f\n' | sort | tail -n 1)"
           git fetch --no-tags --depth=1 origin main
           production_expected_schema="$(git ls-tree -r --name-only FETCH_HEAD migrations | sed -n 's#^migrations/\([0-8][0-9][0-9][0-9]_.+\.sql\)$#\1#p' | sort | tail -n 1)"
 
           test -n "$staging_expected_schema" || { echo "::error::Unable to resolve beta schema baseline."; exit 1; }
           test -n "$production_expected_schema" || { echo "::error::Unable to resolve main schema baseline."; exit 1; }
+
+          schema_ready=false
+          for attempt in $(seq 1 36); do
+            staging_code="$(curl -sS -H "x-vercel-protection-bypass: $AUTOMATION_BYPASS_SECRET" -o /tmp/status.json -w '%{http_code}' "$BASE_URL/api/system/status" || true)"
+            staging_schema="$(node -e "try{const s=require('/tmp/status.json');process.stdout.write(s.schemaVersion||'')}catch{}" 2>/dev/null || true)"
+            if [ "$staging_code" = "200" ] && [ "$staging_schema" = "$staging_expected_schema" ]; then
+              schema_ready=true
+              break
+            fi
+            echo "schema_attempt=$attempt active=$staging_schema expected=$staging_expected_schema"
+            sleep 10
+          done
+          if [ "$schema_ready" != "true" ]; then
+            echo "::error::Staging schema did not reach the beta baseline in time."
+            cat /tmp/status.json 2>/dev/null || true
+            exit 1
+          fi
+
+          production_code="$(curl -sS -o /tmp/production-status.json -w '%{http_code}' "$PRODUCTION_BASE_URL/api/system/status")"
+          test "$production_code" = "200"
 
           STAGING_EXPECTED_SCHEMA="$staging_expected_schema" PRODUCTION_EXPECTED_SCHEMA="$production_expected_schema" node - <<'NODE'
           const fs=require("node:fs");
