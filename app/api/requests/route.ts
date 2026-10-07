@@ -41,7 +41,7 @@ export async function POST(request:Request){
     requireCapability(actor,"sales.request.create");
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       if(body.clientId){
         const [client]=await tx<Array<{id:string}>>`SELECT id FROM client_companies WHERE id=${body.clientId}::uuid`;
         if(!client)throw new Error("Клиент не найден в текущей организации");
@@ -67,7 +67,7 @@ export async function POST(request:Request){
         VALUES (${actor.organizationId}::uuid,${r.id}::uuid,${rr.specialtyId}::uuid,${rr.count},${sql.json(rr.schedule)},${sql.json(rr.requirements)},${rr.targetClientRate??null})
       `;
       return r;
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте заполнение полей",issues:error.issues},{status:400});
