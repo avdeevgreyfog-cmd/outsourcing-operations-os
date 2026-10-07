@@ -24,7 +24,9 @@ export type TenderBidEconomicsSnapshot={
   status:"complete"|"incomplete";revenueNet:number|null;totalCostNet:number|null;marginPct:number|null;vatPct:number|null;missing:string[];
   sources:Array<{roleId:string;scenarioId:string;calculationId:string;calculationVersion:number;scenarioVersion:number;billingUnit:string;volume:number|null;costPerBillingUnit:number|null;vatPct:number|null}>;
 };
-export type TenderBidRound={id:string;roundNumber:number;bidValue:number|string;priceVatMode:string;occurredAt:string;source:string;reference:string|null;note:string|null;economics:TenderBidEconomicsSnapshot|null;recordedBy:string|null};\nexport type TenderWinHandoff={started:boolean;contractId:string|null;contractTitle:string|null;objectId:string|null;objectName:string|null;objectCode:string|null};\ntype ScopedTenderWinHandoff={contractId:string;contractTitle:string;contractOrganizationId:string;contractOwnerUserId:string|null;contractCreatedByUserId:string;contractClientId:string;objectId:string|null;objectName:string|null;objectCode:string|null;objectOrganizationId:string|null;objectOwnerUserId:string|null;objectCreatedByUserId:string|null;objectRegionId:string|null;objectClientId:string|null};
+export type TenderBidRound={id:string;roundNumber:number;bidValue:number|string;priceVatMode:string;occurredAt:string;source:string;reference:string|null;note:string|null;economics:TenderBidEconomicsSnapshot|null;recordedBy:string|null};
+export type TenderWinHandoff={started:boolean;contractId:string|null;contractTitle:string|null;objectId:string|null;objectName:string|null;objectCode:string|null};
+type ScopedTenderWinHandoff={contractId:string;contractTitle:string;contractOrganizationId:string;contractOwnerUserId:string|null;contractCreatedByUserId:string;contractClientId:string;objectId:string|null;objectName:string|null;objectCode:string|null;objectOrganizationId:string|null;objectOwnerUserId:string|null;objectCreatedByUserId:string|null;objectRegionId:string|null;objectClientId:string|null};
 type ScopedTenderCalculation=TenderCalculation & {organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null};
 export type TenderDetail=TenderRow&{conditions:Record<string,unknown>;submissionChecklist:Array<{id:string;label:string;done:boolean}>;bidReference:string|null;submissionNote:string|null;submittedBy:string|null;roles:TenderRole[];assignments:TenderAssignment[];sourceDocuments:TenderSourceDocument[];requirements:TenderRequirement[];comments:TenderComment[];approvals:TenderApproval[];calculations:TenderCalculation[];bidRounds:TenderBidRound[];winHandoff:TenderWinHandoff|null};
 export type TenderOptions={
@@ -77,7 +79,9 @@ function demoDetail(row:TenderRow):TenderDetail{
 
 export async function getTender(actor:Actor,id:string):Promise<TenderDetail|null>{
   const summary=(await listTenders(actor)).find(row=>row.id===id);if(!summary)return null;
-  const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");\n  const canReadContracts=hasCapability(actor.access,"contract.read");\n  const canReadObjects=hasCapability(actor.access,"operations.object.read");
+  const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");
+  const canReadContracts=hasCapability(actor.access,"contract.read");
+  const canReadObjects=hasCapability(actor.access,"operations.object.read");
   if(actor.demo){const detail=demoDetail(summary);return {...detail,calculations:canReadCalculations?detail.calculations:[]};}
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [base]=await sql<Array<{conditions:Record<string,unknown>;submissionChecklist:Array<{id:string;label:string;done:boolean}>;bidReference:string|null;submissionNote:string|null;submittedBy:string|null}>>`
