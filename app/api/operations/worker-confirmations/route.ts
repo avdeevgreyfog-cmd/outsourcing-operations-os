@@ -3,7 +3,7 @@ import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
 import {managerPortalData,editWorkerLink,reconcileEmployeeHours} from "@/lib/operations/worker-timesheet-portal";
 import {employeeDetailManagerList,managerEmployeeDetailAction} from "@/lib/operations/employee-self-service";
-import {managerSetScheduleOwner,managerEmployeePlanningChanges,managerReviewEmployeePlan} from "@/lib/operations/employee-planning";
+import {managerSetScheduleOwner,managerEmployeePlanningChanges,managerReviewEmployeePlan,managerSetWorkerPattern,managerReviewPattern} from "@/lib/operations/employee-planning";
 const actions=z.discriminatedUnion("action",[
  z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
  z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"]),horizon:z.number().int().min(2).max(31).optional()}),
@@ -13,7 +13,9 @@ const actions=z.discriminatedUnion("action",[
  z.object({action:z.literal("review_shift_time"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()}),
  z.object({action:z.literal("document_requirement"),objectId:z.string().uuid(),relationType:z.enum(["employment","gph","npd","custom"]),code:z.string().max(40),required:z.boolean()}),
  z.object({action:z.literal("worker_schedule_owner"),objectId:z.string().uuid(),workerId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"]).nullable()}),
- z.object({action:z.literal("review_plan"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()})
+ z.object({action:z.literal("review_plan"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()}),
+ z.object({action:z.literal("set_worker_pattern"),objectId:z.string().uuid(),workerId:z.string().uuid(),effectiveFrom:z.string().date(),workDays:z.number().int().min(1).max(30),restDays:z.number().int().min(0).max(30),shiftKind:z.enum(["day","night"]),floatingDaysOff:z.boolean()}),
+ z.object({action:z.literal("review_pattern"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()})
 ]);
 export async function GET(request:Request){
  try{
@@ -28,7 +30,11 @@ export async function POST(request:Request){
  try{
   const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется авторизация"},{status:401});
   const body=actions.parse(await request.json());
-  const result=body.action==="worker_schedule_owner"
+  const result=body.action==="set_worker_pattern"
+   ?await managerSetWorkerPattern(actor,body.objectId,body.workerId,{effectiveFrom:body.effectiveFrom,workDays:body.workDays,restDays:body.restDays,shiftKind:body.shiftKind,floatingDaysOff:body.floatingDaysOff})
+   :body.action==="review_pattern"
+   ?await managerReviewPattern(actor,body.objectId,body.workerId,body.date,body.approve)
+   :body.action==="worker_schedule_owner"
    ?await managerSetScheduleOwner(actor,body.objectId,body.scheduleOwner,body.workerId)
    :body.action==="review_plan"
    ?await managerReviewEmployeePlan(actor,body.objectId,body.workerId,body.date,body.approve)
