@@ -37,18 +37,20 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("11");
  const [editingDay,setEditingDay]=useState<string|null>(null);const [kindChoice,setKindChoice]=useState<Kind>("night");
  const [selectedDays,setSelectedDays]=useState<string[]>([]);const [showAll,setShowAll]=useState(false);
- const [clothing,setClothing]=useState("");const [shoe,setShoe]=useState("");
+ const [clothingDraft,setClothingDraft]=useState<string|null>(null);const [shoeDraft,setShoeDraft]=useState<string|null>(null);
  const [settingKind,setSettingKind]=useState<"day"|"night">("night");
  const [startTime,setStartTime]=useState("20:00");const [endTime,setEndTime]=useState("08:00");const [nextDay,setNextDay]=useState(true);
- const [checkedAt,setCheckedAt]=useState("");
+ 
  const reload=useCallback(async()=>{
   const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token),{cache:"no-store"});
   const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось загрузить кабинет");
   setData(j as Portal);return j as Portal;
  },[token]);
  useEffect(()=>{if(isDemo)return;let alive=true;void reload().catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
- useEffect(()=>{if(data?.details){setClothing(data.details.clothingSize??"");setShoe(data.details.shoeSize??"")}},[data?.details]);
- useEffect(()=>{setCheckedAt(clockNow(data?.timezone??"Europe/Moscow"))},[data?.timezone]);
+
+ const clothing=clothingDraft??data?.details?.clothingSize??"";
+ const shoe=shoeDraft??data?.details?.shoeSize??"";
+ const checkedAt=clockNow(data?.timezone??"Europe/Moscow");
  const today=data?.today??new Date().toISOString().slice(0,10),tomorrow=move(today,1);
  const records=useMemo(()=>new Map((data?.planning?.days??[]).map(x=>[x.date,x])),[data?.planning?.days]);
  const answers=useMemo(()=>new Map((data?.reports??[]).map(x=>[x.date,x])),[data?.reports]);
@@ -192,7 +194,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </section>
        </>}
        {more==="workwear"&&<><div className="worker-self-page-title"><div><h1>Спецодежда и СИЗ</h1><p>Укажите размеры и проверьте, что уже выдано на объекте.</p></div></div>
-        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothing(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoe(e.target.value)} maxLength={40} placeholder="Например, 43"/></label></div><button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null},"Размеры сохранены")}>Сохранить размеры</button></section>
+        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label></div><button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null},"Размеры сохранены")}>Сохранить размеры</button></section>
         <section className="worker-self-panel worker-self-additional"><div className="worker-self-panel-head"><span>Выдача по объекту</span></div>
          {(data.details?.workwear??[]).map((x,i)=><div className="worker-self-asset-row" key={i}><span><strong>{x.name}</strong>{x.variant&&<small>Размер: {x.variant}</small>}</span><span className={"worker-self-asset-tag "+(x.state==="issued"?"issued":"")}>{x.state==="issued"?"Выдано":"Не выдано"}</span></div>)}
          <p className="worker-self-muted">Выдачу подтверждает склад или менеджер. Сведения берутся из общего учёта OPERIS.</p>
