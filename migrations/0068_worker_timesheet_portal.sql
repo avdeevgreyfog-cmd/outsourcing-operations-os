@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_object_timesheet_reconciliations_period ON object
 -- Never store or log raw employee link tokens.
 CREATE TABLE IF NOT EXISTS public_worker_timesheet_tokens (
  token_hash text PRIMARY KEY,
- organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+ tenant_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
  actor_user_id uuid NOT NULL REFERENCES app_users(id),
  link_id uuid NOT NULL UNIQUE REFERENCES worker_timesheet_links(id) ON DELETE CASCADE
 );
