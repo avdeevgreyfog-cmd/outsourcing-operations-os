@@ -5,8 +5,10 @@ type Worker={id:string;name:string;objectId:string|null;object:string|null;speci
 type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
-type Setting={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string};
-type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[]};
+type Setting={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string;managerPhone?:string|null};
+type TimeUpdate={workerId:string;objectId:string;date:string;startTime:string;endTime:string;status:"proposed"|"accepted"|"rejected";appliesTo:"single"|"regular"};
+type DocumentUpdate={workerId:string;objectId:string;code:string;employeeReported:boolean;managerVerified:boolean};
+type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[];timeChanges?:TimeUpdate[];documents?:DocumentUpdate[]};
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
 function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
@@ -15,8 +17,12 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [loaded,setLoaded]=useState(false);
  const [error,setError]=useState("");
  const [info,setInfo]=useState("");
- const [mode,setMode]=useState<"answers"|"links">("answers");
+ const [mode,setMode]=useState<"answers"|"links"|"updates">("answers");
  const [search,setSearch]=useState("");
+ const [contactNumber,setContactNumber]=useState("");
+ const [relationType,setRelationType]=useState<"employment"|"gph"|"npd"|"custom">("gph");
+ const [docCode,setDocCode]=useState("medical_book");
+ const [docRequired,setDocRequired]=useState(true);
  const [onlyAttention,setOnlyAttention]=useState(false);
  const [filterObject,setFilterObject]=useState(objectId??"all");
  const [busy,setBusy]=useState("");
@@ -43,8 +49,8 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const replies=expected.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
  const missing=expected.length-replies;
  const activeLinks=data.links.filter(l=>l.status==="active").length;
- async function action(body:Record<string,string>){
-  const key=body.action+":"+(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
+ async function action(body:Record<string,string|boolean|null>){
+  const key=String(body.action)+":"+String(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
   if(demo){
    if(body.action==="create"||body.action==="rotate"||body.action==="copy"){
      const url=window.location.origin+"/employee-timesheet/demo";
