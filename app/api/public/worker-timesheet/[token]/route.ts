@@ -12,7 +12,7 @@ const responseSchema=z.object({
 const detailsSchema=z.discriminatedUnion("action",[
  z.object({action:z.literal("sizes"),clothingSize:z.string().trim().max(40).nullable(),shoeSize:z.string().trim().max(40).nullable()}),
  z.object({action:z.literal("document"),code:z.string().max(40),reported:z.boolean()}),
- z.object({action:z.literal("shift_time"),date:z.string().date(),startTime:z.string().regex(/^\d{2}:\d{2}$/),endTime:z.string().regex(/^\d{2}:\d{2}$/),endsNextDay:z.boolean(),appliesTo:z.enum(["single","regular"])})
+ z.object({action:z.literal("shift_time"),date:z.string().date(),kind:z.enum(["day","night"]).optional(),startTime:z.string().regex(/^\d{2}:\d{2}$/),endTime:z.string().regex(/^\d{2}:\d{2}$/),endsNextDay:z.boolean(),appliesTo:z.enum(["single","regular"])})
 ]);
 const planningSchema=z.object({action:z.literal("plan_day"),date:z.string().date(),kind:z.enum(["day","night","off"])});
 const noStore={"Cache-Control":"no-store, private"};
