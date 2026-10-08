@@ -27,7 +27,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
       sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
         FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
-      sql<Array<PortalConfig>>`SELECT object_id "objectId",schedule_owner "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled",manager_phone "managerPhone",COALESCE(planning_horizon_days,7)::int "planningHorizonDays"
+      sql<Array<PortalConfig>>`SELECT object_id "objectId",COALESCE(schedule_authority,CASE WHEN schedule_owner='client' THEN 'worker' ELSE schedule_owner END) "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled",manager_phone "managerPhone",COALESCE(planning_horizon_days,7)::int "planningHorizonDays"
         FROM object_shift_reporting_settings WHERE object_id=ANY(${[...objects]}::uuid[])`,
       sql<Array<EmployeePlan>>`SELECT DISTINCT ON(worker_id,object_id,work_date) worker_id "workerId",object_id "objectId",work_date::text date,time_code "timeCode",planned_shift_kind kind
         FROM time_entries WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[])
