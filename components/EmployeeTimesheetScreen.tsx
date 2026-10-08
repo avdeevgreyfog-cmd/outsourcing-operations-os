@@ -88,7 +88,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    if(isDemo){
     const date=String(payload.date??"");
     if(payload.action==="plan_day"){
-     const newKind=payload.kind as Kind;setData(d=>d?{...d,planning:{...d.planning,days:d.planning.days.map(x=>x.date===date?{...x,kind:d.planning.owner==="worker"?newKind:x.kind,source:d.planning.owner==="worker"?"worker" as const:x.source,proposal:d.planning.owner==="manager"?newKind:null,proposalStatus:d.planning.owner==="manager"?"proposed" as const:null}:x)}}:d);
+     const newKind=payload.kind as Kind;setData(d=>{if(!d)return d;const direct=d.planning.owner==="worker"&&d.planning.floatingDaysOff;return {...d,planning:{...d.planning,days:d.planning.days.map(x=>x.date===date?{...x,kind:direct?newKind:x.kind,source:direct?"worker" as const:x.source,proposal:direct?null:newKind,proposalStatus:direct?null:"proposed" as const}:x)}}});
     }else if("hours" in payload||"response" in payload){
      setData(d=>{if(!d)return d;const old=d.reports.find(x=>x.date===date);const r:Reply={date,shiftKind:(payload.kind as Kind)??old?.shiftKind??records.get(date)?.kind??null,
       response:(payload.response as Reply["response"])??old?.response??"working",reason:(payload.reason as string)??old?.reason??null,
@@ -112,9 +112,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    if(completedAnswer?.response!=="working"){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
    const ok=await save({date:completed.date,hours:hourEdit?Number(hours):data?.paidHours??11},"Часы переданы для сверки");if(ok)setHourEdit(false);
  }
- async function planDay(date:string,kind:Kind){if(busy)return;const ok=await save({action:"plan_day",date,kind},data?.planning.owner==="manager"?"Предложение передано менеджеру":"График обновлён");if(ok)setEditingDay(null)}
- async function markSelectedOff(){let count=0;for(const date of selectedDays){if(await save({action:"plan_day",date,kind:"off"},"Выходной отмечен"))count++;else break}setSelectedDays([]);if(count>0)setNotice(data?.planning.owner==="worker"?`${count} выходных сохранено`:`${count} изменений передано на согласование`)}
- function openSettings(){setTab("more");setMore("settings");setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??"20:00");setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
+ async function planDay(date:string,kind:Kind){if(busy)return;const direct=data?.planning.owner==="worker"&&data?.planning.floatingDaysOff;const ok=await save({action:"plan_day",date,kind},direct?"График обновлён":"Предложение передано менеджеру");if(ok)setEditingDay(null)}
+ async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},data.planning.owner==="worker"?"Выходные на неделю сохранены":"Предложение по выходным отправлено"))setWeekEditing(false)}
+ function openSettings(){setTab("more");setMore("settings");setSettingsEditing(false);setWorkPattern((data?.planning.workDays??5)+"/"+(data?.planning.restDays??2));setPatternFloating(Boolean(data?.planning.floatingDaysOff));setEffectiveFrom(tomorrow);setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??(d?.kind==="day"?"08:00":"20:00"));setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
  const managerCall=data?.details?.managerPhone?.replace(/[^+\d]/g,"");
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
  if(!data)return <main className="worker-self"><div className="worker-self-loading"><LockKeyhole/> Кабинет недоступен. {error}</div></main>;
