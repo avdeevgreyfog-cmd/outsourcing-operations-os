@@ -49,7 +49,7 @@ async function assertManage(actor:Actor,objectId:string,workerId?:string){
   }
 }
 
-export async function editPortalSettings(actor:Actor,objectId:string,owner:"manager"|"client"){
+export async function editPortalSettings(actor:Actor,objectId:string,owner:"manager"|"worker"){
   if(actor.demo)throw new Error("Настройки сохраняются только в рабочем контуре");
   await assertManage(actor,objectId);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
@@ -98,7 +98,7 @@ export async function resolveToken(token:string):Promise<TokenContext|null>{
 export async function employeePortal(token:string){
   const ref=await resolveToken(token);if(!ref)return null;
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-    const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"client";deadline:string;timezone:string;today:string;reportingEnabled:boolean}>>`
+    const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"worker";deadline:string;timezone:string;today:string;reportingEnabled:boolean}>>`
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
       COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
       COALESCE(wa.schedule_owner,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
@@ -120,11 +120,11 @@ export async function employeePortal(token:string){
       sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null}>>`
         SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours
         FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN date_trunc('month',now() AT TIME ZONE ${link.timezone})::date AND ((now() AT TIME ZONE ${link.timezone})::date+3) ORDER BY work_date`,
+          AND work_date BETWEEN ((now() AT TIME ZONE ${link.timezone})::date-7) AND ((now() AT TIME ZONE ${link.timezone})::date+31) ORDER BY work_date`,
       sql<Array<{date:string;kind:string;timeCode:string;hours:number}>>`
         SELECT work_date::text date,COALESCE(planned_shift_kind,'day') kind,time_code "timeCode",fact_hours::float8 hours
         FROM time_entries WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN date_trunc('month',now() AT TIME ZONE ${link.timezone})::date AND ((now() AT TIME ZONE ${link.timezone})::date+3)
+          AND work_date BETWEEN ((now() AT TIME ZONE ${link.timezone})::date-7) AND ((now() AT TIME ZONE ${link.timezone})::date+31)
           ORDER BY updated_at DESC`,
     ]);
     return {...link,reports,plans};
