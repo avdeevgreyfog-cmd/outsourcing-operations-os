@@ -148,7 +148,7 @@ export async function submitEmployeePlan(token:string,day:string,kind:PlannedKin
     WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND effective_from<=${day}::date AND status='accepted'
     ORDER BY effective_from DESC LIMIT 1`;
   const fixed=Boolean((pattern?.workDays??s.workDays)&&(pattern?.restDays??s.restDays)!==null);
-  const status=s.owner==="worker"&&(!fixed||Boolean(pattern?.floating))?"accepted":"proposed";
+  const status=s.owner==="worker"&&!fixed?"accepted":"proposed";
   if(status==="accepted")await writePlan(sql,s,day,kind);
   await sql`INSERT INTO worker_shift_plan_changes(organization_id,object_id,worker_id,work_date,requested_kind,status,requested_by_link_id)
    VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${day}::date,${kind},${status},${s.link}::uuid)
