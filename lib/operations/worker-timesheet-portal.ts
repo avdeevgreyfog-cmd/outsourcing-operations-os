@@ -91,9 +91,13 @@ export async function editWorkerLink(actor:Actor,objectId:string,workerId:string
 type TokenContext={tenantId:string;actorUserId:string;linkId:string};
 export async function resolveToken(token:string):Promise<TokenContext|null>{
   if(!/^[A-Za-z0-9_-]{30,100}$/.test(token))return null;
-  const [row]=await db()<Array<TokenContext>>`SELECT tenant_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
-    FROM public_worker_timesheet_tokens WHERE token_hash=${tokenHash(token)} LIMIT 1`;
-  return row??null;
+  const hashed=tokenHash(token);
+  return db().begin(async tx=>{
+    await tx`SELECT set_config('app.worker_token_hash',${hashed},true)`;
+    const [row]=await tx<Array<TokenContext>>`SELECT tenant_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
+      FROM public_worker_timesheet_tokens WHERE token_hash=${hashed} LIMIT 1`;
+    return row??null;
+  });
 }
 export async function employeePortal(token:string){
   const ref=await resolveToken(token);if(!ref)return null;
