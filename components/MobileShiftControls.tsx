@@ -66,7 +66,7 @@ export function MobileShiftControls({canEdit,demo}:{canEdit:boolean;demo:boolean
   &&(status==="all"||status==="new"&&w.firstDay||status!=="new"&&w.attendance===status))
   .sort((a,b)=>(a.attendance==="pending"?0:a.attendance==="absent"?1:2)-(b.attendance==="pending"?0:b.attendance==="absent"?1:2)||Number(b.firstDay)-Number(a.firstDay)||a.name.localeCompare(b.name,"ru"));
  const assigned=rows.filter(w=>w.assignmentId);
- const counts={all:assigned.length,present:assigned.filter(w=>w.attendance==="present").length,absent:assigned.filter(w=>w.attendance==="absent").length,pending:assigned.filter(w=>w.attendance==="pending").length,new:rows.filter(w=>w.firstDay).length};
+ const counts={all:rows.length,planned:assigned.length,present:assigned.filter(w=>w.attendance==="present").length,absent:assigned.filter(w=>w.attendance==="absent").length,pending:rows.filter(w=>w.attendance==="pending").length,new:rows.filter(w=>w.firstDay).length};
  const focused=allForDay.find(w=>w.id===openId)||null;
  const checks=data?.checks??[];
  const currentStep=(w:MobileWorker,key:FirstDayStep)=>checks.find(x=>x.workerId===w.id&&x.date===date&&x.checkpoint===key);
@@ -133,7 +133,7 @@ export function MobileShiftControls({canEdit,demo}:{canEdit:boolean;demo:boolean
     </div>
    </div>
    {showDate&&<div className="ocs-calendar-picker"><input type="date" aria-label="Укажите дату" min={dateShift(today(),-7)} max={dateShift(today(),14)} value={date} onChange={e=>{if(e.target.value){setDate(e.target.value);setShowDate(false);setSelected([])}}}/><button onClick={()=>{setDate(today());setShowDate(false);setSelected([])}}>Сегодня</button></div>}
-   {tab==="roster"&&<div className="ocs-attendance-summary"><span><strong>{counts.all}</strong> в плане</span><span className="ocs-summary-pending"><strong>{counts.pending}</strong> проверить</span><span className="ocs-summary-absent"><strong>{counts.absent}</strong> неявки</span></div>}
+   {tab==="roster"&&<div className="ocs-attendance-summary"><span><strong>{counts.planned}</strong> в плане</span><span className="ocs-summary-pending"><strong>{counts.pending}</strong> проверить</span><span className="ocs-summary-absent"><strong>{counts.absent}</strong> неявки</span></div>}
   </div>
   {error&&<div className="ocs-feedback error" role="alert"><AlertTriangle size={14}/>{error}<button onClick={()=>setError("")} aria-label="Закрыть"><X size={14}/></button></div>}
   {notice&&<div className="ocs-feedback" role="status"><Check size={14}/>{notice}</div>}
@@ -184,7 +184,7 @@ export function MobileShiftControls({canEdit,demo}:{canEdit:boolean;demo:boolean
   {focused&&<div className="ocs-overlay" role="presentation" onClick={()=>setOpenId(null)}><section role="dialog" aria-modal="true" aria-label={"Сотрудник "+focused.name} className="ocs-sheet ocs-worker-sheet" onClick={e=>e.stopPropagation()}>
    <div className="ocs-sheet-head"><div><strong>{focused.name}</strong><small>{focused.objectName} · {focused.specialty??"Сотрудник"}</small></div><button aria-label="Закрыть" onClick={()=>setOpenId(null)}><X size={17}/></button></div>
    <div className="ocs-sheet-row"><span>Явка</span><strong>{statusName[focused.attendance]}</strong></div><div className="ocs-sheet-row"><span>Смена</span><strong>{focused.kind==="night"?"Ночная":"Дневная"}{focused.time?" · "+focused.time:""}</strong></div>
-   {focused.documents&&<div className="ocs-sheet-row"><span>Документы</span><strong>{focused.documents==="ready"?"Подготовлены":focused.documents==="problem"?"Есть вопросы":"Проверить"}</strong></div>}
+   {focused.documents&&!focused.firstDay&&<div className="ocs-sheet-row"><span>Документы</span><strong>{focused.documents==="ready"?"Подготовлены":focused.documents==="problem"?"Есть вопросы":"Проверить"}</strong></div>}
    {focused.firstDay&&<><h3>Первый выход</h3>
    <div className="ocs-linked-readiness">
     <div><span>Документы</span><strong>{focused.documents==="ready"?"Подготовлены":focused.documents==="problem"?"Требуют внимания":"Проверить по карточке"}</strong></div>
