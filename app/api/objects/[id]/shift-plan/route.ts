@@ -21,6 +21,9 @@ type EntryState={id:string;factHours:number|string;timeCode:string;source:string
 
 function cycleWork(date:string,row:Assignment){
   if(row.workDays==null||row.restDays==null||row.workDays<1)return null;
+  if((row.workDays===5&&row.restDays===2)||(row.workDays===6&&row.restDays===1)){
+    const dow=new Date(date+"T00:00:00Z").getUTCDay();return !(dow===0||(dow===6&&row.workDays===5));
+  }
   const cycle=row.workDays+row.restDays;
   const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(row.anchorDate+"T00:00:00Z"))/86400000);
   const offset=((diff%cycle)+cycle)%cycle;
@@ -168,6 +171,7 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>{
       const scope=await getScope(sql,id);
       if(!scope||!canReadRow(actor.access,"operations.shift.read",scope,actor))throw new AccessDeniedError("operations.shift.read");
+      const patterns=await sql<Array<{workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean}>>`SELECT worker_id "workerId",effective_from::text "effectiveFrom",work_days "workDays",rest_days "restDays",shift_kind "shiftKind",floating_days_off "floatingDaysOff" FROM worker_schedule_pattern_changes WHERE object_id=${id}::uuid AND status='accepted' AND effective_from<=${end}::date ORDER BY effective_from DESC`;
       const assignments=await sql<Array<{workerId:string;date:string;kind:"day"|"night"|"mixed";reserve:boolean;status:string}>>`
         SELECT sa.worker_id "workerId",sh.shift_date::text date,sh.shift_kind kind,sa.is_reserve reserve,sa.confirmation_status status
         FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
@@ -204,7 +208,7 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         WHERE object_id=${id}::uuid AND period_end>=${start}::date AND period_start<=${end}::date
           AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
         ORDER BY period_start`;
-      return {assignments,entries,absences,demand,lockedRanges};
+      return {assignments,entries,absences,demand,lockedRanges,patterns};
     });
     return NextResponse.json(result);
   }catch(error){
@@ -224,6 +228,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const scope=await getScope(tx,id);
       if(!scope||!canReadRow(actor.access,"operations.shift.edit",scope,actor))throw new AccessDeniedError("operations.shift.edit");
 
+      const patterns=await tx<Array<{workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night"}>>`SELECT worker_id "workerId",effective_from::text "effectiveFrom",work_days "workDays",rest_days "restDays",shift_kind "shiftKind" FROM worker_schedule_pattern_changes WHERE object_id=${id}::uuid AND status='accepted' AND effective_from<=current_date+31 ORDER BY effective_from DESC`;
       const assignments=await tx<Assignment[]>`
         SELECT a.worker_id "workerId",a.specialty_id "specialtyId",a.schedule_work_days "workDays",a.schedule_rest_days "restDays",
           a.schedule_shift_kind "shiftKind",COALESCE(a.schedule_anchor_date,a.effective_from)::text "anchorDate",
@@ -265,9 +270,11 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           WHERE sh.object_id=${id}::uuid AND sh.shift_date=${date}::date AND sa.worker_id=${row.workerId}::uuid
             AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled' LIMIT 1`;
         if(existingShift||(entry&&!isFactEntry(entry)&&(entry.source==="schedule"||entry.timeCode==="PLANNED"))){skippedExisting++;continue}
-        const work=cycleWork(date,row);
+        const pattern=patterns.find(p=>p.workerId===row.workerId&&p.effectiveFrom<=date);
+        const effective=pattern?{...row,workDays:pattern.workDays,restDays:pattern.restDays,shiftKind:pattern.shiftKind,anchorDate:pattern.effectiveFrom}:row;
+        const work=cycleWork(date,effective);
         if(work==null){skipped++;continue}
-        const kind=work?(row.shiftKind==="night"?"night":"day"):"off";
+        const kind=work?(effective.shiftKind==="night"?"night":"day"):"off";
         const result=await assignCell(tx,actor,id,row,date,kind,{skipProtected:true});
         if(result==="updated")updated++;else if(result==="fact")skippedFact++;else if(result==="locked")skippedLocked++;else if(result==="absence")skippedAbsence++;else skipped++;
       }
