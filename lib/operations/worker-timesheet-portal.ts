@@ -248,21 +248,21 @@ export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDat
       WHERE object_id=${objectId}::uuid AND period_start<=${toDate}::date AND period_end>=${fromDate}::date
       AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new Error("В выбранном периоде есть зафиксированный табель");
-    await sql`UPDATE worker_shift_reports r
+    const reviewed=await sql<Array<{workerId:string;date:string}>>`UPDATE worker_shift_reports r
       SET hours_reconciled_at=now(),hours_reconciled_by_user_id=${actor.userId}::uuid,updated_at=now()
       FROM time_entries t WHERE t.worker_id=r.worker_id AND t.object_id=r.object_id AND t.work_date=r.work_date
         AND r.object_id=${objectId}::uuid AND r.work_date BETWEEN ${fromDate}::date AND ${toDate}::date
-        AND r.reported_hours IS NOT NULL AND t.source='worker_report'
+        AND r.reported_hours IS NOT NULL AND r.hours_reconciled_at IS NULL AND t.time_code='WORK' AND t.fact_hours>0
       RETURNING r.worker_id "workerId",r.work_date::text date`;
     const updated=await sql`UPDATE time_entries SET source='manual',corrected_by_user_id=${actor.userId}::uuid,
       correction_reason='Промежуточная сверка с заказчиком',updated_at=now()
       WHERE object_id=${objectId}::uuid AND work_date BETWEEN ${fromDate}::date AND ${toDate}::date AND source='worker_report'
       RETURNING id`;
     await sql`INSERT INTO object_timesheet_reconciliations(organization_id,object_id,period_start,period_end,reconciled_by_user_id,checked_worker_reports)
-      VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${fromDate}::date,${toDate}::date,${actor.userId}::uuid,${updated.length})`;
+      VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${fromDate}::date,${toDate}::date,${actor.userId}::uuid,${reviewed.length})`;
     await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
       VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${objectId}::uuid,'timesheet_interim_reconciled',
-      'Промежуточная сверка табеля с заказчиком',${sql.json({fromDate,toDate,workerReportsAccepted:updated.length})})`;
-    return {ok:true,accepted:updated.length};
+      'Промежуточная сверка табеля с заказчиком',${sql.json({fromDate,toDate,workerReportsAccepted:reviewed.length})})`;
+    return {ok:true,accepted:reviewed.length};
   });
 }
