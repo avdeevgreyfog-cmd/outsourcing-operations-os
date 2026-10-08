@@ -84,3 +84,10 @@ test("staging smoke waits for the beta schema independently of Vercel deployment
   assert.match(workflow,/Staging schema did not reach the beta baseline in time/);
   assert.match(workflow,/staging_schema.*staging_expected_schema/);
 });
+
+
+test("staging smoke resolves the production schema baseline from main with extended regex",()=>{
+  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
+  assert.match(workflow,/git ls-tree -r --name-only FETCH_HEAD migrations \| grep -E/);
+  assert.match(workflow,/\^migrations\/\[0-8\]\[0-9\]\{3\}_\.\+\\\.sql\$/);
+});

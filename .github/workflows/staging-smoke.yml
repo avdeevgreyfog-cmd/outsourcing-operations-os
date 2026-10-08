@@ -80,7 +80,7 @@ jobs:
           set -euo pipefail
           staging_expected_schema="$(find migrations -maxdepth 1 -type f -name '[0-8][0-9][0-9][0-9]_*.sql' -printf '%f\n' | sort | tail -n 1)"
           git fetch --no-tags --depth=1 origin main
-          production_expected_schema="$(git ls-tree -r --name-only FETCH_HEAD migrations | sed -n 's#^migrations/\([0-8][0-9][0-9][0-9]_.+\.sql\)$#\1#p' | sort | tail -n 1)"
+          production_expected_schema="$(git ls-tree -r --name-only FETCH_HEAD migrations | grep -E '^migrations/[0-8][0-9]{3}_.+\.sql$' | sed 's#^migrations/##' | sort | tail -n 1)"
 
           test -n "$staging_expected_schema" || { echo "::error::Unable to resolve beta schema baseline."; exit 1; }
           test -n "$production_expected_schema" || { echo "::error::Unable to resolve main schema baseline."; exit 1; }
