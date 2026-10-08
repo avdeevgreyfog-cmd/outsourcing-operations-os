@@ -1,6 +1,15 @@
 # OPERIS — мобильный контроль явки внутри существующих модулей
 
-**Фиксация:** 08.10.2026. **Ветка:** `feature/mobile-manager-field-20261008`. **PR:** #89 (draft), зависит от PR #88 (личный кабинет сотрудника). **Production/staging БД не изменялись.**
+**Фиксация:** 08.10.2026. **Релиз-кандидат:** `feature/worker-confirmations-20261008` (PR #88, DRAFT). **Мобильный PR #89 успешно объединён с PR #88** merge-коммитом `7e6e78cdfa9310dbc5ce1a0c03bd5c693a1da2e6`. **Production/staging БД не изменялись.**
+
+## Статус интеграции на 08.10.2026
+
+- Реальная кодовая интеграция: **PR #89 → ветка PR #88 выполнена**, без слияния в `beta`/`main`. Далее релизить из PR #88 (а не повторно сливать PR #89).
+- Продакшен пока **не обновлён**; миграции `0068–0073` не применены к staging/prod.
+- Причина блокировки: в GitHub Environment `production` не настроен `PRODUCTION_DATABASE_URL`; нельзя подтвердить, что staging/prod DB физически разные. Необходимо установить реальный источник production DB, не показывая credentials в чате.
+- Отдельно `Staging Smoke` сообщает расхождение production schema `0066_tender_bid_rounds.sql` с baseline ветки `main` `0059_worker_manager_future_integrity.sql`; `Production Release Lineage` не проходит после прямого коммита preview HTML в main. Никаких откатов базы и force-push.
+- Возможность Vercel Preview обнаружена в существующем `outsourcing-operations-os-g942` проекте. Для Preview лишь ветка `beta` имеет явный `DATABASE_URL`, feature-ветка не подключена к этой БД. Попытка развернуть последний объединённый коммит не удалась: `402 api-deployments-free-per-day` (более 100 API deployments/день, повторить примерно через 24 часа). **Новый Preview после merge не создан.**
+- Проверки последнего объединённого SHA отслеживать в GitHub CI ветки `feature/worker-confirmations-20261008`; ранее отдельные PR #88/#89 проходили CI. Нужны реальные staging E2E и mobile/browser QA после безопасной настройки окружений.
 
 ## Последнее решение пользователя — обязательное
 
