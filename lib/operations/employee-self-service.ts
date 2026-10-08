@@ -147,7 +147,7 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
   if(!Number.isFinite(offset)||offset<0||offset>31)throw new Error("Изменение времени доступно на ближайший месяц");
   const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${change.date}::date AND period_end>=${change.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
   if(locked)throw new Error("Период табеля уже зафиксирован");
-  const status=link.owner==="worker"&&change.appliesTo==="single"?"accepted":"proposed";
+  const status="proposed" as const;
   await sql`INSERT INTO worker_shift_time_changes(organization_id,worker_id,object_id,work_date,start_time,end_time,ends_next_day,applies_to,status,source_link_id,shift_kind)
     VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${change.date}::date,${change.startTime}::time,${change.endTime}::time,${change.endsNextDay},${change.appliesTo},${status},${ref.linkId}::uuid,${change.kind??null})
     ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,ends_next_day=EXCLUDED.ends_next_day,applies_to=EXCLUDED.applies_to,status=EXCLUDED.status,source_link_id=EXCLUDED.source_link_id,shift_kind=EXCLUDED.shift_kind,reviewed_at=NULL,reviewed_by_user_id=NULL,updated_at=now()`;
