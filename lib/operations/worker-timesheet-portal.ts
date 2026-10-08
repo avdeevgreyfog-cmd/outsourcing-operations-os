@@ -124,11 +124,11 @@ export async function employeePortal(token:string){
       sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null}>>`
         SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours
         FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN ((now() AT TIME ZONE ${link.timezone})::date-7) AND ((now() AT TIME ZONE ${link.timezone})::date+31) ORDER BY work_date`,
+          AND work_date BETWEEN LEAST(date_trunc('month',now() AT TIME ZONE ${link.timezone})::date,((now() AT TIME ZONE ${link.timezone})::date-7)) AND ((now() AT TIME ZONE ${link.timezone})::date+31) ORDER BY work_date`,
       sql<Array<{date:string;kind:string;timeCode:string;hours:number}>>`
         SELECT work_date::text date,COALESCE(planned_shift_kind,'day') kind,time_code "timeCode",fact_hours::float8 hours
         FROM time_entries WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN ((now() AT TIME ZONE ${link.timezone})::date-7) AND ((now() AT TIME ZONE ${link.timezone})::date+31)
+          AND work_date BETWEEN LEAST(date_trunc('month',now() AT TIME ZONE ${link.timezone})::date,((now() AT TIME ZONE ${link.timezone})::date-7)) AND ((now() AT TIME ZONE ${link.timezone})::date+31)
           ORDER BY updated_at DESC`,
     ]);
     return {...link,reports,plans};
