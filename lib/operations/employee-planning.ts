@@ -9,17 +9,22 @@ import type {Sql} from "postgres";
 export type ScheduleOwner="manager"|"worker";
 export type PlannedKind="day"|"night"|"off";
 export type PlanningDay={date:string;kind:PlannedKind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:PlannedKind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
-export type EmployeePlanning={owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;days:PlanningDay[]};
+export type EmployeePlanning={owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanningDay[]};
 
 type TenantScope={org:string;actor:string;worker:string;object:string;link:string;today:string;timezone:string;owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;anchor:string;defaultKind:"day"|"night"|null};
 type Entry={date:string;kind:string|null;code:string;source:string;hours:number};
 type Shift={date:string;kind:string;start:string;end:string;endsNextDay:boolean};
 type Proposal={date:string;kind:PlannedKind;status:"proposed"|"accepted"|"rejected"};
 type TimeChange={date:string;start:string;end:string;next:boolean;appliesTo:string;status:string;kind:"day"|"night"|null};
+type Pattern={effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean;status:"proposed"|"accepted"|"rejected"};
 
 function addDays(date:string,days:number){const d=new Date(date+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
 export function cycleKind(date:string,anchor:string,workDays:number|null,restDays:number|null,kind:"day"|"night"|null):PlannedKind|null{
  if(!workDays||restDays===null||workDays<1||restDays<0||!kind||date<anchor)return null;
+ if((workDays===5&&restDays===2)||(workDays===6&&restDays===1)){
+  const dow=new Date(date+"T00:00:00Z").getUTCDay();
+  return dow===0||(workDays===5&&dow===6)?"off":kind;
+ }
  const cycle=workDays+restDays;
  const n=Math.round((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);
  return n%cycle<workDays?kind:"off";
@@ -49,7 +54,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
  });
 }
 async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
- const [entries,shifts,proposals,changes]=await Promise.all([
+ const [entries,shifts,proposals,changes,patterns]=await Promise.all([
   sql<Array<Entry>>`SELECT DISTINCT ON(work_date) work_date::text date,planned_shift_kind kind,time_code code,source,fact_hours::float8 hours
    FROM time_entries WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid
      AND work_date BETWEEN ${from}::date AND ${to}::date ORDER BY work_date,(shift_id IS NULL) DESC,updated_at DESC`,
@@ -80,7 +85,9 @@ export async function employeePlanning(token:string):Promise<EmployeePlanning>{
   const requests=new Map(records.proposals.map(e=>[e.date,e]));
   const specific=new Map(records.changes.filter(e=>e.appliesTo==="single"&&e.status==="accepted").map(e=>[e.date,e]));
   const recurring=records.changes.filter(e=>e.appliesTo==="regular"&&e.status==="accepted").sort((a,b)=>b.date.localeCompare(a.date));
-  const days:PlanningDay[]=[];
+  const accepted=records.patterns.filter(p=>p.status==="accepted");
+ const current=accepted.find(p=>p.effectiveFrom<=s.today);
+ const days:PlanningDay[]=[];
   for(let d=from;d<=to;d=addDays(d,1)){
    const en=entries.get(d),sh=shifts.get(d),pr=requests.get(d);
    const regular=recurring.find(x=>x.date<=d),custom=specific.get(d)??regular;
@@ -89,13 +96,18 @@ export async function employeePlanning(token:string):Promise<EmployeePlanning>{
    else if(en?.code==="DAY_OFF"&&en.source==="schedule"){kind="off";source=pr?.status==="accepted"?"worker":"manual";}
    else if(en?.kind==="night"||en?.kind==="day"){kind=en.kind;source=pr?.status==="accepted"?"worker":"manual";}
    else if(en?.code==="WORK"&&en.hours>0){kind=(en.kind==="night"?"night":"day");source="manual";}
-   else {kind=cycleKind(d,s.anchor,s.workDays,s.restDays,s.defaultKind);if(kind)source="cycle";}
+   else {
+    const pattern=accepted.find(p=>p.effectiveFrom<=d);
+    kind=cycleKind(d,pattern?.effectiveFrom??s.anchor,pattern?.workDays??s.workDays,pattern?.restDays??s.restDays,pattern?.shiftKind??s.defaultKind);
+    if(kind)source="cycle";
+   }
    if(!sh&&custom?.kind&&kind!=="off"&&source==="cycle"){kind=custom.kind;source="manual";}
    days.push({date:d,kind,source,proposal:pr?.status==="proposed"?pr.kind:null,
     proposalStatus:pr?.status==="proposed"||pr?.status==="rejected"?pr.status:null,
     startTime:custom?.start??sh?.start??null,endTime:custom?.end??sh?.end??null,endsNextDay:custom?.next??sh?.endsNextDay??kind==="night"});
   }
-  return {owner:s.owner,horizon:s.horizon,workDays:s.workDays,restDays:s.restDays,defaultKind:s.defaultKind,days};
+  return {owner:s.owner,horizon:s.horizon,workDays:current?.workDays??s.workDays,restDays:current?.restDays??s.restDays,
+    defaultKind:current?.shiftKind??s.defaultKind,floatingDaysOff:current?.floatingDaysOff??false,patternFrom:current?.effectiveFrom??s.anchor,days};
  });
 }
 async function ensureNotLocked(sql:Sql,s:TenantScope,date:string){
