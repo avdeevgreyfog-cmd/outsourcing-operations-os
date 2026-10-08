@@ -11,25 +11,30 @@ function encryptToken(raw:string){const iv=randomBytes(12),cipher=createCipheriv
 function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".").map(x=>Buffer.from(x,"base64url"));const cipher=createDecipheriv("aes-256-gcm",tokenCipherKey(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(blob),cipher.final()]).toString("utf8")}
 export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
+export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string;timezone:string;reportingEnabled:boolean};
 
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
   if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11})),reports:[],links:[],settings:[]};
-  if(!visible.length)return {workers:[],reports:[],links:[],settings:[]};
+  if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[]};
   const objects=new Set(visible.map(w=>w.objectId!));
   const ids=visible.map(w=>w.id);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-    const [reports,links,settings]=await Promise.all([
+    const [reports,links,settings,plans]=await Promise.all([
       sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt"
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
       sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
         FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
       sql<Array<PortalConfig>>`SELECT object_id "objectId",schedule_owner "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled"
         FROM object_shift_reporting_settings WHERE object_id=ANY(${[...objects]}::uuid[])`,
+      sql<Array<EmployeePlan>>`SELECT DISTINCT ON(worker_id,object_id,work_date) worker_id "workerId",object_id "objectId",work_date::text date,time_code "timeCode",planned_shift_kind kind
+        FROM time_entries WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[])
+          AND work_date BETWEEN current_date-interval '2 days' AND current_date+interval '7 days'
+        ORDER BY worker_id,object_id,work_date,(shift_id IS NULL) DESC,updated_at DESC`,
     ]);
-    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11)})),reports,links,settings};
+    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11)})),reports,links,settings,plans};
   });
 }
 
@@ -162,6 +167,11 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     // Mirror only provisional planning and self-reported hours into the existing
     // time_entries model. Never overwrite a manager-entered fact or a locked period.
     const [next]=await sql<Array<{response:string;shiftKind:string|null;hours:number|null}>>`SELECT response,shift_kind "shiftKind",reported_hours::float8 hours FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
+    if(next?.response==="cannot_work"){
+      await sql`UPDATE time_entries SET time_code='WORK_PENDING',fact_hours=0,day_hours=0,night_hours=0,source='schedule',
+        correction_reason='Сотрудник отменил ранее заявленную отработку',updated_at=now()
+        WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND source='worker_report'`;
+    }
     if(next&&next.response!=="cannot_work"){
       const [entry]=await sql<Array<{id:string;source:string;factHours:number;timeCode:string}>>`
         SELECT id,source,fact_hours::float8 "factHours",time_code "timeCode" FROM time_entries
