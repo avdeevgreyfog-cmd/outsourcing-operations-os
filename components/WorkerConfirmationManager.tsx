@@ -52,7 +52,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const replies=expected.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
  const missing=expected.length-replies;
  const activeLinks=data.links.filter(l=>l.status==="active").length;
- async function action(body:Record<string,string|boolean|null>){
+ async function action(body:Record<string,string|number|boolean|null>){
   const key=String(body.action)+":"+String(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
   if(demo){
    if(body.action==="create"||body.action==="rotate"||body.action==="copy"||body.action==="copy_mobile"||body.action==="copy_desktop"){
