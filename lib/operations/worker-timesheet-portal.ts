@@ -102,7 +102,7 @@ export async function employeePortal(token:string){
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
       COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
       COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
-      COALESCE(s.confirmation_deadline::text,'22:00') deadline,COALESCE(s.timezone,'Europe/Moscow') timezone,
+      COALESCE(s.confirmation_deadline::text,'22:00') deadline,
       COALESCE(s.timezone,'Europe/Moscow') timezone,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
       COALESCE(s.reporting_enabled,true) "reportingEnabled"
@@ -138,7 +138,8 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string}>>`
       SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text "localToday",
-      COALESCE(s.confirmation_deadline::text,'22:00') deadline
+      COALESCE(s.confirmation_deadline::text,'22:00') deadline,
+      COALESCE(s.timezone,'Europe/Moscow') timezone
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
         AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
