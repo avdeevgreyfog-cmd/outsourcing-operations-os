@@ -190,7 +190,7 @@ body:has(.worker-self){min-width:0!important}
  .worker-self-schedule-attributes{gap:13px}
  .worker-self-ledger-date{gap:12px}
 }
-</style></head><body><div id="app"></div><script>(()=>{"use strict";
+.worker-self-month-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border:1px solid var(--border);border-radius:6px;background:var(--panel);padding:7px 12px;margin-bottom:12px}.worker-self-month-nav strong{text-transform:capitalize;font-size:14px}.worker-self-month-arrow{min-width:34px;height:34px;border:1px solid var(--border);background:var(--panel);border-radius:5px;cursor:pointer;font-size:23px;display:grid;place-items:center}.worker-self-month-arrow:hover{background:var(--panel-2)}.worker-self-agreed{color:var(--good)!important}.worker-self-inline-edit{margin:0 0 12px}.worker-self-date-row{border-top:0}.worker-self-day-item{border-top:1px solid var(--border)}</style></head><body><div id="app"></div><script>(()=>{"use strict";
 const icon={
  calendar:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>',
  clipboard:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 14l2 2 4-5"/></svg>',
@@ -242,13 +242,26 @@ if(state.floating){h+='<div class="worker-self-week-tool"><div><strong>Плав�
 }
 h+='</section>';
 }else if(state.tab==="timesheet"){
-h+='<div class="worker-self-page-title"><div><h1>Мой табель</h1><p>Текущий месяц · Плановые дни не учитываются в итогах.</p></div></div><div class="worker-self-totals"><div><small>Отработано часов</small><strong>'+(44+(state.confirmHours??0))+'</strong><span>Предварительный итог</span></div><div><small>Отработано смен</small><strong>'+(4+(state.confirmHours===null?0:1))+'</strong><span>Только факт</span></div></div><section class="worker-self-panel worker-self-timesheet-panel"><div class="worker-self-panel-head"><span>'+icon.clipboard+' Дни месяца</span><span class="worker-self-ledger-hint">План → Факт → Сверка</span></div><div class="worker-self-ledger-header"><span>Дата / Смена</span><span>Результат</span></div>';
-for(let n=0;n<=7;n++){
- const date=8-n,actual=n===1?state.confirmHours:[2,3,6,7].includes(n)?11:null,off=n===4||n===5;
- if(n===0||n===4)h+='<div class="worker-self-ledger-separator"></div>';
- h+='<div class="worker-self-ledger-row"><div class="worker-self-ledger-date"><strong>'+date+'.10</strong><small>'+(off?"Выходной":"Ночная смена")+'</small></div><div class="worker-self-ledger-result"><strong class="'+(actual!==null?"actual":"")+'">'+(actual!==null?actual+" ч":off?"В":"План")+'</strong>'+(actual!==null?"<small>Учтено</small>":"")+'</div></div>';
+const months=["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+const [yearN,monthN]=state.month.split("-").map(Number),monthName=months[monthN-1]+" "+yearN;
+const length=state.month==="2026-10"?8:new Date(Date.UTC(yearN,monthN,0)).getUTCDate();
+const facts={};
+for(let d=1;d<=length;d++){
+ const dt=state.month+"-"+String(d).padStart(2,"0"),dow=new Date(dt+"T00:00:00Z").getUTCDay();
+ if(dow!==0&&dow!==6&&(state.month!=="2026-10"||d<=7)){
+   const hours=state.month==="2026-10"&&d===7?state.confirmHours:11;
+   if(hours!==null)facts[d]={hours,agreed:state.month!=="2026-10"||d<=6};
+ }
 }
-h+='<p class="worker-self-muted">В итоги входят только завершённые и отмеченные отработанные смены. План не увеличивает часы.</p></section>';
+const count=Object.values(facts).filter(x=>x.hours>0),total=count.reduce((sum,x)=>sum+x.hours,0);
+h+='<div class="worker-self-page-title"><div><h1>Мой табель</h1></div></div><div class="worker-self-month-nav">'+button("month-prev","‹","worker-self-month-arrow")+'<strong>'+monthName+'</strong>'+button("month-next","›","worker-self-month-arrow")+'</div><div class="worker-self-totals"><div><small>Часы</small><strong>'+total+'</strong></div><div><small>Смены</small><strong>'+count.length+'</strong></div></div><section class="worker-self-panel worker-self-timesheet-panel"><div class="worker-self-panel-head"><span>'+icon.clipboard+' '+monthName+'</span></div><div class="worker-self-ledger-header"><span>Дата</span><span>Часы</span></div>';
+for(let d=length;d>=1;d--){
+ const current=state.month+"-"+String(d).padStart(2,"0"),dow=new Date(current+"T00:00:00Z").getUTCDay();
+ const fact=facts[d],off=dow===0||dow===6;
+ if(d<length&&dow===0)h+='<div class="worker-self-ledger-separator"></div>';
+ h+='<div class="worker-self-ledger-row"><div class="worker-self-ledger-date"><strong>'+String(d).padStart(2,"0")+"."+String(monthN).padStart(2,"0")+'</strong><small>'+(off?"Выходной":"Ночная смена")+'</small></div><div class="worker-self-ledger-result"><strong class="'+(fact?"actual":"")+'">'+(fact?fact.hours+" ч":off?"Выходной":"—")+'</strong>'+(fact?'<small class="'+(fact.agreed?"worker-self-agreed":"")+'">'+(fact.agreed?"Согласовано":"Передано")+'</small>':"")+'</div></div>';
+}
+h+='</section>';
 }else if(state.more==="overview"){
 h+='<div class="worker-self-page-title"><div><h1>Дополнительно</h1><p>Документы, обеспечение, контакты и настройки.</p></div></div><div class="worker-self-extra-list">'+[['documents',"Документы","Что необходимо передать","doc"],['workwear',"Спецодежда и СИЗ","Размеры и выдача","shirt"],['contact',"Важные контакты","Ваш менеджер объекта","phone"],['settings',"Настройки графика","Моя обычная смена","gear"]].map(([id,title,subtitle,ic])=>'<button data-more="'+id+'">'+icon[ic]+'<span><strong>'+title+'</strong><small>'+subtitle+'</small></span>›</button>').join("")+'</div>';
 }else{
@@ -288,6 +301,7 @@ else if(a==="saveDecline"){const v=document.getElementById("reason").value.trim(
 else if(a==="confirmHours"){state.confirmHours=11;state.notice="Отработанные часы переданы"}
 else if(a==="editHours"){state.hoursEdit=true}
 else if(a==="saveHours"){const n=Number(document.getElementById("hours").value);if(!Number.isFinite(n)||n<0||n>24){state.notice="Укажите часы от 0 до 24";render();return}state.confirmHours=n;state.hoursEdit=false;state.notice="Часы переданы"}
+else if(a==="month-prev"||a==="month-next"){const [y,m]=state.month.split("-").map(Number);const d=new Date(Date.UTC(y,m-1+(a==="month-prev"?-1:1),1));const next=d.toISOString().slice(0,7);if(next>="2020-01"&&next<="2026-10")state.month=next}
 else if(a==="showFull"){state.showFull=!state.showFull}
 else if(a==="weekly"){state.weekly=!state.weekly;state.selected=[9,10]}
 else if(a.startsWith("rest-")){const n=Number(a.slice(5));if(state.selected.includes(n))state.selected=state.selected.filter(x=>x!==n);else if(state.selected.length<2)state.selected.push(n)}
