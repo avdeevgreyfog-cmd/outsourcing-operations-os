@@ -52,8 +52,8 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  async function action(body:Record<string,string|boolean|null>){
   const key=String(body.action)+":"+String(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
   if(demo){
-   if(body.action==="create"||body.action==="rotate"||body.action==="copy"){
-     const url=window.location.origin+"/employee-timesheet/demo";
+   if(body.action==="create"||body.action==="rotate"||body.action==="copy"||body.action==="copy_mobile"||body.action==="copy_desktop"){
+     const url=window.location.origin+"/employee-timesheet/demo?layout="+(body.action==="copy_desktop"?"desktop":"mobile");
      try{await navigator.clipboard.writeText(url);setInfo("Демо-ссылка скопирована")}catch{setInfo("Демо-ссылка: "+url)}
    }else setInfo("Демонстрация: действие доступно в рабочем контуре");
    setBusy("");return;
