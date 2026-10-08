@@ -188,3 +188,26 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     return {ok:true};
   });
 }
+
+export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDate:string,toDate:string){
+  requireCapability(actor,"time.time_entry.edit");
+  await assertManage(actor,objectId);
+  if(actor.demo)throw new Error("Сверка недоступна в демонстрационном режиме");
+  if(toDate<fromDate||Date.parse(toDate)-Date.parse(fromDate)>31*86400000)throw new Error("Выберите период не длиннее 31 дня");
+  return withTenant(actor.organizationId,actor.userId,async(sql)=>{
+    const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots
+      WHERE object_id=${objectId}::uuid AND period_start<=${toDate}::date AND period_end>=${fromDate}::date
+      AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
+    if(locked)throw new Error("В выбранном периоде есть зафиксированный табель");
+    const updated=await sql`UPDATE time_entries SET source='manual',corrected_by_user_id=${actor.userId}::uuid,
+      correction_reason='Промежуточная сверка с заказчиком',updated_at=now()
+      WHERE object_id=${objectId}::uuid AND work_date BETWEEN ${fromDate}::date AND ${toDate}::date AND source='worker_report'
+      RETURNING id`;
+    await sql`INSERT INTO object_timesheet_reconciliations(organization_id,object_id,period_start,period_end,reconciled_by_user_id,checked_worker_reports)
+      VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${fromDate}::date,${toDate}::date,${actor.userId}::uuid,${updated.length})`;
+    await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+      VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${objectId}::uuid,'timesheet_interim_reconciled',
+      'Промежуточная сверка табеля с заказчиком',${sql.json({fromDate,toDate,workerReportsAccepted:updated.length})})`;
+    return {ok:true,accepted:updated.length};
+  });
+}
