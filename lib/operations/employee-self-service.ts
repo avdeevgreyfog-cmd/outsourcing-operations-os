@@ -91,13 +91,13 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
        ((sh.ends_at AT TIME ZONE ${link.timezone})::date>sh.shift_date) "endsNextDay"
      FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
      WHERE sa.worker_id=${link.workerId}::uuid AND sh.object_id=${link.objectId}::uuid
-       AND sa.confirmation_status<>'cancelled' AND sh.shift_date BETWEEN current_date-33 AND current_date+7
+       AND sa.confirmation_status<>'cancelled' AND sh.shift_date BETWEEN current_date-33 AND current_date+31
      ORDER BY sh.shift_date,sa.is_reserve,sh.starts_at`,
    sql<Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular";status:"proposed"|"accepted"|"rejected"}>>`
      SELECT work_date::text date,to_char(start_time,'HH24:MI') "startTime",to_char(end_time,'HH24:MI') "endTime",
        ends_next_day "endsNextDay",applies_to "appliesTo",status FROM worker_shift_time_changes
      WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-      AND (work_date BETWEEN current_date-33 AND current_date+7 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+7))`
+      AND (work_date BETWEEN current_date-33 AND current_date+31 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+31))`
   ]);
   const codes=checklistCodes(link.employment,overrides);
   const verified=new Map(checkItems.map(item=>[item.code,item]));
@@ -140,7 +140,7 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
   const local=Object.fromEntries(parts.map(p=>[p.type,p.value]));
   const today=`${local.year}-${local.month}-${local.day}`;
   const offset=Math.round((Date.parse(change.date+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
-  if(!Number.isFinite(offset)||offset<0||offset>7)throw new Error("Редактировать время можно только для ближайших 7 дней");
+  if(!Number.isFinite(offset)||offset<0||offset>31)throw new Error("Изменение времени доступно на ближайший месяц");
   const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${change.date}::date AND period_end>=${change.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
   if(locked)throw new Error("Период табеля уже зафиксирован");
   const status=link.owner==="worker"&&change.appliesTo==="single"?"accepted":"proposed";
@@ -162,7 +162,7 @@ export async function employeeDetailManagerList(actor:Actor,objectId?:string){
    sql<Array<{workerId:string;objectId:string;date:string;startTime:string;endTime:string;status:string;appliesTo:string}>>`
     SELECT worker_id "workerId",object_id "objectId",work_date::text date,to_char(start_time,'HH24:MI') "startTime",
       to_char(end_time,'HH24:MI') "endTime",status,applies_to "appliesTo"
-    FROM worker_shift_time_changes WHERE worker_id=ANY(${ids}::uuid[]) AND work_date>=current_date-2 AND work_date<=current_date+7`,
+    FROM worker_shift_time_changes WHERE worker_id=ANY(${ids}::uuid[]) AND work_date>=current_date-2 AND work_date<=current_date+31`,
    sql<Array<{workerId:string;objectId:string;code:string;employeeReported:boolean;managerVerified:boolean}>>`
     SELECT worker_id "workerId",object_id "objectId",document_code code,(employee_reported_at IS NOT NULL) "employeeReported",
       (manager_verified_at IS NOT NULL) "managerVerified" FROM worker_document_checklist
