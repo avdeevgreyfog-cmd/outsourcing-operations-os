@@ -1,7 +1,7 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
-import {managerPortalData,editWorkerLink,editPortalSettings,reconcileEmployeeHours} from "@/lib/operations/worker-timesheet-portal";
+import {managerPortalData,editWorkerLink,reconcileEmployeeHours} from "@/lib/operations/worker-timesheet-portal";
 import {employeeDetailManagerList,managerEmployeeDetailAction} from "@/lib/operations/employee-self-service";
 import {managerSetScheduleOwner,managerEmployeePlanningChanges,managerReviewEmployeePlan} from "@/lib/operations/employee-planning";
 const actions=z.discriminatedUnion("action",[
@@ -32,7 +32,7 @@ export async function POST(request:Request){
    ?await managerSetScheduleOwner(actor,body.objectId,body.scheduleOwner,body.workerId)
    :body.action==="review_plan"
    ?await managerReviewEmployeePlan(actor,body.objectId,body.workerId,body.date,body.approve)
-   :["manager_phone","verify_document","review_shift_time","document_requirement"].includes(body.action)
+   :body.action==="manager_phone"||body.action==="verify_document"||body.action==="review_shift_time"||body.action==="document_requirement"
    ?await managerEmployeeDetailAction(actor,body as Parameters<typeof managerEmployeeDetailAction>[1])
    :body.action==="reconcile"
    ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
