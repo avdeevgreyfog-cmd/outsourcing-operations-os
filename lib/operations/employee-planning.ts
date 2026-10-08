@@ -53,7 +53,7 @@ async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
   sql<Array<Entry>>`SELECT DISTINCT ON(work_date) work_date::text date,planned_shift_kind kind,time_code code,source,fact_hours::float8 hours
    FROM time_entries WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid
      AND work_date BETWEEN ${from}::date AND ${to}::date ORDER BY work_date,(shift_id IS NULL) DESC,updated_at DESC`,
-  sql<Array<Shift>>`SELECT DISTINCT ON(sh.shift_date) sh.shift_date::text date,sh.kind,
+  sql<Array<Shift>>`SELECT DISTINCT ON(sh.shift_date) sh.shift_date::text date,sh.shift_kind kind,
     to_char(sh.starts_at AT TIME ZONE ${s.timezone},'HH24:MI') start,
     to_char(sh.ends_at AT TIME ZONE ${s.timezone},'HH24:MI') "end",
     ((sh.ends_at AT TIME ZONE ${s.timezone})::date>sh.shift_date) "endsNextDay"
