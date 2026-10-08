@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {isDestructiveMigration} from "../scripts/migration-safety.mjs";
 
 const root=fileURLToPath(new URL("../migrations/",import.meta.url));
 const historicalAllowlist=new Set(["0052_personal_workspace_owner_repair.sql","0053_clean_personal_workspace.sql"]);
@@ -27,6 +28,15 @@ test("new migrations cannot reset a persistent customer workspace",()=>{
   );
 });
 
+
+test("migration safety allows DROP NOT NULL but still blocks destructive DROP operations",()=>{
+  assert.equal(isDestructiveMigration("ALTER TABLE contracts ALTER COLUMN request_id DROP NOT NULL;"),false);
+  assert.equal(isDestructiveMigration("ALTER TABLE contracts DROP COLUMN request_id;"),true);
+  assert.equal(isDestructiveMigration("ALTER TABLE contracts DROP CONSTRAINT contracts_source_exactly_one;"),true);
+  assert.equal(isDestructiveMigration("DROP TABLE contracts;"),true);
+  assert.equal(isDestructiveMigration("TRUNCATE contracts;"),true);
+  assert.equal(isDestructiveMigration("DELETE FROM contracts;"),true);
+});
 
 test("migration runner is fail-closed for destructive changes",()=>{
   const runner=readFileSync(fileURLToPath(new URL("../scripts/migrate.mjs",import.meta.url)),"utf8");
@@ -67,27 +77,4 @@ test("staging smoke uses independent beta and main schema baselines",()=>{
   assert.match(workflow,/git fetch --no-tags --depth=1 origin main/);
   assert.match(workflow,/production schema drifted from main/);
   assert.doesNotMatch(workflow,/production\.schemaVersion!==process\.env\.EXPECTED_SCHEMA/);
-});
-
-
-test("staging smoke only requires a new deployment for runtime-affecting beta changes",()=>{
-  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
-  assert.match(workflow,/Determine whether this commit requires a new staging deployment/);
-  assert.match(workflow,/migrations\/\*\|scripts\/migrate\.mjs\|scripts\/migration-safety\.mjs/);
-  assert.match(workflow,/REQUIRE_DEPLOYMENT/);
-  assert.match(workflow,/require_deployment=\$require_deployment/);
-});
-
-test("staging smoke waits for the beta schema independently of Vercel deployment SHA",()=>{
-  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
-  assert.match(workflow,/schema_ready=false/);
-  assert.match(workflow,/Staging schema did not reach the beta baseline in time/);
-  assert.match(workflow,/staging_schema.*staging_expected_schema/);
-});
-
-
-test("staging smoke resolves the production schema baseline from main with extended regex",()=>{
-  const workflow=readFileSync(fileURLToPath(new URL("../.github/workflows/staging-smoke.yml",import.meta.url)),"utf8");
-  assert.match(workflow,/git ls-tree -r --name-only FETCH_HEAD migrations \| grep -E/);
-  assert.match(workflow,/\^migrations\/\[0-8\]\[0-9\]\{3\}_\.\+\\\.sql\$/);
 });

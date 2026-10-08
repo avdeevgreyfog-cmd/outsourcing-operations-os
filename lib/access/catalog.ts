@@ -14,6 +14,7 @@ export const capabilities = {
   tendersImport: "sales.tender.import",
   tendersSubmit: "sales.tender.submit",
   tendersResult: "sales.tender.result",
+  tendersLaunch: "sales.tender.launch",
   proposalsRead: "sales.proposal.read",
   proposalsCreate: "sales.proposal.create",
   proposalsEdit: "sales.proposal.edit",

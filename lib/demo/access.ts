@@ -9,7 +9,7 @@ const TEAM_OPS = "20000000-0000-4000-8000-000000000002";
 const TEAM_REC = "20000000-0000-4000-8000-000000000003";
 const TEAM_FIN = "20000000-0000-4000-8000-000000000004";
 
-const COMMERCIAL = ["approval.read","approval.decide","sales.request.archive","sales.proposal.read","sales.proposal.create","sales.proposal.edit","sales.proposal.submit","sales.proposal.client_decision","sales.proposal.launch","contract.read","contract.create","contract.edit","contract.submit","contract.sign","contract.launch_exception"];
+const COMMERCIAL = ["approval.read","approval.decide","sales.request.archive","sales.proposal.read","sales.proposal.create","sales.proposal.edit","sales.proposal.submit","sales.proposal.client_decision","sales.proposal.launch","sales.tender.launch","contract.read","contract.create","contract.edit","contract.submit","contract.sign","contract.launch_exception"];
 const ALL = [
   "home.command.read","task.read","task.edit","sales.lead.read","sales.lead.create","sales.lead.edit",
   "sales.client.read","sales.client.create","sales.client.edit","sales.request.read","sales.request.create","sales.request.edit",...COMMERCIAL,

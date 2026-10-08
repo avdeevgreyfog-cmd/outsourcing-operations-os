@@ -8,13 +8,13 @@ import {getTender,getTenderOptions} from "@/lib/tenders/service";
 import {listTenderActivity} from "@/lib/tenders/activity";
 import {tenderBillingLabels,tenderDecisionLabels,tenderDeadlineState,tenderResultLabels,tenderStageLabel,tenderCalculationStatusLabels,tenderApprovalStatusLabels,tenderApprovalProcessLabels,tenderEnumLabel} from "@/lib/tenders/model";
 import {EntityTabs,KeyValue,PageHeader,Section,Status} from "@/components/UI";
-import {TenderApprovalActions,TenderComments,TenderCoreEditor,TenderDocumentsPanel,TenderSubmissionEditor,TenderTeamEditor,TenderTradingPanel} from "@/components/TenderEntityPanels";
+import {TenderApprovalActions,TenderComments,TenderCoreEditor,TenderDocumentsPanel,TenderResultPanel,TenderSubmissionEditor,TenderTeamEditor,TenderTradingPanel} from "@/components/TenderEntityPanels";
 import {TenderAnalysisWorkspace} from "@/components/TenderAnalysisWorkspace";
 import {StaticDemoQueryTabsController} from "@/components/StaticDemoQueryTabsController";
 
 import {formatTenderDateTime} from "@/lib/tenders/datetime";
 
-const tabs={overview:"Обзор",analysis:"Анализ",documents:"Документы",calculations:"Расчёты",approvals:"Согласования",submission:"Подача",trading:"Торги",history:"История"} as const;
+const tabs={overview:"Обзор",analysis:"Анализ",documents:"Документы",calculations:"Расчёты",approvals:"Согласования",submission:"Подача",trading:"Торги",result:"Результат",history:"История"} as const;
 function money(value:number|string|null){if(value==null)return "—";return new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(value));}
 const day=formatTenderDateTime;
 function tone(stage:string){if(stage==="completed")return "neutral" as const;if(["submitted","awaiting_result"].includes(stage))return "good" as const;if(["clarification","approval","preparation"].includes(stage))return "warn" as const;return "info" as const;}
@@ -28,7 +28,7 @@ export default async function TenderPage({params,searchParams}:{params:Promise<{
   if(actor.demo&&!actor.access.capabilities.includes("sales.tender.read"))actor.access.capabilities.push("sales.tender.read");
   const tender=await getTender(actor,id);if(!tender)notFound();
   const active=query.tab&&query.tab in tabs?query.tab as keyof typeof tabs:"overview";
-  const canEdit=!actor.demo&&canReadRow(actor.access,"sales.tender.edit",tender,actor);const canResult=canEdit&&hasCapability(actor.access,"sales.tender.result");const canSubmit=canEdit&&hasCapability(actor.access,"sales.tender.submit");const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");
+  const canEdit=!actor.demo&&canReadRow(actor.access,"sales.tender.edit",tender,actor);const canResult=canEdit&&hasCapability(actor.access,"sales.tender.result");const canSubmit=canEdit&&hasCapability(actor.access,"sales.tender.submit");const canLaunch=!actor.demo&&canReadRow(actor.access,"sales.tender.launch",tender,actor);const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");
   const [options,activity]=await Promise.all([getTenderOptions(actor),active==="history"||staticDemo?listTenderActivity(actor,id):Promise.resolve([])]);
   const deadline=tenderDeadlineState(tender.submissionDeadline);const ready=tender.requirementCount?Math.round(tender.readyRequirementCount/tender.requirementCount*100):null;
   const tabItems=Object.entries(tabs).map(([key,label])=>({label,href:`/tenders/${id}?tab=${key}`,count:key==="documents"?tender.requirementCount+tender.sourceDocuments.length:key==="calculations"&&canReadCalculations?tender.calculations.length:key==="approvals"?tender.approvals.length:key==="trading"?tender.bidRounds.length:key==="history"?activity.length:undefined}));

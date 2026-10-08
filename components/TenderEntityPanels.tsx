@@ -1,5 +1,6 @@
 "use client";
 import {useMemo,useState} from "react";
+import Link from "next/link";
 import {useRouter} from "next/navigation";
 import {Check,Pencil,Plus,Send,Trash2} from "lucide-react";
 import {SalesDrawer} from "@/components/sales/SalesUI";
@@ -175,5 +176,82 @@ export function TenderTradingPanel({tender,canSubmit,canReadEconomics}:{tender:T
       {state&&<p className={state==="Раунд зафиксирован"?"form-success":"muted"}>{state}</p>}
     </section>}
     {canSubmit&&!canTrade&&tender.stage!=="completed"&&<section className="section"><p className="muted">Добавление раундов станет доступно после фиксации подачи тендера.</p></section>}
+  </div>;
+}
+
+const tenderOutcomeLabels:Record<string,string>={won:"Выиграли",lost:"Проиграли",no_bid:"Не участвовали",cancelled:"Отменён заказчиком",failed:"Не состоялся"};
+
+export function TenderResultPanel({tender,options,canLaunch}:{tender:TenderDetail;options:TenderOptions;canLaunch:boolean}){
+  const router=useRouter();
+  const [open,setOpen]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [state,setState]=useState("");
+  const defaultEntity=tender.legalEntityId??(options.legalEntities.length===1?options.legalEntities[0]?.id??"":"");
+  const [form,setForm]=useState({name:tender.title,code:"",targetStartDate:"",legalEntityId:defaultEntity});
+  const won=tender.stage==="completed"&&tender.result==="won";
+
+  async function launch(){
+    try{
+      setBusy(true);setState("");
+      await jsonRequest(`/api/tenders/${tender.id}/launch`,"POST",{
+        name:form.name.trim()||undefined,
+        code:form.code.trim()||undefined,
+        targetStartDate:form.targetStartDate||undefined,
+        legalEntityId:form.legalEntityId||undefined,
+      });
+      setOpen(false);
+      setState("Передача в запуск выполнена");
+      router.refresh();
+    }catch(error){
+      setState(error instanceof Error?error.message:"Не удалось передать тендер в запуск");
+    }finally{setBusy(false);}
+  }
+
+  return <div className="tender-tab-stack">
+    <section className="section">
+      <h3>Результат тендера</h3>
+      <div className="request-entity-facts">
+        <article><span>Результат</span><strong>{tender.result?tenderOutcomeLabels[tender.result]??"Статус уточняется":"Не зафиксирован"}</strong><small>{tender.stage==="completed"?"Тендер завершён":"Итог ещё не зафиксирован"}</small></article>
+        <article><span>Финальная цена</span><strong>{tenderMoney(tender.finalBidValue)}</strong><small>{tender.bidRounds.length?`Раундов торгов: ${tender.bidRounds.length}`:"История торгов отсутствует"}</small></article>
+        <article><span>Договор / запуск</span><strong>{tender.winHandoff?.started?"Передано в запуск":won?"Ожидает передачи":"—"}</strong><small>{tender.winHandoff?.started?"Создан договор и контур подготовки объекта":won?"Нужна утверждённая экономика и готовые позиции":"Доступно после победы"}</small></article>
+      </div>
+      {tender.closeReason&&<div className="tender-open-questions"><strong>Комментарий к результату</strong><p>{tender.closeReason}</p></div>}
+    </section>
+
+    {tender.winHandoff?.started&&<section className="section">
+      <h3>Передача в договор и объект</h3>
+      <p className="muted">Источник зафиксирован как выигранный тендер. Дальнейшая работа идёт в общих модулях договоров и объектов.</p>
+      <div className="tender-submit-actions">
+        {tender.winHandoff.contractId&&<Link className="button primary" href={`/contracts/${tender.winHandoff.contractId}`}>Открыть договор</Link>}
+        {tender.winHandoff.objectId&&<Link className="button" href={`/objects/${tender.winHandoff.objectId}`}>Открыть объект</Link>}
+        {!tender.winHandoff.contractId&&!tender.winHandoff.objectId&&<span className="muted">Передача выполнена. Связанные сущности скрыты текущими правами доступа.</span>}
+      </div>
+    </section>}
+
+    {won&&!tender.winHandoff?.started&&<section className="section">
+      <h3>Передать выигранный тендер в запуск</h3>
+      <p className="muted">Будут созданы объект в подготовке, потребности, план запуска, клиентские ставки и черновик договора. Источником останется этот тендер; существующие расчёты не переписываются.</p>
+      {canLaunch?<button className="button primary" type="button" onClick={()=>{setState("");setOpen(true);}}>Создать договор и подготовку объекта</button>:<p className="muted">Нет права передавать выигранный тендер в запуск.</p>}
+      {state&&<p className={state==="Передача в запуск выполнена"?"form-success":"form-error"}>{state}</p>}
+    </section>}
+
+    {!won&&!tender.winHandoff?.started&&<section className="section"><p className="muted">Передача в договор и объект станет доступна после фиксации результата «Выиграли».</p></section>}
+
+    {open&&<SalesDrawer
+      title="Передать тендер в запуск"
+      overline="Тендер · результат"
+      subtitle="Создаётся рабочий контур запуска на основании выигранного тендера и одной утверждённой версии экономики."
+      onClose={()=>{if(!busy)setOpen(false);}}
+      footer={<><button className="button" type="button" disabled={busy} onClick={()=>setOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||!form.name.trim()||!form.legalEntityId} onClick={()=>void launch()}>{busy?"Создаю…":"Создать договор и объект"}</button></>}
+    >
+      <div className="form-grid">
+        <label><span>Название объекта</span><input value={form.name} onChange={e=>setForm(v=>({...v,name:e.target.value}))}/></label>
+        <label><span>Код объекта</span><input value={form.code} onChange={e=>setForm(v=>({...v,code:e.target.value.toUpperCase()}))} placeholder="Можно оставить пустым"/></label>
+        <label><span>Плановый старт</span><input type="date" value={form.targetStartDate} onChange={e=>setForm(v=>({...v,targetStartDate:e.target.value}))}/></label>
+        <label><span>Юридическое лицо</span><select value={form.legalEntityId} onChange={e=>setForm(v=>({...v,legalEntityId:e.target.value}))}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <p className="muted">Система проверит клиента, регион, специальности, количество сотрудников и полное покрытие позиций принятой экономикой. При любой ошибке транзакция будет отменена целиком.</p>
+        {state&&<p className="form-error">{state}</p>}
+      </div>
+    </SalesDrawer>}
   </div>;
 }
