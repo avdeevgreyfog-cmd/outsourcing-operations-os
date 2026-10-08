@@ -12,6 +12,6 @@ export function GlobalShiftsWorkspace({rows,options,canEdit,canReconcile,canUseM
    <button role="tab" aria-selected={tab==="confirmations"} className={tab==="confirmations"?"active":""} onClick={()=>setTab("confirmations")}>Контроль выходов</button>
    <button role="tab" aria-selected={tab==="schedule"} className={tab==="schedule"?"active":""} onClick={()=>setTab("schedule")}>Графики и смены</button>
   </div>
-  {tab==="schedule"?<ResourceScheduler rows={rows} options={options} canEdit={canEdit}/>:<><div className={"ocs-desktop-confirmations"+(canUseMobile?"":" ocs-keep-desktop")}><WorkerConfirmationManager canEdit={canEdit} canReconcile={canReconcile} demo={demo}/></div>{canUseMobile&&<div className="ocs-mobile-confirmations"><MobileShiftControls canEdit={canEdit} demo={demo}/></div>}</>}
+  {tab==="schedule"?<ResourceScheduler rows={rows} options={options} canEdit={canEdit}/>:<><div className={"ocs-desktop-confirmations"+(canUseMobile?"":" ocs-keep-desktop")}><WorkerConfirmationManager canEdit={canEdit} canReconcile={canReconcile} demo={demo}/></div>{canUseMobile&&<div className="ocs-mobile-confirmations"><MobileShiftControls canEdit={canEdit} demo={demo} onOpenSchedule={()=>setTab("schedule")}/></div>}</>}
  </div>;
 }
