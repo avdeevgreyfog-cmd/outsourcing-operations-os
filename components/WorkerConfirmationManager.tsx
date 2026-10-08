@@ -1,16 +1,17 @@
 "use client";
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
-type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number};
+type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number;workDays?:number|null;restDays?:number|null;shiftKind?:"day"|"night"|"mixed"|null};
 type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 type Setting={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;managerPhone?:string|null;planningHorizonDays?:number};
 type TimeUpdate={workerId:string;objectId:string;date:string;startTime:string;endTime:string;status:"proposed"|"accepted"|"rejected";appliesTo:"single"|"regular"};
+type PatternChange={workerId:string;objectId:string;date:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean;status:string};
 type PlanningChange={workerId:string;objectId:string;date:string;kind:"day"|"night"|"off";status:string};
 type Authority={workerId:string;objectId:string;scheduleOwner:"manager"|"worker"};
 type DocumentUpdate={workerId:string;objectId:string;code:string;employeeReported:boolean;managerVerified:boolean};
-type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[];timeChanges?:TimeUpdate[];documents?:DocumentUpdate[];planningChanges?:PlanningChange[];workerAuthorities?:Authority[]};
+type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[];timeChanges?:TimeUpdate[];documents?:DocumentUpdate[];planningChanges?:PlanningChange[];workerAuthorities?:Authority[];patternChanges?:PatternChange[]};
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
 function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
@@ -22,6 +23,11 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [mode,setMode]=useState<"answers"|"links"|"updates">("answers");
  const [search,setSearch]=useState("");
  const [contactNumber,setContactNumber]=useState("");
+ const [patternWorker,setPatternWorker]=useState("");
+ const [patternCode,setPatternCode]=useState("5/2");
+ const [patternShift,setPatternShift]=useState<"day"|"night">("day");
+ const [patternFloating,setPatternFloating]=useState(false);
+ const [patternFrom,setPatternFrom]=useState(new Date().toISOString().slice(0,10));
  const [specialWorker,setSpecialWorker]=useState("");
  const [specialOwner,setSpecialOwner]=useState<"inherit"|"manager"|"worker">("inherit");
 
@@ -104,12 +110,13 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
      {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}</td><td>{r?.updatedAt?new Date(r.updatedAt).toLocaleString("ru-RU"):"—"}</td></tr>})}
     </tbody></table>{!visible.length&&<div className="empty-inline">Нет сотрудников по выбранным условиям</div>}</div>
    </>:mode==="updates"?<>
-    <div className="worker-confirmation-summary"><span>Изменения от сотрудников</span><span>Ожидают решения: <b>{(data.timeChanges??[]).filter(x=>x.status==="proposed").length+(data.planningChanges??[]).filter(x=>x.status==="proposed").length}</b></span></div>
+    <div className="worker-confirmation-summary"><span>Изменения от сотрудников</span><span>Ожидают решения: <b>{(data.timeChanges??[]).filter(x=>x.status==="proposed").length+(data.planningChanges??[]).filter(x=>x.status==="proposed").length+(data.patternChanges??[]).filter(x=>x.status==="proposed").length}</b></span></div>
     <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th><th>Объект</th><th>Что изменилось</th><th>Состояние</th><th>Действия</th></tr></thead><tbody>
+     {(data.patternChanges??[]).filter(x=>scoped.some(w=>w.id===x.workerId)).map(x=>{const w=data.workers.find(w=>w.id===x.workerId);return <tr key={"pattern:"+x.workerId+":"+x.date}><td>{w?.name??"Сотрудник"}</td><td>{w?.object??"—"}</td><td>С {dateLabel(x.date)} · График {x.workDays}/{x.restDays}, {x.shiftKind==="night"?"ночь":"день"}{x.floatingDaysOff?", плавающие выходные":""}</td><td>{x.status==="proposed"?"На согласовании":x.status==="accepted"?"Принято":"Отклонено"}</td><td>{canEdit&&x.status==="proposed"&&<div className="worker-confirmation-actions"><button className="button" disabled={!!busy} onClick={()=>void action({action:"review_pattern",objectId:x.objectId,workerId:x.workerId,date:x.date,approve:true})}>Принять</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"review_pattern",objectId:x.objectId,workerId:x.workerId,date:x.date,approve:false})}>Отклонить</button></div>}</td></tr>})}
      {(data.planningChanges??[]).filter(x=>scoped.some(w=>w.id===x.workerId)).map(x=>{const w=data.workers.find(w=>w.id===x.workerId);return <tr key={"plan:"+x.workerId+":"+x.date}><td>{w?.name??"Сотрудник"}</td><td>{w?.object??"—"}</td><td>{dateLabel(x.date)} · Запрошено: {x.kind==="off"?"Выходной":x.kind==="night"?"Ночная смена":"Дневная смена"}</td><td>{x.status==="proposed"?"На согласовании":x.status==="accepted"?"Принято":"Отклонено"}</td><td>{canEdit&&x.status==="proposed"&&<div className="worker-confirmation-actions"><button className="button" disabled={!!busy} onClick={()=>void action({action:"review_plan",objectId:x.objectId,workerId:x.workerId,date:x.date,approve:true})}>Принять</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"review_plan",objectId:x.objectId,workerId:x.workerId,date:x.date,approve:false})}>Отклонить</button></div>}</td></tr>})}
      {(data.timeChanges??[]).filter(x=>scoped.some(w=>w.id===x.workerId)).map(x=>{const w=data.workers.find(w=>w.id===x.workerId);return <tr key={x.workerId+":"+x.date}><td>{w?.name??"Сотрудник"}</td><td>{w?.object??"—"}</td><td>{dateLabel(x.date)} · {x.startTime}–{x.endTime} · {x.appliesTo==="regular"?"Постоянный график":"Отдельная смена"}</td><td>{x.status==="proposed"?"Ожидает согласования":x.status==="accepted"?"Принято":"Отклонено"}</td><td>{canEdit&&x.status==="proposed"&&<div className="worker-confirmation-actions"><button className="button" disabled={!!busy} onClick={()=>void action({action:"review_shift_time",objectId:x.objectId,workerId:x.workerId,date:x.date,approve:true})}>Принять</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"review_shift_time",objectId:x.objectId,workerId:x.workerId,date:x.date,approve:false})}>Отклонить</button></div>}</td></tr>})}
      {(data.documents??[]).filter(x=>scoped.some(w=>w.id===x.workerId)&&x.employeeReported).map(x=>{const w=data.workers.find(w=>w.id===x.workerId);return <tr key={x.workerId+":"+x.code}><td>{w?.name??"Сотрудник"}</td><td>{w?.object??"—"}</td><td>{({passport:"Паспорт",snils:"СНИЛС",inn:"ИНН",bank_details:"Реквизиты",medical_book:"Медкнижка",military:"Военный билет",application:"Заявление",photo:"Фотография",contract:"Договор"} as Record<string,string>)[x.code]??x.code}</td><td>{x.managerVerified?"Получено":"Сотрудник отметил передачу"}</td><td>{canEdit&&!x.managerVerified&&<button className="button" disabled={!!busy} onClick={()=>void action({action:"verify_document",objectId:x.objectId,workerId:x.workerId,code:x.code,verified:true})}>Получено</button>}</td></tr>})}
-    </tbody></table>{!data.timeChanges?.length&&!data.documents?.length&&!data.planningChanges?.length&&<div className="empty-inline">Изменений пока нет</div>}</div>
+    </tbody></table>{!data.timeChanges?.length&&!data.documents?.length&&!data.planningChanges?.length&&!data.patternChanges?.length&&<div className="empty-inline">Изменений пока нет</div>}</div>
    </>:<>
     <div className="worker-confirmation-summary"><span>Управление доступом к персональным табелям</span><span>Активных: <b>{activeLinks}</b></span></div>
     <div className="worker-confirmation-note">Ссылка действует постоянно, пока не приостановлена или аннулирована. Копирование не является подтверждением отправки через мессенджер.</div>
