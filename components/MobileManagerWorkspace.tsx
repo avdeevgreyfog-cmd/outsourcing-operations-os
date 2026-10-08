@@ -104,7 +104,7 @@ export function MobileManagerWorkspace({initial}:{initial:MobileDesk}){
   const update=()=>setData(old=>({...old,visits:old.visits.map(x=>x.id===v.id?{...x,checklist}:x)}));
   if(data.demo){update();setNotice("Ответ сохранён · пример");setVisitItem(null);return}
   setBusy("visit");setError("");
-  try{const r=await fetch("/api/launches/"+encodeURIComponent(v.launchId)+"/visits/"+encodeURIComponent(v.id),{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({checklist})});const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось сохранить ответ");update();setNotice("Ответ сохранён в карточке выезда");setVisitItem(null)}
+  try{const r=await fetch("/api/launches/"+encodeURIComponent(v.launchId)+"/visits/"+encodeURIComponent(v.id),{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({itemUpdate:{id:itemId,status,value:visitValue,note:visitNote}})});const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось сохранить ответ");update();setNotice("Ответ сохранён в карточке выезда");setVisitItem(null)}
   catch(e){setError(e instanceof Error?e.message:"Ошибка сохранения")}finally{setBusy("")}
  }
  async function review(item:(typeof updates)[number],approve:boolean){
