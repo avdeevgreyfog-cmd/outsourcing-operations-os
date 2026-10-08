@@ -101,7 +101,7 @@ export async function employeePortal(token:string){
     const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"worker";deadline:string;timezone:string;today:string;reportingEnabled:boolean}>>`
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
       COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
-      COALESCE(wa.schedule_owner,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
+      COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
       COALESCE(s.timezone,'Europe/Moscow') timezone,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
@@ -135,7 +135,7 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
   const ref=await resolveToken(token);if(!ref)throw new Error("Недействительная ссылка");
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
     const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string}>>`
-      SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
+      SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text "localToday",
       COALESCE(s.confirmation_deadline::text,'22:00') deadline
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
