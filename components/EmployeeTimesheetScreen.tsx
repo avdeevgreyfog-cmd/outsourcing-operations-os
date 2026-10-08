@@ -199,13 +199,29 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       </section>
      </>}
      {tab==="timesheet"&&<>
-      <div className="worker-self-page-title"><div><h1>Мой табель</h1><p>Отработанные часы за текущий месяц. Суммы предварительные до сверки.</p></div></div>
-      <div className="worker-self-totals"><div><small>Часы</small><strong>{counted.total}</strong></div><div><small>Смены</small><strong>{counted.shifts}</strong></div></div>
-      <section className="worker-self-panel"><div className="worker-self-panel-head"><span>Дата и результат</span><span>Статус</span></div>
-       {(data.planning.days??[]).filter(x=>x.date.startsWith(today.slice(0,7))&&x.date<=today).slice().reverse().map(p=>{
-        const report=answers.get(p.date),legacy=data.plans.find(x=>x.date===p.date),h=report?.hours??(legacy?.timeCode==="WORK"?legacy.hours:null);
-        return <div className="worker-self-timesheet-row" key={p.date}><div><strong>{smallDate(p.date)}</strong><span>{kindLabel(p.kind)}</span></div><div>{p.kind==="off"?"В":h!=null?`${h} ч`:report?.response==="working"?"Подтверждено":"План"}</div></div>;
+      <div className="worker-self-page-title"><div><h1>Мой табель</h1><p>Текущий месяц · Только фактически отработанные смены. Будущие планы не учитываются.</p></div></div>
+      <div className="worker-self-totals"><div><small>Отработано часов</small><strong>{counted.total}</strong><span>Предварительные данные</span></div><div><small>Отработано смен</small><strong>{counted.shifts}</strong><span>Планы не включены</span></div></div>
+      <section className="worker-self-panel worker-self-timesheet-panel">
+       <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> Дни месяца</span><span className="worker-self-ledger-hint">План → Факт → Сверка</span></div>
+       <div className="worker-self-ledger-header"><span>Дата / Смена</span><span>Результат</span></div>
+       {dateRows.map((date,i)=>{
+        const reply=answers.get(date);
+        const fact=data.plans.find(x=>x.date===date&&x.timeCode==="WORK"&&Number(x.hours)>0);
+        const h=reply?.hours!=null?reply.hours:fact?.hours??null;
+        const plan=records.get(date);
+        const isOff=plan?.kind==="off";
+        const weekBreak=i===0||new Date(date+"T00:00:00Z").getUTCDay()===0;
+        return <div key={date}>{weekBreak&&i>0&&<div className="worker-self-ledger-separator"/>}
+         <div className="worker-self-ledger-row">
+          <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"?"Ночная смена":plan?.kind==="day"?"Дневная смена":isOff?"Выходной":fact?.kind==="night"?"Ночная смена":"Нет записи"}</small></div>
+          <div className="worker-self-ledger-result">
+           <strong className={h!=null&&Number(h)>0?"actual":""}>{h!=null&&Number(h)>0?String(h)+" ч":isOff?"В":plan?.kind?"План":"—"}</strong>
+           {h!=null&&Number(h)>0&&<small>Учтено</small>}
+          </div>
+         </div>
+        </div>;
        })}
+       <p className="worker-self-muted">Фактические часы уточняются менеджером при сверке с заказчиком. Плановые дни не увеличивают сумму часов и количество отработанных смен.</p>
       </section>
      </>}
      {tab==="more"&&<>
