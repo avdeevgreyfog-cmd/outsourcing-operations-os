@@ -173,13 +173,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
           <><p className="worker-self-question">Сколько часов вы отработали?</p>{hourEdit&&<label className="worker-self-hours">Отработано часов<input type="number" min={0} max={24} step={0.5} inputMode="decimal" value={hours} onChange={e=>setHours(e.target.value)}/></label>}
            <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":`${data.paidHours} ч — верно`}</button>
            <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
-         <div className="worker-self-deadline"><Info size={13}/> Ночная смена учитывается по дате начала. Данные поступают на сверку менеджеру.</div>
+         <div className="worker-self-deadline"><Info size={13}/> Ночная смена отмечается датой её начала.</div>
         </>:<p className="worker-self-muted">Нет завершённых смен за ближайшие дни.</p>}
        </section>
       </div>
       <section className="worker-self-panel worker-self-future">
        <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайшие дни</span><button className="worker-self-quiet" onClick={()=>setShowAll(x=>!x)}>{showAll?"Свернуть":"Весь график"} <ChevronDown size={14}/></button></div>
-       <p className="worker-self-muted">График заполняется автоматически. Нажмите на дату, только если планы изменились.</p>
+       <p className="worker-self-muted">Нажмите на дату, если ваши планы изменились.</p>
        <div className="worker-self-days">
         {future.slice(0,showAll?future.length:5).map(p=><div className="worker-self-day-item" key={p.date}>
          <button className="worker-self-date-row" aria-expanded={editingDay===p.date}
@@ -236,12 +236,12 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       </section>
      </>}
      {tab==="more"&&<>
-      {more==="overview"?<><div className="worker-self-page-title"><div><h1>Дополнительно</h1><p>Документы, обеспечение, контакты и настройки графика.</p></div></div>
-       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"contact",label:"Важные контакты",sub:"Ваш менеджер объекта",icon:Phone},{key:"settings",label:"Настройки графика",sub:"Обычная смена и рабочее время",icon:Settings2}] as const).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
+      {more==="overview"?<><div className="worker-self-page-title"><div><h1>Дополнительно</h1><p>Рабочие документы, спецодежда и контакты.</p></div></div>
+       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"contact",label:"Важные контакты",sub:"Ваш менеджер объекта",icon:Phone},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2}] as const).filter(x=>x.key==="documents"?(data.details?.visibility?.documents??true):x.key==="workwear"?(data.details?.visibility?.workwear??true):true).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
       </>:<>
        <button className="worker-self-back" onClick={()=>setMore("overview")}><ArrowLeft size={15}/> Все разделы</button>
        {more==="documents"&&<><div className="worker-self-page-title"><div><h1>Мои документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · Что требуется для работы на объекте.</p></div></div>
-        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><FileText size={17}/> Чек-лист документов</span></div><p className="worker-self-muted">Отметьте, что передали. Получение подтвердит менеджер. Загружать файлы не нужно.</p>
+        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><FileText size={17}/> Чек-лист документов</span></div><p className="worker-self-muted">Отметьте переданные документы. Менеджер проверит получение.</p>
          <div className="worker-self-doc-list">{(data.details?.documents??[]).map(d=><div className="worker-self-doc-row" key={d.code}>
           <span className={"worker-self-doc-icon "+(d.managerVerified?"verified":d.employeeReported?"reported":"")}><Check size={14}/></span>
           <div><strong>{d.label}</strong><small>{d.managerVerified?"Получено менеджером":d.employeeReported?"Вы отметили передачу · ожидается проверка":"Требуется передать"}</small></div>
@@ -253,7 +253,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label></div><button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null},"Размеры сохранены")}>Сохранить размеры</button></section>
         <section className="worker-self-panel worker-self-additional"><div className="worker-self-panel-head"><span>Выдача по объекту</span></div>
          {(data.details?.workwear??[]).map((x,i)=><div className="worker-self-asset-row" key={i}><span><strong>{x.name}</strong>{x.variant&&<small>Размер: {x.variant}</small>}</span><span className={"worker-self-asset-tag "+(x.state==="issued"?"issued":"")}>{x.state==="issued"?"Выдано":"Не выдано"}</span></div>)}
-         <p className="worker-self-muted">Выдачу подтверждает склад или менеджер. Сведения берутся из общего учёта OPERIS.</p>
+         <p className="worker-self-muted">Если что-то не выдано, обратитесь к менеджеру.</p>
         </section>
        </>}
        {more==="contact"&&<><div className="worker-self-page-title"><div><h1>Важные контакты</h1><p>Ответственный за вашу работу на объекте.</p></div></div>
@@ -262,7 +262,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </section>
        </>}
        {more==="settings"&&<>
-        <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Основные условия уже установлены в OPERIS. Здесь можно предложить изменение.</p></div></div>
+        <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Здесь можно посмотреть свой график и запросить изменение.</p></div></div>
         <section className="worker-self-panel worker-self-schedule-summary">
          <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Действующий график</span></div>
          <div className="worker-self-schedule-attributes">
