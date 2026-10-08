@@ -18,7 +18,7 @@ const planningSchema=z.object({action:z.literal("plan_day"),date:z.string().date
 const weekSchema=z.object({action:z.literal("plan_week"),weekStart:z.string().date(),offDates:z.array(z.string().date()).max(2)});
 const patternSchema=z.object({action:z.literal("pattern_change"),effectiveFrom:z.string().date(),workDays:z.number().int().min(1).max(30),restDays:z.number().int().min(0).max(30),shiftKind:z.enum(["day","night"]),floatingDaysOff:z.boolean()});
 const noStore={"Cache-Control":"no-store, private"};
-export async function GET(_request:Request,{params}:{params:Promise<{token:string}>}){
+export async function GET(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
   const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
   return data?NextResponse.json({...data,...await (async()=>{const [details,planning]=await Promise.all([employeePortalDetails(token),employeePlanning(token)]);return {details,planning}})()},{headers:noStore}):NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
