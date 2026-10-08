@@ -17,7 +17,7 @@ export type PortalConfig={objectId:string;scheduleOwner:"manager"|"client";confi
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
-  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11})),reports:[],links:[],settings:[]};
+  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11})),reports:[],links:[],settings:[],plans:[]};
   if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[]};
   const objects=new Set(visible.map(w=>w.objectId!));
   const ids=visible.map(w=>w.id);
