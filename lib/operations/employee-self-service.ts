@@ -134,7 +134,9 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
   const minutes=(x:string)=>Number(x.slice(0,2))*60+Number(x.slice(3,5));
   const duration=minutes(change.endTime)-minutes(change.startTime)+(change.endsNextDay?1440:0);
   if(duration<60||duration>24*60)throw new Error("Продолжительность смены должна быть от 1 до 24 часов");
-  const today=new Intl.DateTimeFormat("en-CA",{timeZone:link.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+  const parts=new Intl.DateTimeFormat("ru-RU",{timeZone:link.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const local=Object.fromEntries(parts.map(p=>[p.type,p.value]));
+  const today=`${local.year}-${local.month}-${local.day}`;
   const offset=Math.round((Date.parse(change.date+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
   if(!Number.isFinite(offset)||offset<0||offset>7)throw new Error("Редактировать время можно только для ближайших 7 дней");
   const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${change.date}::date AND period_end>=${change.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
