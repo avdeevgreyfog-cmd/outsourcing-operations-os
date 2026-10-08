@@ -17,7 +17,7 @@ const labelDate=(iso:string)=>new Intl.DateTimeFormat("ru-RU",{day:"numeric",mon
 const tel=(s:string|null)=>s?"tel:"+s.replace(/[^\d+]/g,""):null;
 const statusName={present:"На месте",absent:"Неявка",pending:"Не проверен"} as const;
 const empty:ReviewPayload={workers:[],planningChanges:[],patternChanges:[],timeChanges:[]};
-export function MobileShiftControls({canEdit,demo}:{canEdit:boolean;demo:boolean}){
+export function MobileShiftControls({canEdit,demo,onOpenSchedule}:{canEdit:boolean;demo:boolean;onOpenSchedule?:()=>void}){
  const [data,setData]=useState<MobileDesk|null>(null);
  const [date,setDate]=useState(today());
  const [objectId,setObjectId]=useState("");
@@ -119,7 +119,7 @@ export function MobileShiftControls({canEdit,demo}:{canEdit:boolean;demo:boolean
     <div><h2>Явка</h2><p>Контроль выходов на объектах</p></div>
     <button className="ocs-overflow" aria-label="Другие действия" aria-expanded={moreOpen} onClick={()=>setMoreOpen(v=>!v)}><MoreHorizontal size={23}/></button>
    </header>
-   {moreOpen&&<div className="ocs-more-menu"><button onClick={()=>{setMoreOpen(false);setTab("reviews")}}><ClipboardCheck size={16}/> Запросы сотрудников <ChevronRight size={15}/></button><Link href="/launches"><Factory size={16}/> План запусков и выезды <ChevronRight size={15}/></Link><Link href="/timesheets"><CalendarDays size={16}/> Табели и сверка <ChevronRight size={15}/></Link><button onClick={()=>{setMoreOpen(false);setShowSearch(true);requestAnimationFrame(()=>searchRef.current?.focus())}}><Search size={16}/> Найти сотрудника <ChevronRight size={15}/></button></div>}
+   {moreOpen&&<div className="ocs-more-menu"><button onClick={()=>{setMoreOpen(false);setTab("reviews")}}><ClipboardCheck size={16}/> Запросы сотрудников <ChevronRight size={15}/></button><Link href="/launches"><Factory size={16}/> План запусков и выезды <ChevronRight size={15}/></Link><Link href="/timesheets"><CalendarDays size={16}/> Табели и сверка <ChevronRight size={15}/></Link>{onOpenSchedule&&<button onClick={onOpenSchedule}><CalendarDays size={16}/> Графики и смены <ChevronRight size={15}/></button>}<button onClick={()=>{setMoreOpen(false);setShowSearch(true);requestAnimationFrame(()=>searchRef.current?.focus())}}><Search size={16}/> Найти сотрудника <ChevronRight size={15}/></button></div>}
    <div className="ocs-object-switch">
     <span>Объект</span>
     <div><select aria-label="Выбрать объект" value={objectId} onChange={e=>{setObjectId(e.target.value);resetFilters()}}><option value="">Все доступные объекты</option>{objects.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select><ChevronDown size={17}/></div>
