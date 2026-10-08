@@ -8,6 +8,7 @@ const actions=z.discriminatedUnion("action",[
  z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
  z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"]),horizon:z.number().int().min(2).max(31).optional()}),
  z.object({action:z.literal("reconcile"),objectId:z.string().uuid(),fromDate:z.string().date(),toDate:z.string().date()}),
+ z.object({action:z.literal("portal_sections"),objectId:z.string().uuid(),documents:z.boolean(),workwear:z.boolean()}),
  z.object({action:z.literal("manager_phone"),objectId:z.string().uuid(),phone:z.string().max(50).nullable()}),
  z.object({action:z.literal("verify_document"),objectId:z.string().uuid(),workerId:z.string().uuid(),code:z.string().max(40),verified:z.boolean()}),
  z.object({action:z.literal("review_shift_time"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()}),
@@ -38,7 +39,7 @@ export async function POST(request:Request){
    ?await managerSetScheduleOwner(actor,body.objectId,body.scheduleOwner,body.workerId)
    :body.action==="review_plan"
    ?await managerReviewEmployeePlan(actor,body.objectId,body.workerId,body.date,body.approve)
-   :body.action==="manager_phone"||body.action==="verify_document"||body.action==="review_shift_time"||body.action==="document_requirement"
+   :body.action==="portal_sections"||body.action==="manager_phone"||body.action==="verify_document||body.action==="review_shift_time"||body.action==="document_requirement"
    ?await managerEmployeeDetailAction(actor,body as Parameters<typeof managerEmployeeDetailAction>[1])
    :body.action==="reconcile"
    ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
