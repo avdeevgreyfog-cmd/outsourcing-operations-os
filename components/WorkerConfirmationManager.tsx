@@ -9,7 +9,7 @@ type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Sett
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
 function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
-export function WorkerConfirmationManager({objectId,workerId,canEdit,demo=false}:{objectId?:string;workerId?:string;canEdit:boolean;demo?:boolean}){
+export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcile=false,demo=false}:{objectId?:string;workerId?:string;canEdit:boolean;canReconcile?:boolean;demo?:boolean}){
  const [data,setData]=useState<Payload>(empty);
  const [loaded,setLoaded]=useState(false);
  const [error,setError]=useState("");
@@ -20,6 +20,8 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,demo=false}
  const [filterObject,setFilterObject]=useState(objectId??"all");
  const [busy,setBusy]=useState("");
  const [day,setDay]=useState(tomorrow());
+ const [fromDate,setFromDate]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10)});
+ const [toDate,setToDate]=useState(()=>new Date().toISOString().slice(0,10));
  const load=useCallback(async()=>{
   try{
    const q=new URLSearchParams();if(objectId)q.set("objectId",objectId);if(workerId)q.set("workerId",workerId);
@@ -53,7 +55,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,demo=false}
    if(j.path){
      const url=window.location.origin+j.path;
      try{await navigator.clipboard.writeText(url);setInfo("Персональная ссылка скопирована. Отправьте её сотруднику.")}catch{setInfo("Ссылка: "+url)}
-   }else setInfo("Сохранено");
+   }else setInfo(body.action==="reconcile"?`Промежуточная сверка сохранена. Проверено записей сотрудников: ${j.accepted??0}`:"Сохранено");
    await load();
   }catch(e){setError(e instanceof Error?e.message:"Ошибка сохранения")}finally{setBusy("")}
  }
@@ -82,6 +84,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,demo=false}
    {mode==="answers"?<>
     <div className="worker-confirmation-summary"><span>На {dateLabel(day)}</span><span>Ответили: <b>{replies}</b></span><span>Нет ответа: <b>{missing}</b></span></div>
     <div className="worker-confirmation-note">Сведения сотрудников используются для оперативного планирования. Неответивший сотрудник не считается неявившимся.</div>
+    {canReconcile&&(objectId||filterObject!=="all")&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Промежуточная сверка с заказчиком:</span><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} aria-label="Сверить с"/><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} aria-label="Сверить по"/><button type="button" className="button" disabled={!!busy||toDate<fromDate} onClick={()=>{if(window.confirm("Вы сверили часы за этот период с заказчиком?"))void action({action:"reconcile",objectId:objectId??filterObject,fromDate,toDate})}}>Отметить период сверенным</button></div>}
     <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>Подтверждение</th><th>Часы</th><th>Последний ответ</th></tr></thead><tbody>
      {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}</td><td>{r?.updatedAt?new Date(r.updatedAt).toLocaleString("ru-RU"):"—"}</td></tr>})}
     </tbody></table>{!visible.length&&<div className="empty-inline">Нет сотрудников по выбранным условиям</div>}</div>
