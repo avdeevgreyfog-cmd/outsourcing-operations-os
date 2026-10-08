@@ -25,6 +25,7 @@ const schema=z.object({
   scheduledDate:z.string().date().nullable().optional(),
   status:z.enum(["planned","in_progress","completed","cancelled"]).optional(),
   checklist:z.array(checklistItem).optional(),
+  itemUpdate:z.object({id:z.string().min(1).max(80),status:z.enum(["confirmed","issue"]),value:z.string().min(1).max(2000),note:z.string().max(500)}).optional(),
   notes:z.string().max(5000).nullable().optional(),
 });
 
@@ -44,7 +45,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
         FOR UPDATE
       `;
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
-      const checklist=body.checklist??(Array.isArray(scope.checklist)?scope.checklist:[]);
+      const savedChecklist=Array.isArray(scope.checklist)?scope.checklist as Array<z.infer<typeof checklistItem>>:[];
+      if(body.itemUpdate&&!savedChecklist.some(item=>item.id===body.itemUpdate?.id&&!item.hidden))return NextResponse.json({error:"Пункт чек-листа отсутствует"},{status:404});
+      const checklist=body.itemUpdate?savedChecklist.map(item=>item.id===body.itemUpdate?.id?{...item,value:body.itemUpdate!.value,note:body.itemUpdate!.note,status:body.itemUpdate!.status}:item):(body.checklist??savedChecklist);
       const completed=body.status==="completed";
       await tx`
         UPDATE launch_site_visits SET
