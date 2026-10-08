@@ -218,3 +218,78 @@ export async function managerEmployeePlanningChanges(actor:Actor,objectId?:strin
   return {planningChanges,workerAuthorities};
  });
 }
+
+export type PatternInput={effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean};
+function validatePattern(pattern:PatternInput,from:string){
+ if(!Number.isInteger(pattern.workDays)||!Number.isInteger(pattern.restDays)||pattern.workDays<1||pattern.workDays>30||pattern.restDays<0||pattern.restDays>30)throw new Error("Проверьте рабочие и выходные дни");
+ if(pattern.floatingDaysOff&&!(pattern.workDays===5&&pattern.restDays===2||pattern.workDays===6&&pattern.restDays===1))throw new Error("Плавающие выходные доступны для графика 5/2 и 6/1");
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(pattern.effectiveFrom)||pattern.effectiveFrom<from)throw new Error("Изменение графика должно действовать с сегодняшней или будущей даты");
+}
+export async function submitEmployeePattern(token:string,pattern:PatternInput){
+ const s=await scopeForToken(token);
+ validatePattern(pattern,addDays(s.today,1));
+ if(pattern.effectiveFrom>addDays(s.today,s.horizon))throw new Error("Дата изменения за горизонтом планирования объекта");
+ return withTenant(s.org,s.actor,async sql=>{
+  await ensureNotLocked(sql,s,pattern.effectiveFrom);
+  await sql`INSERT INTO worker_schedule_pattern_changes(organization_id,object_id,worker_id,effective_from,work_days,rest_days,shift_kind,floating_days_off,status,source_link_id)
+   VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${pattern.effectiveFrom}::date,${pattern.workDays},${pattern.restDays},${pattern.shiftKind},${pattern.floatingDaysOff},'proposed',${s.link}::uuid)
+   ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,floating_days_off=EXCLUDED.floating_days_off,
+      status='proposed',source_link_id=EXCLUDED.source_link_id,reviewed_at=NULL,reviewed_by_user_id=NULL,updated_at=now()`;
+  return {ok:true,status:"proposed"};
+ });
+}
+export async function submitEmployeeWeek(token:string,weekStart:string,offDates:string[]){
+ const s=await scopeForToken(token);
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)||new Date(weekStart+"T00:00:00Z").getUTCDay()!==1)throw new Error("Выберите неделю, начиная с понедельника");
+ const dates=Array.from({length:7},(_,i)=>addDays(weekStart,i));
+ if(weekStart<s.today||dates[6]>addDays(s.today,s.horizon))throw new Error("Выберите полную будущую неделю в пределах горизонта планирования");
+ if(new Set(offDates).size!==offDates.length||offDates.some(d=>!dates.includes(d)))throw new Error("Проверьте выбранные выходные");
+ return withTenant(s.org,s.actor,async sql=>{
+  const [p]=await sql<Array<{workDays:number;restDays:number;kind:"day"|"night";floating:boolean}>>`SELECT work_days "workDays",rest_days "restDays",shift_kind kind,floating_days_off floating
+    FROM worker_schedule_pattern_changes WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND effective_from<=${weekStart}::date AND status='accepted' ORDER BY effective_from DESC LIMIT 1`;
+  const workDays=p?.workDays??s.workDays,restDays=p?.restDays??s.restDays;
+  if(!p?.floating||!(workDays===5&&restDays===2||workDays===6&&restDays===1))throw new Error("Плавающие выходные не разрешены в текущем графике");
+  if(offDates.length!==restDays)throw new Error(${restDays===1?"На неделе должен быть один выходной":"На неделе должно быть два выходных"}`);
+  const status=s.owner==="worker"?"accepted":"proposed";
+  for(const date of dates){
+   await ensureNotLocked(sql,s,date);
+   const kind:PlannedKind=offDates.includes(date)?"off":p?.kind??s.defaultKind??"day";
+   if(status==="accepted")await writePlan(sql,s,date,kind);
+   await sql`INSERT INTO worker_shift_plan_changes(organization_id,object_id,worker_id,work_date,requested_kind,status,requested_by_link_id)
+    VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${date}::date,${kind},${status},${s.link}::uuid)
+    ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET requested_kind=EXCLUDED.requested_kind,status=EXCLUDED.status,
+      requested_by_link_id=EXCLUDED.requested_by_link_id,reviewed_at=NULL,reviewed_by_user_id=NULL,updated_at=now()`;
+  }
+  return {ok:true,status,updated:dates.length};
+ });
+}
+export async function managerSetWorkerPattern(actor:Actor,objectId:string,workerId:string,pattern:PatternInput){
+ if(actor.demo)throw new Error("Недоступно в демонстрации");
+ await assertManager(actor,objectId,workerId);
+ validatePattern(pattern,new Date().toISOString().slice(0,10));
+ return withTenant(actor.organizationId,actor.userId,async sql=>{
+  const [fact]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${objectId}::uuid
+    AND period_start<=${pattern.effectiveFrom}::date AND period_end>=${pattern.effectiveFrom}::date
+    AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
+  if(fact)throw new Error("Дата попадает в закрытый период");
+  await sql`INSERT INTO worker_schedule_pattern_changes(organization_id,object_id,worker_id,effective_from,work_days,rest_days,shift_kind,floating_days_off,status,reviewed_by_user_id,reviewed_at)
+   VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${workerId}::uuid,${pattern.effectiveFrom}::date,${pattern.workDays},${pattern.restDays},${pattern.shiftKind},${pattern.floatingDaysOff},'accepted',${actor.userId}::uuid,now())
+   ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,
+     floating_days_off=EXCLUDED.floating_days_off,status='accepted',reviewed_by_user_id=EXCLUDED.reviewed_by_user_id,reviewed_at=now(),updated_at=now()`;
+  return {ok:true};
+ });
+}
+export async function managerReviewPattern(actor:Actor,objectId:string,workerId:string,date:string,approve:boolean){
+ if(actor.demo)throw new Error("Недоступно в демонстрации");
+ await assertManager(actor,objectId,workerId);
+ return withTenant(actor.organizationId,actor.userId,async sql=>{
+  const [request]=await sql<Array<{effectiveFrom:string}>>`SELECT effective_from::text "effectiveFrom" FROM worker_schedule_pattern_changes
+    WHERE worker_id=${workerId}::uuid AND object_id=${objectId}::uuid AND effective_from=${date}::date AND status='proposed' FOR UPDATE`;
+  if(!request)throw new Error("Запрос уже обработан или отсутствует");
+  if(approve&&date<new Date().toISOString().slice(0,10))throw new Error("График нельзя вводить задним числом");
+  await sql`UPDATE worker_schedule_pattern_changes SET status=${approve?"accepted":"rejected"},
+   reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),updated_at=now()
+   WHERE worker_id=${workerId}::uuid AND object_id=${objectId}::uuid AND effective_from=${date}::date`;
+  return {ok:true};
+ });
+}
