@@ -12,7 +12,7 @@ function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".
 export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
-export type PortalConfig={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null};
+export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null};
 
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
@@ -101,7 +101,7 @@ export async function employeePortal(token:string){
     const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"client";deadline:string;timezone:string;today:string;reportingEnabled:boolean}>>`
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
       COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
-      COALESCE(s.schedule_owner,'manager') owner,
+      COALESCE(wa.schedule_owner,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
       COALESCE(s.timezone,'Europe/Moscow') timezone,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
@@ -111,6 +111,7 @@ export async function employeePortal(token:string){
       JOIN worker_object_assignments a ON a.worker_id=w.id AND a.object_id=o.id
         AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
+      LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=w.id AND wa.object_id=o.id
       WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${tokenHash(token)} AND l.status='active'
         AND w.status='active' ORDER BY a.effective_from DESC LIMIT 1`;
     if(!link||!link.reportingEnabled)return null;
@@ -134,23 +135,29 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
   const ref=await resolveToken(token);if(!ref)throw new Error("Недействительная ссылка");
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
     const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string}>>`
-      SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(s.schedule_owner,'manager') owner,
+      SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text "localToday",
       COALESCE(s.confirmation_deadline::text,'22:00') deadline
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
         AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       LEFT JOIN object_shift_reporting_settings s ON s.object_id=l.object_id
+      LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
       WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active' AND COALESCE(s.reporting_enabled,true)
       LIMIT 1`;
     if(!link)throw new Error("Доступ закрыт");
     const today=link.localToday;
     const offset=Math.round((Date.parse(payload.date+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
-    if(!Number.isFinite(offset)||offset< -1||offset>2)throw new Error("Эту дату больше нельзя редактировать");
-    if(payload.hours!==undefined&&offset!==-1)throw new Error("Часы можно уточнить только за вчерашнюю смену");
+    if(!Number.isFinite(offset)||offset< -3||offset>31)throw new Error("Эту дату больше нельзя редактировать");
+    if(payload.hours!==undefined&&(offset>0||offset< -3))throw new Error("Часы можно уточнить только после завершения смены");
     if(payload.hours!==undefined&&(payload.hours<0||payload.hours>24))throw new Error("Часы должны быть от 0 до 24");
-    if(payload.response==="day_off"&&link.owner!=="client")throw new Error("Выходной согласовывает менеджер объекта");
+    if(payload.response==="day_off")throw new Error("Выходные дни отмечаются в разделе планирования графика");
     if(payload.response==="cannot_work"&&!payload.reason?.trim())throw new Error("Укажите причину невыхода");
+    if(payload.hours!==undefined&&offset===0){
+      const nowClock=new Intl.DateTimeFormat("en-GB",{hour:"2-digit",minute:"2-digit",hourCycle:"h23",timeZone:"Europe/Moscow"}).format(new Date());
+      const endClock=payload.kind==="night"?"23:59":"20:00";
+      if(nowClock<endClock)throw new Error("Укажите часы после окончания сегодняшней смены");
+    }
     const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${payload.date}::date AND period_end>=${payload.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new Error("Табель за эту дату уже зафиксирован");
     const [old]=await sql<Array<{response:string;shiftKind:string|null}>>`SELECT response,shift_kind "shiftKind" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
@@ -172,12 +179,12 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
         correction_reason='Сотрудник отменил ранее заявленную отработку',updated_at=now()
         WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND source='worker_report'`;
     }
-    if(next&&next.response!=="cannot_work"){
+    if(next&&next.response==="working"&&next.hours!==null){
       const [entry]=await sql<Array<{id:string;source:string;factHours:number;timeCode:string}>>`
         SELECT id,source,fact_hours::float8 "factHours",time_code "timeCode" FROM time_entries
         WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date
         ORDER BY (shift_id IS NULL) DESC,updated_at DESC LIMIT 1 FOR UPDATE`;
-      const nextCode=next.response==="day_off"?"DAY_OFF":next.hours!==null?"WORK":"PLANNED";
+      const nextCode="WORK";
       const kind=next.shiftKind==="night"?"night":"day";
       const h=nextCode==="WORK"?Number(next.hours):0;
       const mayReplace=!entry||((entry.source==="schedule"||entry.source==="worker_report")&&!(entry.source!=="worker_report"&&entry.factHours>0));
