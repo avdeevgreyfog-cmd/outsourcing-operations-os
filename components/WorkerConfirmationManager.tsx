@@ -22,7 +22,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [mode,setMode]=useState<"answers"|"links"|"updates">("answers");
  const [search,setSearch]=useState("");
  const [contactNumber,setContactNumber]=useState("");
- const [horizon,setHorizon]=useState("7");
+
  const [relationType,setRelationType]=useState<"employment"|"gph"|"npd"|"custom">("gph");
  const [docCode,setDocCode]=useState("medical_book");
  const [docRequired,setDocRequired]=useState(true);
@@ -40,7 +40,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
    setData(j);setError("");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка получения данных")}finally{setLoaded(true)}
  },[objectId,workerId]);
- useEffect(()=>{void load()},[load]);
+ useEffect(()=>{void Promise.resolve().then(()=>load())},[load]);
  const links=useMemo(()=>new Map(data.links.map(x=>[x.workerId+":"+x.objectId,x])),[data.links]);
  const reports=useMemo(()=>new Map(data.reports.map(x=>[x.workerId+":"+x.objectId+":"+x.date,x])),[data.reports]);
  const settings=useMemo(()=>new Map(data.settings.map(x=>[x.objectId,x])),[data.settings]);
