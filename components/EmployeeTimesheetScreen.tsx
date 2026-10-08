@@ -3,12 +3,12 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,ChevronRight,Phone,FileText,Shirt,Settings2,LockKeyhole,Moon,Sun,AlertTriangle,MoreHorizontal,ArrowLeft,Info} from "lucide-react";
 
 type Kind="day"|"night"|"off";
-type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null};
+type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null};
 type PlanDay={date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
-type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
-type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string}[];details?:Details;planning:Planning};
+type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;visibility?:{documents:boolean;workwear:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
+type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning};
 type Tab="shifts"|"timesheet"|"more";
 type More="overview"|"documents"|"workwear"|"contact"|"settings";
 function move(d:string,n:number){const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
@@ -19,8 +19,8 @@ function demo():Portal{
  const today=new Date().toISOString().slice(0,10);
  const days=Array.from({length:19},(_,i)=>{const date=move(today,i-7),weekday=new Date(date+"T00:00:00Z").getUTCDay(),kind:Kind=weekday===0||weekday===6?"off":"night";return{date,kind,source:"cycle" as const,proposal:null,proposalStatus:null,startTime:"20:00",endTime:"08:00",endsNextDay:true}});
  return {name:"Иванов Иван",objectName:"Можайское · Комплектовщик",paidHours:11,deadline:"22:00",today,timezone:"Europe/Moscow",
-  reports:[],plans:Array.from({length:7},(_,i)=>({date:move(today,-i-1),timeCode:"WORK",hours:11,kind:"night"})),planning:{owner:"worker",horizon:12,workDays:5,restDays:2,defaultKind:"night",floatingDaysOff:false,patternFrom:move(today,-30),days},
-  details:{clothingSize:"52–54",shoeSize:"43",employment:"gph",managerName:"Менеджер объекта",managerPhone:null,
+  selectedMonth:today.slice(0,7),reports:[],plans:Array.from({length:42},(_,i)=>({date:move(today,-i-1),timeCode:"WORK",hours:i%7<5?11:0,kind:"night",source:"worker_report"})),planning:{owner:"worker",horizon:12,workDays:5,restDays:2,defaultKind:"night",floatingDaysOff:false,patternFrom:move(today,-30),days},
+  details:{clothingSize:"52–54",shoeSize:"43",employment:"gph",managerName:"Менеджер объекта",managerPhone:null,visibility:{documents:true,workwear:true},
    documents:[{code:"passport",label:"Паспорт",employeeReported:true,managerVerified:true},{code:"snils",label:"СНИЛС",employeeReported:true,managerVerified:true},{code:"inn",label:"ИНН",employeeReported:false,managerVerified:false},{code:"bank_details",label:"Реквизиты для выплаты",employeeReported:true,managerVerified:false}],
    workwear:[{name:"Рабочая куртка",state:"issued",variant:"52–54"},{name:"Рабочие брюки",state:"issued",variant:"52–54"},{name:"Защитная обувь",state:"needed",variant:"43"}],shiftWindows:[],timeChanges:[]}};
 }
@@ -30,6 +30,7 @@ const kindShort=(kind:Kind|null)=>kind==="day"?"День":kind==="night"?"Ноч
 export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;previewLayout?:"phone"|"desktop"}){
  const isDemo=token==="demo";
  const [data,setData]=useState<Portal|null>(isDemo?demo():null);
+ const [monthOverride,setMonthOverride]=useState<string|null>(null);
  const [tab,setTab]=useState<Tab>("shifts");
  const [more,setMore]=useState<More>("overview");
  const [error,setError]=useState("");const [notice,setNotice]=useState("");const [loading,setLoading]=useState(!isDemo);
@@ -48,10 +49,10 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [startTime,setStartTime]=useState("20:00");const [endTime,setEndTime]=useState("08:00");const [nextDay,setNextDay]=useState(true);
  
  const reload=useCallback(async()=>{
-  const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token),{cache:"no-store"});
+  const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token)+(monthOverride?"?month="+encodeURIComponent(monthOverride):""),{cache:"no-store"});
   const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось загрузить кабинет");
   setData(j as Portal);return j as Portal;
- },[token]);
+ },[token,monthOverride]);
  useEffect(()=>{if(isDemo)return;let alive=true;void Promise.resolve().then(()=>reload()).catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
 
  const clothing=clothingDraft??data?.details?.clothingSize??"";
@@ -71,8 +72,12 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const nextMonday=move(today,((8-new Date(today+"T00:00:00Z").getUTCDay())%7)||7);
  const fullWeek=Array.from({length:7},(_,i)=>move(nextMonday,i));
  const canEditWeek=Boolean(data?.planning.floatingDaysOff&&fullWeek[6]<=move(today,data.planning.horizon));
- const currentMonth=today.slice(0,7);
- const dateRows=Array.from({length:Number(today.slice(8))},(_,i)=>currentMonth+"-"+String(i+1).padStart(2,"0")).reverse();
+ const currentMonth=monthOverride??data?.selectedMonth??today.slice(0,7);
+ const dateMonth=new Date(currentMonth+"-01T00:00:00Z");
+ const monthLabel=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(dateMonth);
+ const adjacentMonth=(offset:number)=>new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5))-1+offset,1)).toISOString().slice(0,7);
+ const currentEnd=currentMonth===today.slice(0,7)?Number(today.slice(8)):new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5)),0)).getUTCDate();
+ const dateRows=Array.from({length:currentEnd},(_,i)=>currentMonth+"-"+String(i+1).padStart(2,"0")).reverse();
  const counted=useMemo(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
    for(const date of new Set([...dayEntries.keys(),...answers.keys()])){
     if(!date.startsWith(currentMonth)||date>today||distinct.has(date))continue;
