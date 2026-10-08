@@ -12,7 +12,7 @@ const actions=z.discriminatedUnion("action",[
  z.object({action:z.literal("verify_document"),objectId:z.string().uuid(),workerId:z.string().uuid(),code:z.string().max(40),verified:z.boolean()}),
  z.object({action:z.literal("review_shift_time"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()}),
  z.object({action:z.literal("document_requirement"),objectId:z.string().uuid(),relationType:z.enum(["employment","gph","npd","custom"]),code:z.string().max(40),required:z.boolean()}),
- z.object({action:z.literal("worker_schedule_owner"),objectId:z.string().uuid(),workerId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"])}),
+ z.object({action:z.literal("worker_schedule_owner"),objectId:z.string().uuid(),workerId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"]).nullable()}),
  z.object({action:z.literal("review_plan"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()})
 ]);
 export async function GET(request:Request){
