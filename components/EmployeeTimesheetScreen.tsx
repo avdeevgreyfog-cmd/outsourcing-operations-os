@@ -173,20 +173,28 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        </section>
       </div>
       <section className="worker-self-panel worker-self-future">
-       <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайшие дни</span><button className="worker-self-quiet" onClick={()=>setShowAll(x=>!x)}>{showAll?"Свернуть":"Весь период"} <ChevronDown size={14}/></button></div>
-       <p className="worker-self-muted">{data.planning.owner==="worker"?"Отмечайте выходные и рабочие дни заранее.":"Видите график менеджера. Изменения отправляются ему на согласование."} Можно выбрать несколько дат и отметить выходные разом.</p>
+       <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайшие дни</span><button className="worker-self-quiet" onClick={()=>setShowAll(x=>!x)}>{showAll?"Свернуть":"Весь график"} <ChevronDown size={14}/></button></div>
+       <p className="worker-self-muted">График заполняется автоматически. Нажмите на дату, только если планы изменились.</p>
        <div className="worker-self-days">
-        {future.slice(0,showAll?future.length:5).map(p=><div className="worker-self-day" key={p.date}>
-         <input type="checkbox" aria-label={"Выбрать "+format(p.date)} checked={selectedDays.includes(p.date)} onChange={e=>setSelectedDays(v=>e.target.checked?[...v,p.date]:v.filter(x=>x!==p.date))}/>
-         <button className="worker-self-day-content" onClick={()=>setEditingDay(p.date)}><strong>{format(p.date)}</strong><span>{kindShort(p.kind)}{p.proposalStatus==="proposed"?" · Изменение на проверке":""}</span></button>
-         <button className="worker-self-day-action" onClick={()=>setEditingDay(p.date)}><ChevronRight size={18}/></button>
-        </div>)}
+        {future.slice(0,showAll?future.length:5).map(p=><button className="worker-self-date-row" key={p.date} onClick={()=>{setEditingDay(p.date);setKindChoice(p.kind??data.planning.defaultKind??"day")}}>
+         <span className="worker-self-date-info"><strong>{format(p.date)}</strong><small>{p.kind==="off"?"Выходной по графику":p.kind?"Запланирована "+(p.kind==="night"?"ночная":"дневная")+" смена":"Смена пока не назначена"}</small></span>
+         <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{kindShort(p.kind)}</span><ChevronRight size={17}/></span>
+        </button>)}
        </div>
-       {selectedDays.length>0&&<div className="worker-self-selected"><span>Выбрано дат: {selectedDays.length}</span><button disabled={busy} onClick={()=>void markSelectedOff()}>{data.planning.owner==="worker"?"Отметить выходными":"Запросить выходные"}</button><button className="worker-self-quiet" onClick={()=>setSelectedDays([])}>Снять выбор</button></div>}
-       {editingDay&&<div className="worker-self-edit"><div className="worker-self-edit-title"><strong>{format(editingDay)}</strong><button className="worker-self-quiet" onClick={()=>setEditingDay(null)}>Закрыть</button></div>
-        <p>{data.planning.owner==="manager"?"Изменения будут направлены менеджеру.":"Выберите рабочую смену либо выходной."}</p>
+       {canEditWeek&&<div className="worker-self-week-tool">
+        <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Выберите {(data.planning.restDays??0)===1?"один день отдыха":"два дня отдыха"} на следующую неделю. Рабочие смены выставятся автоматически.</p></div>
+        <button className="worker-self-light-button" onClick={()=>{setWeekEditing(x=>!x);setRestDates(fullWeek.filter(d=>records.get(d)?.kind==="off"))}}>{weekEditing?"Свернуть":"Выбрать дни отдыха"}</button>
+        {weekEditing&&<div className="worker-self-week-editor">
+         <div className="worker-self-week-label">Неделя {smallDate(fullWeek[0])}–{smallDate(fullWeek[6])} · {restDates.length} из {data.planning.restDays??0} выходных</div>
+         <div className="worker-self-week-grid">{fullWeek.map(date=><button key={date} className={restDates.includes(date)?"off":""} onClick={()=>setRestDates(old=>old.includes(date)?old.filter(x=>x!==date):old.length<(data.planning.restDays??0)?[...old,date]:old)}><strong>{new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}</strong><span>{date.slice(8)}</span>{restDates.includes(date)?"Вых.":"Раб."}</button>)}</div>
+         <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Сохранить неделю</button>
+        </div>}
+       </div>}
+       {editingDay&&<div className="worker-self-edit">
+        <div className="worker-self-edit-title"><strong>{format(editingDay)}</strong><button className="worker-self-quiet" onClick={()=>setEditingDay(null)}>Закрыть</button></div>
+        <p>Выберите желаемый вариант. Для фиксированного графика изменение отправится на согласование.</p>
         <div className="worker-self-choices">{(["day","night","off"] as Kind[]).map(k=><button key={k} className={kindChoice===k?"selected":""} onClick={()=>setKindChoice(k)}>{kindShort(k)}</button>)}</div>
-        <button className="worker-self-main-button" disabled={busy} onClick={()=>void planDay(editingDay,kindChoice)}>{data.planning.owner==="manager"?"Отправить на согласование":"Сохранить день"}</button>
+        <button className="worker-self-main-button" disabled={busy} onClick={()=>void planDay(editingDay,kindChoice)}>Отправить изменение</button>
        </div>}
       </section>
      </>}
