@@ -143,7 +143,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
      {error&&<div role="alert" className="worker-self-alert"><AlertTriangle size={16}/>{error}</div>}
      {notice&&<div role="status" className="worker-self-alert success"><CheckCircle2 size={16}/>{notice}{isDemo?" · демонстрация":""}</div>}
      {tab==="shifts"&&<>
-      <div className="worker-self-page-title"><div><h1>Мои смены</h1><p>{data.objectName}</p></div><button className="worker-self-light-button" onClick={openSettings}><Settings2 size={15}/> Настройки графика</button></div>
+      <div className="worker-self-page-title"><div><h1>Мои смены</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings}><Settings2 size={15}/> Мой график</button></div>
       <div className="worker-self-primary-grid">
        <section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
