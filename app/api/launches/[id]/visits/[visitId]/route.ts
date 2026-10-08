@@ -46,7 +46,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string;
       `;
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
       const savedChecklist=Array.isArray(scope.checklist)?scope.checklist as Array<z.infer<typeof checklistItem>>:[];
-      if(body.itemUpdate&&!savedChecklist.some(item=>item.id===body.itemUpdate?.id&&!item.hidden))return NextResponse.json({error:"Пункт чек-листа отсутствует"},{status:404});
+      if(body.itemUpdate&&!savedChecklist.some(item=>item.id===body.itemUpdate?.id&&!item.hidden))throw new Error("Пункт чек-листа отсутствует");
       const checklist=body.itemUpdate?savedChecklist.map(item=>item.id===body.itemUpdate?.id?{...item,value:body.itemUpdate!.value,note:body.itemUpdate!.note,status:body.itemUpdate!.status}:item):(body.checklist??savedChecklist);
       const completed=body.status==="completed";
       await tx`
