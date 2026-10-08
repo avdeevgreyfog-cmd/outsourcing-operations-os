@@ -122,11 +122,13 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
  const {ref,link}=scope;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
   if(change.action==="sizes"){
+   if(!link.showWorkwear)throw new Error("Раздел спецодежды недоступен на объекте");
    if((change.clothingSize?.length??0)>40||(change.shoeSize?.length??0)>40)throw new Error("Укажите корректные размеры");
    await sql`UPDATE worker_profiles SET clothing_size=${change.clothingSize?.trim()||null},shoe_size=${change.shoeSize?.trim()||null},updated_at=now() WHERE id=${link.workerId}::uuid`;
    return {ok:true};
   }
   if(change.action==="document"){
+   if(!link.showDocuments)throw new Error("Раздел документов недоступен на объекте");
    const overrides=await sql<Array<{code:string;required:boolean}>>`SELECT document_code code,required FROM object_worker_document_requirements WHERE object_id=${link.objectId}::uuid AND relation_type=${link.employment}`;
    if(!checklistCodes(link.employment,overrides).includes(change.code))throw new Error("Документ не входит в список объекта");
    await sql`INSERT INTO worker_document_checklist(organization_id,worker_id,object_id,document_code,employee_reported_at)
