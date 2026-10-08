@@ -17,7 +17,7 @@ export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confi
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
-  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11})),reports:[],links:[],settings:[],plans:[]};
+  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[]};
   if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[]};
   const objects=new Set(visible.map(w=>w.objectId!));
   const ids=visible.map(w=>w.id);
@@ -34,7 +34,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
           AND work_date BETWEEN current_date-interval '2 days' AND current_date+interval '7 days'
         ORDER BY worker_id,object_id,work_date,(shift_id IS NULL) DESC,updated_at DESC`,
     ]);
-    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11)})),reports,links,settings,plans};
+    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11),workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans};
   });
 }
 
