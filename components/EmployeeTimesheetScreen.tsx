@@ -48,6 +48,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [monthOpen,setMonthOpen]=useState(false);
  const [hoursOpen,setHoursOpen]=useState(false);
  const [hoursValue,setHoursValue]=useState("11");
+ const [selectedKind,setSelectedKind]=useState<"day"|"night">(demo?"night":"day");
  const [shiftDate,setShiftDate]=useState("");
  const [shiftStart,setShiftStart]=useState("20:00");
  const [shiftEnd,setShiftEnd]=useState("08:00");
@@ -144,8 +145,10 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         <h2>{human(tomorrow)}</h2><p className="emp2-shift-line"><MoonSun kind={kind(tomorrow)}/> {shiftLabel(tomorrow)} · {timingText(tomorrow)}</p>
         {kind(tomorrow)==="off"?<p className="emp2-subdued">Выходной по графику. Подтверждать его не нужно.</p>:<>
           {nextReply?.response==="working"?<div className="emp2-confirm"><CheckCircle2 size={18}/> Вы подтвердили выход. Если планы изменятся, сообщите до начала смены.</div>:nextReply?.response==="cannot_work"?<div className="emp2-confirm is-warning">Вы сообщили о невыходе{nextReply.reason?": "+nextReply.reason:""}. Менеджер увидит изменение.</div>:<p className="emp2-question">Выйдете на смену?</p>}
-          {nextReply?.response!=="working"&&<button className="emp2-primary" disabled={busy} onClick={()=>void send({date:tomorrow,response:"working",kind:kind(tomorrow)==="night"?"night":"day"},"Выход подтверждён")}> <Check size={16}/> Да, выйду</button>}
+          {data.owner==="client"&&nextReply?.response!=="working"&&<div className="emp2-shift-choices"><span>Какую смену определил заказчик?</span><div><button type="button" className={selectedKind==="day"?"is-active":""} onClick={()=>setSelectedKind("day")}>День</button><button type="button" className={selectedKind==="night"?"is-active":""} onClick={()=>setSelectedKind("night")}>Ночь</button></div></div>}
+          {nextReply?.response!=="working"&&<button className="emp2-primary" disabled={busy} onClick={()=>void send({date:tomorrow,response:"working",kind:data.owner==="client"?selectedKind:kind(tomorrow)==="night"?"night":"day"},"Выход подтверждён")}> <Check size={16}/> Да, выйду</button>}
           {nextReply?.response==="working"&&<button className="emp2-secondary" onClick={()=>setAbsenceDate(tomorrow)}>Изменились планы</button>}
+          <button className="emp2-link" onClick={()=>startTimeEdit(tomorrow)}>Уточнить время смены</button>
           {nextReply?.response!=="working"&&<button className="emp2-secondary" onClick={()=>setAbsenceDate(absenceDate===tomorrow?null:tomorrow)}>Не смогу выйти</button>}
           {data.owner==="client"&&nextReply?.response!=="day_off"&&<button className="emp2-link" disabled={busy} onClick={()=>void send({date:tomorrow,response:"day_off",kind:"off"},"Выходной передан в планирование")}>У меня выходной по графику заказчика</button>}
           {absenceDate===tomorrow&&<div className="emp2-inline-form"><label>Причина изменения<textarea rows={2} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Например, заболел"/></label><button className="emp2-primary" disabled={busy||!reason.trim()} onClick={async()=>{if(await send({date:tomorrow,response:"cannot_work",kind:kind(tomorrow)==="night"?"night":"day",reason},"Менеджер получит изменение")){setAbsenceDate(null);setReason("")}}}>Сообщить о невыходе</button></div>}
