@@ -159,6 +159,32 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     }else{
       await sql`UPDATE worker_shift_reports SET reported_hours=${payload.hours},hours_submitted_at=now(),updated_at=now() WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date`;
     }
+    // Mirror only provisional planning and self-reported hours into the existing
+    // time_entries model. Never overwrite a manager-entered fact or a locked period.
+    const [next]=await sql<Array<{response:string;shiftKind:string|null;hours:number|null}>>`SELECT response,shift_kind "shiftKind",reported_hours::float8 hours FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
+    if(next&&next.response!=="cannot_work"){
+      const [entry]=await sql<Array<{id:string;source:string;factHours:number;timeCode:string}>>`
+        SELECT id,source,fact_hours::float8 "factHours",time_code "timeCode" FROM time_entries
+        WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date
+        ORDER BY (shift_id IS NULL) DESC,updated_at DESC LIMIT 1 FOR UPDATE`;
+      const nextCode=next.response==="day_off"?"DAY_OFF":next.hours!==null?"WORK":"PLANNED";
+      const kind=next.shiftKind==="night"?"night":"day";
+      const h=nextCode==="WORK"?Number(next.hours):0;
+      const mayReplace=!entry||((entry.source==="schedule"||entry.source==="worker_report")&&!(entry.source!=="worker_report"&&entry.factHours>0));
+      if(mayReplace){
+        if(entry){
+          await sql`UPDATE time_entries SET planned=${nextCode!=="DAY_OFF"},time_code=${nextCode},fact_hours=${h},day_hours=${nextCode==="WORK"&&kind==="day"?h:0},night_hours=${nextCode==="WORK"&&kind==="night"?h:0},
+            planned_shift_kind=${nextCode==="DAY_OFF"?null:kind},source=${nextCode==="WORK"?"worker_report":"schedule"},correction_reason=${nextCode==="WORK"?"Данные сотрудника, требуется сверка":"План по сообщению сотрудника"},updated_at=now()
+            WHERE id=${entry.id}::uuid`;
+        }else{
+          await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,planned_shift_kind,source,correction_reason)
+            VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${payload.date}::date,${nextCode!=="DAY_OFF"},${nextCode},${h},
+              ${nextCode==="WORK"&&kind==="day"?h:0},${nextCode==="WORK"&&kind==="night"?h:0},${nextCode==="DAY_OFF"?null:kind},${nextCode==="WORK"?"worker_report":"schedule"},
+              ${nextCode==="WORK"?"Данные сотрудника, требуется сверка":"План по сообщению сотрудника"})`;
+        }
+      }
+    }
+
     return {ok:true};
   });
 }
