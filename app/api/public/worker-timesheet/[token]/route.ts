@@ -2,7 +2,7 @@ import {NextResponse} from "next/server";
 import {z} from "zod";
 import {employeePortal,submitEmployeeReply} from "@/lib/operations/worker-timesheet-portal";
 import {employeePortalDetails,updateEmployeePortalDetails} from "@/lib/operations/employee-self-service";
-import {employeePlanning,submitEmployeePlan} from "@/lib/operations/employee-planning";
+import {employeePlanning,submitEmployeePlan,submitEmployeeWeek,submitEmployeePattern} from "@/lib/operations/employee-planning";
 const responseSchema=z.object({
  date:z.string().date(),response:z.enum(["working","day_off","cannot_work"]).optional(),
  kind:z.enum(["day","night","off"]).optional(),
@@ -15,6 +15,8 @@ const detailsSchema=z.discriminatedUnion("action",[
  z.object({action:z.literal("shift_time"),date:z.string().date(),kind:z.enum(["day","night"]).optional(),startTime:z.string().regex(/^\d{2}:\d{2}$/),endTime:z.string().regex(/^\d{2}:\d{2}$/),endsNextDay:z.boolean(),appliesTo:z.enum(["single","regular"])})
 ]);
 const planningSchema=z.object({action:z.literal("plan_day"),date:z.string().date(),kind:z.enum(["day","night","off"])});
+const weekSchema=z.object({action:z.literal("plan_week"),weekStart:z.string().date(),offDates:z.array(z.string().date()).max(2)});
+const patternSchema=z.object({action:z.literal("pattern_change"),effectiveFrom:z.string().date(),workDays:z.number().int().min(1).max(30),restDays:z.number().int().min(0).max(30),shiftKind:z.enum(["day","night"]),floatingDaysOff:z.boolean()});
 const noStore={"Cache-Control":"no-store, private"};
 export async function GET(_request:Request,{params}:{params:Promise<{token:string}>}){
  try{
@@ -26,7 +28,11 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
  try{
   const {token}=await params;const raw=await request.json();
   const result=raw&&typeof raw==="object"&&"action" in raw
-    ?raw.action==="plan_day"
+    ?raw.action==="plan_week"
+      ?await (async()=>{const input=weekSchema.parse(raw);return submitEmployeeWeek(token,input.weekStart,input.offDates)})()
+      :raw.action==="pattern_change"
+      ?await (async()=>{const input=patternSchema.parse(raw);return submitEmployeePattern(token,input)})()
+      :raw.action==="plan_day"
       ?await (async()=>{const plan=planningSchema.parse(raw);return submitEmployeePlan(token,plan.date,plan.kind)})()
       :await updateEmployeePortalDetails(token,detailsSchema.parse(raw))
     :await submitEmployeeReply(token,responseSchema.parse(raw));
