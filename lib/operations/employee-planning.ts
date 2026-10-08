@@ -249,7 +249,7 @@ export async function submitEmployeeWeek(token:string,weekStart:string,offDates:
     FROM worker_schedule_pattern_changes WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND effective_from<=${weekStart}::date AND status='accepted' ORDER BY effective_from DESC LIMIT 1`;
   const workDays=p?.workDays??s.workDays,restDays=p?.restDays??s.restDays;
   if(!p?.floating||!(workDays===5&&restDays===2||workDays===6&&restDays===1))throw new Error("Плавающие выходные не разрешены в текущем графике");
-  if(offDates.length!==restDays)throw new Error(${restDays===1?"На неделе должен быть один выходной":"На неделе должно быть два выходных"}`);
+  if(offDates.length!==restDays)throw new Error(restDays===1?"На неделе должен быть один выходной":"На неделе должно быть два выходных");
   const status=s.owner==="worker"?"accepted":"proposed";
   for(const date of dates){
    await ensureNotLocked(sql,s,date);
