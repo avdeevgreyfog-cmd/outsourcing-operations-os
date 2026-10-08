@@ -2,23 +2,32 @@ import {NextResponse} from "next/server";
 import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
 import {managerPortalData,editWorkerLink,editPortalSettings,reconcileEmployeeHours} from "@/lib/operations/worker-timesheet-portal";
+import {employeeDetailManagerList,managerEmployeeDetailAction} from "@/lib/operations/employee-self-service";
 const actions=z.discriminatedUnion("action",[
  z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
  z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","client"])}),
- z.object({action:z.literal("reconcile"),objectId:z.string().uuid(),fromDate:z.string().date(),toDate:z.string().date()})
+ z.object({action:z.literal("reconcile"),objectId:z.string().uuid(),fromDate:z.string().date(),toDate:z.string().date()}),
+ z.object({action:z.literal("manager_phone"),objectId:z.string().uuid(),phone:z.string().max(50).nullable()}),
+ z.object({action:z.literal("verify_document"),objectId:z.string().uuid(),workerId:z.string().uuid(),code:z.string().max(40),verified:z.boolean()}),
+ z.object({action:z.literal("review_shift_time"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()}),
+ z.object({action:z.literal("document_requirement"),objectId:z.string().uuid(),relationType:z.enum(["employment","gph","npd","custom"]),code:z.string().max(40),required:z.boolean()})
 ]);
 export async function GET(request:Request){
  try{
   const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется авторизация"},{status:401});
   const url=new URL(request.url);
-  return NextResponse.json(await managerPortalData(actor,url.searchParams.get("objectId")??undefined,url.searchParams.get("workerId")??undefined));
+  const objectId=url.searchParams.get("objectId")??undefined;
+  const [portal,details]=await Promise.all([managerPortalData(actor,objectId,url.searchParams.get("workerId")??undefined),employeeDetailManagerList(actor,objectId)]);
+  return NextResponse.json({...portal,...details});
  }catch(error){console.error("worker confirmations GET",error);return NextResponse.json({error:"Не удалось загрузить подтверждения. Проверьте миграцию базы данных."},{status:500})}
 }
 export async function POST(request:Request){
  try{
   const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется авторизация"},{status:401});
   const body=actions.parse(await request.json());
-  const result=body.action==="reconcile"
+  const result=["manager_phone","verify_document","review_shift_time","document_requirement"].includes(body.action)
+   ?await managerEmployeeDetailAction(actor,body as Parameters<typeof managerEmployeeDetailAction>[1])
+   :body.action==="reconcile"
    ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
    :body.action==="settings"
    ?await editPortalSettings(actor,body.objectId,body.scheduleOwner)
