@@ -23,6 +23,7 @@ export type PortalDetails={
  clothingSize:string|null;shoeSize:string|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
  documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean}>;
  workwear:Array<{name:string;state:"issued"|"needed";variant:string|null}>;
+ visibility:{documents:boolean;workwear:boolean};
  shiftWindows:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean}>;
  timeChanges:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular";status:"proposed"|"accepted"|"rejected"}>;
 };
@@ -34,9 +35,10 @@ export function checklistCodes(relation:RelationType,overrides:Array<{code:strin
 async function authorizedEmployee(token:string){
  const ref=await resolveToken(token);if(!ref)return null;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType}>>`
+  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;showDocuments:boolean;showWorkwear:boolean}>>`
    SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,st.schedule_authority,CASE WHEN st.schedule_owner='client' THEN 'worker' ELSE st.schedule_owner END,'manager') owner,
    COALESCE(st.timezone,'Europe/Moscow') timezone,
+   COALESCE(st.show_employee_documents,true) "showDocuments",COALESCE(st.show_employee_workwear,true) "showWorkwear",
    COALESCE((SELECT er.relation_type FROM employment_relations er WHERE er.worker_id=l.worker_id
       AND er.effective_from<=current_date AND (er.effective_to IS NULL OR er.effective_to>=current_date)
       ORDER BY er.effective_from DESC LIMIT 1),'custom') employment
@@ -105,8 +107,8 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
   const workwear=[...issueRows.map(x=>({...x,state:"issued" as const})),...normRows.filter(x=>!names.has(x.name)).map(x=>({name:x.name,variant:null,state:"needed" as const}))];
   return {clothingSize:profile[0]?.clothingSize??null,shoeSize:profile[0]?.shoeSize??null,
     employment:link.employment,managerName:profile[0]?.managerName??null,managerPhone:profile[0]?.managerPhone??null,
-    documents:codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false})),
-    workwear,shiftWindows,timeChanges};
+    documents:link.showDocuments?codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false})):[],
+    workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear},shiftWindows,timeChanges};
  });
 }
 
@@ -174,7 +176,8 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
  |{action:"verify_document";objectId:string;workerId:string;code:string;verified:boolean}
  |{action:"review_shift_time";objectId:string;workerId:string;date:string;approve:boolean}
  |{action:"manager_phone";objectId:string;phone:string|null}
- |{action:"document_requirement";objectId:string;relationType:RelationType;code:string;required:boolean}){
+ |{action:"document_requirement";objectId:string;relationType:RelationType;code:string;required:boolean}
+ |{action:"portal_sections";objectId:string;documents:boolean;workwear:boolean}){
  requireCapability(actor,"operations.shift.edit");
  if(actor.demo)throw new Error("Действие недоступно в демонстрации");
  const objects=await listObjects(actor);
@@ -184,7 +187,12 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
   if(!(await listWorkers(actor)).some(w=>w.id===change.workerId&&w.objectId===change.objectId))throw new Error("Нет доступа к сотруднику");
  }
  return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-  if(change.action==="manager_phone"){
+  if(change.action==="portal_sections"){
+   await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,show_employee_documents,show_employee_workwear,updated_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.objectId}::uuid,${change.documents},${change.workwear},${actor.userId}::uuid)
+     ON CONFLICT(object_id) DO UPDATE SET show_employee_documents=EXCLUDED.show_employee_documents,
+       show_employee_workwear=EXCLUDED.show_employee_workwear,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
+  }else if(change.action==="manager_phone"){
    if((change.phone?.length??0)>50)throw new Error("Номер слишком длинный");
    await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,manager_phone,updated_by_user_id)
      VALUES(${actor.organizationId}::uuid,${change.objectId}::uuid,${change.phone},${actor.userId}::uuid)
