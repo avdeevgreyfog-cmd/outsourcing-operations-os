@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import type {Actor} from "@/lib/access/types";
 import {withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
@@ -30,7 +31,7 @@ export function checklistCodes(relation:RelationType,overrides:Array<{code:strin
  for(const item of overrides)if(docLabels[item.code])map.set(item.code,item.required);
  return [...map].filter(([,required])=>required).map(([code])=>code);
 }
-async function authorizedEmployee(token:string,actor:(organizationId:string,userId:string,workerId:string,objectId:string)=>Promise<unknown>){
+async function authorizedEmployee(token:string){
  const ref=await resolveToken(token);if(!ref)return null;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
   const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"client";timezone:string;employment:RelationType}>>`
@@ -50,10 +51,8 @@ async function authorizedEmployee(token:string,actor:(organizationId:string,user
  });
 }
 function createHashToken(raw:string){return createHash("sha256").update(raw).digest("hex")}
-import {createHash} from "node:crypto";
-
 export async function employeePortalDetails(token:string):Promise<PortalDetails|null>{
- const scope=await authorizedEmployee(token,async()=>null);if(!scope)return null;
+ const scope=await authorizedEmployee(token);if(!scope)return null;
  const {ref,link}=scope;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
   const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges]=await Promise.all([
@@ -69,7 +68,7 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
    sql<Array<{code:string;employeeReported:boolean;managerVerified:boolean}>>`SELECT document_code code,(employee_reported_at IS NOT NULL) "employeeReported",(manager_verified_at IS NOT NULL) "managerVerified" FROM worker_document_checklist WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid`,
    sql<Array<{name:string;variant:string|null}>>`
      SELECT i.name, NULLIF(m.variant,'') variant FROM inventory_movements m JOIN inventory_items i ON i.id=m.item_id
-     WHERE m.worker_id=${link.workerId}::uuid AND m.object_id=${link.objectId}::uuid AND i.returnable
+     WHERE m.worker_id=${link.workerId}::uuid AND i.returnable
      GROUP BY i.id,i.name,m.variant
      HAVING sum(CASE WHEN m.movement_type='issue' THEN m.quantity WHEN m.movement_type='return' THEN -m.quantity
        WHEN m.movement_type='writeoff' AND m.from_location_id IS NULL THEN -m.quantity ELSE 0 END)>0
@@ -115,7 +114,7 @@ type EmployeeDetailChange=
  |{action:"shift_time";date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular"};
 const hhmm=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
 export async function updateEmployeePortalDetails(token:string,change:EmployeeDetailChange){
- const scope=await authorizedEmployee(token,async()=>null);if(!scope)throw new Error("Доступ недействителен");
+ const scope=await authorizedEmployee(token);if(!scope)throw new Error("Доступ недействителен");
  const {ref,link}=scope;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
   if(change.action==="sizes"){
