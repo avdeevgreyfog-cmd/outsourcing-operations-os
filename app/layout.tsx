@@ -19,6 +19,7 @@ import "./navigation-shell.css";
 import "./workers-registry.css";
 import "./registry-patterns.css";
 import "./employee-timesheet.css";
+import "./employee-workspace-v2.css";
 
 export const metadata: Metadata = {
   title: "OPERIS — Операционная система аутсорсинга",
