@@ -123,18 +123,18 @@ export async function employeePortal(token:string,selectedMonth?:string){
     const todayMonth=link.today.slice(0,7);
      const month=selectedMonth&&/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)&&selectedMonth>="2020-01"&&selectedMonth<=todayMonth?selectedMonth:todayMonth;
      const monthFrom=month+"-01";const monthTo=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
-     const rangeFrom=month<todayMonth?monthFrom:monthFrom;
-     const rangeTo=month<todayMonth?monthTo:link.today;
+     const rangeFrom=monthFrom;
+     const rangeTo=monthTo;
      const [reports,plans]=await Promise.all([
-      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null}>>`
-        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours
+      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null}>>`
+        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,hours_reconciled_at::text "reconciledAt"
         FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN ${rangeFrom}::date AND ${month===todayMonth?link.today:rangeTo}::date ORDER BY work_date`,
-      sql<Array<{date:string;kind:string;timeCode:string;hours:number}>>`
-        SELECT work_date::text date,COALESCE(planned_shift_kind,'day') kind,time_code "timeCode",fact_hours::float8 hours
+          AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31))) ORDER BY work_date`,
+      sql<Array<{date:string;kind:string;timeCode:string;hours:number;source:string}>>`
+        SELECT DISTINCT ON(work_date) work_date::text date,COALESCE(planned_shift_kind,'day') kind,time_code "timeCode",fact_hours::float8 hours,source
         FROM time_entries WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN ${rangeFrom}::date AND ${month===todayMonth?link.today:rangeTo}::date
-          ORDER BY updated_at DESC`,
+          AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31)))
+          ORDER BY work_date,updated_at DESC`,
     ]);
     return {...link,reports,plans,selectedMonth:month};
   });
@@ -248,7 +248,7 @@ export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDat
       WHERE object_id=${objectId}::uuid AND period_start<=${toDate}::date AND period_end>=${fromDate}::date
       AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new Error("В выбранном периоде есть зафиксированный табель");
-    const reportRows=await sql<Array<{workerId:string;date:string}>>`UPDATE worker_shift_reports r
+    await sql`UPDATE worker_shift_reports r
       SET hours_reconciled_at=now(),hours_reconciled_by_user_id=${actor.userId}::uuid,updated_at=now()
       FROM time_entries t WHERE t.worker_id=r.worker_id AND t.object_id=r.object_id AND t.work_date=r.work_date
         AND r.object_id=${objectId}::uuid AND r.work_date BETWEEN ${fromDate}::date AND ${toDate}::date
