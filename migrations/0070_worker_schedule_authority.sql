@@ -6,6 +6,7 @@ ALTER TABLE object_shift_reporting_settings
    CHECK(schedule_authority IS NULL OR schedule_authority IN ('manager','worker')),
  ADD COLUMN IF NOT EXISTS planning_horizon_days integer NOT NULL DEFAULT 7
    CHECK(planning_horizon_days BETWEEN 2 AND 31);
+ALTER TABLE worker_shift_time_changes ADD COLUMN IF NOT EXISTS shift_kind text CHECK(shift_kind IS NULL OR shift_kind IN ('day','night'));
 -- Overrides are exceptional: object-level settings are authoritative by default.
 CREATE TABLE IF NOT EXISTS worker_schedule_authorities (
  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
