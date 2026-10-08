@@ -89,7 +89,7 @@ export async function editWorkerLink(actor:Actor,objectId:string,workerId:string
 }
 
 type TokenContext={tenantId:string;actorUserId:string;linkId:string};
-async function resolveToken(token:string):Promise<TokenContext|null>{
+export async function resolveToken(token:string):Promise<TokenContext|null>{
   if(!/^[A-Za-z0-9_-]{30,100}$/.test(token))return null;
   const [row]=await db()<Array<TokenContext>>`SELECT organization_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
     FROM public_worker_timesheet_tokens WHERE token_hash=${tokenHash(token)} LIMIT 1`;
