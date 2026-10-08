@@ -217,9 +217,11 @@ export async function managerEmployeePlanningChanges(actor:Actor,objectId?:strin
    sql<Array<{workerId:string;objectId:string;date:string;kind:PlannedKind;status:string}>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,requested_kind kind,status
     FROM worker_shift_plan_changes WHERE worker_id=ANY(${ids}::uuid[]) AND work_date BETWEEN current_date-1 AND current_date+31`,
    sql<Array<{workerId:string;objectId:string;scheduleOwner:ScheduleOwner}>>`SELECT worker_id "workerId",object_id "objectId",schedule_owner "scheduleOwner"
-    FROM worker_schedule_authorities WHERE worker_id=ANY(${ids}::uuid[])`
+    FROM worker_schedule_authorities WHERE worker_id=ANY(${ids}::uuid[])`,
+   sql<Array<{workerId:string;objectId:string;date:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean;status:string}>>`SELECT worker_id "workerId",object_id "objectId",effective_from::text date,work_days "workDays",rest_days "restDays",shift_kind "shiftKind",floating_days_off "floatingDaysOff",status
+    FROM worker_schedule_pattern_changes WHERE worker_id=ANY(${ids}::uuid[]) AND effective_from BETWEEN current_date-90 AND current_date+60 ORDER BY effective_from DESC`
   ]);
-  return {planningChanges,workerAuthorities};
+  return {planningChanges,workerAuthorities,patternChanges};
  });
 }
 
