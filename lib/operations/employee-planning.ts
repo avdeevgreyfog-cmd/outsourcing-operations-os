@@ -148,17 +148,20 @@ async function assertManager(actor:Actor,objectId:string,workerId?:string){
   if(!workers.some(x=>x.id===workerId&&x.objectId===objectId))throw new Error("Сотрудник не относится к объекту");
  }
 }
-export async function managerSetScheduleOwner(actor:Actor,objectId:string,owner:ScheduleOwner,workerId?:string,horizon?:number){
+export async function managerSetScheduleOwner(actor:Actor,objectId:string,owner:ScheduleOwner|null,workerId?:string,horizon?:number){
  if(actor.demo)throw new Error("Недоступно в демонстрации");
  await assertManager(actor,objectId,workerId);
  if(horizon!==undefined&&(!Number.isInteger(horizon)||horizon<2||horizon>31))throw new Error("Укажите горизонт от 2 до 31 дня");
  return withTenant(actor.organizationId,actor.userId,async sql=>{
-  if(workerId){
+  if(workerId&&owner===null){
+   await sql`DELETE FROM worker_schedule_authorities WHERE object_id=${objectId}::uuid AND worker_id=${workerId}::uuid`;
+  }else if(workerId){
    await sql`INSERT INTO worker_schedule_authorities(organization_id,object_id,worker_id,schedule_owner,updated_by_user_id)
     VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${workerId}::uuid,${owner},${actor.userId}::uuid)
     ON CONFLICT(object_id,worker_id) DO UPDATE SET schedule_owner=EXCLUDED.schedule_owner,
       updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }else{
+   if(!owner)throw new Error("Режим графика объекта должен быть указан");
    await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,schedule_authority,planning_horizon_days,updated_by_user_id)
     VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${owner},${horizon??7},${actor.userId}::uuid)
     ON CONFLICT(object_id) DO UPDATE SET schedule_authority=EXCLUDED.schedule_authority,planning_horizon_days=COALESCE(${horizon??null},object_shift_reporting_settings.planning_horizon_days),
