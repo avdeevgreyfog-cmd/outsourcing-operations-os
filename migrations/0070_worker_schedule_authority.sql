@@ -1,6 +1,5 @@
 -- Expand employee portal planning without changing existing object/timesheet identifiers.
 -- Legacy 'client' meant employee self-planning: rename data conservatively.
-UPDATE object_shift_reporting_settings SET schedule_owner='worker' WHERE schedule_owner='client';
 DO $$
 DECLARE constraint_name text;
 BEGIN
@@ -8,7 +7,8 @@ BEGIN
   SELECT conname FROM pg_constraint WHERE conrelid='object_shift_reporting_settings'::regclass
     AND contype='c' AND pg_get_constraintdef(oid) LIKE '%schedule_owner%'
  LOOP EXECUTE format('ALTER TABLE object_shift_reporting_settings DROP CONSTRAINT %I',constraint_name); END LOOP;
-END $$;
+END $;
+UPDATE object_shift_reporting_settings SET schedule_owner='worker' WHERE schedule_owner='client';
 ALTER TABLE object_shift_reporting_settings
  ADD CONSTRAINT object_shift_reporting_settings_owner_valid CHECK(schedule_owner IN ('manager','worker')),
  ADD COLUMN IF NOT EXISTS planning_horizon_days integer NOT NULL DEFAULT 7
