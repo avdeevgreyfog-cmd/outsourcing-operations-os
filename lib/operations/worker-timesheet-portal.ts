@@ -1,4 +1,4 @@
-import {randomBytes,createHash} from "node:crypto";
+import {randomBytes,createHash,createCipheriv,createDecipheriv} from "node:crypto";
 import type {Actor} from "@/lib/access/types";
 import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
@@ -6,6 +6,9 @@ import {db,withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
 
 const tokenHash=(token:string)=>createHash("sha256").update(token).digest("hex");
+function tokenCipherKey(){const secret=process.env.SESSION_SECRET;if(!secret)throw new Error("SESSION_SECRET не задан");return createHash("sha256").update(secret).digest()}
+function encryptToken(raw:string){const iv=randomBytes(12),cipher=createCipheriv("aes-256-gcm",tokenCipherKey(),iv);const encrypted=Buffer.concat([cipher.update(raw,"utf8"),cipher.final()]);return [iv,cipher.getAuthTag(),encrypted].map(x=>x.toString("base64url")).join(".")}
+function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".").map(x=>Buffer.from(x,"base64url"));const cipher=createDecipheriv("aes-256-gcm",tokenCipherKey(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(blob),cipher.final()]).toString("utf8")}
 export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string;timezone:string;reportingEnabled:boolean};
@@ -52,10 +55,15 @@ export async function editPortalSettings(actor:Actor,objectId:string,owner:"mana
   });
 }
 
-export async function editWorkerLink(actor:Actor,objectId:string,workerId:string,action:"create"|"rotate"|"pause"|"resume"|"revoke"){
+export async function editWorkerLink(actor:Actor,objectId:string,workerId:string,action:"create"|"rotate"|"copy"|"pause"|"resume"|"revoke"){
   if(actor.demo)throw new Error("Ссылки выдаются только в рабочем контуре");
   await assertManage(actor,objectId,workerId);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
+    if(action==="copy"){
+      const [existing]=await sql<Array<{ciphertext:string}>>`SELECT token_ciphertext ciphertext FROM worker_timesheet_links WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND status='active' ORDER BY created_at DESC LIMIT 1`;
+      if(!existing)throw new Error("Активная ссылка не найдена");
+      return {ok:true,path:"/employee-timesheet/"+decryptToken(existing.ciphertext)};
+    }
     if(action==="create"||action==="rotate"){
       const raw=randomBytes(32).toString("base64url");
       const hash=tokenHash(raw);
