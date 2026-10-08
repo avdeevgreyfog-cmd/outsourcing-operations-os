@@ -1,9 +1,10 @@
-import {requireActor} from "@/lib/auth/server";
-import {mobileManagerDesk} from "@/lib/operations/mobile-manager";
-import {MobileManagerWorkspace} from "@/components/MobileManagerWorkspace";
-import {isGithubPagesDemo} from "@/lib/demo/pages";
-export default async function FieldManager({searchParams}:{searchParams:Promise<{date?:string}>}){
- const actor=await requireActor();const params=isGithubPagesDemo()?{}:await searchParams;
- const data=await mobileManagerDesk(actor,params.date);
- return <MobileManagerWorkspace initial={data}/>;
+"use client";
+import {useEffect} from "react";
+import Link from "next/link";
+import {useRouter} from "next/navigation";
+/** Compatibility redirect for previous /field deep links: the only working UI is /shifts. */
+export default function FormerFieldMode(){
+ const router=useRouter();
+ useEffect(()=>{router.replace("/shifts")},[router]);
+ return <div className="section" style={{padding:"20px"}}><p>Контроль явки доступен в разделе «Смены и выходы».</p><Link href="/shifts" className="button primary">Перейти к сменам</Link></div>;
 }
