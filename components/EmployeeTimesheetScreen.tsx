@@ -1,6 +1,6 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
-import {CalendarDays,Check,ChevronLeft,ChevronRight,Clock3,Info,LockKeyhole,RotateCcw,Sun,Moon} from "lucide-react";
+import {CalendarDays,Check,ChevronLeft,ChevronRight,Clock3,Info,LockKeyhole,Sun,Moon} from "lucide-react";
 
 type Kind="day"|"night"|"off";
 type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null};
@@ -76,8 +76,8 @@ export function EmployeeTimesheetScreen({token}:{token:string}){
    <h2 className="employee-portal-title">Ваши ближайшие дни</h2>
    {dates.map((date,index)=>{
      const report=reports.get(date),plan=plans.get(date),kind=getKind(date),past=index===0,off=kind==="off";
-     const hasHours=report?.hours!=null||plan?.timeCode==="WORK"&&Number(plan.hours)>0;
-     const lockedPast=index===0&&plan?.timeCode==="WORK"&&Number(plan.hours)>0&&report?.hours==null;
+     const hasHours=report ? report.hours!=null : plan?.timeCode==="WORK"&&Number(plan.hours)>0;
+     const lockedPast=index===0&&plan?.timeCode==="WORK"&&Number(plan.hours)>0&&!report;
      const label=index===0?"Вчера":index===1?"Сегодня":index===2?"Завтра":"Послезавтра";
      return <article key={date} className={"employee-portal-day"+(index===2?" employee-portal-focus":"")}>
       <div className="employee-portal-dayhead"><div><span>{label} · {human(date)}</span><strong>{kind==="night"?<><Moon size={15}/> Ночная смена</>:kind==="day"?<><Sun size={15}/> Дневная смена</>:off?"Выходной":"График не указан"}</strong></div>
@@ -88,7 +88,7 @@ export function EmployeeTimesheetScreen({token}:{token:string}){
        :editHours&&nowDate===date?<div className="employee-portal-hour-edit"><label>Сколько часов отработали?<input type="number" inputMode="decimal" min="0" max="24" step="0.5" value={hourInput} onChange={e=>setHourInput(e.target.value)}/></label><button className="employee-portal-main" disabled={busy===date||!hourInput||Number(hourInput)<0||Number(hourInput)>24} onClick={()=>void save(date,{hours:Number(hourInput)})}>Сохранить часы</button><button className="employee-portal-link" onClick={()=>setEditHours(false)}>Отмена</button></div>
        :report?.response==="working"?<div className="employee-portal-buttons"><p>Вы отработали {fmt(data.paidHours)} часов?</p><button className="employee-portal-main" disabled={busy===date} onClick={()=>void save(date,{hours:data.paidHours})}><Check size={17}/> Да, {fmt(data.paidHours)} ч</button><button className="employee-portal-secondary" disabled={busy===date} onClick={()=>{setNowDate(date);setEditHours(true);setHourInput(String(data.paidHours))}}>Указать другие часы</button></div>
        :<div className="employee-portal-buttons"><p>Укажите результат вчерашней смены</p><button className="employee-portal-main" disabled={busy===date} onClick={async()=>{await save(date,{response:"working",kind:kind==="night"?"night":"day"});setNowDate(date);setHourInput(String(data.paidHours));setEditHours(true)}}>Вышел на работу</button><button className="employee-portal-secondary" disabled={busy===date} onClick={()=>void save(date,{response:"cannot_work",reason:"Не вышел на смену",kind:kind??"day"})}>Не вышел</button></div>}
-      </div>:off?<p className="employee-portal-small">По графику выходной. Отвечать не нужно.</p>
+      </div>:off?<div className="employee-portal-buttons"><p>По графику выходной. Отвечать не нужно.</p>{report?.response==="day_off"&&data.owner==="client"&&<button className="employee-portal-secondary" disabled={busy===date} onClick={()=>void save(date,{response:"working",kind:selectedKind})}>Изменить на рабочую смену</button>}</div>
       :<div className="employee-portal-buttons">
        {report?.response==="working"&&<p>Вы подтвердили выход на смену.</p>}
        {report?.response==="cannot_work"&&<p>Менеджер получит информацию о невыходе.</p>}
@@ -104,7 +104,7 @@ export function EmployeeTimesheetScreen({token}:{token:string}){
    {error&&<p className="employee-portal-error" role="alert">{error}</p>}
    {saved&&<p className="employee-portal-success" role="status"><Check size={15}/>{saved}</p>}
    <button className="employee-portal-monthtoggle" onClick={()=>setCalendarOpen(v=>!v)}><CalendarDays size={16}/>{calendarOpen?"Свернуть табель":"Посмотреть весь месяц"} {calendarOpen?<ChevronLeft size={16}/>:<ChevronRight size={16}/>}</button>
-   {calendarOpen&&<section className="employee-portal-month"><h2>Октябрь / мой учёт</h2><div className="employee-portal-history">{monthRows.map(date=>{const r=reports.get(date),p=plans.get(date);return <div key={date}><span>{new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}</span><span>{r?.response==="day_off"||p?.timeCode==="DAY_OFF"?"Выходной":r?.response==="cannot_work"?"Не вышел":r?.hours!=null?fmt(r.hours)+" ч":p?.timeCode==="WORK"?fmt(p.hours)+" ч":r?.response==="working"?"Выход подтверждён":"Нет данных"}</span></div>})}</div></section>}
+   {calendarOpen&&<section className="employee-portal-month"><h2>{new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(new Date(data.today+"T00:00:00Z"))} · мой учёт</h2><div className="employee-portal-history">{monthRows.map(date=>{const r=reports.get(date),p=plans.get(date);return <div key={date}><span>{new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}</span><span>{r?.response==="day_off"||p?.timeCode==="DAY_OFF"?"Выходной":r?.response==="cannot_work"?"Не вышел":r?.hours!=null?fmt(r.hours)+" ч":p?.timeCode==="WORK"?fmt(p.hours)+" ч":r?.response==="working"?"Выход подтверждён":"Нет данных"}</span></div>})}</div></section>}
    <footer className="employee-portal-footer">{demo?"Демонстрационный режим. Изменения остаются только на этом экране.":"Ответы сохраняются в OPERIS. Если данные неверны, сообщите менеджеру."}</footer>
   </div>
  </main>;
