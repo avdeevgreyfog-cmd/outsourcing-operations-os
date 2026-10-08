@@ -46,7 +46,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
   const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось загрузить кабинет");
   setData(j as Portal);return j as Portal;
  },[token]);
- useEffect(()=>{if(isDemo)return;let alive=true;void reload().catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
+ useEffect(()=>{if(isDemo)return;let alive=true;void Promise.resolve().then(()=>reload()).catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
 
  const clothing=clothingDraft??data?.details?.clothingSize??"";
  const shoe=shoeDraft??data?.details?.shoeSize??"";
@@ -63,7 +63,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const next=schedule(tomorrow),nextAnswer=answers.get(tomorrow),completedAnswer=completed?answers.get(completed.date):null;
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
  const counted=useMemo(()=>{const month=today.slice(0,7);let total=0,shifts=0;for(const x of data?.plans??[]){if(!x.date.startsWith(month))continue;const answer=answers.get(x.date);const hours=answer?answer.hours:(x.timeCode==="WORK"?Number(x.hours):null);if(hours!=null&&hours>0){total+=hours;shifts++}}return{total,shifts}},[today,data?.plans,answers]);
- const actionMessage=(d:PlanDay|null)=>d?.kind==="off"?"По графику выходной":d?.proposalStatus==="proposed"?"Предложение отправлено менеджеру":d?.kind?"Запланировано":"График пока не составлен";
+ 
  const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
  async function save(payload:Record<string,unknown>,message:string){
   if(!data)return false;setError("");setNotice("");setBusy(true);
