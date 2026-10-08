@@ -15,7 +15,7 @@ type TenantScope={org:string;actor:string;worker:string;object:string;link:strin
 type Entry={date:string;kind:string|null;code:string;source:string;hours:number};
 type Shift={date:string;kind:string;start:string;end:string;endsNextDay:boolean};
 type Proposal={date:string;kind:PlannedKind;status:"proposed"|"accepted"|"rejected"};
-type TimeChange={date:string;start:string;end:string;next:boolean;appliesTo:string;status:string};
+type TimeChange={date:string;start:string;end:string;next:boolean;appliesTo:string;status:string;kind:"day"|"night"|null};
 
 function addDays(date:string,days:number){const d=new Date(date+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
 export function cycleKind(date:string,anchor:string,workDays:number|null,restDays:number|null,kind:"day"|"night"|null):PlannedKind|null{
@@ -64,7 +64,7 @@ async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
   sql<Array<Proposal>>`SELECT work_date::text date,requested_kind kind,status FROM worker_shift_plan_changes
    WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND work_date BETWEEN ${from}::date AND ${to}::date`,
   sql<Array<TimeChange>>`SELECT work_date::text date,to_char(start_time,'HH24:MI') start,to_char(end_time,'HH24:MI') "end",
-    ends_next_day "next",applies_to "appliesTo",status FROM worker_shift_time_changes
+    ends_next_day "next",applies_to "appliesTo",status,shift_kind kind FROM worker_shift_time_changes
    WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND
      (work_date BETWEEN ${from}::date AND ${to}::date OR (applies_to='regular' AND status='accepted' AND work_date<=${to}::date))`,
  ]);
@@ -90,6 +90,7 @@ export async function employeePlanning(token:string):Promise<EmployeePlanning>{
    else if(en?.kind==="night"||en?.kind==="day"){kind=en.kind;source=pr?.status==="accepted"?"worker":"manual";}
    else if(en?.code==="WORK"&&en.hours>0){kind=(en.kind==="night"?"night":"day");source="manual";}
    else {kind=cycleKind(d,s.anchor,s.workDays,s.restDays,s.defaultKind);if(kind)source="cycle";}
+   if(!sh&&custom?.kind&&kind!=="off"&&source==="cycle"){kind=custom.kind;source="manual";}
    days.push({date:d,kind,source,proposal:pr?.status==="proposed"?pr.kind:null,
     proposalStatus:pr?.status==="proposed"||pr?.status==="rejected"?pr.status:null,
     startTime:custom?.start??sh?.start??null,endTime:custom?.end??sh?.end??null,endsNextDay:custom?.next??sh?.endsNextDay??kind==="night"});
