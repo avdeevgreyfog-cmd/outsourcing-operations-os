@@ -1,0 +1,89 @@
+/* Employee self-service extends OPERIS palette without introducing a separate UI kit. */
+body:has(.employee-portal){min-width:0}
+.employee-portal{min-height:100vh;background:var(--bg);color:var(--text);font-size:14px;padding:24px 12px 48px}
+.employee-portal-inner{max-width:430px;margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-panel);box-shadow:0 6px 32px rgba(25,35,44,.06);padding:0 18px 20px}
+.employee-portal-header{display:flex;align-items:center;gap:11px;padding:21px 2px 17px;border-bottom:1px solid var(--border)}
+.employee-portal-mark{width:38px;height:38px;display:grid;place-items:center;border-radius:7px;background:var(--accent-soft);color:var(--accent)}
+.employee-portal-brand{font-size:10px;font-weight:800;color:var(--accent);letter-spacing:.14em}
+.employee-portal h1{margin:3px 0 0;font-size:21px;font-weight:720;line-height:1.1;letter-spacing:-.02em}
+.employee-portal-person{display:grid;gap:4px;padding:14px 2px 17px}
+.employee-portal-person strong{font-size:15px}
+.employee-portal-person span{font-size:12px;color:var(--muted)}
+.employee-portal-stats{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--border);border-radius:6px;background:var(--panel-2)}
+.employee-portal-stats>div{padding:13px 12px;display:grid;gap:5px}
+.employee-portal-stats>div+div{border-left:1px solid var(--border)}
+.employee-portal-stats span{font-size:11px;color:var(--muted)}
+.employee-portal-stats strong{font-size:21px;font-weight:730;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.employee-portal-note{display:flex;align-items:flex-start;gap:7px;margin:11px 1px 18px;color:var(--muted);font-size:11px;line-height:1.5}
+.employee-portal-note svg{flex:none;margin-top:2px}
+.employee-portal-title{font-size:13px;font-weight:740;margin:0 0 10px}
+.employee-portal-day{border:1px solid var(--border);border-radius:7px;margin-bottom:9px;padding:13px 12px}
+.employee-portal-focus{border-color:var(--border-strong)}
+.employee-portal-dayhead{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.employee-portal-dayhead>div{display:grid;gap:6px;min-width:0}
+.employee-portal-dayhead>div>span{font-size:11px;color:var(--muted)}
+.employee-portal-dayhead strong{font-size:13px;display:flex;align-items:center;gap:6px}
+.employee-portal-dayhead svg{color:var(--muted)}
+.employee-portal-tag{display:inline-block;flex:none;border:1px solid var(--border);background:var(--panel-2);border-radius:4px;padding:3px 6px;font-size:10px;font-weight:650;color:var(--muted);white-space:nowrap}
+.employee-portal-tag.ok{background:var(--good-bg);color:var(--good);border-color:transparent}
+.employee-portal-tag.warn{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.employee-portal-tag.muted{color:var(--soft)}
+.employee-portal-buttons,.employee-portal-answer{margin-top:13px}
+.employee-portal-buttons{display:grid;gap:8px}
+.employee-portal-buttons>p{font-size:12px;margin:0 0 3px;color:var(--muted);line-height:1.45}
+.employee-portal-main,.employee-portal-secondary{border:1px solid var(--border-strong);border-radius:6px;min-height:42px;padding:9px 10px;background:var(--panel);font-size:13px;font-weight:650;display:flex;justify-content:center;align-items:center;gap:8px;width:100%;cursor:pointer}
+.employee-portal-main{background:var(--accent);color:#fff;border-color:var(--accent)}
+.employee-portal-main:hover{background:var(--accent-hover)}
+.employee-portal-secondary:hover{background:var(--panel-2)}
+.employee-portal-main:disabled,.employee-portal-secondary:disabled{opacity:.6;cursor:wait}
+.employee-portal-small{display:flex;align-items:center;gap:6px;margin:11px 0 0;color:var(--soft);font-size:11px}
+.employee-portal-inline{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px}
+.employee-portal-inline b{color:var(--text);font-size:14px}
+.employee-portal-link{border:0;background:none;color:var(--accent);cursor:pointer;padding:6px 0;font-size:12px;font-weight:650;text-align:left}
+.employee-portal-link:disabled{opacity:.6}
+.employee-portal-hour-edit{display:grid;gap:8px}
+.employee-portal-hour-edit label,.employee-portal-absence label{display:grid;gap:6px;font-size:12px;font-weight:600}
+.employee-portal-hour-edit input,.employee-portal-absence textarea{background:var(--panel);border:1px solid var(--border-strong);border-radius:6px;color:var(--text);width:100%;padding:10px 11px;min-height:40px;font-size:15px}
+.employee-portal-shift-picker{display:grid;gap:7px;margin:0 0 2px}
+.employee-portal-shift-picker>label{font-size:11px;color:var(--muted)}
+.employee-portal-shift-picker>div{display:flex;gap:7px}
+.employee-portal-shift-picker button{flex:1;min-height:36px;border-radius:5px;border:1px solid var(--border);background:var(--panel);cursor:pointer;font-size:12px}
+.employee-portal-shift-picker button.selected{border-color:var(--accent);background:var(--accent-soft);font-weight:700}
+.employee-portal-absence{font-size:12px;color:var(--muted)}
+.employee-portal-absence summary{cursor:pointer;padding:4px 0}
+.employee-portal-absence label{margin-top:8px}
+.employee-portal-absence button{width:100%;margin-top:8px;padding:9px 12px;border:1px solid var(--border);border-radius:5px;background:var(--panel-2);cursor:pointer}
+.employee-portal-absence button:disabled{opacity:.5}
+.employee-portal-error,.employee-portal-success{padding:10px;border-radius:5px;margin:10px 0;font-size:12px}
+.employee-portal-error{color:var(--bad);background:var(--bad-bg)}
+.employee-portal-success{color:var(--good);background:var(--good-bg);display:flex;gap:6px;align-items:center}
+.employee-portal-monthtoggle{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--panel);border:1px solid var(--border);border-radius:6px;margin-top:14px;min-height:38px;font-size:12px;font-weight:650;cursor:pointer}
+.employee-portal-monthtoggle:hover{background:var(--panel-2)}
+.employee-portal-month{margin:10px 0 0;border:1px solid var(--border);border-radius:6px;padding:12px}
+.employee-portal-month h2{margin:0 0 12px;font-size:13px}
+.employee-portal-history{display:grid;gap:0}
+.employee-portal-history>div{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding:8px 0;font-size:12px}
+.employee-portal-history>div:last-child{border-bottom:0}
+.employee-portal-history>div>span:last-child{color:var(--muted)}
+.employee-portal-footer{text-align:center;color:var(--soft);font-size:11px;line-height:1.5;margin:18px 2px 0}
+.employee-portal-panel{background:var(--panel);border:1px solid var(--border);max-width:430px;margin:100px auto;padding:24px;border-radius:8px}
+.employee-portal-panel h1{font-size:20px}.employee-portal-panel p{line-height:1.5;color:var(--muted)}
+/* Manager surfaces share existing table and segmented patterns. */
+.worker-confirmation-tabs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 14px}
+.worker-confirmation-tabs button{background:var(--panel);border:1px solid var(--border);border-radius:5px;padding:8px 12px;cursor:pointer;font-size:12px;font-weight:650}
+.worker-confirmation-tabs button.active{background:var(--panel-2);color:var(--text);box-shadow:inset 0 -2px var(--accent)}
+.worker-confirmation-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.worker-confirmation-toolbar select,.worker-confirmation-toolbar input{border:1px solid var(--border);border-radius:5px;background:var(--panel);color:var(--text);padding:8px 10px;font-size:12px;min-height:34px}
+.worker-confirmation-toolbar input{min-width:200px}
+.worker-confirmation-toolbar .right{margin-left:auto}
+.worker-confirmation-note{color:var(--muted);font-size:12px;line-height:1.5;margin:8px 0 16px}
+.worker-confirmation-status{display:flex;align-items:center;gap:6px;font-size:12px}
+.worker-confirmation-status:before{content:"";width:7px;height:7px;flex:none;border-radius:50%;background:var(--soft)}
+.worker-confirmation-status.good:before{background:var(--good)}.worker-confirmation-status.warn:before{background:var(--warn)}.worker-confirmation-status.bad:before{background:var(--bad)}
+.worker-confirmation-actions{display:flex;gap:5px;flex-wrap:wrap}
+.worker-confirmation-actions .button{min-height:28px;font-size:11px;padding:4px 8px}
+.worker-confirmation-manager-error{padding:12px;border:1px solid var(--border);border-left:3px solid var(--warn);font-size:12px;color:var(--muted);margin-bottom:12px}
+.worker-confirmation-summary{display:flex;align-items:center;gap:14px;border:1px solid var(--border);border-radius:6px;background:var(--panel-2);padding:9px 12px;margin-bottom:12px;font-size:12px}
+.worker-confirmation-summary b{font-weight:750;font-variant-numeric:tabular-nums}
+.worker-confirmation-summary>span:first-child{margin-right:auto}
+@media(max-width:580px){.employee-portal{padding:0}.employee-portal-inner{max-width:none;min-height:100vh;border-radius:0;border:0;padding:0 14px 30px;box-shadow:none}.employee-portal-main,.employee-portal-secondary{min-height:46px}}
