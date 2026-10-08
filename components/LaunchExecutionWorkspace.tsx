@@ -327,7 +327,8 @@ export function LaunchExecutionWorkspace({
     const first=(rows.find(item=>item.required&&item.status==="pending")??rows[0])?.section??"";
     setVisitEditor({id:visit.id,scheduledDate:visit.scheduledDate??"",status:visit.status,checklist:visit.checklist.map(item=>({...item,audiences:[...item.audiences]})),notes:visit.notes??""});
     setVisitSection(first);
-    setVisitFilter("all");
+    // On phones show unresolved questions first; the full checklist stays one tap away.
+    setVisitFilter(window.innerWidth<=820?"pending":"all");
     setVisitShowHidden(false);
     setQuestionEditor(null);
   }
