@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS public_worker_timesheet_tokens (
  actor_user_id uuid NOT NULL REFERENCES app_users(id),
  link_id uuid NOT NULL UNIQUE REFERENCES worker_timesheet_links(id) ON DELETE CASCADE
 );
+ALTER TABLE public_worker_timesheet_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public_worker_timesheet_tokens FORCE ROW LEVEL SECURITY;
+CREATE POLICY public_token_lookup ON public_worker_timesheet_tokens FOR SELECT USING (token_hash=current_setting('app.worker_token_hash',true));
+CREATE POLICY public_token_insert ON public_worker_timesheet_tokens FOR INSERT WITH CHECK (tenant_id=app_current_organization_id());
 ALTER TABLE object_shift_reporting_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE object_shift_reporting_settings FORCE ROW LEVEL SECURITY;
 ALTER TABLE worker_timesheet_links ENABLE ROW LEVEL SECURITY;
