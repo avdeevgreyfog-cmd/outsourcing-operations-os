@@ -102,7 +102,7 @@ export async function employeePortal(token:string){
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
       COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
       COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
-      COALESCE(s.confirmation_deadline::text,'22:00') deadline,
+      COALESCE(s.confirmation_deadline::text,'22:00') deadline,COALESCE(s.timezone,'Europe/Moscow') timezone,
       COALESCE(s.timezone,'Europe/Moscow') timezone,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
       COALESCE(s.reporting_enabled,true) "reportingEnabled"
@@ -131,10 +131,11 @@ export async function employeePortal(token:string){
   });
 }
 
+function dateAddOne(date:string){const day=new Date(date+"T00:00:00Z");day.setUTCDate(day.getUTCDate()+1);return day.toISOString().slice(0,10)}
 export async function submitEmployeeReply(token:string,payload:{date:string;response?:"working"|"day_off"|"cannot_work";kind?:"day"|"night"|"off";hours?:number;reason?:string}){
   const ref=await resolveToken(token);if(!ref)throw new Error("Недействительная ссылка");
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-    const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string}>>`
+    const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string}>>`
       SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text "localToday",
       COALESCE(s.confirmation_deadline::text,'22:00') deadline
@@ -153,10 +154,30 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     if(payload.hours!==undefined&&(payload.hours<0||payload.hours>24))throw new Error("Часы должны быть от 0 до 24");
     if(payload.response==="day_off")throw new Error("Выходные дни отмечаются в разделе планирования графика");
     if(payload.response==="cannot_work"&&!payload.reason?.trim())throw new Error("Укажите причину невыхода");
-    if(payload.hours!==undefined&&offset===0){
-      const nowClock=new Intl.DateTimeFormat("en-GB",{hour:"2-digit",minute:"2-digit",hourCycle:"h23",timeZone:"Europe/Moscow"}).format(new Date());
-      const endClock=payload.kind==="night"?"23:59":"20:00";
-      if(nowClock<endClock)throw new Error("Укажите часы после окончания сегодняшней смены");
+    if(payload.hours!==undefined){
+      const [assignmentShift]=await sql<Array<{endClock:string;endDate:string}>>`
+        SELECT to_char(sh.ends_at AT TIME ZONE ${link.timezone},'HH24:MI') "endClock",
+          (sh.ends_at AT TIME ZONE ${link.timezone})::date::text "endDate"
+        FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+        WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid
+          AND sh.shift_date=${payload.date}::date AND sa.confirmation_status<>'cancelled' AND NOT sa.is_reserve
+        ORDER BY sh.starts_at LIMIT 1`;
+      const [customTime]=await sql<Array<{endClock:string;nextDay:boolean}>>`
+        SELECT to_char(end_time,'HH24:MI') "endClock",ends_next_day "nextDay"
+        FROM worker_shift_time_changes WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+          AND status='accepted' AND work_date<=${payload.date}::date
+          AND (work_date=${payload.date}::date OR applies_to='regular')
+        ORDER BY (work_date=${payload.date}::date) DESC,work_date DESC LIMIT 1`;
+      const [savedResponse]=await sql<Array<{kind:string|null}>>`SELECT shift_kind kind FROM worker_shift_reports
+        WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
+      const night=(savedResponse?.kind??payload.kind)==="night";
+      const finishDate=customTime?(customTime.nextDay?dateAddOne(payload.date):payload.date)
+        :assignmentShift?.endDate??(night?dateAddOne(payload.date):payload.date);
+      const finishTime=customTime?.endClock??assignmentShift?.endClock??(night?"08:00":"20:00");
+      const parts=new Intl.DateTimeFormat("en-GB",{timeZone:link.timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
+      const stamp=Object.fromEntries(parts.map(p=>[p.type,p.value]));
+      const nowLocal=`${stamp.year}-${stamp.month}-${stamp.day}T${stamp.hour}:${stamp.minute}`;
+      if(nowLocal<`${finishDate}T${finishTime}`)throw new Error("Смена ещё не завершилась. Укажите часы после её окончания.");
     }
     const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${payload.date}::date AND period_end>=${payload.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new Error("Табель за эту дату уже зафиксирован");
