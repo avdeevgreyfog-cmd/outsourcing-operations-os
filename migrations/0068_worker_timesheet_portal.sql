@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS worker_shift_reports (
  UNIQUE(worker_id,object_id,work_date)
 );
 CREATE INDEX IF NOT EXISTS idx_worker_shift_reports_object_day ON worker_shift_reports(organization_id,object_id,work_date);
+-- Intermediate reconciliation does not close a monthly snapshot or create accruals.
+CREATE TABLE IF NOT EXISTS object_timesheet_reconciliations (
+ id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+ object_id uuid NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+ period_start date NOT NULL,
+ period_end date NOT NULL,
+ reconciled_by_user_id uuid NOT NULL REFERENCES app_users(id),
+ reconciled_at timestamptz NOT NULL DEFAULT now(),
+ checked_worker_reports integer NOT NULL DEFAULT 0,
+ CHECK(period_end>=period_start)
+);
+CREATE INDEX IF NOT EXISTS idx_object_timesheet_reconciliations_period ON object_timesheet_reconciliations(organization_id,object_id,period_start,period_end,reconciled_at DESC);
 -- This hash directory is the RLS tenant locator for unauthenticated public URLs.
 -- Never store or log raw employee link tokens.
 CREATE TABLE IF NOT EXISTS public_worker_timesheet_tokens (
@@ -55,10 +68,14 @@ ALTER TABLE object_shift_reporting_settings FORCE ROW LEVEL SECURITY;
 ALTER TABLE worker_timesheet_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE worker_timesheet_links FORCE ROW LEVEL SECURITY;
 ALTER TABLE worker_shift_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE object_timesheet_reconciliations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE object_timesheet_reconciliations FORCE ROW LEVEL SECURITY;
 ALTER TABLE worker_shift_reports FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON object_shift_reporting_settings USING (organization_id=app_current_organization_id()) WITH CHECK (organization_id=app_current_organization_id());
 CREATE POLICY tenant_isolation ON worker_timesheet_links USING (organization_id=app_current_organization_id()) WITH CHECK (organization_id=app_current_organization_id());
+CREATE POLICY tenant_isolation ON object_timesheet_reconciliations USING (organization_id=app_current_organization_id()) WITH CHECK (organization_id=app_current_organization_id());
 CREATE POLICY tenant_isolation ON worker_shift_reports USING (organization_id=app_current_organization_id()) WITH CHECK (organization_id=app_current_organization_id());
 CREATE TRIGGER audit_object_shift_reporting_settings AFTER INSERT OR UPDATE OR DELETE ON object_shift_reporting_settings FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 CREATE TRIGGER audit_worker_timesheet_links AFTER INSERT OR UPDATE OR DELETE ON worker_timesheet_links FOR EACH ROW EXECUTE FUNCTION audit_row_change();
 CREATE TRIGGER audit_worker_shift_reports AFTER INSERT OR UPDATE OR DELETE ON worker_shift_reports FOR EACH ROW EXECUTE FUNCTION audit_row_change();
+CREATE TRIGGER audit_object_timesheet_reconciliations AFTER INSERT OR UPDATE OR DELETE ON object_timesheet_reconciliations FOR EACH ROW EXECUTE FUNCTION audit_row_change();
