@@ -226,18 +226,20 @@ h+='<section class="worker-self-panel"><div class="worker-self-panel-head"><span
 if(state.confirmHours!==null&&!state.hoursEdit)h+='<div class="worker-self-done">✓ '+state.confirmHours+' часов переданы для сверки.</div>'+button("editHours","Исправить часы","worker-self-light-button full");
 else h+='<p class="worker-self-question">Сколько часов вы отработали?</p>'+(state.hoursEdit?'<label class="worker-self-hours">Отработано часов<input id="hours" type="number" min="0" max="24" step=".5" value="'+esc(state.hoursText)+'"/></label>':'')+button(state.hoursEdit?"saveHours":"confirmHours",state.hoursEdit?"Сохранить часы":"✓ 11 часов — верно")+(state.hoursEdit?"":button("editHours","Указать другое количество","worker-self-light-button full"));
 h+='<div class="worker-self-deadline">Ночная смена учитывается по дате её начала. Часы проверяет менеджер.</div></section></div>';
-h+='<section class="worker-self-panel worker-self-future"><div class="worker-self-panel-head"><span>'+icon.calendar+' Ближайшие дни</span>'+button("showFull",state.showFull?"Свернуть":"Весь график ▾","worker-self-quiet")+'</div><p class="worker-self-muted">График уже заполнен. Нажмите на дату, только если планы изменились.</p><div class="worker-self-days">';
+h+='<section class="worker-self-panel worker-self-future"><div class="worker-self-panel-head"><span>'+icon.calendar+' Ближайшие дни</span>'+button("showFull",state.showFull?"Свернуть":"Все даты ▾","worker-self-quiet")+'</div><div class="worker-self-days">';
 for(let n=1;n<=(state.showFull?10:5);n++){
- const k=state.plans[n]||"night";
- h+='<button class="worker-self-date-row" data-act="edit-'+n+'"><span class="worker-self-date-info"><strong>'+day(n)+'</strong><small>'+(k==="off"?"Выходной по графику":"Запланирована ночная смена")+'</small></span><span class="worker-self-date-right"><span class="'+(k==="off"?"worker-self-day-off":"")+'">'+kindShort(k)+'</span>›</span></button>';
+ const kind=state.plans[n]||"night";
+ h+='<div class="worker-self-day-item"><button aria-expanded="'+(state.editDay===n)+'" class="worker-self-date-row" data-act="edit-'+n+'"><span class="worker-self-date-info"><strong>'+day(n)+'</strong><small>'+(kind==="off"?"Выходной":"Ночная смена")+'</small></span><span class="worker-self-date-right"><span>'+kindShort(kind)+'</span>›</span></button>';
+ if(state.editDay===n)h+='<div class="worker-self-edit worker-self-inline-edit"><p>Изменить на:</p><div class="worker-self-choices">'+["day","night","off"].map(k=>button("pick-"+k,kindShort(k),state.kind===k?"selected":"")).join("")+'</div>'+button("saveDay","Отправить изменение")+'</div>';
+ h+='</div>';
 }
 h+='</div>';
-if(state.floating){h+='<div class="worker-self-week-tool"><div><strong>Плавающие выходные</strong><p class="worker-self-muted">Выберите два выходных на следующую неделю. Остальные дни рабочие.</p></div>'+button("weekly",state.weekly?"Свернуть":"Выбрать дни отдыха","worker-self-light-button");
-if(state.weekly){h+='<div class="worker-self-week-editor"><div class="worker-self-week-label">12–18 октября · Выходные '+state.selected.length+' из 2</div><div class="worker-self-week-grid">';
-for(let n=4;n<=10;n++){h+='<button class="'+(state.selected.includes(n)?"off":"")+'" data-act="rest-'+n+'"><strong>'+day(n).slice(0,2)+'</strong><span>'+(8+n)+'</span>'+(state.selected.includes(n)?"Вых.":"Раб.")+'</button>'}
-h+='</div>'+button("saveWeek","Сохранить неделю")+'</div>'}
-h+='</div>'}
-if(state.editDay!==null){h+='<div class="worker-self-edit"><div class="worker-self-edit-title"><strong>'+day(state.editDay)+'</strong>'+button("cancel","Закрыть","worker-self-quiet")+'</div><p>Выберите желаемую смену или выходной. Изменение фиксированного графика поступит менеджеру.</p><div class="worker-self-choices">'+["day","night","off"].map(k=>button("pick-"+k,kindShort(k),state.kind===k?"selected":"")).join("")+'</div>'+button("saveDay","Отправить изменение")+'</div>'}
+if(state.floating){h+='<div class="worker-self-week-tool"><div><strong>Плавающие выходные</strong><p class="worker-self-muted">Выберите два выходных на следующую неделю.</p></div>'+button("weekly",state.weekly?"Свернуть":"Выбрать дни отдыха","worker-self-light-button");
+ if(state.weekly){h+='<div class="worker-self-week-editor"><div class="worker-self-week-label">12–18 октября · Выбрано '+state.selected.length+' из 2</div><div class="worker-self-week-grid">';
+ for(let n=4;n<=10;n++)h+='<button class="'+(state.selected.includes(n)?"off":"")+'" data-act="rest-'+n+'"><strong>'+day(n).slice(0,2)+'</strong><span>'+(8+n)+'</span>'+(state.selected.includes(n)?"Вых.":"Раб.")+'</button>';
+ h+='</div>'+button("saveWeek","Сохранить выходные")+'</div>'}
+ h+='</div>';
+}
 h+='</section>';
 }else if(state.tab==="timesheet"){
 h+='<div class="worker-self-page-title"><div><h1>Мой табель</h1><p>Текущий месяц · Плановые дни не учитываются в итогах.</p></div></div><div class="worker-self-totals"><div><small>Отработано часов</small><strong>'+(44+(state.confirmHours??0))+'</strong><span>Предварительный итог</span></div><div><small>Отработано смен</small><strong>'+(4+(state.confirmHours===null?0:1))+'</strong><span>Только факт</span></div></div><section class="worker-self-panel worker-self-timesheet-panel"><div class="worker-self-panel-head"><span>'+icon.clipboard+' Дни месяца</span><span class="worker-self-ledger-hint">План → Факт → Сверка</span></div><div class="worker-self-ledger-header"><span>Дата / Смена</span><span>Результат</span></div>';
@@ -290,7 +292,7 @@ else if(a==="showFull"){state.showFull=!state.showFull}
 else if(a==="weekly"){state.weekly=!state.weekly;state.selected=[9,10]}
 else if(a.startsWith("rest-")){const n=Number(a.slice(5));if(state.selected.includes(n))state.selected=state.selected.filter(x=>x!==n);else if(state.selected.length<2)state.selected.push(n)}
 else if(a==="saveWeek"){if(state.selected.length!==2){state.notice="Нужно выбрать ровно два выходных"}else{for(let n=4;n<=10;n++)state.plans[n]=state.selected.includes(n)?"off":"night";state.weekly=false;state.notice="Плавающие выходные на неделю сохранены"}}
-else if(a.startsWith("edit-")){state.editDay=Number(a.split("-")[1]);state.kind=state.plans[state.editDay]||"night"}
+else if(a.startsWith("edit-")){const n=Number(a.split("-")[1]);state.editDay=state.editDay===n?null:n;state.kind=state.plans[n]||"night"}
 else if(a==="cancel"){state.editDay=null}
 else if(a.startsWith("pick-")){state.kind=a.slice(5)}
 else if(a==="saveDay"){state.notice="Запрос об изменении передан менеджеру";state.editDay=null}
