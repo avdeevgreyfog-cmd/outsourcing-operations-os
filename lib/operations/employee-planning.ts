@@ -199,6 +199,16 @@ export async function managerReviewEmployeePlan(actor:Actor,objectId:string,work
   const s={org:actor.organizationId,actor:actor.userId,worker:workerId,object:objectId};
   if(approve){
    await ensureNotLocked(sql,{...s,link:"",today:date,timezone:"Europe/Moscow",owner:"manager",horizon:7,workDays:null,restDays:null,anchor:date,defaultKind:null},date);
+   const active=await sql<Array<{shiftId:string}>>`SELECT DISTINCT sh.id "shiftId" FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
+    WHERE sa.worker_id=${workerId}::uuid AND sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date AND sa.confirmation_status<>'cancelled'`;
+   if(active.length){
+    await sql`UPDATE shift_assignments sa SET confirmation_status='cancelled' FROM shifts sh
+      WHERE sh.id=sa.shift_id AND sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date
+        AND sa.worker_id=${workerId}::uuid AND sa.confirmation_status<>'cancelled'`;
+    const ids=active.map(x=>x.shiftId);
+    await sql`UPDATE shifts sh SET assigned_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'),
+      reserve_count=(SELECT count(*)::int FROM shift_assignments sa WHERE sa.shift_id=sh.id AND sa.is_reserve AND sa.confirmation_status<>'cancelled') WHERE sh.id=ANY(${ids}::uuid[])`;
+   }
    await writePlan(sql,s,date,request.kind);
   }
   await sql`UPDATE worker_shift_plan_changes SET status=${approve?"accepted":"rejected"},reviewed_by_user_id=${actor.userId}::uuid,
