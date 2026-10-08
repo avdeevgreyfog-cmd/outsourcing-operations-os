@@ -87,7 +87,11 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
   try{
    if(isDemo){
     const date=String(payload.date??"");
-    if(payload.action==="plan_day"){
+    if(payload.action==="plan_week"){
+      const off=new Set(payload.offDates as string[]),begin=String(payload.weekStart);
+      setData(d=>d?{...d,planning:{...d.planning,days:d.planning.days.map(p=>p.date>=begin&&p.date<=move(begin,6)?{...p,kind:off.has(p.date)?"off":d.planning.defaultKind??"day",source:"worker" as const}:p)}}:d);
+     }else if(payload.action==="pattern_change"){setNotice("Запрос на изменение постоянного графика отправлен");
+     }else if(payload.action==="plan_day"){
      const newKind=payload.kind as Kind;setData(d=>{if(!d)return d;const direct=d.planning.owner==="worker"&&d.planning.floatingDaysOff;return {...d,planning:{...d.planning,days:d.planning.days.map(x=>x.date===date?{...x,kind:direct?newKind:x.kind,source:direct?"worker" as const:x.source,proposal:direct?null:newKind,proposalStatus:direct?null:"proposed" as const}:x)}}});
     }else if("hours" in payload||"response" in payload){
      setData(d=>{if(!d)return d;const old=d.reports.find(x=>x.date===date);const r:Reply={date,shiftKind:(payload.kind as Kind)??old?.shiftKind??records.get(date)?.kind??null,
