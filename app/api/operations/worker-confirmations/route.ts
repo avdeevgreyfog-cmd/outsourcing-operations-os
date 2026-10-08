@@ -1,10 +1,11 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
-import {managerPortalData,editWorkerLink,editPortalSettings} from "@/lib/operations/worker-timesheet-portal";
+import {managerPortalData,editWorkerLink,editPortalSettings,reconcileEmployeeHours} from "@/lib/operations/worker-timesheet-portal";
 const actions=z.discriminatedUnion("action",[
  z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
- z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","client"])})
+ z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","client"])}),
+ z.object({action:z.literal("reconcile"),objectId:z.string().uuid(),fromDate:z.string().date(),toDate:z.string().date()})
 ]);
 export async function GET(request:Request){
  try{
@@ -17,7 +18,9 @@ export async function POST(request:Request){
  try{
   const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется авторизация"},{status:401});
   const body=actions.parse(await request.json());
-  const result=body.action==="settings"
+  const result=body.action==="reconcile"
+   ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
+   :body.action==="settings"
    ?await editPortalSettings(actor,body.objectId,body.scheduleOwner)
    :await editWorkerLink(actor,body.objectId,body.workerId,body.action);
   return NextResponse.json(result);
