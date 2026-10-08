@@ -181,10 +181,18 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайшие дни</span><button className="worker-self-quiet" onClick={()=>setShowAll(x=>!x)}>{showAll?"Свернуть":"Весь график"} <ChevronDown size={14}/></button></div>
        <p className="worker-self-muted">График заполняется автоматически. Нажмите на дату, только если планы изменились.</p>
        <div className="worker-self-days">
-        {future.slice(0,showAll?future.length:5).map(p=><button className="worker-self-date-row" key={p.date} onClick={()=>{setEditingDay(p.date);setKindChoice(p.kind??data.planning.defaultKind??"day")}}>
-         <span className="worker-self-date-info"><strong>{format(p.date)}</strong><small>{p.kind==="off"?"Выходной по графику":p.kind?"Запланирована "+(p.kind==="night"?"ночная":"дневная")+" смена":"Смена пока не назначена"}</small></span>
-         <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{kindShort(p.kind)}</span><ChevronRight size={17}/></span>
-        </button>)}
+        {future.slice(0,showAll?future.length:5).map(p=><div className="worker-self-day-item" key={p.date}>
+         <button className="worker-self-date-row" aria-expanded={editingDay===p.date}
+           onClick={()=>{setEditingDay(x=>x===p.date?null:p.date);setKindChoice(p.kind??data.planning.defaultKind??"day")}}>
+          <span className="worker-self-date-info"><strong>{format(p.date)}</strong><small>{p.kind==="off"?"Выходной":p.kind?"Смена "+(p.kind==="night"?"ночная":"дневная"):"Не запланировано"}</small></span>
+          <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{kindShort(p.kind)}</span><ChevronRight size={17}/></span>
+         </button>
+         {editingDay===p.date&&<div className="worker-self-edit worker-self-inline-edit">
+          <p>Изменить на:</p>
+          <div className="worker-self-choices">{(["day","night","off"] as Kind[]).map(k=><button key={k} className={kindChoice===k?"selected":""} onClick={()=>setKindChoice(k)}>{kindShort(k)}</button>)}</div>
+          <button className="worker-self-main-button" disabled={busy} onClick={()=>void planDay(p.date,kindChoice)}>{data.planning.owner==="worker"&&data.planning.floatingDaysOff?"Сохранить":"Отправить запрос"}</button>
+         </div>}
+        </div>)}
        </div>
        {canEditWeek&&<div className="worker-self-week-tool">
         <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Выберите {(data.planning.restDays??0)===1?"один день отдыха":"два дня отдыха"} на следующую неделю. Рабочие смены выставятся автоматически.</p></div>
@@ -194,12 +202,6 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          <div className="worker-self-week-grid">{fullWeek.map(date=><button key={date} className={restDates.includes(date)?"off":""} onClick={()=>setRestDates(old=>old.includes(date)?old.filter(x=>x!==date):old.length<(data.planning.restDays??0)?[...old,date]:old)}><strong>{new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}</strong><span>{date.slice(8)}</span>{restDates.includes(date)?"Вых.":"Раб."}</button>)}</div>
          <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Сохранить неделю</button>
         </div>}
-       </div>}
-       {editingDay&&<div className="worker-self-edit">
-        <div className="worker-self-edit-title"><strong>{format(editingDay)}</strong><button className="worker-self-quiet" onClick={()=>setEditingDay(null)}>Закрыть</button></div>
-        <p>Выберите желаемый вариант. Для фиксированного графика изменение отправится на согласование.</p>
-        <div className="worker-self-choices">{(["day","night","off"] as Kind[]).map(k=><button key={k} className={kindChoice===k?"selected":""} onClick={()=>setKindChoice(k)}>{kindShort(k)}</button>)}</div>
-        <button className="worker-self-main-button" disabled={busy} onClick={()=>void planDay(editingDay,kindChoice)}>Отправить изменение</button>
        </div>}
       </section>
      </>}
