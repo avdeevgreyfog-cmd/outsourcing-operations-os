@@ -39,7 +39,7 @@ export async function POST(request:Request){
    ?await managerSetScheduleOwner(actor,body.objectId,body.scheduleOwner,body.workerId)
    :body.action==="review_plan"
    ?await managerReviewEmployeePlan(actor,body.objectId,body.workerId,body.date,body.approve)
-   :body.action==="portal_sections"||body.action==="manager_phone"||body.action==="verify_document||body.action==="review_shift_time"||body.action==="document_requirement"
+   :body.action==="portal_sections"||body.action==="manager_phone"||body.action==="verify_document"||body.action==="review_shift_time"||body.action==="document_requirement"
    ?await managerEmployeeDetailAction(actor,body as Parameters<typeof managerEmployeeDetailAction>[1])
    :body.action==="reconcile"
    ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
