@@ -77,7 +77,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const monthDates=useMemo(()=>Array.from({length:Number(today.slice(-2))},(_,i)=>addDays(today.slice(0,7)+"-01",i)),[today]);
  const totals=useMemo(()=>monthDates.reduce((acc,date)=>{const reported=reports.get(date),p=plans.get(date);const h=reported?(reported.hours??0):(p?.timeCode==="WORK"?Number(p.hours):0);return {hours:acc.hours+h,shifts:acc.shifts+(h>0?1:0)}},{hours:0,shifts:0}),[monthDates,reports,plans]);
  function kind(date:string):Kind|null{const report=reports.get(date);if(report?.response==="day_off")return"off";if(report?.shiftKind)return report.shiftKind;const p=plans.get(date);if(p?.timeCode==="DAY_OFF")return"off";if(p?.kind==="day"||p?.kind==="night")return p.kind;return null}
- function timing(date:string){const t=overrides.get(date);if(t?.status==="accepted")return t;return windows.get(date)??(demo?({date,startTime:"20:00",endTime:"08:00",endsNextDay:true} as Window):null)}
+ function timing(date:string){const t=overrides.get(date);if(t?.status==="accepted")return t;
+  const regular=(data?.details?.timeChanges??[]).filter(x=>x.appliesTo==="regular"&&x.status==="accepted"&&x.date<=date).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  return regular??windows.get(date)??(demo?({date,startTime:"20:00",endTime:"08:00",endsNextDay:true} as Window):null)}
  function timingText(date:string){const t=timing(date);return t?`${t.startTime}–${t.endTime}${t.endsNextDay?" (следующий день)":""}`:"Время пока не указано"}
  function finished(date:string){const t=timing(date);if(!t)return date<today;const endDate=t.endsNextDay?addDays(date,1):date;
   if(demo)return date<today;
