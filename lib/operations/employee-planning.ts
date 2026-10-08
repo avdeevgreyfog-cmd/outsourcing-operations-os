@@ -144,7 +144,11 @@ export async function submitEmployeePlan(token:string,day:string,kind:PlannedKin
  if(!Number.isFinite(distance)||distance<0||distance>s.horizon)throw new Error("Дата вне доступного периода планирования");
  return withTenant(s.org,s.actor,async sql=>{
   await ensureNotLocked(sql,s,day);
-  const status=s.owner==="worker"?"accepted":"proposed";
+  const [pattern]=await sql<Array<{workDays:number;restDays:number;floating:boolean}>>`SELECT work_days "workDays",rest_days "restDays",floating_days_off floating FROM worker_schedule_pattern_changes
+    WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND effective_from<=${day}::date AND status='accepted'
+    ORDER BY effective_from DESC LIMIT 1`;
+  const fixed=Boolean((pattern?.workDays??s.workDays)&&(pattern?.restDays??s.restDays)!==null);
+  const status=s.owner==="worker"&&(!fixed||Boolean(pattern?.floating))?"accepted":"proposed";
   if(status==="accepted")await writePlan(sql,s,day,kind);
   await sql`INSERT INTO worker_shift_plan_changes(organization_id,object_id,worker_id,work_date,requested_kind,status,requested_by_link_id)
    VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${day}::date,${kind},${status},${s.link}::uuid)
