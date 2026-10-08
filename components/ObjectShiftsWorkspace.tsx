@@ -13,7 +13,8 @@ type PlannerEntry={workerId:string;date:string;timeCode:string;factHours:number|
 type PlannerAbsence={workerId:string;type:string;from:string;to:string|null;status:string};
 type PlannerDemand={date:string;specialtyId:string;specialty:string;required:number};
 type LockedRange={from:string;to:string;status:string};
-type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];demo?:boolean};
+type PlannerPattern={workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean};
+type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];patterns?:PlannerPattern[];demo?:boolean};
 type CellState={kind:Kind;label:string;source:"fact"|"plan"|"suggested"|"absence"|"none";editable:boolean;attention:boolean;factWithoutPlan:boolean;title:string};
 
 const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",reserve_day:"Резерв день",reserve_night:"Резерв ночь",clear:"Очистить"};
@@ -82,11 +83,19 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return null;
   }
   function scheduleKind(worker:WorkerRow,date:string):Kind{
-    if(worker.scheduleWorkDays==null||worker.scheduleRestDays==null||!worker.startDate||worker.scheduleWorkDays<1||date<worker.startDate)return "";
-    const anchor=worker.scheduleAnchorDate??worker.startDate;const cycle=worker.scheduleWorkDays+worker.scheduleRestDays;
+    if(!worker.startDate||date<worker.startDate)return "";
+    const pattern=planner?.patterns?.find(p=>p.workerId===worker.id&&p.effectiveFrom<=date);
+    const workDays=pattern?.workDays??worker.scheduleWorkDays,restDays=pattern?.restDays??worker.scheduleRestDays;
+    if(workDays==null||restDays==null||workDays<1)return "";
+    const anchor=pattern?.effectiveFrom??worker.scheduleAnchorDate??worker.startDate;const cycle=workDays+restDays;
+    if((workDays===5&&restDays===2)||(workDays===6&&restDays===1)){
+      const dow=new Date(date+"T00:00:00Z").getUTCDay();
+      if(dow===0||(dow===6&&workDays===5))return "off";
+      return (pattern?.shiftKind??worker.scheduleShiftKind)==="night"?"night":"day";
+    }
     const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);
-    const offset=((diff%cycle)+cycle)%cycle;if(offset>=worker.scheduleWorkDays)return "off";
-    return worker.scheduleShiftKind==="night"?"night":"day";
+    const offset=((diff%cycle)+cycle)%cycle;if(offset>=workDays)return "off";
+    return (pattern?.shiftKind??worker.scheduleShiftKind)==="night"?"night":"day";
   }
   function planned(worker:WorkerRow,date:string):Kind{
     const key=`${worker.id}:${date}`;const absence=absenceFor(worker,date);
