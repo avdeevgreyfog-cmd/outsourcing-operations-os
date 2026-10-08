@@ -34,8 +34,8 @@ export function checklistCodes(relation:RelationType,overrides:Array<{code:strin
 async function authorizedEmployee(token:string){
  const ref=await resolveToken(token);if(!ref)return null;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"client";timezone:string;employment:RelationType}>>`
-   SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(st.schedule_owner,'manager') owner,
+  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType}>>`
+   SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,st.schedule_authority,CASE WHEN st.schedule_owner='client' THEN 'worker' ELSE st.schedule_owner END,'manager') owner,
    COALESCE(st.timezone,'Europe/Moscow') timezone,
    COALESCE((SELECT er.relation_type FROM employment_relations er WHERE er.worker_id=l.worker_id
       AND er.effective_from<=current_date AND (er.effective_to IS NULL OR er.effective_to>=current_date)
@@ -44,6 +44,7 @@ async function authorizedEmployee(token:string){
    JOIN worker_object_assignments a ON a.worker_id=w.id AND a.object_id=l.object_id
       AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
    LEFT JOIN object_shift_reporting_settings st ON st.object_id=l.object_id
+   LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
    WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${createHashToken(token)}
       AND l.status='active' AND w.status='active' AND COALESCE(st.reporting_enabled,true) LIMIT 1`;
   if(!link)return null;
@@ -112,7 +113,7 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
 type EmployeeDetailChange=
  |{action:"sizes";clothingSize:string|null;shoeSize:string|null}
  |{action:"document";code:string;reported:boolean}
- |{action:"shift_time";date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular"};
+ |{action:"shift_time";date:string;kind?:"day"|"night";startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular"};
 const hhmm=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
 export async function updateEmployeePortalDetails(token:string,change:EmployeeDetailChange){
  const scope=await authorizedEmployee(token);if(!scope)throw new Error("Доступ недействителен");
@@ -142,10 +143,10 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
   if(!Number.isFinite(offset)||offset<0||offset>7)throw new Error("Редактировать время можно только для ближайших 7 дней");
   const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${change.date}::date AND period_end>=${change.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
   if(locked)throw new Error("Период табеля уже зафиксирован");
-  const status=link.owner==="client"&&change.appliesTo==="single"?"accepted":"proposed";
-  await sql`INSERT INTO worker_shift_time_changes(organization_id,worker_id,object_id,work_date,start_time,end_time,ends_next_day,applies_to,status,source_link_id)
-    VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${change.date}::date,${change.startTime}::time,${change.endTime}::time,${change.endsNextDay},${change.appliesTo},${status},${ref.linkId}::uuid)
-    ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,ends_next_day=EXCLUDED.ends_next_day,applies_to=EXCLUDED.applies_to,status=EXCLUDED.status,source_link_id=EXCLUDED.source_link_id,reviewed_at=NULL,reviewed_by_user_id=NULL,updated_at=now()`;
+  const status=link.owner==="worker"&&change.appliesTo==="single"?"accepted":"proposed";
+  await sql`INSERT INTO worker_shift_time_changes(organization_id,worker_id,object_id,work_date,start_time,end_time,ends_next_day,applies_to,status,source_link_id,shift_kind)
+    VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${change.date}::date,${change.startTime}::time,${change.endTime}::time,${change.endsNextDay},${change.appliesTo},${status},${ref.linkId}::uuid,${change.kind??null})
+    ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET start_time=EXCLUDED.start_time,end_time=EXCLUDED.end_time,ends_next_day=EXCLUDED.ends_next_day,applies_to=EXCLUDED.applies_to,status=EXCLUDED.status,source_link_id=EXCLUDED.source_link_id,shift_kind=EXCLUDED.shift_kind,reviewed_at=NULL,reviewed_by_user_id=NULL,updated_at=now()`;
   return {ok:true,status};
  });
 }
