@@ -76,7 +76,7 @@ export async function editWorkerLink(actor:Actor,objectId:string,workerId:string
         WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND status<>'revoked'`;
       const [link]=await sql<Array<{id:string}>>`INSERT INTO worker_timesheet_links(organization_id,worker_id,object_id,token_hash,token_ciphertext,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${objectId}::uuid,${hash},${encryptToken(raw)},${actor.userId}::uuid) RETURNING id`;
-      await sql`INSERT INTO public_worker_timesheet_tokens(token_hash,organization_id,actor_user_id,link_id)
+      await sql`INSERT INTO public_worker_timesheet_tokens(token_hash,tenant_id,actor_user_id,link_id)
         VALUES(${hash},${actor.organizationId}::uuid,${actor.userId}::uuid,${link.id}::uuid)`;
       return {ok:true,path:"/employee-timesheet/"+raw};
     }
@@ -91,7 +91,7 @@ export async function editWorkerLink(actor:Actor,objectId:string,workerId:string
 type TokenContext={tenantId:string;actorUserId:string;linkId:string};
 export async function resolveToken(token:string):Promise<TokenContext|null>{
   if(!/^[A-Za-z0-9_-]{30,100}$/.test(token))return null;
-  const [row]=await db()<Array<TokenContext>>`SELECT organization_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
+  const [row]=await db()<Array<TokenContext>>`SELECT tenant_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
     FROM public_worker_timesheet_tokens WHERE token_hash=${tokenHash(token)} LIMIT 1`;
   return row??null;
 }
