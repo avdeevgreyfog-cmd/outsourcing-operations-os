@@ -95,7 +95,8 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
    sql<Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular";status:"proposed"|"accepted"|"rejected"}>>`
      SELECT work_date::text date,to_char(start_time,'HH24:MI') "startTime",to_char(end_time,'HH24:MI') "endTime",
        ends_next_day "endsNextDay",applies_to "appliesTo",status FROM worker_shift_time_changes
-     WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date BETWEEN current_date-33 AND current_date+7`
+     WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+      AND (work_date BETWEEN current_date-33 AND current_date+7 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+7))`
   ]);
   const codes=checklistCodes(link.employment,overrides);
   const verified=new Map(checkItems.map(item=>[item.code,item]));
