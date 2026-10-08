@@ -3,7 +3,7 @@ import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
 import {managerPortalData,editWorkerLink,editPortalSettings} from "@/lib/operations/worker-timesheet-portal";
 const actions=z.discriminatedUnion("action",[
- z.object({action:z.enum(["create","rotate","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
+ z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
  z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","client"])})
 ]);
 export async function GET(request:Request){
