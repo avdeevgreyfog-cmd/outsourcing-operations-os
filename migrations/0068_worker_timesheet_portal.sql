@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS worker_timesheet_links (
  worker_id uuid NOT NULL REFERENCES worker_profiles(id) ON DELETE CASCADE,
  object_id uuid NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
  token_hash text NOT NULL UNIQUE,
+ token_ciphertext text NOT NULL,
  status text NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','revoked')),
  created_by_user_id uuid NOT NULL REFERENCES app_users(id),
  created_at timestamptz NOT NULL DEFAULT now(),
