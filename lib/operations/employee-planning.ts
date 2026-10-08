@@ -37,7 +37,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
    (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
    COALESCE(s.timezone,'Europe/Moscow') timezone,
    COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
-   COALESCE(s.planning_horizon_days,7)::int horizon,
+   COALESCE(s.planning_horizon_days,14)::int horizon,
    a.schedule_work_days::int "workDays",a.schedule_rest_days::int "restDays",
    COALESCE(a.schedule_anchor_date,a.effective_from)::text anchor,
    CASE WHEN a.schedule_shift_kind='night' THEN 'night' WHEN a.schedule_shift_kind='day' THEN 'day' ELSE NULL END "defaultKind"
