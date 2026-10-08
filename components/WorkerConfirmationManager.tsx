@@ -3,9 +3,10 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number};
 type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
+type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 type Setting={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string};
-type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[]};
+type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[]};
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
 function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
@@ -34,11 +35,13 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const links=useMemo(()=>new Map(data.links.map(x=>[x.workerId+":"+x.objectId,x])),[data.links]);
  const reports=useMemo(()=>new Map(data.reports.map(x=>[x.workerId+":"+x.objectId+":"+x.date,x])),[data.reports]);
  const settings=useMemo(()=>new Map(data.settings.map(x=>[x.objectId,x])),[data.settings]);
+ const plans=useMemo(()=>new Map((data.plans??[]).map(x=>[x.workerId+":"+x.objectId+":"+x.date,x])),[data.plans]);
  const options=useMemo(()=>[...new Map(data.workers.filter(x=>x.objectId).map(x=>[x.objectId!,x.object??"Объект"])).entries()].sort((a,b)=>a[1].localeCompare(b[1],"ru")),[data.workers]);
  const scoped=data.workers.filter(w=>(filterObject==="all"||w.objectId===filterObject)&&(!search||((w.name+" "+w.object+" "+w.specialty).toLowerCase().includes(search.toLowerCase()))));
- const visible=scoped.filter(w=>!onlyAttention||!reports.get(w.id+":"+w.objectId+":"+day));
- const replies=scoped.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
- const missing=scoped.length-replies;
+ const visible=scoped.filter(w=>!onlyAttention||(!reports.get(w.id+":"+w.objectId+":"+day)&&plans.get(w.id+":"+w.objectId+":"+day)?.timeCode!=="DAY_OFF"));
+ const expected=scoped.filter(w=>plans.get(w.id+":"+w.objectId+":"+day)?.timeCode!=="DAY_OFF");
+ const replies=expected.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
+ const missing=expected.length-replies;
  const activeLinks=data.links.filter(l=>l.status==="active").length;
  async function action(body:Record<string,string>){
   const key=body.action+":"+(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
@@ -61,7 +64,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  }
  function reply(w:Worker){
   const r=reports.get(w.id+":"+w.objectId+":"+day);
-  if(!r)return <span className="worker-confirmation-status warn">Нет ответа</span>;
+  if(!r){if(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode==="DAY_OFF")return <span className="worker-confirmation-status">Выходной по графику</span>;return <span className="worker-confirmation-status warn">Нет ответа</span>;}
   if(r.response==="cannot_work")return <span className="worker-confirmation-status bad">Не выйдет</span>;
   if(r.response==="day_off")return <span className="worker-confirmation-status">Выходной</span>;
   return <span className="worker-confirmation-status good">{r.shiftKind==="night"?"Выйдет ночью":"Выйдет днём"}</span>;
