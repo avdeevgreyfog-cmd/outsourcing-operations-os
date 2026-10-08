@@ -234,14 +234,39 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          {managerCall?<a className="worker-self-main-button" href={"tel:"+managerCall}><Phone size={17}/> Позвонить · {data.details?.managerPhone}</a>:<p className="worker-self-muted">Контактный телефон пока не указан. Менеджер добавит рабочий номер в настройках объекта.</p>}
         </section>
        </>}
-       {more==="settings"&&<><div className="worker-self-page-title"><div><h1>Настройки графика</h1><p>Проверьте, какое время и тип смены используются обычно.</p></div></div>
-        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Settings2 size={17}/> Моя обычная смена</span></div><p className="worker-self-muted">Текущий тип: {kindLabel(data.planning.defaultKind)}. Повторение: {data.planning.workDays!==null?`${data.planning.workDays}/${data.planning.restDays}`:"Индивидуальный график"}.</p>
-          <div className="worker-self-choices">{(["day","night"] as const).map(k=><button className={settingKind===k?"selected":""} key={k} onClick={()=>{setSettingKind(k);setNextDay(k==="night")}}>{kindShort(k)}</button>)}</div>
-          <div className="worker-self-fields"><label>Начало смены<input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)}/></label><label>Окончание<input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)}/></label></div>
-          <label className="worker-self-check"><input type="checkbox" checked={nextDay} onChange={e=>setNextDay(e.target.checked)}/> Окончание на следующий день</label>
-          <p className="worker-self-muted">Изменение постоянного времени отправится менеджеру на согласование. До решения будет действовать прежний график.</p>
-          <button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"shift_time",date:tomorrow,kind:settingKind,startTime,endTime,endsNextDay:nextDay,appliesTo:"regular"},"Предложение по графику отправлено")}>Предложить изменение</button>
+       {more==="settings"&&<>
+        <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Основные условия уже установлены в OPERIS. Здесь можно предложить изменение.</p></div></div>
+        <section className="worker-self-panel worker-self-schedule-summary">
+         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Действующий график</span></div>
+         <div className="worker-self-schedule-attributes">
+          <div><small>Режим работы</small><strong>{data.planning.workDays!==null?String(data.planning.workDays)+"/"+String(data.planning.restDays):"Индивидуальный"}</strong></div>
+          <div><small>Обычная смена</small><strong>{kindLabel(data.planning.defaultKind)}</strong></div>
+          <div><small>Выходные</small><strong>{data.planning.floatingDaysOff?"Плавающие":data.planning.workDays===5&&data.planning.restDays===2?"Сб, вс":data.planning.workDays===6&&data.planning.restDays===1?"Вс":"По циклу"}</strong></div>
+          <div><small>Время смены</small><strong>{timeText(records.get(tomorrow)??null)||"Уточняется"}</strong></div>
+         </div>
+         <p className="worker-self-muted">Если график не изменился, ничего заполнять не нужно. Он автоматически отображается в будущих сменах.</p>
+         <button className="worker-self-light-button full" onClick={()=>setSettingsEditing(x=>!x)}>{settingsEditing?"Закрыть форму":"Предложить изменение"}</button>
         </section>
+        {settingsEditing&&<section className="worker-self-panel worker-self-additional">
+         <div className="worker-self-panel-head"><span><Settings2 size={17}/> Запрос на изменение</span></div>
+         <p className="worker-self-muted">Менеджер получит запрос и примет решение. Прежний график сохранится до согласования.</p>
+         <label className="worker-self-setting-date">Изменения действуют с <input type="date" min={tomorrow} value={effectiveFrom} onChange={e=>setEffectiveFrom(e.target.value)}/></label>
+         <div className="worker-self-setting-section">
+          <strong>1. Режим работы</strong>
+          <div className="worker-self-fields">
+           <label>График <select value={workPattern} onChange={e=>{setWorkPattern(e.target.value);if(!["5/2","6/1"].includes(e.target.value))setPatternFloating(false)}}>{["5/2","6/1","2/2","3/3","4/2","7/7"].map(x=><option key={x}>{x}</option>)}</select></label>
+           <label>Тип смены <select value={settingKind} onChange={e=>setSettingKind(e.target.value as "day"|"night")}><option value="day">Дневная</option><option value="night">Ночная</option></select></label>
+          </div>
+          <label className="worker-self-check"><input type="checkbox" disabled={!["5/2","6/1"].includes(workPattern)} checked={patternFloating} onChange={e=>setPatternFloating(e.target.checked)}/> Плавающие выходные</label>
+          <button className="worker-self-light-button full" disabled={busy||!effectiveFrom} onClick={()=>void save({action:"pattern_change",effectiveFrom,workDays:Number(workPattern.split("/")[0]),restDays:Number(workPattern.split("/")[1]),shiftKind:settingKind,floatingDaysOff:patternFloating},"Запрос об изменении режима работы отправлен")}>Запросить новый график</button>
+         </div>
+         <div className="worker-self-setting-section">
+          <strong>2. Рабочее время</strong>
+          <div className="worker-self-fields"><label>Начало смены<input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)}/></label><label>Окончание<input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)}/></label></div>
+          <label className="worker-self-check"><input type="checkbox" checked={nextDay} onChange={e=>setNextDay(e.target.checked)}/> Заканчивается на следующий день</label>
+          <button className="worker-self-light-button full" disabled={busy||!effectiveFrom} onClick={()=>void save({action:"shift_time",date:effectiveFrom,kind:settingKind,startTime,endTime,endsNextDay:nextDay,appliesTo:"regular"},"Запрос об изменении рабочего времени отправлен")}>Запросить новое время</button>
+         </div>
+        </section>}
        </>}
       </>}
      </>}
