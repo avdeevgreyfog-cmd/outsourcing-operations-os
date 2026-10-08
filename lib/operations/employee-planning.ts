@@ -31,7 +31,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
    l.worker_id worker,l.object_id object,
    (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
    COALESCE(s.timezone,'Europe/Moscow') timezone,
-   COALESCE(wa.schedule_owner,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
+   COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
    COALESCE(s.planning_horizon_days,7)::int horizon,
    a.schedule_work_days::int "workDays",a.schedule_rest_days::int "restDays",
    COALESCE(a.schedule_anchor_date,a.effective_from)::text anchor,
@@ -158,9 +158,9 @@ export async function managerSetScheduleOwner(actor:Actor,objectId:string,owner:
     ON CONFLICT(object_id,worker_id) DO UPDATE SET schedule_owner=EXCLUDED.schedule_owner,
       updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }else{
-   await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,schedule_owner,planning_horizon_days,updated_by_user_id)
+   await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,schedule_authority,planning_horizon_days,updated_by_user_id)
     VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${owner},${horizon??7},${actor.userId}::uuid)
-    ON CONFLICT(object_id) DO UPDATE SET schedule_owner=EXCLUDED.schedule_owner,planning_horizon_days=COALESCE(${horizon??null},object_shift_reporting_settings.planning_horizon_days),
+    ON CONFLICT(object_id) DO UPDATE SET schedule_authority=EXCLUDED.schedule_authority,planning_horizon_days=COALESCE(${horizon??null},object_shift_reporting_settings.planning_horizon_days),
       updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }
   return {ok:true};
