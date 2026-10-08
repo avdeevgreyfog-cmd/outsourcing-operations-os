@@ -72,8 +72,11 @@ async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
     ends_next_day "next",applies_to "appliesTo",status,shift_kind kind FROM worker_shift_time_changes
    WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND
      (work_date BETWEEN ${from}::date AND ${to}::date OR (applies_to='regular' AND status='accepted' AND work_date<=${to}::date))`,
+  sql<Array<Pattern>>`SELECT effective_from::text "effectiveFrom",work_days "workDays",rest_days "restDays",shift_kind "shiftKind",floating_days_off "floatingDaysOff",status
+    FROM worker_schedule_pattern_changes WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid
+    AND effective_from<=${to}::date ORDER BY effective_from DESC`,
  ]);
- return {entries,shifts,proposals,changes};
+ return {entries,shifts,proposals,changes,patterns};
 }
 export async function employeePlanning(token:string):Promise<EmployeePlanning>{
  const s=await scopeForToken(token);
