@@ -14,7 +14,7 @@ type More="overview"|"documents"|"workwear"|"contact"|"settings";
 function move(d:string,n:number){const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
 function format(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",weekday:"long",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
 function smallDate(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
-function clockNow(timezone:string){const f=new Intl.DateTimeFormat("en-GB",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());const o=Object.fromEntries(f.map(x=>[x.type,x.value]));return ${o.year}-${o.month}-${o.day}T${o.hour}:${o.minute}}
+function clockNow(timezone:string){const f=new Intl.DateTimeFormat("en-GB",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());const o=Object.fromEntries(f.map(x=>[x.type,x.value]));return `${o.year}-${o.month}-${o.day}T${o.hour}:${o.minute}`}
 function demo():Portal{
  const today=new Date().toISOString().slice(0,10);
  const days=Array.from({length:16},(_,i)=>{const date=move(today,i-3),kind:Kind=(i===5||i===8)?"off":"night";return{date,kind,source:"cycle" as const,proposal:null,proposalStatus:null,startTime:"20:00",endTime:"08:00",endsNextDay:true}});
@@ -62,7 +62,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
  const counted=useMemo(()=>{const month=today.slice(0,7);let total=0,shifts=0;for(const x of data?.plans??[]){if(!x.date.startsWith(month))continue;const answer=answers.get(x.date);const hours=answer?answer.hours:(x.timeCode==="WORK"?Number(x.hours):null);if(hours!=null&&hours>0){total+=hours;shifts++}}return{total,shifts}},[today,data?.plans,answers]);
  const actionMessage=(d:PlanDay|null)=>d?.kind==="off"?"По графику выходной":d?.proposalStatus==="proposed"?"Предложение отправлено менеджеру":d?.kind?"Запланировано":"График пока не составлен";
- const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}:"Время смены уточняется";
+ const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
  async function save(payload:Record<string,unknown>,message:string){
   if(!data)return false;setError("");setNotice("");setBusy(true);
   try{
@@ -94,7 +94,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    const ok=await save({date:completed.date,hours:hourEdit?Number(hours):data?.paidHours??11},"Часы переданы для сверки");if(ok)setHourEdit(false);
  }
  async function planDay(date:string,kind:Kind){if(busy)return;const ok=await save({action:"plan_day",date,kind},data?.planning.owner==="manager"?"Предложение передано менеджеру":"График обновлён");if(ok)setEditingDay(null)}
- async function markSelectedOff(){let count=0;for(const date of selectedDays){if(await save({action:"plan_day",date,kind:"off"},"Выходной отмечен"))count++;else break}setSelectedDays([]);if(count>0)setNotice(data?.planning.owner==="worker"?${count} выходных сохранено:${count} изменений передано на согласование)}
+ async function markSelectedOff(){let count=0;for(const date of selectedDays){if(await save({action:"plan_day",date,kind:"off"},"Выходной отмечен"))count++;else break}setSelectedDays([]);if(count>0)setNotice(data?.planning.owner==="worker"?`${count} выходных сохранено`:`${count} изменений передано на согласование`)}
  function openSettings(){setTab("more");setMore("settings");setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??"20:00");setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
  const managerCall=data?.details?.managerPhone?.replace(/[^+\d]/g,"");
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
@@ -143,7 +143,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         {completed?<><h2>{format(completed.date)}</h2><p className="worker-self-shift"><ShiftIcon kind={completed.kind}/><strong>{kindLabel(completed.kind)}</strong><span>{timeText(completed)}</span></p>
          {completedAnswer?.hours!=null&&!hourEdit?<><div className="worker-self-done"><CheckCircle2 size={17}/> Вы указали {completedAnswer.hours} ч.</div><button className="worker-self-light-button full" onClick={()=>{setHourEdit(true);setHours(String(completedAnswer.hours))}}>Исправить часы</button></>:
           <><p className="worker-self-question">Сколько часов вы отработали?</p>{hourEdit&&<label className="worker-self-hours">Отработано часов<input type="number" min={0} max={24} step={0.5} inputMode="decimal" value={hours} onChange={e=>setHours(e.target.value)}/></label>}
-           <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":${data.paidHours} ч — верно}</button>
+           <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":`${data.paidHours} ч — верно`}</button>
            <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
          <div className="worker-self-deadline"><Info size={13}/> Ночная смена учитывается по дате начала. Данные поступают на сверку менеджеру.</div>
         </>:<p className="worker-self-muted">Нет завершённых смен за ближайшие дни.</p>}
@@ -173,7 +173,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       <section className="worker-self-panel"><div className="worker-self-panel-head"><span>Дата и результат</span><span>Статус</span></div>
        {(data.planning.days??[]).filter(x=>x.date.startsWith(today.slice(0,7))&&x.date<=today).slice().reverse().map(p=>{
         const report=answers.get(p.date),legacy=data.plans.find(x=>x.date===p.date),h=report?.hours??(legacy?.timeCode==="WORK"?legacy.hours:null);
-        return <div className="worker-self-timesheet-row" key={p.date}><div><strong>{smallDate(p.date)}</strong><span>{kindLabel(p.kind)}</span></div><div>{p.kind==="off"?"В":h!=null?${h} ч:report?.response==="working"?"Подтверждено":"План"}</div></div>;
+        return <div className="worker-self-timesheet-row" key={p.date}><div><strong>{smallDate(p.date)}</strong><span>{kindLabel(p.kind)}</span></div><div>{p.kind==="off"?"В":h!=null?`${h} ч`:report?.response==="working"?"Подтверждено":"План"}</div></div>;
        })}
       </section>
      </>}
@@ -204,7 +204,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </section>
        </>}
        {more==="settings"&&<><div className="worker-self-page-title"><div><h1>Настройки графика</h1><p>Проверьте, какое время и тип смены используются обычно.</p></div></div>
-        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Settings2 size={17}/> Моя обычная смена</span></div><p className="worker-self-muted">Текущий тип: {kindLabel(data.planning.defaultKind)}. Повторение: {data.planning.workDays!==null?${data.planning.workDays}/${data.planning.restDays}:"Индивидуальный график"}.</p>
+        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Settings2 size={17}/> Моя обычная смена</span></div><p className="worker-self-muted">Текущий тип: {kindLabel(data.planning.defaultKind)}. Повторение: {data.planning.workDays!==null?`${data.planning.workDays}/${data.planning.restDays}`:"Индивидуальный график"}.</p>
           <div className="worker-self-choices">{(["day","night"] as const).map(k=><button className={settingKind===k?"selected":""} key={k} onClick={()=>{setSettingKind(k);setNextDay(k==="night")}}>{kindShort(k)}</button>)}</div>
           <div className="worker-self-fields"><label>Начало смены<input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)}/></label><label>Окончание<input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)}/></label></div>
           <label className="worker-self-check"><input type="checkbox" checked={nextDay} onChange={e=>setNextDay(e.target.checked)}/> Окончание на следующий день</label>
