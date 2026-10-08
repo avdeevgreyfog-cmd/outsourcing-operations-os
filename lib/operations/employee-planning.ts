@@ -208,12 +208,12 @@ export async function managerReviewEmployeePlan(actor:Actor,objectId:string,work
 }
 export async function managerEmployeePlanningChanges(actor:Actor,objectId?:string){
  requireCapability(actor,"operations.shift.read");
- if(actor.demo)return {planningChanges:[],workerAuthorities:[]};
+ if(actor.demo)return {planningChanges:[],workerAuthorities:[],patternChanges:[]};
  const people=(await listWorkers(actor)).filter(x=>x.objectId&&(!objectId||x.objectId===objectId));
- if(!people.length)return {planningChanges:[],workerAuthorities:[]};
+ if(!people.length)return {planningChanges:[],workerAuthorities:[],patternChanges:[]};
  const ids=people.map(x=>x.id);
  return withTenant(actor.organizationId,actor.userId,async sql=>{
-  const [planningChanges,workerAuthorities]=await Promise.all([
+  const [planningChanges,workerAuthorities,patternChanges]=await Promise.all([
    sql<Array<{workerId:string;objectId:string;date:string;kind:PlannedKind;status:string}>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,requested_kind kind,status
     FROM worker_shift_plan_changes WHERE worker_id=ANY(${ids}::uuid[]) AND work_date BETWEEN current_date-1 AND current_date+31`,
    sql<Array<{workerId:string;objectId:string;scheduleOwner:ScheduleOwner}>>`SELECT worker_id "workerId",object_id "objectId",schedule_owner "scheduleOwner"
