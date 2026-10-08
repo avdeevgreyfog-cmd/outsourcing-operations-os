@@ -1,18 +1,11 @@
 -- Expand employee portal planning without changing existing object/timesheet identifiers.
--- Legacy 'client' meant employee self-planning: rename data conservatively.
-DO $$
-DECLARE constraint_name text;
-BEGIN
- FOR constraint_name IN
-  SELECT conname FROM pg_constraint WHERE conrelid='object_shift_reporting_settings'::regclass
-    AND contype='c' AND pg_get_constraintdef(oid) LIKE '%schedule_owner%'
- LOOP EXECUTE format('ALTER TABLE object_shift_reporting_settings DROP CONSTRAINT %I',constraint_name); END LOOP;
-END $;
-UPDATE object_shift_reporting_settings SET schedule_owner='worker' WHERE schedule_owner='client';
+-- No changes to existing schedule_owner values or constraints: new settings
+-- take precedence and legacy 'client' is interpreted as employee self-planning.
 ALTER TABLE object_shift_reporting_settings
- ADD CONSTRAINT object_shift_reporting_settings_owner_valid CHECK(schedule_owner IN ('manager','worker')),
+ ADD COLUMN IF NOT EXISTS schedule_authority text
+   CHECK(schedule_authority IS NULL OR schedule_authority IN ('manager','worker')),
  ADD COLUMN IF NOT EXISTS planning_horizon_days integer NOT NULL DEFAULT 7
-  CHECK(planning_horizon_days BETWEEN 2 AND 31);
+   CHECK(planning_horizon_days BETWEEN 2 AND 31);
 -- Overrides are exceptional: object-level settings are authoritative by default.
 CREATE TABLE IF NOT EXISTS worker_schedule_authorities (
  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
