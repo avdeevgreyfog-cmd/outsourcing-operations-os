@@ -77,14 +77,14 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const totals=useMemo(()=>monthDates.reduce((acc,date)=>{const reported=reports.get(date),p=plans.get(date);const h=reported?.hours??(p?.timeCode==="WORK"?Number(p.hours):0);return {hours:acc.hours+h,shifts:acc.shifts+(h>0?1:0)}},{hours:0,shifts:0}),[monthDates,reports,plans]);
  function kind(date:string):Kind|null{const report=reports.get(date);if(report?.response==="day_off")return"off";if(report?.shiftKind)return report.shiftKind;const p=plans.get(date);if(p?.timeCode==="DAY_OFF")return"off";if(p?.kind==="day"||p?.kind==="night")return p.kind;return null}
  function timing(date:string){const t=overrides.get(date);if(t?.status==="accepted")return t;return windows.get(date)??(demo?({date,startTime:"20:00",endTime:"08:00",endsNextDay:true} as Window):null)}
- function timingText(date:string){const t=timing(date);return t?${t.startTime}–${t.endTime}${t.endsNextDay?" (следующий день)":""}:"Время пока не указано"}
+ function timingText(date:string){const t=timing(date);return t?`${t.startTime}–${t.endTime}${t.endsNextDay?" (следующий день)":""}`:"Время пока не указано"}
  function finished(date:string){const t=timing(date);if(!t)return date<today;const endDate=t.endsNextDay?addDays(date,1):date;
   if(demo)return date<today;
   if(!localClock)return false;
   const tz=data?.timezone||"Europe/Moscow";
   const parts=new Intl.DateTimeFormat("en-GB",{timeZone:tz,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date(localClock));
   const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));
-  return (${v.year}-${v.month}-${v.day})+"T"+v.hour+":"+v.minute>=endDate+"T"+t.endTime;
+  return `${v.year}-${v.month}-${v.day}T${v.hour}:${v.minute}`>=endDate+"T"+t.endTime;
  }
  async function send(body:Record<string,unknown>,message:string){
   if(!data)return false;setError("");setNotice("");setBusy(true);
@@ -157,7 +157,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         <h2>{human(yesterday)}</h2><p className="emp2-shift-line"><MoonSun kind={kind(yesterday)}/> {shiftLabel(yesterday)} · {timingText(yesterday)}</p>
         {kind(yesterday)==="off"?<p className="emp2-subdued">По графику выходной.</p>:completed?.hours!=null&&!hoursOpen?<><div className="emp2-confirm"><CheckCircle2 size={17}/> Вы указали {numberString(completed.hours)} ч</div><button className="emp2-secondary" onClick={()=>{setHoursOpen(true);setHoursValue(String(completed.hours))}}>Исправить часы</button></>:finished(yesterday)?<>
           {!hoursOpen?<p className="emp2-question">Сколько часов фактически отработали?</p>:<label className="emp2-field">Отработано часов<input type="number" min="0" max="24" step=".5" value={hoursValue} onChange={e=>setHoursValue(e.target.value)}/></label>}
-          <button className="emp2-primary" disabled={busy||hoursOpen&&(!hoursValue||Number(hoursValue)<0||Number(hoursValue)>24)} onClick={async()=>{if(!reports.get(yesterday)?.response){const ok=await send({date:yesterday,response:"working",kind:kind(yesterday)==="night"?"night":"day"},"Смена отмечена");if(!ok)return;}await send({date:yesterday,hours:hoursOpen?Number(hoursValue):data.paidHours},"Отработанные часы переданы");setHoursOpen(false)}}>{hoursOpen?"Сохранить часы":${numberString(data.paidHours)} ч — верно}</button>
+          <button className="emp2-primary" disabled={busy||hoursOpen&&(!hoursValue||Number(hoursValue)<0||Number(hoursValue)>24)} onClick={async()=>{if(!reports.get(yesterday)?.response){const ok=await send({date:yesterday,response:"working",kind:kind(yesterday)==="night"?"night":"day"},"Смена отмечена");if(!ok)return;}await send({date:yesterday,hours:hoursOpen?Number(hoursValue):data.paidHours},"Отработанные часы переданы");setHoursOpen(false)}}>{hoursOpen?"Сохранить часы":numberString(data.paidHours)+" ч — верно"}</button>
           {!hoursOpen&&<button className="emp2-secondary" onClick={()=>{setHoursOpen(true);setHoursValue(String(data.paidHours))}}>Указать другое количество</button>}
           {hoursOpen&&<button className="emp2-link" onClick={()=>setHoursOpen(false)}>Отмена</button>}
          </>:<p className="emp2-subdued">Указать часы можно после окончания смены.</p>}
