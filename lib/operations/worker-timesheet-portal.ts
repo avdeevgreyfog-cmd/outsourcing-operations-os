@@ -12,7 +12,7 @@ function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".
 export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
-export type PortalConfig={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string;timezone:string;reportingEnabled:boolean};
+export type PortalConfig={objectId:string;scheduleOwner:"manager"|"client";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null};
 
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
@@ -27,7 +27,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
       sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
         FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
-      sql<Array<PortalConfig>>`SELECT object_id "objectId",schedule_owner "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled"
+      sql<Array<PortalConfig>>`SELECT object_id "objectId",schedule_owner "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled",manager_phone "managerPhone"
         FROM object_shift_reporting_settings WHERE object_id=ANY(${[...objects]}::uuid[])`,
       sql<Array<EmployeePlan>>`SELECT DISTINCT ON(worker_id,object_id,work_date) worker_id "workerId",object_id "objectId",work_date::text date,time_code "timeCode",planned_shift_kind kind
         FROM time_entries WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[])
