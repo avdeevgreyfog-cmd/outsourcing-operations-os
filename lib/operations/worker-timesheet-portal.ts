@@ -186,18 +186,18 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
         ORDER BY (shift_id IS NULL) DESC,updated_at DESC LIMIT 1 FOR UPDATE`;
       const nextCode="WORK";
       const kind=next.shiftKind==="night"?"night":"day";
-      const h=nextCode==="WORK"?Number(next.hours):0;
+      const h=Number(next.hours);
       const mayReplace=!entry||((entry.source==="schedule"||entry.source==="worker_report")&&!(entry.source!=="worker_report"&&entry.factHours>0));
       if(mayReplace){
         if(entry){
-          await sql`UPDATE time_entries SET planned=${nextCode!=="DAY_OFF"},time_code=${nextCode},fact_hours=${h},day_hours=${nextCode==="WORK"&&kind==="day"?h:0},night_hours=${nextCode==="WORK"&&kind==="night"?h:0},
-            planned_shift_kind=${nextCode==="DAY_OFF"?null:kind},source=${nextCode==="WORK"?"worker_report":"schedule"},correction_reason=${nextCode==="WORK"?"Данные сотрудника, требуется сверка":"План по сообщению сотрудника"},updated_at=now()
+          await sql`UPDATE time_entries SET planned=true,time_code=${nextCode},fact_hours=${h},day_hours=${kind==="day"?h:0},night_hours=${kind==="night"?h:0},
+            planned_shift_kind=${kind},source='worker_report',correction_reason='Данные сотрудника, требуется сверка',updated_at=now()
             WHERE id=${entry.id}::uuid`;
         }else{
           await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,planned_shift_kind,source,correction_reason)
-            VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${payload.date}::date,${nextCode!=="DAY_OFF"},${nextCode},${h},
-              ${nextCode==="WORK"&&kind==="day"?h:0},${nextCode==="WORK"&&kind==="night"?h:0},${nextCode==="DAY_OFF"?null:kind},${nextCode==="WORK"?"worker_report":"schedule"},
-              ${nextCode==="WORK"?"Данные сотрудника, требуется сверка":"План по сообщению сотрудника"})`;
+            VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${payload.date}::date,${true},${nextCode},${h},
+              ${kind==="day"?h:0},${kind==="night"?h:0},${kind},'worker_report',
+              'Данные сотрудника, требуется сверка')`;
         }
       }
     }
