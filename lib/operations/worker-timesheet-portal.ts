@@ -254,7 +254,7 @@ export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDat
         AND r.object_id=${objectId}::uuid AND r.work_date BETWEEN ${fromDate}::date AND ${toDate}::date
         AND r.reported_hours IS NOT NULL AND r.hours_reconciled_at IS NULL AND t.time_code='WORK' AND t.fact_hours>0
       RETURNING r.worker_id "workerId",r.work_date::text date`;
-    const updated=await sql`UPDATE time_entries SET source='manual',corrected_by_user_id=${actor.userId}::uuid,
+    await sql`UPDATE time_entries SET source='manual',corrected_by_user_id=${actor.userId}::uuid,
       correction_reason='Промежуточная сверка с заказчиком',updated_at=now()
       WHERE object_id=${objectId}::uuid AND work_date BETWEEN ${fromDate}::date AND ${toDate}::date AND source='worker_report'
       RETURNING id`;
