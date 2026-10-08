@@ -82,7 +82,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    for(const date of new Set([...dayEntries.keys(),...answers.keys()])){
     if(!date.startsWith(currentMonth)||date>today||distinct.has(date))continue;
     const entry=dayEntries.get(date),reply=answers.get(date);
-    const worked=reply?.hours!=null?Number(reply.hours):entry?.hours;
+    const worked=reply?.reconciledAt?entry?.hours??reply?.hours:reply?.hours??entry?.hours;
     if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
    }return{total,shifts}},[today,currentMonth,data?.plans,answers]);
  
@@ -204,29 +204,33 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       </section>
      </>}
      {tab==="timesheet"&&<>
-      <div className="worker-self-page-title"><div><h1>Мой табель</h1><p>Текущий месяц · Только фактически отработанные смены. Будущие планы не учитываются.</p></div></div>
-      <div className="worker-self-totals"><div><small>Отработано часов</small><strong>{counted.total}</strong><span>Предварительные данные</span></div><div><small>Отработано смен</small><strong>{counted.shifts}</strong><span>Планы не включены</span></div></div>
+      <div className="worker-self-page-title"><div><h1>Мой табель</h1></div></div>
+      <div className="worker-self-month-nav">
+       <button aria-label="Предыдущий месяц" onClick={()=>setMonthOverride(adjacentMonth(-1))} disabled={currentMonth<="2020-01"}><ChevronRight size={18} style={{transform:"rotate(180deg)"}}/></button>
+       <strong>{monthLabel}</strong>
+       <button aria-label="Следующий месяц" onClick={()=>setMonthOverride(adjacentMonth(1))} disabled={currentMonth>=today.slice(0,7)}><ChevronRight size={18}/></button>
+      </div>
+      <div className="worker-self-totals"><div><small>Часы</small><strong>{counted.total}</strong></div><div><small>Смены</small><strong>{counted.shifts}</strong></div></div>
       <section className="worker-self-panel worker-self-timesheet-panel">
-       <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> Дни месяца</span><span className="worker-self-ledger-hint">План → Факт → Сверка</span></div>
-       <div className="worker-self-ledger-header"><span>Дата / Смена</span><span>Результат</span></div>
+       <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> {monthLabel}</span></div>
+       <div className="worker-self-ledger-header"><span>Дата</span><span>Часы</span></div>
        {dateRows.map((date,i)=>{
-        const reply=answers.get(date);
-        const fact=data.plans.find(x=>x.date===date&&x.timeCode==="WORK"&&Number(x.hours)>0);
-        const h=reply?.hours!=null?reply.hours:fact?.hours??null;
-        const plan=records.get(date);
-        const isOff=plan?.kind==="off";
-        const weekBreak=i===0||new Date(date+"T00:00:00Z").getUTCDay()===0;
-        return <div key={date}>{weekBreak&&i>0&&<div className="worker-self-ledger-separator"/>}
+        const reply=answers.get(date),fact=data.plans.find(x=>x.date===date&&x.timeCode==="WORK"&&Number(x.hours)>0);
+        const approved=Boolean(reply?.reconciledAt);
+        const h=approved?fact?.hours??reply?.hours??null:reply?.hours??fact?.hours??null;
+        const plan=records.get(date),off=plan?.kind==="off";
+        return <div key={date}>
+         {i>0&&new Date(date+"T00:00:00Z").getUTCDay()===0&&<div className="worker-self-ledger-separator"/>}
          <div className="worker-self-ledger-row">
-          <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"?"Ночная смена":plan?.kind==="day"?"Дневная смена":isOff?"Выходной":fact?.kind==="night"?"Ночная смена":"Нет записи"}</small></div>
+          <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"||fact?.kind==="night"?"Ночная смена":plan?.kind==="day"||fact?.kind==="day"?"Дневная смена":off?"Выходной":"—"}</small></div>
           <div className="worker-self-ledger-result">
-           <strong className={h!=null&&Number(h)>0?"actual":""}>{h!=null&&Number(h)>0?String(h)+" ч":isOff?"В":plan?.kind?"План":"—"}</strong>
-           {h!=null&&Number(h)>0&&<small>Учтено</small>}
+           <strong className={h!=null&&Number(h)>0?"actual":""}>{h!=null&&Number(h)>0?String(h)+" ч":off?"Выходной":"—"}</strong>
+           {h!=null&&Number(h)>0&&<small className={approved?"worker-self-agreed":""}>{approved?"Согласовано":"Передано"}</small>}
           </div>
          </div>
         </div>;
        })}
-       <p className="worker-self-muted">Фактические часы уточняются менеджером при сверке с заказчиком. Плановые дни не увеличивают сумму часов и количество отработанных смен.</p>
+       {counted.shifts===0&&<p className="worker-self-muted">За этот месяц пока нет отработанных смен.</p>}
       </section>
      </>}
      {tab==="more"&&<>
