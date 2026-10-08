@@ -5,7 +5,7 @@ import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,Chevro
 type Kind="day"|"night"|"off";
 type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null};
 type PlanDay={date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
-type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;days:PlanDay[]};
+type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
 type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
 type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string}[];details?:Details;planning:Planning};
@@ -17,9 +17,9 @@ function smallDate(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digi
 function clockNow(timezone:string){const f=new Intl.DateTimeFormat("en-GB",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());const o=Object.fromEntries(f.map(x=>[x.type,x.value]));return `${o.year}-${o.month}-${o.day}T${o.hour}:${o.minute}`}
 function demo():Portal{
  const today=new Date().toISOString().slice(0,10);
- const days=Array.from({length:16},(_,i)=>{const date=move(today,i-3),kind:Kind=(i===5||i===8)?"off":"night";return{date,kind,source:"cycle" as const,proposal:null,proposalStatus:null,startTime:"20:00",endTime:"08:00",endsNextDay:true}});
+ const days=Array.from({length:19},(_,i)=>{const date=move(today,i-7),weekday=new Date(date+"T00:00:00Z").getUTCDay(),kind:Kind=weekday===0||weekday===6?"off":"night";return{date,kind,source:"cycle" as const,proposal:null,proposalStatus:null,startTime:"20:00",endTime:"08:00",endsNextDay:true}});
  return {name:"Иванов Иван",objectName:"Можайское · Комплектовщик",paidHours:11,deadline:"22:00",today,timezone:"Europe/Moscow",
-  reports:[],plans:[],planning:{owner:"worker",horizon:12,workDays:5,restDays:2,defaultKind:"night",days},
+  reports:[],plans:Array.from({length:7},(_,i)=>({date:move(today,-i-1),timeCode:"WORK",hours:11,kind:"night"})),planning:{owner:"worker",horizon:12,workDays:5,restDays:2,defaultKind:"night",floatingDaysOff:false,patternFrom:move(today,-30),days},
   details:{clothingSize:"52–54",shoeSize:"43",employment:"gph",managerName:"Менеджер объекта",managerPhone:null,
    documents:[{code:"passport",label:"Паспорт",employeeReported:true,managerVerified:true},{code:"snils",label:"СНИЛС",employeeReported:true,managerVerified:true},{code:"inn",label:"ИНН",employeeReported:false,managerVerified:false},{code:"bank_details",label:"Реквизиты для выплаты",employeeReported:true,managerVerified:false}],
    workwear:[{name:"Рабочая куртка",state:"issued",variant:"52–54"},{name:"Рабочие брюки",state:"issued",variant:"52–54"},{name:"Защитная обувь",state:"needed",variant:"43"}],shiftWindows:[],timeChanges:[]}};
@@ -36,7 +36,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [busy,setBusy]=useState(false);const [showReason,setShowReason]=useState(false);const [reason,setReason]=useState("");
  const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("11");
  const [editingDay,setEditingDay]=useState<string|null>(null);const [kindChoice,setKindChoice]=useState<Kind>("night");
- const [selectedDays,setSelectedDays]=useState<string[]>([]);const [showAll,setShowAll]=useState(false);
+ const [showAll,setShowAll]=useState(false);
+ const [weekEditing,setWeekEditing]=useState(false);
+ const [restDates,setRestDates]=useState<string[]>([]);
+ const [settingsEditing,setSettingsEditing]=useState(false);
+ const [effectiveFrom,setEffectiveFrom]=useState("");
+ const [workPattern,setWorkPattern]=useState("5/2");
+ const [patternFloating,setPatternFloating]=useState(false);
  const [clothingDraft,setClothingDraft]=useState<string|null>(null);const [shoeDraft,setShoeDraft]=useState<string|null>(null);
  const [settingKind,setSettingKind]=useState<"day"|"night">("night");
  const [startTime,setStartTime]=useState("20:00");const [endTime,setEndTime]=useState("08:00");const [nextDay,setNextDay]=useState(true);
@@ -62,7 +68,18 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const completed=useMemo(()=>[0,-1,-2,-3].map(i=>schedule(move(today,i))).find(p=>p&&canFinish(p))??null,[today,records,checkedAt]);
  const next=schedule(tomorrow),nextAnswer=answers.get(tomorrow),completedAnswer=completed?answers.get(completed.date):null;
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
- const counted=useMemo(()=>{const month=today.slice(0,7);let total=0,shifts=0;for(const x of data?.plans??[]){if(!x.date.startsWith(month))continue;const answer=answers.get(x.date);const hours=answer?answer.hours:(x.timeCode==="WORK"?Number(x.hours):null);if(hours!=null&&hours>0){total+=hours;shifts++}}return{total,shifts}},[today,data?.plans,answers]);
+ const nextMonday=move(today,((8-new Date(today+"T00:00:00Z").getUTCDay())%7)||7);
+ const fullWeek=Array.from({length:7},(_,i)=>move(nextMonday,i));
+ const canEditWeek=Boolean(data?.planning.floatingDaysOff&&fullWeek[6]<=move(today,data.planning.horizon));
+ const currentMonth=today.slice(0,7);
+ const dateRows=Array.from({length:Number(today.slice(8))},(_,i)=>currentMonth+"-"+String(i+1).padStart(2,"0")).reverse();
+ const counted=useMemo(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
+   for(const date of new Set([...dayEntries.keys(),...answers.keys()])){
+    if(!date.startsWith(currentMonth)||date>today||distinct.has(date))continue;
+    const entry=dayEntries.get(date),reply=answers.get(date);
+    const worked=reply?.hours!=null?Number(reply.hours):entry?.hours;
+    if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
+   }return{total,shifts}},[today,currentMonth,data?.plans,answers]);
  
  const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
  async function save(payload:Record<string,unknown>,message:string){
@@ -122,7 +139,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
      {error&&<div role="alert" className="worker-self-alert"><AlertTriangle size={16}/>{error}</div>}
      {notice&&<div role="status" className="worker-self-alert success"><CheckCircle2 size={16}/>{notice}{isDemo?" · демонстрация":""}</div>}
      {tab==="shifts"&&<>
-      <div className="worker-self-page-title"><div><h1>Мои смены</h1><p>{data.objectName} · {data.planning.owner==="manager"?"График составляет менеджер":"График составляете вы"}</p></div><button className="worker-self-light-button" onClick={openSettings}><Settings2 size={15}/> Настройки графика</button></div>
+      <div className="worker-self-page-title"><div><h1>Мои смены</h1><p>{data.objectName}</p></div><button className="worker-self-light-button" onClick={openSettings}><Settings2 size={15}/> Настройки графика</button></div>
       <div className="worker-self-primary-grid">
        <section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
