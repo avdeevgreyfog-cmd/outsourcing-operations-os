@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>OPERIS · Компьютер · демонстрация кабинета</title><style>:root{color-scheme:light;--bg:#f5f7f8;--panel:#fff;--panel-2:#f8f9f9;--panel-3:#eef1f2;--text:#182028;--muted:#5f6b75;--soft:#87929b;--border:rgba(22,34,44,.10);--border-strong:rgba(22,34,44,.18);--accent:#e9661e;--accent-hover:#d95a15;--accent-soft:#fff2ea;--good:#238f4b;--good-bg:#edf8f1;--warn:#a66a16;--warn-bg:#fff7e7;--bad:#cf4c46;--bad-bg:#fff1ef;--focus:0 0 0 3px rgba(233,102,30,.18)}:root[data-theme=dark]{color-scheme:dark;--bg:#0a1016;--panel:#111820;--panel-2:#151e27;--panel-3:#1a2530;--text:#f4f6f8;--muted:#a8b2ba;--soft:#788590;--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.15);--accent:#ff762b;--accent-hover:#ff8e52;--accent-soft:#2c1c13;--good:#79d283;--good-bg:#17271b;--warn:#e3a456;--warn-bg:#2c2418;--bad:#ef6f66;--bad-bg:#2d1918;--focus:0 0 0 3px rgba(255,118,43,.24)}*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif;letter-spacing:-.006em;color:var(--text)}button,input,textarea,select{font:inherit;color:inherit}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:none;box-shadow:var(--focus)}
+/* Adaptive employee cabinet. Uses existing OPERIS design tokens and compact controls. */
+body:has(.emp2){min-width:0}
+.emp2{min-height:100vh;background:var(--bg);color:var(--text);font-size:13px;padding:22px}
+.emp2-wrap{width:min(1200px,100%);margin:0 auto;background:var(--panel);border:1px solid var(--border);border-radius:9px;min-height:calc(100vh - 44px);overflow:hidden}
+.emp2-header{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:78px;padding:16px 24px;border-bottom:1px solid var(--border)}
+.emp2-brand{display:flex;align-items:center;gap:12px}
+.emp2-brandmark{width:38px;height:38px;border-radius:7px;background:var(--accent);color:white;font-weight:850;font-size:22px;display:grid;place-items:center}
+.emp2-brand>div:last-child{display:grid;gap:4px}
+.emp2-brand span{color:var(--accent);font-weight:750;font-size:10px;letter-spacing:.09em}
+.emp2-brand strong{font-weight:750;font-size:16px;letter-spacing:-.025em}
+.emp2-header-person{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;min-width:0}
+.emp2-header-person>div{display:grid;gap:4px}
+.emp2-header-person strong{color:var(--text);font-size:12px;font-weight:680}
+.emp2-header-person span{max-width:260px;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.emp2-columns{display:grid;grid-template-columns:238px minmax(0,1fr);min-height:720px}
+.emp2-sidebar{background:var(--panel-2);border-right:1px solid var(--border);padding:22px 12px}
+.emp2-sidebar-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--soft);margin:0 9px 12px}
+.emp2-nav-button{display:flex;align-items:center;gap:11px;width:100%;height:39px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:12px;font-weight:610;text-align:left;cursor:pointer}
+.emp2-nav-button:hover{background:var(--panel)}
+.emp2-nav-button.is-active{background:var(--panel);color:var(--text);box-shadow:inset 2px 0 var(--accent);font-weight:720}
+.emp2-nav-button.is-active>svg{color:var(--accent)}
+.emp2-nav-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:auto}
+.emp2-sidebar-help{margin:24px 8px 0;border-top:1px solid var(--border);padding-top:18px;color:var(--soft);font-size:11px;line-height:1.5;display:flex;gap:9px}
+.emp2-sidebar-help svg{flex:none;margin-top:2px}
+.emp2-content{max-width:100%;padding:26px 30px 30px;min-width:0}
+.emp2-mobile-nav{display:none}
+.emp2-section-title{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+.emp2-section-title h1{font-size:20px;line-height:1.2;letter-spacing:-.02em;margin:0;font-weight:750}
+.emp2-section-title p{margin:7px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.emp2-meta{flex:none;color:var(--muted);font-size:12px;margin-top:3px}
+.emp2-stats{display:grid;grid-template-columns:1fr 1fr auto;gap:0;margin-bottom:19px;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;min-height:84px}
+.emp2-stats>div{display:grid;gap:7px;padding:14px 18px;border-right:1px solid var(--border)}
+.emp2-stats span{font-size:11px;color:var(--muted)}
+.emp2-stats strong{font-size:23px;font-variant-numeric:tabular-nums;font-weight:750;letter-spacing:-.035em}
+.emp2-stats>p{margin:auto;max-width:260px;padding:14px 18px;color:var(--muted);font-size:11px;line-height:1.6}
+.emp2-workgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.emp2-module{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:18px;min-width:0}
+.emp2-module.is-attention{border-color:var(--border-strong)}
+.emp2-module-kicker{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.006em;min-height:24px}
+.emp2-module-kicker>svg{color:var(--accent)}
+.emp2-module-kicker>span:nth-child(2){flex:1}
+.emp2-state{font-weight:600;font-size:10px;color:var(--muted);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.emp2-state:before{content:"";display:block;width:6px;height:6px;border-radius:50%;background:var(--soft)}
+.emp2-state.is-good:before{background:var(--good)}
+.emp2-state.is-warning:before{background:var(--warn)}
+.emp2-module h2{font-weight:735;font-size:17px;line-height:1.2;letter-spacing:-.02em;margin:14px 0 5px}
+.emp2-shift-line{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;margin:0 0 20px;line-height:1.5;flex-wrap:wrap}
+.emp2-shift-line svg{flex:none}
+.emp2-question{font-size:12px;font-weight:700;margin:12px 0 10px}
+.emp2-primary,.emp2-secondary{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:39px;margin:7px 0;border-radius:6px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text);font-size:12px;font-weight:680;cursor:pointer;padding:8px 12px;text-align:center;text-decoration:none}
+.emp2-primary{background:#c64c0b;border-color:#c64c0b;color:white}
+.emp2-primary:hover{background:#ab3e05}
+:root[data-theme=dark] .emp2-primary{background:var(--accent);border-color:var(--accent);color:#0d1319}
+.emp2-secondary:hover{background:var(--panel-2)}
+.emp2-primary:disabled,.emp2-secondary:disabled{opacity:.55;cursor:wait}
+.emp2-link{font-size:11px;font-weight:650;color:var(--accent);border:0;background:none;cursor:pointer;text-align:left;padding:6px 1px;display:inline-flex;gap:6px;align-items:center}
+.emp2-deadline{display:flex;align-items:flex-start;gap:6px;border-top:1px solid var(--border);color:var(--soft);font-size:10px;line-height:1.55;margin-top:15px;padding-top:12px}
+.emp2-deadline svg{flex:none;margin-top:1px}
+.emp2-confirm{display:flex;gap:7px;align-items:flex-start;background:var(--panel-2);border-radius:5px;padding:11px 10px;margin:14px 0;font-size:12px;line-height:1.5;color:var(--text)}
+.emp2-confirm svg{color:var(--good);flex:none}
+.emp2-confirm.is-warning{border-left:2px solid var(--warn)}
+.emp2-subdued{font-size:12px;color:var(--muted);line-height:1.55;margin:12px 0}
+.emp2-additional,.emp2-month{margin-top:14px}
+.emp2-other-day{border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;justify-content:space-between;padding:12px 0}
+.emp2-other-day>div{display:grid;gap:4px;min-width:0}
+.emp2-other-day b{font-size:12px}
+.emp2-other-day span{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.emp2-other-day button{display:flex;gap:4px;align-items:center;flex:none;font-size:11px;background:none;border:0;color:var(--accent);cursor:pointer}
+.emp2-row-toggle,.emp2-month-toggle{border:0;background:none;display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:12px;font-weight:680;cursor:pointer;width:100%;text-align:left;padding:10px 0;color:var(--text)}
+.emp2-month{padding:14px 18px}
+.emp2-month-toggle{justify-content:flex-start}
+.emp2-month-toggle svg:last-child{margin-left:auto}
+.emp2-history{border-top:1px solid var(--border)}
+.emp2-history>div{display:flex;align-items:center;justify-content:space-between;padding:9px 3px;border-bottom:1px solid var(--border);font-size:11px}
+.emp2-history>div>span:last-child{color:var(--muted)}
+.emp2-inline-form{border:1px solid var(--border);background:var(--panel-2);padding:13px;border-radius:6px;margin:12px 0;display:grid;gap:11px}
+.emp2-inline-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.emp2-inline-form label,.emp2-field,.emp2-time-fields label{font-size:11px;font-weight:650;color:var(--muted);display:grid;gap:6px}
+.emp2-inline-form input,.emp2-inline-form textarea,.emp2-inline-form select,.emp2-field input,.emp2-field select,.emp2-time-fields input{width:100%;min-height:38px;max-width:100%;padding:8px 9px;border:1px solid var(--border-strong);border-radius:6px;background:var(--panel);color:var(--text);font-size:13px}
+.emp2-inline-form textarea{resize:vertical}
+.emp2-time-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:13px 0}
+.emp2-checkbox{display:flex!important;gap:8px;align-items:center}
+.emp2-checkbox input{width:16px;min-height:auto}
+.emp2-checklist{margin-top:14px}
+.emp2-doc{display:flex;align-items:center;gap:12px;min-height:64px;border-top:1px solid var(--border);padding:10px 0}
+.emp2-doc>div:nth-child(2){display:grid;gap:4px;flex:1;min-width:0}
+.emp2-doc strong{font-size:12px}
+.emp2-doc span{font-size:11px;color:var(--muted);line-height:1.45}
+.emp2-doc button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:5px;min-height:32px;padding:0 10px;font-size:11px;font-weight:650;cursor:pointer}
+.emp2-doc button:hover{background:var(--panel-2)}
+.emp2-doc-check{height:20px;width:20px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--border-strong);color:var(--soft);flex:none}
+.emp2-doc-check.is-good{color:var(--good);border-color:var(--good)}
+.emp2-doc-check.is-wait{color:var(--warn)}
+.emp2-manager-person{display:flex;gap:12px;align-items:center;margin-bottom:18px}
+.emp2-manager-avatar{width:43px;height:43px;display:grid;place-items:center;background:var(--panel-2);border:1px solid var(--border);border-radius:7px;color:var(--muted)}
+.emp2-manager-person>div:last-child{display:grid;gap:5px}
+.emp2-manager-person strong{font-size:14px}
+.emp2-manager-person span{font-size:12px;color:var(--muted)}
+.emp2-call{max-width:340px}
+.emp2-alert{border:1px solid var(--border);border-left:3px solid var(--bad);padding:12px;margin:0 0 14px;display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5}
+.emp2-alert svg{flex:none}
+.emp2-alert.is-success{border-left-color:var(--good)}
+.emp2-empty{color:var(--soft);font-size:12px;padding:15px 0}
+.emp2-footer{color:var(--soft);font-size:10px;line-height:1.5;margin-top:25px;text-align:center}
+.emp2-error{max-width:450px;margin:90px auto;background:var(--panel);border:1px solid var(--border);border-radius:7px;padding:26px}
+.emp2-error h1{font-size:20px}.emp2-error p{font-size:13px;color:var(--muted);line-height:1.6}
+/* Mobile variant: natural vertical task flow, no horizontal scrolling. */
+@media(max-width:780px){
+ .emp2{padding:0}
+ .emp2-wrap{width:100%;min-height:100vh;border:0;border-radius:0}
+ .emp2-header{padding:15px 16px;min-height:67px}
+ .emp2-brandmark{height:34px;width:34px;font-size:20px}
+ .emp2-brand strong{font-size:15px}
+ .emp2-header-person{display:none}
+ .emp2-columns{grid-template-columns:minmax(0,1fr)}
+ .emp2-sidebar{display:none}
+ .emp2-content{padding:14px 13px 28px}
+ .emp2-mobile-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;border-bottom:1px solid var(--border);margin:-14px -13px 20px;padding:8px 5px}
+ .emp2-mobile-nav button{border:0;background:none;color:var(--muted);font-size:10px;display:grid;justify-items:center;gap:5px;padding:8px 0;cursor:pointer;border-bottom:2px solid transparent;min-width:0}
+ .emp2-mobile-nav button span{text-align:center;font-size:10px;line-height:1.25}
+ .emp2-mobile-nav button.is-active{border-bottom-color:var(--accent);color:var(--text);font-weight:700}
+ .emp2-section-title{display:block;margin-bottom:15px}
+ .emp2-section-title h1{font-size:18px}
+ .emp2-meta{font-size:11px;margin-top:8px}
+ .emp2-stats{grid-template-columns:1fr 1fr;margin-bottom:12px}
+ .emp2-stats>div{padding:12px}
+ .emp2-stats strong{font-size:20px}
+ .emp2-stats>p{grid-column:1/3;max-width:none;margin:0;padding:8px 12px;border-top:1px solid var(--border)}
+ .emp2-workgrid{grid-template-columns:1fr;gap:10px}
+ .emp2-module{padding:14px}
+ .emp2-module h2{font-size:16px}
+ .emp2-primary,.emp2-secondary{min-height:44px}
+ .emp2-time-fields{gap:9px}
+}
+/* Force phone preview to show actual mobile layout even when opened on desktop. */
+.emp2-preview-phone{padding:20px}
+.emp2-preview-phone .emp2-wrap{max-width:425px;min-height:740px}
+.emp2-preview-phone .emp2-columns{display:block;min-height:0}
+.emp2-preview-phone .emp2-sidebar,.emp2-preview-phone .emp2-header-person{display:none}
+.emp2-preview-phone .emp2-header{min-height:66px;padding:13px 15px}
+.emp2-preview-phone .emp2-content{padding:14px}
+.emp2-preview-phone .emp2-mobile-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;margin:-14px -14px 18px;padding:8px 4px;border-bottom:1px solid var(--border)}
+.emp2-preview-phone .emp2-mobile-nav button{border:0;background:none;color:var(--muted);font-size:10px;display:grid;justify-items:center;gap:6px;padding:8px 0;cursor:pointer;border-bottom:2px solid transparent;min-width:0}
+.emp2-preview-phone .emp2-mobile-nav button.is-active{border-bottom-color:var(--accent);color:var(--text)}
+.emp2-preview-phone .emp2-mobile-nav button span{font-size:10px}
+.emp2-preview-phone .emp2-workgrid{grid-template-columns:1fr;gap:10px}
+.emp2-preview-phone .emp2-stats{grid-template-columns:1fr 1fr}
+.emp2-preview-phone .emp2-stats>p{grid-column:1/3;max-width:none;margin:0;border-top:1px solid var(--border)}
+.emp2-preview-phone .emp2-section-title{display:block}
+.emp2-preview-phone .emp2-meta{margin-top:8px}
+@media(max-width:480px){.emp2-preview-phone{padding:0}.emp2-preview-phone .emp2-wrap{max-width:none;border:0;border-radius:0;min-height:100vh}}
+
+.emp2-shift-choices{display:grid;gap:7px;margin:10px 0}
+.emp2-shift-choices>span{font-size:11px;color:var(--muted);font-weight:650}
+.emp2-shift-choices>div{display:flex;gap:6px}
+.emp2-shift-choices button{flex:1;min-height:34px;border:1px solid var(--border);border-radius:6px;background:var(--panel);cursor:pointer;font-size:12px}
+.emp2-shift-choices button.is-active{background:var(--accent-soft);border-color:var(--accent);color:var(--text);font-weight:700}
+
+.emp2-preview-desktop .emp2-wrap{max-width:1200px}
+.emp2-demo-kicker{position:sticky;top:0;z-index:3;padding:7px 14px;text-align:center;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:650;border-bottom:1px solid var(--border)}
+.emp2-demo-buttons{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.emp2-demo-buttons button{padding:5px 8px;background:var(--panel);border:1px solid var(--border);border-radius:5px;font-size:11px;cursor:pointer}
+.emp2-demo-buttons button:hover{background:var(--panel-2)}
+.emp2-module-kicker svg{flex:none}
+.emp2-checklist .emp2-doc-check{font-size:12px}
+.emp2-checklist .emp2-doc-check svg{stroke-width:1.8}
+.emp2-inline-form button.emp2-link{justify-self:start}
+.emp2 .emp2-link{cursor:pointer}
+.emp2-demo-message{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:4px;background:var(--good-bg);font-size:12px;padding:9px 12px;margin:0 0 12px}
+.emp2-section-title h1{font-weight:700}
+@media(max-width:780px){.emp2-demo-buttons button{font-size:10px}}
+</style></head><body><div class="emp2 emp2-preview-desktop"><div class="emp2-wrap"><div class="emp2-demo-kicker">ДЕМОНСТРАЦИЯ ИНТЕРФЕЙСА · ДАННЫЕ УСЛОВНЫЕ · БЕЗ СОХРАНЕНИЯ В CRM</div><header class="emp2-header"><div class="emp2-brand"><div class="emp2-brandmark">O</div><div><span>OPERIS · ДЛЯ СОТРУДНИКА</span><strong>Личный кабинет</strong></div></div><div class="emp2-header-person"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><div><strong>Иванов Иван</strong><span>Склад «Можайское»</span></div></div><div class="emp2-demo-buttons"><button data-action="theme" title="Светлая и тёмная темы">◐ Тема</button><button data-action="reset">↺ Сбросить</button></div></header><div class="emp2-columns"><aside class="emp2-sidebar"><div class="emp2-sidebar-title">Рабочее пространство</div><button type="button" data-tab="schedule" class="emp2-nav-button is-active"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg><span>График и табель</span></button><button type="button" data-tab="documents" class="emp2-nav-button "><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h9l5 5v13H5zM14 3v6h5M8 13h8M8 17h6"/></svg><span>Документы</span></button><button type="button" data-tab="workwear" class="emp2-nav-button "><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3l4 2 4-2 5 5-4 3v10H7V11L3 8z"/></svg><span>Спецодежда</span></button><button type="button" data-tab="manager" class="emp2-nav-button "><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>Менеджер</span></button><div class="emp2-sidebar-help"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>Сведения поступают менеджеру. Загрузка файлов не требуется.</span></div></aside><div class="emp2-content"><nav class="emp2-mobile-nav" aria-label="Разделы"><button type="button" data-tab="schedule" class="is-active"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg><span>График и табель</span></button><button type="button" data-tab="documents" class=""><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h9l5 5v13H5zM14 3v6h5M8 13h8M8 17h6"/></svg><span>Документы</span></button><button type="button" data-tab="workwear" class=""><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3l4 2 4-2 5 5-4 3v10H7V11L3 8z"/></svg><span>Спецодежда</span></button><button type="button" data-tab="manager" class=""><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>Менеджер</span></button></nav><div id="message" aria-live="polite"></div><div id="content"></div><footer class="emp2-footer">OPERIS · Личный кабинет сотрудника · Интерактивный дизайн-макет</footer></div></div></div></div><script>(function(){
+"use strict";
+const ico={moon:'☾',check:'✓',clock:'◷'};
+let state;const base=new Date("2026-10-08T00:00:00Z");
+function date(i){const d=new Date(base.getTime()+86400000*i);return new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"}).format(d)}
+function short(i){const d=new Date(base.getTime()+86400000*i);return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(d)}
+function fresh(){return {tab:"schedule",confirmed:false,declined:false,reason:"",hours:null,hoursEdit:false,showDecline:false,showMore:false,showMonth:false,showTime:false,timeDate:1,timeStart:"19:00",timeEnd:"07:00",nextDay:true,permanent:false,mode:"night",doc:{passport:"verified",snils:"verified",inn:"needed",bank_details:"reported",medical_book:"needed"},clothing:"52–54",shoe:"43",changes:{},notice:""}}
+function escape(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function hourSummary(){return state.hours==null?"11 ч — верно":"Указано "+state.hours+" ч"}
+function status(v,classes){return '<span class="emp2-state '+(classes||"")+'">'+v+'</span>'}
+function btn(action,label,cls,attr){return '<button type="button" class="'+(cls||"emp2-primary")+'" data-action="'+action+'" '+(attr||"")+'>'+label+'</button>'}
+function timesEdit(day){const c=state.changes[day];if(c)return c.start+"–"+c.end+(c.next?" (следующий день)":"");return "20:00–08:00 (следующий день)"}
+function showNotice(msg){state.notice=msg;document.getElementById("message").innerHTML=msg?'<div class="emp2-demo-message">'+escape(msg)+' · Изменено только в макете</div>':""}
+function render(){
+document.querySelectorAll("[data-tab]").forEach(function(b){let a=b.dataset.tab===state.tab;b.classList.toggle("is-active",a)});
+let h="";
+if(state.tab==="schedule"){
+h='<div class="emp2-section-title"><div><h1>График и табель</h1><p>Подтверждайте будущие смены и указывайте фактически отработанные часы.</p></div><div class="emp2-meta">Сегодня · 8 октября 2026</div></div>'+
+'<div class="emp2-stats"><div><span>Учтено за месяц</span><strong>'+(88+(state.hours==null?0:Number(state.hours)-11))+' ч</strong></div><div><span>Отработано смен</span><strong>8</strong></div><p>Предварительные данные до сверки с заказчиком.</p></div>'+
+'<div class="emp2-workgrid">'+
+'<section class="emp2-module is-attention"><div class="emp2-module-kicker">'+ico.moon+'<span>01 · Ближайший выход</span>'+status(state.declined?"Не выйду":state.confirmed?"Подтверждено":"Ожидается ответ",state.declined?"is-warning":state.confirmed?"is-good":"is-warning")+'</div>'+
+'<h2>'+date(1)+'</h2><p class="emp2-shift-line">☾ Ночная смена · '+timesEdit(1)+'</p>'+
+(state.confirmed?'<div class="emp2-confirm">✓ Вы подтвердили выход. Если планы изменились, сообщите заранее.</div>'+btn("change","Изменились планы","emp2-secondary"):
+state.declined?'<div class="emp2-confirm is-warning">Вы сообщили о невыходе: '+escape(state.reason)+'. Менеджер видит изменение.</div>'+btn("confirm","Всё-таки выйду"):
+'<p class="emp2-question">Выйдете на смену?</p><div class="emp2-shift-choices"><span>Какая смена назначена заказчиком?</span><div><button class="'+(state.mode==="day"?"is-active":"")+'" data-action="day">День</button><button class="'+(state.mode==="night"?"is-active":"")+'" data-action="night">Ночь</button></div></div>'+btn("confirm","✓ Да, выйду")+btn("decline","Не смогу выйти","emp2-secondary"))+
+'<div>'+btn("editTime","Уточнить время смены","emp2-link")+'</div>'+
+(state.showDecline?'<div class="emp2-inline-form"><label>Почему не сможете выйти?<textarea id="reason" rows="2" placeholder="Например, заболел">'+escape(state.reason)+'</textarea></label>'+btn("saveDecline","Отправить информацию менеджеру")+'</div>':'')+
+'<div class="emp2-deadline">◷ Подтвердите до 8 октября, 22:00. Если планы изменятся позже, сообщите сразу.</div></section>'+
+'<section class="emp2-module"><div class="emp2-module-kicker">✓ <span>02 · Завершённая смена</span>'+status(state.hours===null?"Нужны часы":"Часы указаны",state.hours===null?"is-warning":"is-good")+'</div><h2>'+date(-1)+'</h2><p class="emp2-shift-line">☾ Ночная смена · 7 октября 20:00 — 8 октября 08:00</p>'+
+(state.hours!=null&&!state.hoursEdit?'<div class="emp2-confirm">✓ Вы указали '+escape(state.hours)+' ч</div>'+btn("changeHours","Исправить часы","emp2-secondary"):
+'<p class="emp2-question">Сколько часов фактически отработали?</p>'+(state.hoursEdit?'<label class="emp2-field">Отработано часов<input type="number" id="hours" value="'+(state.hours==null?11:escape(state.hours))+'" min="0" max="24" step=".5"></label>':'')+btn(state.hoursEdit?"saveHours":"confirmHours",state.hoursEdit?"Сохранить часы":"✓ 11 ч — верно")+(state.hoursEdit?btn("cancelHours","Отмена","emp2-link"):btn("changeHours","Указать другие часы","emp2-secondary")))+
+'<div class="emp2-deadline">ⓘ Ночная смена учитывается за 7 октября, даже если закончилась утром 8 октября.</div></section></div>'+
+'<section class="emp2-module emp2-additional"><div class="emp2-module-kicker">▦ <span>Другие даты</span></div>'+
+[0,2].map(function(day){return '<div class="emp2-other-day"><div><b>'+date(day)+'</b><span>☾ Ночная смена · '+timesEdit(day)+'</span></div><button data-action="edit-time-'+day+'">Уточнить время ›</button></div>'}).join("")+
+'<button class="emp2-row-toggle" data-action="more">Другие даты и будущий график ▾</button>'+
+(state.showMore?[3,4].map(function(day){return '<div class="emp2-other-day"><div><b>'+date(day)+'</b><span>График пока не указан</span></div><button data-action="edit-time-'+day+'">Уточнить ›</button></div>'}).join(""):"")+
+(state.showTime?'<div class="emp2-inline-form"><div class="emp2-inline-head"><strong>Уточнение · '+date(state.timeDate)+'</strong>'+btn("cancelTime","Закрыть","emp2-link")+'</div><div class="emp2-time-fields"><label>Начало<input type="time" id="start" value="'+escape(state.timeStart)+'"></label><label>Окончание<input type="time" id="end" value="'+escape(state.timeEnd)+'"></label></div><label class="emp2-checkbox"><input type="checkbox" id="nextday" '+(state.nextDay?"checked":"")+'> Окончание на следующий день</label><label class="emp2-field">На какой срок?<select id="period"><option value="single" '+(!state.permanent?"selected":"")+'>Только эта смена</option><option value="regular" '+(state.permanent?"selected":"")+'>Мой постоянный график изменился</option></select></label><p class="emp2-subdued">Это предложение менеджеру. Учёт оплачиваемых часов остаётся отдельным.</p>'+btn("saveTime","Передать новое время")+'</div>':"")+
+'</section><section class="emp2-module emp2-month"><button class="emp2-month-toggle" data-action="month">▦ Табель за месяц ▾</button>'+(state.showMonth?'<div class="emp2-history">'+Array.from({length:8},function(_,i){return '<div><span>'+short(-i)+'</span><span>'+(i===1?(state.hours===null?"Нужны часы":state.hours+" ч"):"11 ч")+'</span></div>'}).join("")+'</div>':"")+'</section>';
+}else if(state.tab==="documents"){
+const docs=[["passport","Паспорт"],["snils","СНИЛС"],["inn","ИНН"],["bank_details","Реквизиты для выплат"],["medical_book","Медицинская книжка"]];
+h='<div class="emp2-section-title"><div><h1>Документы</h1><p>Отметьте переданные документы. Менеджер подтвердит получение.</p></div></div><section class="emp2-module"><div class="emp2-module-kicker">▤ <span>Чек-лист · ГПХ · Склад «Можайское»</span></div><p class="emp2-subdued">Документы определяются видом оформления и требованиями объекта. Загружать сканы не нужно.</p><div class="emp2-checklist">'+docs.map(function(entry){const code=entry[0],name=entry[1],s=state.doc[code];return '<div class="emp2-doc"><span class="emp2-doc-check '+(s==="verified"?"is-good":s==="reported"?"is-wait":"")+'">✓</span><div><strong>'+name+'</strong><span>'+(s==="verified"?"Получено менеджером":s==="reported"?"Сообщили о передаче — ожидается проверка":"Требуется передать")+'</span></div>'+(s==="verified"?"":btn("doc-"+code,s==="reported"?"Отменить":"Передал","emp2-secondary"))+'</div>'}).join("")+'</div></section>';
+}else if(state.tab==="workwear"){
+h='<div class="emp2-section-title"><div><h1>Спецодежда и СИЗ</h1><p>Укажите размеры и проверьте полученное имущество.</p></div></div><section class="emp2-module"><div class="emp2-module-kicker">♧ <span>Мои размеры</span></div><div class="emp2-time-fields"><label>Размер одежды<input id="clothing" value="'+escape(state.clothing)+'" placeholder="52–54"></label><label>Размер обуви<input id="shoe" value="'+escape(state.shoe)+'" placeholder="43"></label></div>'+btn("saveSizes","Сохранить размеры")+'<p class="emp2-subdued">Изменения видны менеджеру в карточке сотрудника. Выдачу подтверждает ответственное лицо.</p></section><section class="emp2-module emp2-additional"><div class="emp2-module-kicker">✓ <span>Выданное имущество</span></div><div class="emp2-checklist">'+[["Куртка рабочая","Выдана · размер "+state.clothing,true],["Брюки рабочие","Выданы · размер "+state.clothing,true],["Ботинки защитные","Не выданы / требуется проверить",false]].map(function(x){return '<div class="emp2-doc"><span class="emp2-doc-check '+(x[2]?"is-good":"")+'">✓</span><div><strong>'+x[0]+'</strong><span>'+escape(x[1])+'</span></div></div>'}).join("")+'</div></section>';
+}else{
+h='<div class="emp2-section-title"><div><h1>Мой менеджер</h1><p>Контакты для вопросов и срочных изменений в графике.</p></div></div><section class="emp2-module"><div class="emp2-manager-person"><div class="emp2-manager-avatar">♙</div><div><strong>Менеджер объекта</strong><span>Склад «Можайское»</span></div></div><p class="emp2-subdued">Телефон указывается ответственным менеджером в OPERIS. В демонстрации номер скрыт.</p><p class="emp2-subdued">Для срочного изменения выхода сообщите через раздел «График и табель».</p></section>';
+}
+document.getElementById("content").innerHTML=h;showNotice(state.notice)
+}
+function updateTab(tab){state.tab=tab;state.notice="";render()}
+document.addEventListener("click",function(ev){
+const tab=ev.target.closest("[data-tab]");if(tab){updateTab(tab.dataset.tab);return;}
+const b=ev.target.closest("[data-action]");if(!b)return;
+const a=b.dataset.action;state.notice="";
+if(a==="theme"){document.documentElement.dataset.theme=document.documentElement.dataset.theme==="dark"?"light":"dark";return}
+if(a==="reset"){state=fresh();render();return}
+if(a==="confirm"){state.confirmed=true;state.declined=false;state.showDecline=false;state.notice="Выход 9 октября подтверждён"}
+else if(a==="decline"||a==="change"){state.showDecline=!state.showDecline}
+else if(a==="saveDecline"){const input=document.getElementById("reason");if(!input.value.trim()){state.notice="Укажите причину невыхода";render();return}state.reason=input.value.trim();state.declined=true;state.confirmed=false;state.showDecline=false;state.notice="Невыход передан в контроль менеджера"}
+else if(a==="confirmHours"){state.hours=11;state.hoursEdit=false;state.notice="Отработанные часы переданы"}
+else if(a==="changeHours"){state.hoursEdit=true}
+else if(a==="saveHours"){const n=Number(document.getElementById("hours").value);if(!Number.isFinite(n)||n<0||n>24){state.notice="Укажите от 0 до 24 часов";render();return}state.hours=n;state.hoursEdit=false;state.notice="Часы уточнены"}
+else if(a==="cancelHours"){state.hoursEdit=false}
+else if(a==="more"){state.showMore=!state.showMore}
+else if(a==="month"){state.showMonth=!state.showMonth}
+else if(a==="day"||a==="night"){state.mode=a}
+else if(a==="editTime"||a.startsWith("edit-time-")){state.showTime=true;state.timeDate=a==="editTime"?1:Number(a.split("-").slice(-1)[0]);state.timeStart=state.changes[state.timeDate]?.start||"19:00";state.timeEnd=state.changes[state.timeDate]?.end||"07:00";state.nextDay=true}
+else if(a==="cancelTime"){state.showTime=false}
+else if(a==="saveTime"){
+const st=document.getElementById("start").value,en=document.getElementById("end").value,nd=document.getElementById("nextday").checked,period=document.getElementById("period").value;
+if(!st||!en){state.notice="Укажите начало и окончание";render();return}
+state.changes[state.timeDate]={start:st,end:en,next:nd};state.permanent=period==="regular";state.showTime=false;state.notice="Новое время смены передано менеджеру";
+}
+else if(a.startsWith("doc-")){const k=a.slice(4);state.doc[k]=state.doc[k]==="reported"?"needed":"reported";state.notice="Отметка о документе обновлена"}
+else if(a==="saveSizes"){state.clothing=document.getElementById("clothing").value;state.shoe=document.getElementById("shoe").value;state.notice="Размеры переданы менеджеру"}
+render();
+});
+state=fresh();render();
+})();</script></body></html>
