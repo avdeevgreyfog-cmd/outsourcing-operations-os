@@ -225,6 +225,10 @@ export async function POST(request:Request){
       const internal=await latestSnapshot(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
       const client=await latestSnapshot(tx,body.objectId,"client",body.periodStart,body.periodEnd);
       const baseKey=`timesheet:${body.objectId}:${body.periodStart}:${body.periodEnd}`;
+      if(["finalize","submit_internal","send_client"].includes(body.action)){
+        const [unverified]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM time_entries WHERE object_id=${body.objectId}::uuid AND work_date BETWEEN ${body.periodStart}::date AND ${body.periodEnd}::date AND source='worker_report'`;
+        if((unverified?.count??0)>0)throw new Error(`Есть ${unverified.count} записей часов от сотрудников без сверки. Сверьте период с заказчиком перед фиксацией.`);
+      }
 
       if(body.action==="finalize"){
         const alreadyLocked=[internal?.status,client?.status].some(status=>status&&["fixed","closed","internal_submitted","internal_checked","client_sent","client_approved"].includes(status));
