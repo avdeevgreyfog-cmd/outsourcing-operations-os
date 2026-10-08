@@ -12,7 +12,7 @@ function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".
 export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
-export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number};
+export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number;showEmployeeDocuments:boolean;showEmployeeWorkwear:boolean};
 
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
@@ -27,7 +27,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
       sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
         FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
-      sql<Array<PortalConfig>>`SELECT object_id "objectId",COALESCE(schedule_authority,CASE WHEN schedule_owner='client' THEN 'worker' ELSE schedule_owner END) "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled",manager_phone "managerPhone",COALESCE(planning_horizon_days,14)::int "planningHorizonDays"
+      sql<Array<PortalConfig>>`SELECT object_id "objectId",COALESCE(schedule_authority,CASE WHEN schedule_owner='client' THEN 'worker' ELSE schedule_owner END) "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled",manager_phone "managerPhone",COALESCE(planning_horizon_days,14)::int "planningHorizonDays",show_employee_documents "showEmployeeDocuments",show_employee_workwear "showEmployeeWorkwear"
         FROM object_shift_reporting_settings WHERE object_id=ANY(${[...objects]}::uuid[])`,
       sql<Array<EmployeePlan>>`SELECT DISTINCT ON(worker_id,object_id,work_date) worker_id "workerId",object_id "objectId",work_date::text date,time_code "timeCode",planned_shift_kind kind
         FROM time_entries WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[])
@@ -99,7 +99,7 @@ export async function resolveToken(token:string):Promise<TokenContext|null>{
     return row??null;
   });
 }
-export async function employeePortal(token:string){
+export async function employeePortal(token:string,selectedMonth?:string){
   const ref=await resolveToken(token);if(!ref)return null;
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
     const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"worker";deadline:string;timezone:string;today:string;reportingEnabled:boolean}>>`
@@ -120,18 +120,23 @@ export async function employeePortal(token:string){
         AND w.status='active' ORDER BY a.effective_from DESC LIMIT 1`;
     if(!link||!link.reportingEnabled)return null;
     await sql`UPDATE worker_timesheet_links SET last_opened_at=now() WHERE id=${link.id}::uuid`;
-    const [reports,plans]=await Promise.all([
+    const todayMonth=link.today.slice(0,7);
+     const month=selectedMonth&&/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)&&selectedMonth>="2020-01"&&selectedMonth<=todayMonth?selectedMonth:todayMonth;
+     const monthFrom=month+"-01";const monthTo=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
+     const rangeFrom=month<todayMonth?monthFrom:monthFrom;
+     const rangeTo=month<todayMonth?monthTo:link.today;
+     const [reports,plans]=await Promise.all([
       sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null}>>`
         SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours
         FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN LEAST(date_trunc('month',now() AT TIME ZONE ${link.timezone})::date,((now() AT TIME ZONE ${link.timezone})::date-7)) AND ((now() AT TIME ZONE ${link.timezone})::date+31) ORDER BY work_date`,
+          AND work_date BETWEEN ${rangeFrom}::date AND ${month===todayMonth?link.today:rangeTo}::date ORDER BY work_date`,
       sql<Array<{date:string;kind:string;timeCode:string;hours:number}>>`
         SELECT work_date::text date,COALESCE(planned_shift_kind,'day') kind,time_code "timeCode",fact_hours::float8 hours
         FROM time_entries WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND work_date BETWEEN LEAST(date_trunc('month',now() AT TIME ZONE ${link.timezone})::date,((now() AT TIME ZONE ${link.timezone})::date-7)) AND ((now() AT TIME ZONE ${link.timezone})::date+31)
+          AND work_date BETWEEN ${rangeFrom}::date AND ${month===todayMonth?link.today:rangeTo}::date
           ORDER BY updated_at DESC`,
     ]);
-    return {...link,reports,plans};
+    return {...link,reports,plans,selectedMonth:month};
   });
 }
 
@@ -187,7 +192,8 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${payload.date}::date AND period_end>=${payload.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new Error("Табель за эту дату уже зафиксирован");
     const [old]=await sql<Array<{response:string;shiftKind:string|null}>>`SELECT response,shift_kind "shiftKind" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
-    if(payload.hours!==undefined&&!old)throw new Error("Сначала подтвердите выход");
+    if(payload.hours!==undefined){const [verified]=await sql<Array<{id:string}>>`SELECT worker_id id FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND hours_reconciled_at IS NOT NULL LIMIT 1`;if(verified)throw new Error("Часы уже согласованы. Для исправления обратитесь к менеджеру.")}
+     if(payload.hours!==undefined&&!old)throw new Error("Сначала подтвердите выход");
     if(payload.hours!==undefined&&old?.response!=="working")throw new Error("Часы указываются только за отработанную смену");
     if(payload.hours===undefined&&!payload.response)throw new Error("Не указан ответ");
     if(payload.hours===undefined){
@@ -242,6 +248,12 @@ export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDat
       WHERE object_id=${objectId}::uuid AND period_start<=${toDate}::date AND period_end>=${fromDate}::date
       AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new Error("В выбранном периоде есть зафиксированный табель");
+    const reportRows=await sql<Array<{workerId:string;date:string}>>`UPDATE worker_shift_reports r
+      SET hours_reconciled_at=now(),hours_reconciled_by_user_id=${actor.userId}::uuid,updated_at=now()
+      FROM time_entries t WHERE t.worker_id=r.worker_id AND t.object_id=r.object_id AND t.work_date=r.work_date
+        AND r.object_id=${objectId}::uuid AND r.work_date BETWEEN ${fromDate}::date AND ${toDate}::date
+        AND r.reported_hours IS NOT NULL AND t.source='worker_report'
+      RETURNING r.worker_id "workerId",r.work_date::text date`;
     const updated=await sql`UPDATE time_entries SET source='manual',corrected_by_user_id=${actor.userId}::uuid,
       correction_reason='Промежуточная сверка с заказчиком',updated_at=now()
       WHERE object_id=${objectId}::uuid AND work_date BETWEEN ${fromDate}::date AND ${toDate}::date AND source='worker_report'
