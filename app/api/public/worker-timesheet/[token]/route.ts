@@ -20,7 +20,7 @@ const patternSchema=z.object({action:z.literal("pattern_change"),effectiveFrom:z
 const noStore={"Cache-Control":"no-store, private"};
 export async function GET(_request:Request,{params}:{params:Promise<{token:string}>}){
  try{
-  const {token}=await params;const data=await employeePortal(token);
+  const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
   return data?NextResponse.json({...data,...await (async()=>{const [details,planning]=await Promise.all([employeePortalDetails(token),employeePlanning(token)]);return {details,planning}})()},{headers:noStore}):NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
  }catch(error){console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
 }
