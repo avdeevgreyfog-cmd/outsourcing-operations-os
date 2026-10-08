@@ -59,7 +59,7 @@ export function MobileManagerWorkspace({initial}:{initial:MobileDesk}){
  },[tab,approvalLoaded,initial.demo]);
  const workers=useMemo(()=>data.workers.filter(w=>(objectId==="all"||w.objectId===objectId)&&w.kind===kind&&(search===""||(w.name+" "+w.specialty+" "+w.objectName).toLowerCase().includes(search.toLowerCase()))),[data.workers,objectId,kind,search]);
  const inShift=workers.filter(w=>w.assignmentId);
- const hasAttention=w=>w.attendance!=="present";
+ const hasAttention=(w:MobileWorker)=>w.attendance!=="present";
  const visible=workers.filter(w=>!attentionOnly||hasAttention(w));
  const futureNew=data.workers.filter(w=>w.firstDay&&(objectId==="all"||objectId===w.objectId));
  const planned=inShift.length,present=inShift.filter(w=>w.attendance==="present").length,missing=inShift.filter(w=>w.attendance==="absent").length,pending=inShift.filter(w=>w.attendance==="pending").length;
@@ -113,7 +113,7 @@ export function MobileManagerWorkspace({initial}:{initial:MobileDesk}){
   try{
    if(!data.demo){const r=await fetch("/api/operations/worker-confirmations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:actionName,objectId:item.objectId,workerId:item.workerId,date:item.date,approve})});const j=await r.json();if(!r.ok)throw new Error(j.error??"Решение не сохранено")}
    const source=item.type==="plan"?"planningChanges":item.type==="pattern"?"patternChanges":"timeChanges";
-   setApprovals(old=>({...old,[source]:(old[source]??[]).map(x=>x===item?{...x,status:approve?"accepted":"rejected"}:x)}));
+   setApprovals(old=>({...old,[source]:(old[source]??[]).map(x=>x.workerId===item.workerId&&x.date===item.date?{...x,status:approve?"accepted":"rejected"}:x)}));
    setApprovalLoaded(false);setNotice(approve?"Изменение согласовано":"Изменение отклонено");
   }catch(e){setError(e instanceof Error?e.message:"Ошибка решения")}finally{setBusy("")}
  }
@@ -140,7 +140,7 @@ export function MobileManagerWorkspace({initial}:{initial:MobileDesk}){
      <div className="field-workers">
       {visible.map(w=><article key={w.assignmentId??w.id} className="field-worker">
        <div className="field-worker-top"><div><strong>{w.name}</strong><p>{w.objectName} · {w.specialty??"Сотрудник"}{w.time?" · "+w.time:""}</p></div><span className={"field-state "+statusClass[w.attendance]}><span className="field-state-dot"/>{statusLabel[w.attendance]}</span></div>
-       {w.firstDay&&<button className="field-new-label" onClick={()=>{setFirstDay(w.id);setCheckEdit(null)}}><UserRoundPlus size={14}/> Первый выход · проверить подготовку <ChevronRight size={13}/></button>}
+       {w.firstDay&&<button className="field-new-label" onClick={()=>{setFirstDay(w.id);setTab("newcomers");setCheckEdit(null)}}><UserRoundPlus size={14}/> Первый выход · проверить подготовку <ChevronRight size={13}/></button>}
        {!w.assignmentId&&<p className="field-minor-warning">Смена ещё не назначена — отметка явки недоступна.</p>}
        <div className="field-worker-actions">{phoneLink(w.phone)?<a className="field-call" href={phoneLink(w.phone)!}><Phone size={15}/> Позвонить</a>:<span className="field-muted">Телефон не указан</span>}
         {canWrite&&w.assignmentId&&<><button disabled={!!busy} className={w.attendance==="present"?"field-active-present":""} onClick={()=>void mark([w.id],"present",null)}><Check size={15}/> На месте</button><button disabled={!!busy} onClick={()=>{setDraft({id:w.id,state:"absent",reason:""});setFirstDay(null)}}>Нет на месте</button></>}
@@ -175,7 +175,7 @@ export function MobileManagerWorkspace({initial}:{initial:MobileDesk}){
    </>}
    {tab==="decisions"&&<><div className="field-section-bar"><h2>Запросы сотрудников</h2><button className="field-link" onClick={()=>{setApprovalLoaded(false);setNotice("")}}>Обновить</button></div>
     {initial.demo&&<div className="field-empty">В демонстрационных данных нет запросов на согласование.</div>}
-    {!initial.demo&&(!approvalLoaded?<div className="field-empty">Загружаем согласования…</div>:updates.length?updates.map((x,i)=>{const worker=approvals.workers?.find(w=>w.id===x.workerId);const what=x.type==="plan"?"Изменение смены":x.type==="pattern"?"Изменение графика":"Изменение времени";return <article className="field-decision" key={x.workerId+":"+x.date+":"+x.type+":"+i}><span className="field-muted">{worker?.object??""} · {x.date}</span><strong>{worker?.name??"Сотрудник"}</strong><p>{what}{x.kind?" · "+(x.kind==="off"?"Выходной":x.kind==="night"?"Ночная":"Дневная"):""}{x.workDays?" · "+x.workDays+"/"+x.restDays:""}{x.startTime?" · "+x.startTime+"–"+x.endTime:""}</p><div><button disabled={!!busy} onClick={()=>void review(x,false)}>Отклонить</button><button className="primary" disabled={!!busy} onClick={()=>void review(x,true)}>Согласовать</button></div></article>}) : <div className="field-empty">Ожидающих решений нет.</div>))}
+    {!initial.demo&&(!approvalLoaded?<div className="field-empty">Загружаем согласования…</div>:updates.length?updates.map((x,i)=>{const worker=approvals.workers?.find(w=>w.id===x.workerId);const what=x.type==="plan"?"Изменение смены":x.type==="pattern"?"Изменение графика":"Изменение времени";return <article className="field-decision" key={x.workerId+":"+x.date+":"+x.type+":"+i}><span className="field-muted">{worker?.object??""} · {x.date}</span><strong>{worker?.name??"Сотрудник"}</strong><p>{what}{x.kind?" · "+(x.kind==="off"?"Выходной":x.kind==="night"?"Ночная":"Дневная"):""}{x.workDays?" · "+x.workDays+"/"+x.restDays:""}{x.startTime?" · "+x.startTime+"–"+x.endTime:""}</p><div><button disabled={!!busy} onClick={()=>void review(x,false)}>Отклонить</button><button className="primary" disabled={!!busy} onClick={()=>void review(x,true)}>Согласовать</button></div></article>}) : <div className="field-empty">Ожидающих решений нет.</div>)}
     <div className="field-quick-links"><Link href="/shifts">Все смены и подтверждения <ArrowRight size={15}/></Link><Link href="/timesheets">Табели и сверка часов <ArrowRight size={15}/></Link></div>
    </>}
    {tab==="more"&&<><div className="field-quick-links"><Link href="/objects"><Factory size={17}/> Все объекты <ChevronRight size={16}/></Link><Link href="/tasks"><ClipboardList size={17}/> Мои задачи <ChevronRight size={16}/></Link><Link href="/shifts"><CalendarDays size={17}/> Смены и выходы <ChevronRight size={16}/></Link><Link href="/workers"><UsersRound size={17}/> Сотрудники <ChevronRight size={16}/></Link><Link href="/launches"><MapPin size={17}/> План запусков <ChevronRight size={16}/></Link></div>
