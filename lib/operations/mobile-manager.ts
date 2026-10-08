@@ -76,7 +76,10 @@ export async function markMobileAttendance(actor:Actor,objectId:string,date:stri
  if(!safeDate(date)||date>moscowToday())throw new Error("Отметки будущей явки недоступны");
  if(workerIds.length<1||workerIds.length>50||new Set(workerIds).size!==workerIds.length)throw new Error("Выберите не более 50 сотрудников");
  if((reason?.length??0)>500)throw new Error("Слишком длинный комментарий");
- for(const id of workerIds)await verifyEmployee(actor,objectId,id);
+ requireCapability(actor,"operations.shift.edit");requireCapability(actor,"worker.read");
+ const [objects,people]=await Promise.all([listObjects(actor),listWorkers(actor)]);
+ const object=objects.find(x=>x.id===objectId);
+ if(!object||!managerCanEdit(actor,object)||workerIds.some(id=>!people.some(w=>w.id===id&&w.objectId===objectId&&w.status==="active")))throw new AccessDeniedError("operations.shift.edit");
  return withTenant(actor.organizationId,actor.userId,sql=>sql.begin(async tx=>{
   const rows=await tx<Array<{id:string;workerId:string}>>`SELECT sa.id,sa.worker_id "workerId" FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
    WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date AND sh.shift_kind=${kind} AND sa.worker_id=ANY(${workerIds}::uuid[])
