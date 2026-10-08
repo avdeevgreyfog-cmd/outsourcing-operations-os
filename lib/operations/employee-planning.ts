@@ -182,7 +182,7 @@ export async function managerSetScheduleOwner(actor:Actor,objectId:string,owner:
   }else{
    if(!owner)throw new Error("Режим графика объекта должен быть указан");
    await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,schedule_authority,planning_horizon_days,updated_by_user_id)
-    VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${owner},${horizon??7},${actor.userId}::uuid)
+    VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${owner},${horizon??14},${actor.userId}::uuid)
     ON CONFLICT(object_id) DO UPDATE SET schedule_authority=EXCLUDED.schedule_authority,planning_horizon_days=COALESCE(${horizon??null},object_shift_reporting_settings.planning_horizon_days),
       updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }
