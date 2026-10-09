@@ -121,17 +121,18 @@ jobs:
 
           if(production.ok!==true)throw new Error("production runtime is unhealthy");
           if(production.databaseConfigured!==true)throw new Error("production DATABASE_URL is not configured");
-          if(production.schemaVersion!==process.env.PRODUCTION_EXPECTED_SCHEMA){
-            throw new Error(`production schema drifted from main; expected=${process.env.PRODUCTION_EXPECTED_SCHEMA} active=${production.schemaVersion??"unknown"}`);
+          if(production.environment!=="production"){
+            throw new Error(`production deployment must report APP_ENVIRONMENT=production; got ${production.environment??"unknown"}`);
           }
-          if(production.environment!=null&&production.environment!=="production"){
-            throw new Error(`production deployment reports an invalid environment: ${production.environment}`);
+          if(!production.databaseIdentity){
+            throw new Error("production database identity is unavailable; the production status endpoint must include databaseIdentity");
           }
-          if(production.databaseIdentity!=null&&staging.databaseIdentity===production.databaseIdentity){
+          if(staging.databaseIdentity===production.databaseIdentity){
             throw new Error("staging and production resolve to the same PostgreSQL database");
           }
-          if(production.environment==null||production.databaseIdentity==null){
-            console.log("::notice::Production runtime does not yet expose full environment/database identity metadata; secret-level boundary verification remains mandatory in Release Readiness.");
+          console.log("Runtime boundary verified: staging and production PostgreSQL identities are distinct.");
+          if(production.schemaVersion!==process.env.PRODUCTION_EXPECTED_SCHEMA){
+            throw new Error(`production schema drifted from main; expected=${process.env.PRODUCTION_EXPECTED_SCHEMA} active=${production.schemaVersion??"unknown"}`);
           }
           NODE
 
