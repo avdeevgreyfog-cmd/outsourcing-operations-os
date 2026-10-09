@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateScenario, calculateCommercialScenario } from "../lib/core/calculator.mjs";
+import { aggregateAcceptedEconomics, mergeCalculationRules, pricingTargetFields } from "../lib/commercial/scenario-economics.mjs";
 
 test("calculator includes employee and project costs", () => {
   const result = calculateScenario({
@@ -281,4 +282,31 @@ test("piecework payment and periodic expenses use their actual calculation base"
   assert.equal(result.additionalCostsMonthly, 240);
   assert.equal(result.monthlyCost, 2240);
   assert.equal(result.clientRateNet, 4.49);
+});
+
+
+test("per-unit profit survives serialization and company policy overrides model price settings", () => {
+  const inputs = { workerPayAmount: 100, workerPayUnit: "hour", workers: 2, hoursPerWorker: 100,
+    billingUnit: "hour", vatMode: "without_vat", ruleVersionId: "rule",
+    pricingMode: "target_profit", ...pricingTargetFields("target_profit", 25) };
+  const rules = mergeCalculationRules({ mandatoryChargePct: 0, minimumMarginPct: 5 },
+    { riskReservePct: 0, minimumMarginPct: 10, roundingStep: 0.01 });
+  const preview = calculateCommercialScenario({ ...inputs, rules, costs: [] });
+  const persisted = calculateCommercialScenario({ ...JSON.parse(JSON.stringify(inputs)), rules, costs: [] });
+  assert.deepEqual(persisted, preview);
+  assert.equal(persisted.clientRateNet, 125);
+  assert.equal(persisted.monthlyContribution, 5000);
+  assert.equal(rules.minimumMarginPct, 10);
+  assert.equal(pricingTargetFields("target_margin", 25).targetProfitPerBillingUnit, null);
+});
+
+test("aggregate scenario margin is revenue weighted and excludes incomplete economics", () => {
+  const summary = aggregateAcceptedEconomics([
+    { monthlyRevenueNet: 100000, monthlyCost: 90000 },
+    { monthlyRevenueNet: 900000, monthlyCost: 630000 },
+  ]);
+  assert.equal(summary.marginPct, 28);
+  assert.equal(summary.monthlyContribution, 280000);
+  assert.equal(aggregateAcceptedEconomics([{ monthlyRevenueNet: null, monthlyCost: 100 }]).marginPct, null);
+  assert.equal(aggregateAcceptedEconomics([]).monthlyContribution, null);
 });

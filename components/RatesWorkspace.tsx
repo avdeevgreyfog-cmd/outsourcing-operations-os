@@ -154,7 +154,8 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
   const summary = useMemo(() => {
     const map = new Map<string, RateMemoryRow[]>();
     for (const row of filtered) {
-      const key = `${row.specialty}__${row.priceZone || row.region}`;
+      // Never combine hourly and shift rates or different employment/payment conditions.
+      const key = JSON.stringify([row.specialty,row.priceZone||row.region,row.unit,row.grossNet,row.employmentModel,row.scheduleLabel??"",row.housingIncluded,row.shuttleIncluded]);
       map.set(key, [...(map.get(key) ?? []), row]);
     }
     return [...map.entries()].map(([key, items]) => {

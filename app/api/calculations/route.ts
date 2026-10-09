@@ -4,6 +4,8 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { requireCapability,AccessDeniedError } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
+import { defaultCommercialPolicy } from "@/lib/commercial/commercial-policy";
+import { mergeCalculationRules } from "@/lib/commercial/scenario-economics.mjs";
 import { withTenant } from "@/lib/db/client";
 
 const jsonObject=z.record(z.string(),z.json());
@@ -117,6 +119,16 @@ export async function POST(request:Request){
         `;
       }
       const ruleVersionId=rule?.id??null;
+      // Read the company-wide policy on the same effective date as the employment rules.
+      const [policyVersion]=await tx<Array<{id:string;version:number;policy:Record<string,unknown>}>>`
+        SELECT id,version,policy_json policy FROM commercial_policy_versions
+        WHERE organization_id=${actor.organizationId}::uuid
+          AND effective_from<=${economicsDate}::date
+          AND (effective_to IS NULL OR effective_to>=${economicsDate}::date)
+        ORDER BY version DESC,effective_from DESC LIMIT 1
+      `;
+      const commercialPolicy={...defaultCommercialPolicy,...(policyVersion?.policy??{})};
+      const effectiveRules=mergeCalculationRules(rule?.rules??{},commercialPolicy);
 
       if(!calculationId){
         const existing=resolvedSourceType==="request"
@@ -142,9 +154,9 @@ export async function POST(request:Request){
       }
       if(!calculationId)throw new Error("Не удалось создать расчёт");
 
-      const inputs:JsonRecord={...b.inputs,ruleVersionId,sourceType:resolvedSourceType,sourceId:resolvedSourceId,economicsDate,calculationVersion,projectAllocationMode:allocationMode};
+      const inputs:JsonRecord={...b.inputs,ruleVersionId,sourceType:resolvedSourceType,sourceId:resolvedSourceId,economicsDate,calculationVersion,projectAllocationMode:allocationMode,commercialPolicyVersionId:policyVersion?.id??null,commercialPolicySnapshot:{...commercialPolicy}};
       const isCommercialScenario="workerPayAmount" in b.inputs||"billingUnit" in b.inputs||"pricingMode" in b.inputs;
-      const serverResult:JsonRecord=isCommercialScenario?calculateCommercialScenario({...inputs,costs:b.costs,rules:rule?.rules??{}}) as JsonRecord:b.result??{};
+      const serverResult:JsonRecord=isCommercialScenario?calculateCommercialScenario({...inputs,costs:b.costs,rules:effectiveRules}) as JsonRecord:b.result??{};
       if(isCommercialScenario&&Object.keys(serverResult).length===0)throw new Error("Не удалось рассчитать экономику сценария");
 
       let referenceSnapshot:JsonRecord|null=null;
