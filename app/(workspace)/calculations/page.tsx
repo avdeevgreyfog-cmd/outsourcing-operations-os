@@ -4,13 +4,17 @@ import { redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { listCommercialCalculations } from "@/lib/commercial/calculation-list";
+import { listRequestBoard } from "@/lib/commercial/request-workflow-server";
+import { listTenders } from "@/lib/tenders/service";
+import { buildCalculationQueue } from "@/lib/commercial/calculation-queue.mjs";
+import { CalculationsHomeWorkspace } from "@/components/CalculationsHomeWorkspace";
 import { getCalculationModels } from "@/lib/commercial/calculation-models";
 import { getRateReferencesForRoles } from "@/lib/commercial/calculation-workspace";
 import { getCalculationStandards } from "@/lib/commercial/calculation-standards";
 import { getCommercialRequest } from "@/lib/commercial/service";
 import { getTender } from "@/lib/tenders/service";
 import { PageHeader, Section } from "@/components/UI";
-import { CalculationsRegistryWorkspace } from "@/components/CalculationsRegistryWorkspace";
+
 import { CalculatorWorkspaceWithRateMemory } from "@/components/CalculatorWorkspaceWithRateMemory";
 
 export default async function Calculations({searchParams}:{searchParams:Promise<{request?:string;tender?:string}>}) {
@@ -44,6 +48,11 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
   const canEdit = hasCapability(actor.access, "calculation.scenario.edit");
 
   if (!source) {
+    const [requests, tenders] = await Promise.all([
+      hasCapability(actor.access, "sales.request.read") ? listRequestBoard(actor) : Promise.resolve([]),
+      hasCapability(actor.access, "sales.tender.read") ? listTenders(actor) : Promise.resolve([]),
+    ]);
+    const queue = buildCalculationQueue(requests, tenders, rows);
     return <>
       <PageHeader
         eyebrow="Коммерция → Экономика"
@@ -52,7 +61,7 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
         breadcrumbs={[{label:"Коммерция"},{label:"Экономика"},{label:"Расчёты"}]}
         actions={<Link className="button primary" href="/calculations/quick">+ Быстрый расчёт</Link>}
       />
-      <CalculationsRegistryWorkspace rows={rows} canEdit={canEdit}/>
+      <CalculationsHomeWorkspace queue={queue} calculations={rows} canEdit={canEdit} canCreate={canCreate}/>
     </>;
   }
 
