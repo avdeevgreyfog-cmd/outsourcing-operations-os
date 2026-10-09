@@ -18,7 +18,7 @@ function dateLabel(value:string|null) {
 export function CalculationsHomeWorkspace({queue,calculations,canCreate,canEdit}:{
   queue:CalculationQueueRow[];calculations:CommercialCalculationRow[];canCreate:boolean;canEdit:boolean;
 }){
-  const [view,setView]=useState<View>("queue");
+  const [view,setView]=useState<View>(queue.length?"queue":"calculations");
   const [query,setQuery]=useState("");
   const [filter,setFilter]=useState<"all"|"request"|"tender">("all");
   const visible=useMemo(()=>queue.filter(item=>(filter==="all"||item.sourceType===filter)
