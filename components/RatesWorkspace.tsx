@@ -76,6 +76,10 @@ const sourceStatusLabels: Record<string,string> = {
   draft:"Черновик",
 };
 const sourceStatusLabel = (value: string) => sourceStatusLabels[value.toLowerCase()] ?? "Источник данных";
+const freshRate = (date: string, now: number) => {
+  const age = now - dateTime(date);
+  return age >= 0 && age <= 180 * 86400000;
+};
 
 function parseImportRow(raw: Record<string, unknown>, index: number, fallbackDate: string): { row?: RateMemoryRow; error?: string } {
   const values = new Map(Object.entries(raw).map(([key,value]) => [normalizedHeader(key), value]));
@@ -90,11 +94,15 @@ function parseImportRow(raw: Record<string, unknown>, index: number, fallbackDat
   const clientMax = numberValue(get("Клиенту макс без НДС","Ставка клиенту макс","client max"));
   if (!specialty) return { error: `Строка ${index + 2}: не указана специальность` };
   if (workerMin == null && workerMax == null && clientMin == null && clientMax == null) return { error: `Строка ${index + 2}: нужна хотя бы одна ставка сотруднику или клиенту` };
+  const originalUnit = norm(get("Единица","unit")) || "hour";
+  const normalized = originalUnit.toLowerCase();
+  if (!["hour","ч","час","₽/ч","shift","смена","₽/смену","month","месяц","мес","₽/мес"].includes(normalized))
+    return { error:`Строка ${index + 2}: неизвестная единица ставки «${originalUnit}»` };
   const region = norm(get("Регион","region")) || "Без региона";
   return { row: {
     id: `local-${crypto.randomUUID()}`, organizationId: "demo", specialty, region, priceZone: norm(get("Ценовая зона","price zone")) || region,
     employmentModel: norm(get("Модель оформления","Модель","employment model")) || "Не указано",
-    amountMin: workerMin ?? workerMax, amountMax: workerMax ?? workerMin, unit: norm(get("Единица","unit")) || "hour",
+    amountMin: workerMin ?? workerMax, amountMax: workerMax ?? workerMin, unit: originalUnit,
     grossNet: norm(get("Тип выплаты","Тип","pay semantics")) || "На руки", source: norm(get("Источник","source")) || "Импорт компании",
     sourceType: "import", sourceStatus: norm(get("Статус источника","source status")) || "historical", sourceDate: isoDate(get("Дата источника","Дата","source date")) || fallbackDate,
     confidence: "imported", comment: norm(get("Комментарий","comment")) || null, scheduleLabel: norm(get("График","schedule")) || null,
@@ -120,6 +128,8 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
   const [region, setRegion] = useState("all");
   const [model, setModel] = useState("all");
   const [sourceType, setSourceType] = useState("all");
+  const [unitFilter,setUnitFilter]=useState("all");
+  const [freshness,setFreshness]=useState<"all"|"recent"|"historical">("all");
   const [selected, setSelected] = useState<RateMemoryRow[] | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -147,9 +157,11 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
     if (region !== "all" && row.region !== region) return false;
     if (model !== "all" && row.employmentModel !== model) return false;
     if (sourceType !== "all" && row.sourceType !== sourceType) return false;
+    if (unitFilter !== "all" && row.unit !== unitFilter) return false;
+    if (freshness !== "all" && freshRate(row.sourceDate,now) !== (freshness === "recent")) return false;
     const haystack = `${row.specialty} ${row.region} ${row.priceZone ?? ""} ${row.source} ${row.comment ?? ""}`.toLowerCase();
     return haystack.includes(query.toLowerCase());
-  }), [rows, region, model, sourceType, query]);
+  }), [rows, region, model, sourceType, unitFilter, freshness, query, now]);
 
   const summary = useMemo(() => {
     const map = new Map<string, RateMemoryRow[]>();
@@ -171,7 +183,8 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
 
   const regions = useMemo(() => [...new Set(rows.map(row => row.region))].sort((a,b)=>a.localeCompare(b,"ru")), [rows]);
   const models = useMemo(() => [...new Set(rows.map(row => row.employmentModel))].sort((a,b)=>a.localeCompare(b,"ru")), [rows]);
-  const fresh = rows.filter(row => now - dateTime(row.sourceDate) < 180 * 86400000).length;
+  const units = useMemo(() => [...new Set(rows.map(row => row.unit))].sort((a,b)=>a.localeCompare(b,"ru")), [rows]);
+  const fresh = rows.filter(row => freshRate(row.sourceDate,now)).length;
   const selectedWorkerRange = rangeBounds(selected?.flatMap(row => [row.amountMin,row.amountMax]) ?? []);
   const selectedClientRange = rangeBounds(selected?.flatMap(row => [row.clientRateMin,row.clientRateMax]) ?? []);
   const metrics = [
@@ -250,7 +263,7 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
     const ok = await commitRows([row]); if (ok) setAddOpen(false);
   }
 
-  const resetFilters = () => { setQuery(""); setRegion("all"); setModel("all"); setSourceType("all"); };
+  const resetFilters = () => { setQuery(""); setRegion("all"); setModel("all"); setSourceType("all"); setUnitFilter("all"); setFreshness("all"); };
 
   return <div className="rates-workspace">
     <SalesMetrics label="Сводка базы ставок" items={metrics}/>
@@ -267,6 +280,8 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
         <label>Регион<select value={region} onChange={event=>setRegion(event.target.value)}><option value="all">Все регионы</option>{regions.map(value=><option key={value}>{value}</option>)}</select></label>
         <label>Модель<select value={model} onChange={event=>setModel(event.target.value)}><option value="all">Все модели</option>{models.map(value=><option key={value}>{value}</option>)}</select></label>
         <label>Источник<select value={sourceType} onChange={event=>setSourceType(event.target.value)}><option value="all">Все источники</option><option value="object">Факт объекта</option><option value="proposal">КП</option><option value="calculation">Расчёт</option><option value="import">Импорт</option><option value="manual">Ручной</option></select></label>
+        <label>Единица<select value={unitFilter} onChange={event=>setUnitFilter(event.target.value)}><option value="all">Все единицы</option>{units.map(value=><option key={value} value={value}>{unitLabel(value)}</option>)}</select></label>
+        <label>Актуальность<select value={freshness} onChange={event=>setFreshness(event.target.value as typeof freshness)}><option value="all">Все даты</option><option value="recent">До 180 дней</option><option value="historical">Старше 180 дней</option></select></label>
       </div>
       <SalesSearch value={query} onChange={setQuery} placeholder="Поиск по специальности, региону или источнику"/>
     </div>
@@ -274,8 +289,8 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
     {message&&<div className="rates-message">{message}</div>}
     {preview&&<div className="rates-import-preview"><div><strong>{preview.name}</strong><span>Готово к импорту: {preview.rows.length}{preview.errors.length?` · пропущено: ${preview.errors.length}`:""}</span>{preview.errors.slice(0,3).map(error=><small key={error}>{error}</small>)}</div><div><button className="button primary" disabled={!preview.rows.length} onClick={()=>void applyPreview()}>Импортировать {preview.rows.length}</button><button className="button" onClick={()=>setPreview(null)}>Отмена</button></div></div>}
 
-    {view==="summary" ? <div className="request-table-wrap rates-table-wrap">{summary.length?<table className="data-table rates-summary-table"><thead><tr><th>Специальность</th><th>Ценовая зона</th><th>Базовые условия</th><th>Сотруднику</th><th>Клиенту без НДС</th><th>Наблюдений</th><th>Обновлено</th></tr></thead><tbody>{summary.map(group=><tr key={group.key} onClick={()=>setSelected(group.items)} tabIndex={0} onKeyDown={event=>{if(event.key==="Enter")setSelected(group.items)}}><td><strong>{group.specialty}</strong><span className="cell-sub">{group.latest.region}</span></td><td>{group.zone}</td><td>{conditions(group.latest)}</td><td className="num">{rangeLabel(group.workerMin,group.workerMax,` ${unitLabel(group.latest.unit)}`)}</td><td className="num">{rangeLabel(group.clientMin,group.clientMax,` ${unitLabel(group.latest.unit)}`)}</td><td className="num">{group.items.length}</td><td>{dateLabel(group.latest.sourceDate)}</td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>
-    : <div className="request-table-wrap rates-table-wrap">{filtered.length?<table className="data-table rates-history-table"><thead><tr><th>Специальность</th><th>Регион / зона</th><th>Условия</th><th>Сотруднику</th><th>Себестоимость</th><th>Клиенту</th><th>Источник</th><th>Дата</th></tr></thead><tbody>{[...filtered].sort((a,b)=>dateTime(b.sourceDate)-dateTime(a.sourceDate)).map(row=><tr key={row.id} onClick={()=>setSelected([row])} tabIndex={0} onKeyDown={event=>{if(event.key==="Enter")setSelected([row])}}><td><strong>{row.specialty}</strong><span className="cell-sub">{row.employmentModel}</span></td><td>{row.region}<span className="cell-sub">{row.priceZone||"—"}</span></td><td>{conditions(row)}</td><td className="num">{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.fullCostMin,row.fullCostMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</td><td>{sourceLabels[row.sourceType]||"Источник"}<span className="cell-sub">{row.source}</span></td><td>{dateLabel(row.sourceDate)}</td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>}
+    {view==="summary" ? <div className="request-table-wrap rates-table-wrap">{summary.length?<table className="data-table rates-summary-table"><thead><tr><th>Специальность</th><th>Ценовая зона</th><th>Базовые условия</th><th>Сотруднику</th><th>Клиенту без НДС</th><th>Наблюдений</th><th>Обновлено</th></tr></thead><tbody>{summary.map(group=><tr key={group.key} onClick={()=>setSelected(group.items)} tabIndex={0} onKeyDown={event=>{if(event.key==="Enter")setSelected(group.items)}}><td><strong>{group.specialty}</strong><span className="cell-sub">{group.latest.region}</span></td><td>{group.zone}</td><td>{conditions(group.latest)}</td><td className="num">{rangeLabel(group.workerMin,group.workerMax,` ${unitLabel(group.latest.unit)}`)}</td><td className="num">{rangeLabel(group.clientMin,group.clientMax,` ${unitLabel(group.latest.unit)}`)}</td><td className="num">{group.items.length}</td><td>{dateLabel(group.latest.sourceDate)}<span className="cell-sub">{freshRate(group.latest.sourceDate,now)?"Недавнее наблюдение":"Исторический ориентир"}</span></td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>
+    : <div className="request-table-wrap rates-table-wrap">{filtered.length?<table className="data-table rates-history-table"><thead><tr><th>Специальность</th><th>Регион / зона</th><th>Условия</th><th>Сотруднику</th><th>Себестоимость</th><th>Клиенту</th><th>Источник</th><th>Дата</th></tr></thead><tbody>{[...filtered].sort((a,b)=>dateTime(b.sourceDate)-dateTime(a.sourceDate)).map(row=><tr key={row.id} onClick={()=>setSelected([row])} tabIndex={0} onKeyDown={event=>{if(event.key==="Enter")setSelected([row])}}><td><strong>{row.specialty}</strong><span className="cell-sub">{row.employmentModel}</span></td><td>{row.region}<span className="cell-sub">{row.priceZone||"—"}</span></td><td>{conditions(row)}</td><td className="num">{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.fullCostMin,row.fullCostMax,` ${unitLabel(row.unit)}`)}</td><td className="num">{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</td><td>{sourceLabels[row.sourceType]||"Источник"}<span className="cell-sub">{row.source} · {sourceStatusLabel(row.sourceStatus)}</span></td><td>{dateLabel(row.sourceDate)}</td></tr>)}</tbody></table>:<SalesEmpty onReset={resetFilters}/>}</div>}
 
     {selected&&<SalesDrawer title={selected[0].specialty} subtitle={`${selected[0].priceZone||selected[0].region} · ${selected.length} наблюдений`} onClose={()=>setSelected(null)}><div className="rates-drawer-summary"><div><span>Сотруднику</span><strong>{rangeLabel(selectedWorkerRange[0],selectedWorkerRange[1],` ${unitLabel(selected[0].unit)}`)}</strong></div><div><span>Клиенту</span><strong>{rangeLabel(selectedClientRange[0],selectedClientRange[1],` ${unitLabel(selected[0].unit)}`)}</strong></div></div><div className="rates-drawer-list">{selected.map(row=><article key={row.id}><header><strong>{dateLabel(row.sourceDate)} · {sourceLabels[row.sourceType]||"Источник"}</strong><span>{sourceStatusLabel(row.sourceStatus)}</span></header><p>{conditions(row)}</p><dl><div><dt>Сотруднику</dt><dd>{rangeLabel(row.amountMin,row.amountMax,` ${unitLabel(row.unit)}`)}</dd></div><div><dt>Клиенту</dt><dd>{rangeLabel(row.clientRateMin,row.clientRateMax,` ${unitLabel(row.unit)}`)}</dd></div><div><dt>Источник</dt><dd>{row.source}</dd></div></dl>{row.comment&&<small>{row.comment}</small>}</article>)}</div></SalesDrawer>}
 
