@@ -25,6 +25,7 @@ export type ContractTerms = {
   notes?: string | null;
   roles?: Array<{ role: string; count: number; rateNet: number; rateGross?: number; unit: string; scenarioId?: string }>;
   proposalSnapshot?: { proposalId: string; proposalVersion: number };
+  tenderSnapshot?: { tenderId:string; calculationId:string; calculationVersion:number; scenarioIds:string[]; finalBidRoundId?:string; finalBidRoundNumber?:number; finalBidValue?:number; priceVatMode?:string; winningRevenueNet?:number|null; scenarioRevenueNet?:number|null };
 };
 
 export type ContractRow = {
@@ -32,8 +33,10 @@ export type ContractRow = {
   organizationId: string;
   clientId: string;
   client: string;
-  requestId: string;
-  request: string;
+  requestId: string | null;
+  request: string | null;
+  tenderId: string | null;
+  tender: string | null;
   proposalId: string | null;
   proposalVersion: number | null;
   objectId: string | null;
@@ -92,6 +95,8 @@ function demoContracts(): ContractRow[] {
     client: request.client,
     requestId: request.id,
     request: request.title,
+    tenderId: null,
+    tender: null,
     proposalId: proposal.id,
     proposalVersion: Number(proposal.version ?? 1),
     objectId: object.id,
@@ -119,7 +124,8 @@ export async function listContracts(actor: Actor): Promise<ContractRow[]> {
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ContractRow[]>`
       SELECT c.id,c.organization_id "organizationId",c.client_company_id "clientId",cl.name client,
-        c.request_id "requestId",r.title request,c.proposal_id "proposalId",p.version "proposalVersion",
+        c.request_id "requestId",r.title request,c.tender_id "tenderId",t.title tender,
+        c.proposal_id "proposalId",p.version "proposalVersion",
         c.object_id "objectId",o.name object,c.parent_contract_id "parentContractId",
         CASE WHEN pc.id IS NULL THEN NULL ELSE COALESCE(pc.number,pc.title) END "parentContract",
         c.kind,c.status,c.title,c.number,c.owner_user_id "ownerUserId",u.display_name owner,c.launch_gate "launchGate",
@@ -127,7 +133,8 @@ export async function listContracts(actor: Actor): Promise<ContractRow[]> {
         COALESCE(cv.version,1)::int version,to_char(c.updated_at,'DD.MM.YYYY') "updatedAt"
       FROM contracts c
       JOIN client_companies cl ON cl.id=c.client_company_id
-      JOIN requests r ON r.id=c.request_id
+      LEFT JOIN requests r ON r.id=c.request_id
+      LEFT JOIN tenders t ON t.id=c.tender_id
       LEFT JOIN proposals p ON p.id=c.proposal_id
       LEFT JOIN objects o ON o.id=c.object_id
       LEFT JOIN contracts pc ON pc.id=c.parent_contract_id
@@ -144,7 +151,7 @@ export async function getContractDetail(actor: Actor, id: string): Promise<Contr
   if (!summary) return null;
   if (actor.demo) {
     const proposal = demo.proposals.find((item) => item.id === summary.proposalId);
-    const request = demo.requests.find((item) => item.id === summary.requestId);
+    const request = summary.requestId ? demo.requests.find((item) => item.id === summary.requestId) : undefined;
     return {
       ...summary,
       terms: {

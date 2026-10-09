@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import ts from 'typescript';
 import {canReadRow,hasCapability} from '../lib/core/access.mjs';
+import {validateTenderLaunchPricing} from '../lib/tenders/handoff.mjs';
 const nativeRequire=createRequire(import.meta.url);
 function load(path,deps={}){
   const code=ts.transpileModule(fs.readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
@@ -141,4 +142,59 @@ test('bid round API requires submit capability, edit row scope and submitted sta
   assert.equal(response.status,500);
   assert.match(response.body.error,/после подачи/i);
   assert.equal(early.writes.length,0);
+});
+
+function launchFixture({caps=['sales.tender.read','sales.tender.launch'],rowDenied=false,stage='completed',result='won',clientId='client',regionId='region'}={}){
+  const a=actor(caps),writes=[];
+  const tx=async(strings)=>{
+    const query=strings.join('?');
+    if(query.includes('FROM tenders t WHERE t.id='))return [{tenderId:id,organizationId:rowDenied?'other':'org',clientId,regionId,legalEntityId:null,ownerUserId:'user',createdByUserId:'user',teamId:null,title:'Tender',stage,result,conditions:{}}];
+    writes.push(query);
+    throw Error('Unexpected write/read after launch preconditions: '+query);
+  };
+  tx.json=value=>value;
+  const sql=Object.assign(tx,{begin:async cb=>cb(tx)});
+  const api=load('app/api/tenders/[id]/launch/route.ts',{
+    'next/server':{NextResponse:{json:(body,{status=200}={})=>({body,status})}},
+    '@/lib/auth/server':{getCurrentActor:async()=>a},
+    '@/lib/access/server':auth,
+    '@/lib/core/access.mjs':{canReadRow},
+    '@/lib/db/client':{withTenant:async(org,user,cb)=>cb(sql)},
+    '@/lib/operations/launch-checklist':{defaultPrimarySiteVisitChecklist:()=>[]},
+    '@/lib/tenders/handoff.mjs':{validateTenderLaunchPricing},
+  });
+  return {writes,post:body=>api.POST(new Request('http://localhost/api/tenders/'+id+'/launch',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body??{})}),{params:Promise.resolve({id})})};
+}
+test('won tender handoff requires launch capability before database writes',async()=>{
+  const f=launchFixture({caps:['sales.tender.read']});
+  const response=await f.post({});
+  assert.equal(response.status,403);
+  assert.equal(f.writes.length,0);
+});
+test('won tender handoff enforces row scope and terminal won result before downstream writes',async()=>{
+  const denied=launchFixture({rowDenied:true});
+  assert.equal((await denied.post({})).status,403);
+  assert.equal(denied.writes.length,0);
+  const lost=launchFixture({result:'lost'});
+  const lostResponse=await lost.post({});
+  assert.equal(lostResponse.status,500);
+  assert.match(lostResponse.body.error,/Выиграли/);
+  assert.equal(lost.writes.length,0);
+  const active=launchFixture({stage:'awaiting_result',result:null});
+  const activeResponse=await active.post({});
+  assert.equal(activeResponse.status,500);
+  assert.match(activeResponse.body.error,/Выиграли/);
+  assert.equal(active.writes.length,0);
+});
+test('won tender handoff requires linked client and region before downstream writes',async()=>{
+  const noClient=launchFixture({clientId:null});
+  const clientResponse=await noClient.post({});
+  assert.equal(clientResponse.status,500);
+  assert.match(clientResponse.body.error,/клиент/i);
+  assert.equal(noClient.writes.length,0);
+  const noRegion=launchFixture({regionId:null});
+  const regionResponse=await noRegion.post({});
+  assert.equal(regionResponse.status,500);
+  assert.match(regionResponse.body.error,/регион/i);
+  assert.equal(noRegion.writes.length,0);
 });
