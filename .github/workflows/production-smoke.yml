@@ -98,3 +98,31 @@ jobs:
           if [ "$worker_code" != "200" ]; then head -c 3000 /tmp/worker.html || true; echo; exit 1; fi
           if grep -q "This page couldn" /tmp/object.html; then head -c 3000 /tmp/object.html; echo; exit 1; fi
           if grep -q "This page couldn" /tmp/worker.html; then head -c 3000 /tmp/worker.html; echo; exit 1; fi
+
+      - name: Verify tender, shift and linked-client workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          cookie='oo_workspace_mode=demo; oo_demo_role=director'
+          for route in '/tenders' '/shifts' '/clients/70000000-0000-4000-8000-000000000001?tab=tenders'; do
+            result="$(curl -sS -L -H "Cookie: $cookie" -o /tmp/operis-workflow.html -w '%{http_code}' "$BASE_URL$route")"
+            if [ "$result" != "200" ]; then
+              echo "::error::Expected HTTP 200 on $route; got $result"
+              exit 1
+            fi
+            if grep -q "This page couldn" /tmp/operis-workflow.html; then
+              echo "::error::Next.js error screen on $route"
+              exit 1
+            fi
+            echo "PASS $route"
+          done
+          invalid_token='0000000000000000000000000000000000000000000000000000000000000000'
+          code="$(curl -sS -D /tmp/worker-api-headers -o /tmp/worker-api-body -w '%{http_code}' "$BASE_URL/api/public/worker-timesheet/$invalid_token")"
+          if [ "$code" != "404" ]; then
+            echo "::error::Invalid employee private link must return 404 (got $code)"
+            exit 1
+          fi
+          grep -qi '^cache-control:.*no-store' /tmp/worker-api-headers || {
+            echo "::error::Employee private link response must not be cacheable"
+            exit 1
+          }
