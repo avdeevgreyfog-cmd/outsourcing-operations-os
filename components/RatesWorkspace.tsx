@@ -106,7 +106,7 @@ function parseImportRow(raw: Record<string, unknown>, index: number, fallbackDat
 }
 
 function conditions(row: RateMemoryRow) {
-  const parts = [row.employmentModel, row.scheduleLabel].filter(Boolean);
+  const parts = [row.employmentModel, row.scheduleLabel, row.grossNet].filter(Boolean);
   if (row.housingIncluded === true) parts.push("с проживанием");
   else if (row.housingIncluded === false) parts.push("без проживания");
   if (row.shuttleIncluded === true) parts.push("с развозкой");
