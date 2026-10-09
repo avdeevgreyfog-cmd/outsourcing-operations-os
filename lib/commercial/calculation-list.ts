@@ -10,7 +10,7 @@ export type CommercialCalculationRow = {
   organizationId:string;sourceType:"request"|"tender";sourceId:string;source:string;
   requestId:string|null;tenderId:string|null;request:string;role:string;sourceRoleId:string;requestRoleId:string|null;tenderRoleId:string|null;
   name:string;model:string;modelCode:string;status:string;workerNet:number|string;totalCost:number|string;clientRate:number|string;clientRateGross:number|string|null;
-  billingUnit:string;billingUnitLabel:string|null;pricingMode:string;marginPct:number|string;monthlyContribution:number|string;warnings:string[];ruleVersion:number|null;ruleSource:string|null;
+  billingUnit:string;billingUnitLabel:string|null;pricingMode:string;marginPct:number|string;monthlyContribution:number|string;monthlyRevenueNet:number|string|null;monthlyCost:number|string|null;warnings:string[];ruleVersion:number|null;ruleSource:string|null;
   rateReference:Record<string,unknown>|null;
   createdByUserId?:string;ownerUserId?:string|null;teamId?:string|null;regionId?:string|null;clientId?:string|null;
 };
@@ -33,7 +33,7 @@ export async function listCommercialCalculations(actor:Actor):Promise<Commercial
       sourceRoleId:index===0?"74000000-0000-4000-8000-000000000001":"74000000-0000-4000-8000-000000000002",
       requestRoleId:index===0?"74000000-0000-4000-8000-000000000001":"74000000-0000-4000-8000-000000000002",tenderRoleId:null,
       modelCode:item.model==="Employment / TK"||item.model==="Employment"?"employment":String(item.model).toLowerCase(),clientRateGross:Number(item.clientRate)*1.22,
-      billingUnit:"hour",billingUnitLabel:null,pricingMode:"target_margin",warnings:[],ruleVersion:1,ruleSource:"Демонстрационная версия правил",rateReference:null,clientId:null,
+      billingUnit:"hour",billingUnitLabel:null,pricingMode:"target_margin",monthlyRevenueNet:null,monthlyCost:null,warnings:[],ruleVersion:1,ruleSource:"Демонстрационная версия правил",rateReference:null,clientId:null,
     })) as CommercialCalculationRow[];
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
@@ -56,6 +56,8 @@ export async function listCommercialCalculations(actor:Actor):Promise<Commercial
         cs.result_snapshot->>'billingUnitLabel' "billingUnitLabel",
         COALESCE(cs.result_snapshot->>'pricingMode','target_margin') "pricingMode",COALESCE((cs.result_snapshot->>'marginPct')::numeric,0) "marginPct",
         COALESCE((cs.result_snapshot->>'monthlyContribution')::numeric,0) "monthlyContribution",
+         (cs.result_snapshot->>'monthlyRevenueNet')::numeric "monthlyRevenueNet",
+         (cs.result_snapshot->>'monthlyCost')::numeric "monthlyCost",
         COALESCE(ARRAY(SELECT jsonb_array_elements_text(COALESCE(cs.result_snapshot->'warnings','[]'::jsonb))),ARRAY[]::text[]) warnings,
         rv.version "ruleVersion",rv.source "ruleSource",cs.rate_reference_snapshot "rateReference"
       FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id

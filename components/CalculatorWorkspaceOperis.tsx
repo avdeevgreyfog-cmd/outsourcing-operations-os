@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ChevronDown, Copy, Download, Plus, Save, Trash2 } from "lucide-react";
 import { calculateCommercialScenario } from "@/lib/core/calculator.mjs";
+import { mergeCalculationRules, pricingTargetFields } from "@/lib/commercial/scenario-economics.mjs";
 import type { CalculationModelOption } from "@/lib/commercial/calculation-models";
 import type { ExpenseStandard, ScheduleStandard } from "@/lib/commercial/calculation-standards";
 import { defaultCommercialPolicy, loadCompanyRulesDraft, subscribeCompanyRulesDraft } from "@/lib/commercial/company-rules-client";
@@ -151,7 +152,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const initialModelId=models.some(item=>item.id===seed?.modelId)?seed!.modelId:models[0]?.id??"";
   const [modelId, setModelId] = useState(initialModelId);
   const model = models.find((item) => item.id === modelId) ?? models[0];
-  const scenarioRules = useMemo(() => ({ ...(model?.rules ?? {}), ...commercialPolicy }), [model?.rules, commercialPolicy]);
+  const scenarioRules = useMemo(() => mergeCalculationRules(model?.rules ?? {}, commercialPolicy), [model?.rules, commercialPolicy]);
   const initialRoleId=context?.roles.some(role=>role.id===seed?.sourceRoleId)?seed!.sourceRoleId:context?.roles[0]?.id??"";
   const [selectedRoleId, setSelectedRoleId] = useState(initialRoleId);
   const selectedRole = context?.roles.find((role) => role.id === selectedRoleId);
@@ -254,7 +255,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const unitLabel=volumeUnitCode==="custom"?customVolumeLabel:(volumeUnits.find(item=>item.code===volumeUnitCode)?.label??"единица");
   const result = useMemo(() => calculateCommercialScenario({
     workers,hoursPerWorker:hours,hoursPerShift:shiftHours,shiftsPerWorker:shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,
-    targetMarginPct:margin,targetMonthlyContribution:targetContribution,targetProfitPerBillingUnit:targetContribution,clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,
+    targetMarginPct:margin,...pricingTargetFields(pricingMode,targetContribution),clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,
     billingUnitCode:billingUnit==="unit"?volumeUnitCode:null,billingUnitLabel:billingUnit==="unit"?unitLabel:null,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,
     vatMode,vatPct,roundingStep:scenarioRules.roundingStep,rules:scenarioRules,ruleVersionId:model?.ruleVersionId??null,costs:calculatedCosts,
   }), [workers,hours,shiftHours,shifts,projectMonths,workerPayAmount,workerPayUnit,pricingMode,margin,targetContribution,clientLimit,clientLimitVatMode,billingUnit,variableBillingUnit,volumeUnitCode,unitLabel,unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model,calculatedCosts,scenarioRules]);
@@ -322,7 +323,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
 
   async function saveScenario(){
     if(!context||!sourceId||!selectedRoleId||!model)return;setSaveState({busy:true,message:"",error:false});
-    const inputs={workerPayAmount,workerPayUnit,workers,hoursPerWorker:hours,shiftHours,shiftsPerWorker:shifts,projectMonths,pricingMode,targetMarginPct:margin,targetMonthlyContribution:targetContribution,
+    const inputs={workerPayAmount,workerPayUnit,workers,hoursPerWorker:hours,shiftHours,shiftsPerWorker:shifts,projectMonths,pricingMode,targetMarginPct:margin,...pricingTargetFields(pricingMode,targetContribution),
       clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,billingUnitCode:billingUnit==="unit"?volumeUnitCode:null,billingUnitLabel:billingUnit==="unit"?unitLabel:null,
       unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model:model.code,ruleVersionId:model.ruleVersionId,economicsDate:context.economicsDate??null,
       projectWorkers:totalProjectWorkers,projectAllocationMode:allocationMode,projectAllocationShare};

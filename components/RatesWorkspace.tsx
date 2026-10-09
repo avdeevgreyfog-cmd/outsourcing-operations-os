@@ -106,7 +106,7 @@ function parseImportRow(raw: Record<string, unknown>, index: number, fallbackDat
 }
 
 function conditions(row: RateMemoryRow) {
-  const parts = [row.employmentModel, row.scheduleLabel].filter(Boolean);
+  const parts = [row.employmentModel, row.scheduleLabel, row.grossNet].filter(Boolean);
   if (row.housingIncluded === true) parts.push("с проживанием");
   else if (row.housingIncluded === false) parts.push("без проживания");
   if (row.shuttleIncluded === true) parts.push("с развозкой");
@@ -154,7 +154,8 @@ export function RatesWorkspace({ initialRows, demo, canManage, now, today }: { i
   const summary = useMemo(() => {
     const map = new Map<string, RateMemoryRow[]>();
     for (const row of filtered) {
-      const key = `${row.specialty}__${row.priceZone || row.region}`;
+      // Never combine hourly and shift rates or different employment/payment conditions.
+      const key = JSON.stringify([row.specialty,row.priceZone||row.region,row.unit,row.grossNet,row.employmentModel,row.scheduleLabel??"",row.housingIncluded,row.shuttleIncluded]);
       map.set(key, [...(map.get(key) ?? []), row]);
     }
     return [...map.entries()].map(([key, items]) => {

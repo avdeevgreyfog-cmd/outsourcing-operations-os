@@ -7,6 +7,8 @@ import { SalesEmpty, SalesMetrics, SalesSearch, SalesSegments } from "@/componen
 import { Status } from "@/components/UI";
 import { SubmitApprovalButton } from "@/components/CommercialWorkflowActions";
 import { pct, rub } from "@/lib/ui/format";
+import { aggregateAcceptedEconomics } from "@/lib/commercial/scenario-economics.mjs";
+import { calculationStatusLabel } from "@/lib/ui/calculation-status";
 
 type View = "calculations" | "scenarios";
 type Filter = "all" | "work" | "review" | "attention" | "accepted" | "history";
@@ -14,10 +16,6 @@ type Filter = "all" | "work" | "review" | "attention" | "accepted" | "history";
 const billingLabels: Record<string, string> = {
   hour: "час",shift: "смена",unit: "объём",worker_month: "сотрудник / месяц",project_month: "проект / месяц",project_fixed: "фикс за проект",mixed: "смешанная",
 };
-const statusLabels: Record<string, string> = {
-  draft: "Черновик",review: "На согласовании",pending: "На согласовании",accepted: "Принято",rejected: "Отклонено",superseded: "Историческая версия",approved: "Согласовано",
-};
-function statusLabel(value:string){return statusLabels[value]??(/[A-Za-z_]/.test(value)?"Другой статус":value);}
 function tone(value:string){if(value==="accepted"||value==="approved")return "good" as const;if(value==="rejected")return "bad" as const;if(value==="review"||value==="pending")return "warn" as const;return "neutral" as const;}
 function sourceHref(row:CommercialCalculationRow){return row.sourceType==="tender"?`/tenders/${row.sourceId}?tab=calculations`:`/requests/${row.sourceId}`;}
 function billingLabel(row:CommercialCalculationRow){return row.billingUnit==="unit"&&row.billingUnitLabel?row.billingUnitLabel:(billingLabels[row.billingUnit]??"другая схема");}
@@ -68,15 +66,15 @@ export function CalculationsRegistryWorkspace({rows,canEdit=false,compact=false,
       <div className="sales-results" aria-live="polite">Показано {view==="calculations"?groups.length:filtered.length} · сценариев {filtered.length}</div>
 
       {view==="calculations"?<div className="request-table-wrap"><table className="data-table calculation-version-table"><thead><tr><th>Расчёт</th><th>Статус</th><th>Позиции</th><th>Сценарии</th><th>Принято</th><th>Экономика</th><th>Риски</th></tr></thead><tbody>{groups.length?groups.map(group=>{
-        const roleCount=new Set(group.rows.map(row=>row.sourceRoleId)).size;const acceptedRoles=new Set(group.rows.filter(row=>row.status==="accepted").map(row=>row.sourceRoleId)).size;const warnings=group.rows.reduce((sum,row)=>sum+row.warnings.length,0);const acceptedRows=group.rows.filter(row=>row.status==="accepted");const avgMargin=acceptedRows.length?acceptedRows.reduce((sum,row)=>sum+Number(row.marginPct),0)/acceptedRows.length:null;const contribution=acceptedRows.reduce((sum,row)=>sum+Number(row.monthlyContribution),0);
-        return <tr key={group.key}><td><Link className="cell-title" href={`/calculations/${group.calculationId}`}>{group.source} · v{group.version}</Link><span className="cell-sub">{group.sourceType==="tender"?"Тендер":"Заявка"}{group.economicsDate?` · экономика на ${new Intl.DateTimeFormat("ru-RU").format(new Date(`${group.economicsDate}T00:00:00`))}`:""}</span></td><td><Status tone={tone(group.status)}>{statusLabel(group.status)}</Status></td><td className="num">{roleCount}</td><td className="num">{group.rows.length}</td><td><strong>{acceptedRoles}/{roleCount}</strong><span className="cell-sub">позиций с принятой экономикой</span></td><td>{avgMargin==null?"—":pct(avgMargin)}<span className="cell-sub">{contribution>0?`${rub(contribution)} вклад / мес.`:"Нет принятой экономики"}</span></td><td>{warnings>0?<Status tone="warn">{warnings} сигналов</Status>:<Status tone="good">Без сигналов</Status>}</td></tr>;
+        const roleCount=new Set(group.rows.map(row=>row.sourceRoleId)).size;const acceptedRoles=new Set(group.rows.filter(row=>row.status==="accepted").map(row=>row.sourceRoleId)).size;const warnings=group.rows.reduce((sum,row)=>sum+row.warnings.length,0);const acceptedRows=group.rows.filter(row=>row.status==="accepted");const economics=aggregateAcceptedEconomics(acceptedRows);const avgMargin=economics.marginPct;const contribution=economics.monthlyContribution;
+        return <tr key={group.key}><td><Link className="cell-title" href={`/calculations/${group.calculationId}`}>{group.source} · v{group.version}</Link><span className="cell-sub">{group.sourceType==="tender"?"Тендер":"Заявка"}{group.economicsDate?` · экономика на ${new Intl.DateTimeFormat("ru-RU").format(new Date(`${group.economicsDate}T00:00:00`))}`:""}</span></td><td><Status tone={tone(group.status)}>{calculationStatusLabel(group.status)}</Status></td><td className="num">{roleCount}</td><td className="num">{group.rows.length}</td><td><strong>{acceptedRoles}/{roleCount}</strong><span className="cell-sub">позиций с принятой экономикой</span></td><td>{avgMargin==null?"—":pct(avgMargin)}<span className="cell-sub">{contribution==null?"Нет сопоставимой экономики":`${rub(contribution)} вклад / мес.`}</span></td><td>{warnings>0?<Status tone="warn">{warnings} сигналов</Status>:<Status tone="good">Без сигналов</Status>}</td></tr>;
       }):<tr><td colSpan={7}><SalesEmpty onReset={reset}/></td></tr>}</tbody></table></div>:<>
         <div className="request-table-wrap"><table className="data-table calculation-scenario-table"><thead><tr><th aria-label="Выбор для сравнения"></th><th>Источник / позиция</th><th>Версия</th><th>Модель</th><th>Сотруднику</th><th>Себестоимость / ч</th><th>Клиенту</th><th>Маржа</th><th>Статус</th><th></th></tr></thead><tbody>{filtered.length?filtered.map(row=><tr key={row.id}>
           <td><input type="checkbox" aria-label={`Сравнить ${row.name}`} checked={selected.includes(row.id)} onChange={()=>toggleScenario(row.id)} disabled={!selected.includes(row.id)&&selected.length>=4}/></td>
           <td><Link className="cell-title" href={`/calculations/${row.calculationId}`}>{row.source} · {row.role}</Link><span className="cell-sub">{row.name} · {billingLabel(row)}</span></td>
           <td><strong>v{row.scenarioVersion}</strong><span className="cell-sub">расчёт v{row.calculationVersion}</span></td>
           <td>{row.model}<span className="cell-sub">{row.ruleVersion?`Правила №${row.ruleVersion}`:"Без версии правил"}</span></td><td className="num">{rub(row.workerNet)}</td><td className="num">{rub(row.totalCost)}</td><td className="num">{rub(row.clientRate)}<span className="cell-sub">без НДС</span></td><td className="num">{pct(row.marginPct)}</td>
-          <td><Status tone={tone(row.status)}>{statusLabel(row.status)}</Status>{row.warnings.length>0&&<span className="cell-sub">Сигналов: {row.warnings.length}</span>}</td>
+          <td><Status tone={tone(row.status)}>{calculationStatusLabel(row.status)}</Status>{row.warnings.length>0&&<span className="cell-sub">Сигналов: {row.warnings.length}</span>}</td>
           <td><div className="calculation-row-actions">{canEdit&&["draft","rejected"].includes(row.status)&&<SubmitApprovalButton subjectType="calculation_scenario" subjectId={row.id}/>} {canEdit&&!['approved','superseded'].includes(row.calculationStatus)&&<Link className="button" href={`/calculations/${row.calculationId}?seed=${row.id}`}>Взять за основу</Link>}<Link className="button" href={sourceHref(row)}>Источник</Link></div></td>
         </tr>):<tr><td colSpan={10}><SalesEmpty onReset={reset}/></td></tr>}</tbody></table></div>
         {selectedRows.length>=2&&<div className="request-table-wrap calculation-compare-table"><table className="data-table"><thead><tr><th>Показатель</th>{selectedRows.map(row=><th key={row.id}>{row.name}<span className="cell-sub">{row.role} · v{row.scenarioVersion}</span></th>)}</tr></thead><tbody>
