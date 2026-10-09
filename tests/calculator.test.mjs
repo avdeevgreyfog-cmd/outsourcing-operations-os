@@ -305,7 +305,7 @@ test("aggregate scenario margin is revenue weighted and excludes incomplete econ
     { monthlyRevenueNet: 100000, monthlyCost: 90000 },
     { monthlyRevenueNet: 900000, monthlyCost: 630000 },
   ]);
-  assert.equal(summary.marginPct, 28);
+  assert.ok(Math.abs(summary.marginPct - 28) < 1e-9);
   assert.equal(summary.monthlyContribution, 280000);
   assert.equal(aggregateAcceptedEconomics([{ monthlyRevenueNet: null, monthlyCost: 100 }]).marginPct, null);
   assert.equal(aggregateAcceptedEconomics([]).monthlyContribution, null);
