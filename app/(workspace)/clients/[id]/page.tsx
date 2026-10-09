@@ -9,11 +9,15 @@ import {Empty,EntityTabs,KeyValue,PageHeader,Section,Status} from "@/components/
 import {StaticDemoQueryTabsController} from "@/components/StaticDemoQueryTabsController";
 import {modelLabel,pct,rub} from "@/lib/ui/format";
 import {ClientContactEditButton,ClientEditButton} from "@/components/ClientEntityEditor";
+import {listTenders} from "@/lib/tenders/service";
+import {tenderEnumLabel,tenderResultLabels,tenderStageLabel} from "@/lib/tenders/model";
+import {formatTenderDateTime} from "@/lib/tenders/datetime";
 
 const labels:Record<string,string>={
   overview:"Обзор",
   contacts:"Контакты",
   requests:"Заявки",
+  tenders:"Тендеры",
   calculations:"Расчёты",
   proposals:"КП",
   objects:"Объекты",
@@ -53,6 +57,7 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const {tab:rawTab}=staticDemo?{}:await searchParams;
   const actor=await requireActor();
   const canReadRequests=hasCapability(actor.access,"sales.request.read");
+  const canReadTenders=hasCapability(actor.access,"sales.tender.read");
   const canReadObjects=hasCapability(actor.access,"operations.object.read");
   const canReadCalculations=hasCapability(actor.access,"calculation.scenario.read");
   const canReadFinance=hasCapability(actor.access,"finance.pnl.read");
@@ -63,16 +68,18 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const canEdit=!actor.demo&&canReadRow(actor.access,"sales.client.edit",client,actor);
   const clientEditOptions=canEdit?await getClientEditOptions(actor):null;
 
-  const [requests,objects,calculations,finance,contacts,proposals]=await Promise.all([
+  const [requests,objects,calculations,finance,contacts,proposals,tenders]=await Promise.all([
     canReadRequests?listRequests(actor):Promise.resolve([]),
     canReadObjects?listObjects(actor):Promise.resolve([]),
     canReadCalculations?listCalculations(actor):Promise.resolve([]),
     canReadFinance?listFinance(actor):Promise.resolve([]),
     listClientContacts(actor,id),
     canReadProposals?listProposals(actor):Promise.resolve([]),
+    canReadTenders?listTenders(actor):Promise.resolve([]),
   ]);
 
   const clientRequests=requests.filter(item=>item.clientId===id);
+  const clientTenders=tenders.filter(item=>item.clientId===id);
   const requestIds=new Set(clientRequests.map(item=>item.id));
   const clientObjects=objects.filter(item=>item.clientId===id);
   const clientCalculations=calculations.filter(item=>requestIds.has(item.requestId));
@@ -86,6 +93,7 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
 
   const visibleTabKeys=Object.keys(labels).filter(key=>{
     if(key==="requests")return canReadRequests;
+    if(key==="tenders")return canReadTenders;
     if(key==="calculations")return canReadCalculations;
     if(key==="proposals")return canReadProposals;
     if(key==="objects")return canReadObjects;
@@ -95,7 +103,7 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const tab=rawTab&&visibleTabKeys.includes(rawTab)?rawTab:"overview";
   const tabs=visibleTabKeys.map(key=>({
     label:labels[key],href:"/clients/"+id+"?tab="+key,
-    count:key==="contacts"?contacts.length:key==="requests"?clientRequests.length:key==="calculations"?clientCalculations.length:key==="proposals"?clientProposals.length:key==="objects"?clientObjects.length:undefined,
+    count:key==="contacts"?contacts.length:key==="requests"?clientRequests.length:key==="tenders"?clientTenders.length:key==="calculations"?clientCalculations.length:key==="proposals"?clientProposals.length:key==="objects"?clientObjects.length:undefined,
   }));
   const panel=(key:string,content:ReactNode)=>{
     if(!visibleTabKeys.includes(key)||(!staticDemo&&tab!==key))return null;
@@ -156,6 +164,10 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
 
     {panel("requests",<div className="request-entity-tab-content"><Section title="Заявки клиента" note={clientRequests.length+" заявок"}>
       <div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table"><thead><tr><th>Заявка</th><th>Позиции</th><th>Старт</th><th>Статус</th></tr></thead><tbody>{clientRequests.length?clientRequests.map(item=><tr key={item.id}><td><Link className="cell-title" href={"/requests/"+item.id}>{item.title}</Link><span className="cell-sub">{item.location||"Локация уточняется"}</span></td><td>{item.roles.map(role=>role.name+" × "+role.count).join(" · ")||"—"}</td><td>{item.start||"—"}</td><td><Status tone={tone(item.status)}>{statusLabel(item.status)}</Status></td></tr>):<tr><td colSpan={4}><div className="empty-inline">Заявок пока нет</div></td></tr>}</tbody></table></div>
+    </Section></div>)}
+
+    {panel("tenders",<div className="request-entity-tab-content"><Section title="Тендеры клиента" note={clientTenders.length+" тендеров"}>
+      <div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table"><thead><tr><th>Тендер</th><th>Площадка</th><th>Срок подачи</th><th>Этап</th><th>Результат</th></tr></thead><tbody>{clientTenders.length?clientTenders.map(item=><tr key={item.id}><td><Link className="cell-title" href={"/tenders/"+item.id}>{item.title}</Link><span className="cell-sub">{item.procedureNumber?"№ "+item.procedureNumber:"Номер не указан"}</span></td><td>{item.platform??"—"}</td><td>{item.submissionDeadline?formatTenderDateTime(item.submissionDeadline):"—"}</td><td><Status tone={tone(item.stage)}>{tenderStageLabel(item.stage)}</Status></td><td>{item.result?tenderEnumLabel(tenderResultLabels,item.result):"—"}</td></tr>):<tr><td colSpan={5}><div className="empty-inline">Связанных тендеров пока нет</div></td></tr>}</tbody></table></div>
     </Section></div>)}
 
     {panel("calculations",<div className="request-entity-tab-content"><Section title="Расчёты" note={clientCalculations.length+" сценариев"}>
