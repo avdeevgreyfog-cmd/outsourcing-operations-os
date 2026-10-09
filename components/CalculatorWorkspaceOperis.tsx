@@ -164,6 +164,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const [editorTab, setEditorTab] = useState<"inputs"|"structure">("inputs");
   const [expandedRateGroups, setExpandedRateGroups] = useState<Set<string>>(() => new Set(["pay","charges"]));
   const [workerPayAmount, setWorkerPayAmount] = useState(nonNegative(seedInputs.workerPayAmount,0));
+  const [appliedRateReferenceId,setAppliedRateReferenceId] = useState<string|null>(typeof seedInputs.rateReferenceId==="string"?seedInputs.rateReferenceId:null);
   const [workerPayUnit, setWorkerPayUnit] = useState<WorkerPayUnit>(payUnit(seedInputs.workerPayUnit));
   const [workers, setWorkers] = useState(positive(seedInputs.workers,selectedRole?.count??1));
   const [hours, setHours] = useState(positive(seedInputs.hoursPerWorker,initialPaidHours*initialShifts));
@@ -286,11 +287,12 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   function duplicateCost(cost:Cost){setCosts(current=>[...current,{...cost,id:crypto.randomUUID(),label:`${cost.label} — копия`,source:"manual"}]);}
 
   function selectModel(nextId:string){setModelId(nextId);}
-  function selectRole(nextId:string){setSelectedRoleId(nextId);const role=context?.roles.find(item=>item.id===nextId);if(!role)return;setWorkers(role.count);const paid=positive(role.schedule?.paidHours??context?.schedule?.paidHours,shiftHours);setShiftHours(paid);setHours(paid*shifts);setClientLimit(Number(role.targetClientRate??0));}
+  function selectRole(nextId:string){setAppliedRateReferenceId(null);setSelectedRoleId(nextId);const role=context?.roles.find(item=>item.id===nextId);if(!role)return;setWorkers(role.count);const paid=positive(role.schedule?.paidHours??context?.schedule?.paidHours,shiftHours);setShiftHours(paid);setHours(paid*shifts);setClientLimit(Number(role.targetClientRate??0));}
   function selectScheduleStandard(nextId:string){setScheduleStandardId(nextId);const standard=scheduleStandards.find(item=>item.id===nextId);if(!standard)return;const paid=Math.max(0.1,standard.shiftHours-(standard.breakPaid?0:standard.breakHours));setShiftHours(paid);setShifts(standard.shiftsPerMonth);setHours(paid*standard.shiftsPerMonth);}
 
   function applyReference(reference:RateReference,amount:number){
     if(reference.paySemantics!=="net")return;
+    setAppliedRateReferenceId(reference.id);
     if(reference.unit==="shift")setWorkerPayUnit("shift");else if(reference.unit==="month")setWorkerPayUnit("month");else setWorkerPayUnit("hour");
     setWorkerPayAmount(amount);
   }
@@ -326,7 +328,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
     const inputs={workerPayAmount,workerPayUnit,workers,hoursPerWorker:hours,shiftHours,shiftsPerWorker:shifts,projectMonths,pricingMode,targetMarginPct:margin,...pricingTargetFields(pricingMode,targetContribution),
       clientLimit:clientLimit||null,clientLimitVatMode,billingUnit,variableBillingUnit,billingUnitCode:billingUnit==="unit"?volumeUnitCode:null,billingUnitLabel:billingUnit==="unit"?unitLabel:null,
       unitsPerWorkerShift,fixedMonthlyNet,minimumMonthlyNet,minimumVolumeMonthly,vatMode,vatPct,model:model.code,ruleVersionId:model.ruleVersionId,economicsDate:context.economicsDate??null,
-      projectWorkers:totalProjectWorkers,projectAllocationMode:allocationMode,projectAllocationShare};
+      projectWorkers:totalProjectWorkers,projectAllocationMode:allocationMode,projectAllocationShare,rateReferenceId:appliedRateReferenceId};
     const scenario={id:`demo-scenario-${crypto.randomUUID()}`,sourceType,sourceId,sourceRoleId:selectedRoleId,modelId:model.id,ruleVersionId:model.ruleVersionId??undefined,supersedesScenarioId:seed?.id,allocationMode,name:scenarioName,inputs,costs:calculatedCosts,result,createdAt:new Date().toISOString()};
     if (demo) {
       const key="operis.demo.calculation-scenarios.v1";
@@ -345,6 +347,7 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
   const rateSuffix=rateUnit==="hour"?"/ч":rateUnit==="shift"?"/смену":rateUnit==="unit"?`/${unitLabel}`:rateUnit==="worker_month"?"/сотр./мес":rateUnit==="project_month"?"/мес":"/проект";
   const economicsDate=displayDate(context?.economicsDate);
   const reference=selectedRole?.reference??null;
+  const referenceOptions=reference?[reference,...(reference.alternatives??[])]:[];
 
   const monthlyHours = Math.max(1, hours * workers);
   const monthlyShifts = Math.max(1, shifts * workers);
@@ -388,8 +391,19 @@ export function CalculatorWorkspaceOperis({ context, seed, models: standaloneMod
 
       <details className="calc-group" open>
         <summary><span>Исходные условия и оплата</span><span>{workerPayAmount>0?`${rub(workerPayAmount)} / ${workerPayUnit==="hour"?"ч":workerPayUnit==="shift"?"смену":workerPayUnit==="unit"?unitLabel:"мес"}`:"Заполните ставку"}</span></summary>
-        {reference&&<div className="calc-reference"><div><span>Ориентир базы ставок</span><strong>{rub(reference.amountMin)}{reference.amountMax!=null?` – ${rub(reference.amountMax)}`:""} / {reference.unit}</strong><small>{reference.source} · {displayDate(reference.sourceDate)??reference.sourceDate} · {reference.paySemantics==="net"?"на руки":"брутто"}</small></div>{reference.paySemantics==="net"&&<div><button type="button" className="button" onClick={()=>applyReference(reference,reference.amountMin)}>Подставить минимум</button>{reference.amountMax!=null&&<button type="button" className="button" onClick={()=>applyReference(reference,(reference.amountMin+reference.amountMax)/2)}>Подставить середину</button>}</div>}</div>}
-        <div className="calc-row"><span className="calc-row-check">✓</span><span>Сотруднику на руки<small>Вручную</small></span><input type="number" min="0" value={workerPayAmount} onChange={event=>setWorkerPayAmount(Number(event.target.value))}/><select value={workerPayUnit} onChange={event=>setWorkerPayUnit(event.target.value as WorkerPayUnit)}><option value="hour">₽/ч</option><option value="shift">₽/смену</option><option value="month">₽/мес</option><option value="unit">₽/ед.</option></select></div>
+        {referenceOptions.length>0&&<div className="calculation-rate-reference-list">
+          <div className="muted calculation-section-text">Ориентиры базы ставок. Проверьте график, модель оформления и дополнительные условия перед применением.</div>
+          {referenceOptions.map((item,index)=><div key={item.id} className="calc-reference">
+            <div><span>Ориентир {index+1}{appliedRateReferenceId===item.id?" · выбран":""}</span>
+              <strong>{rub(item.amountMin)}{item.amountMax!=null&&item.amountMax!==item.amountMin?` – ${rub(item.amountMax)}`:""} / {item.unit==="hour"?"ч":item.unit==="shift"?"смену":item.unit==="month"?"мес":item.unit}</strong>
+              <small>{item.source} · {displayDate(item.sourceDate)??item.sourceDate} · {item.paySemantics==="net"?"на руки":"до вычета"}
+                {item.scheduleLabel?` · ${item.scheduleLabel}`:""}</small>
+            </div>
+            {item.paySemantics==="net"&&<div><button type="button" className="button" onClick={()=>applyReference(item,item.amountMin)}>Подставить минимум</button>
+              {item.amountMax!=null&&item.amountMax!==item.amountMin&&<button type="button" className="button" onClick={()=>applyReference(item,(item.amountMin+item.amountMax)/2)}>Подставить середину</button>}</div>}
+          </div>)}
+        </div>}
+        <div className="calc-row"><span className="calc-row-check">✓</span><span>Сотруднику на руки<small>Вручную</small></span><input type="number" min="0" value={workerPayAmount} onChange={event=>{setWorkerPayAmount(Number(event.target.value));setAppliedRateReferenceId(null);}}/><select value={workerPayUnit} onChange={event=>{setWorkerPayUnit(event.target.value as WorkerPayUnit);setAppliedRateReferenceId(null);}}><option value="hour">₽/ч</option><option value="shift">₽/смену</option><option value="month">₽/мес</option><option value="unit">₽/ед.</option></select></div>
         <CalcInput label="Количество сотрудников" note={context?"Из позиции источника":"Вручную"} value={workers} onChange={setWorkers} unit="чел."/>
         {scheduleStandards.length>0&&<div className="calc-row"><span className="calc-row-check">✓</span><span>Шаблон графика<small>Подставляет оплачиваемые часы и смены</small></span><select value={scheduleStandardId} onChange={event=>selectScheduleStandard(event.target.value)}><option value="">Из источника / вручную</option>{scheduleStandards.map(item=><option key={item.id} value={item.id}>{item.name} · {item.shiftsPerMonth} смен.</option>)}</select><span/></div>}
         {model?.rules.payStructure==="mrot_plus_supplement"&&<div className="calc-model-breakdown"><span>Официальная база: <strong>{rub(result.officialBaseMonthly)} / мес.</strong></span><span>Доплата: <strong>{rub(result.supplementMonthly)} / мес.</strong></span><small>Разделение и комиссия задаются в модели оформления; коммерческие ориентиры — отдельно в политике.</small></div>}
