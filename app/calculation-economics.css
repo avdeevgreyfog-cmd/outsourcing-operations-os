@@ -162,3 +162,5 @@
 .calculation-model-form{grid-template-columns:repeat(3,minmax(0,1fr))}.calculation-form-wide{grid-column:1/-1}.calc-model-breakdown{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 14px;border:1px solid var(--border);border-left:3px solid var(--accent);background:var(--panel-2);font-size:12px}.calc-model-breakdown small{width:100%;color:var(--muted)}.calc-model-breakdown strong{font-weight:650}
 @media(max-width:900px){.standards-tabs{grid-template-columns:1fr 1fr}.standards-grid{grid-template-columns:1fr}.calculation-inline-form,.calculation-model-form{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.standards-tabs,.standards-rule-cards,.standards-rule-table,.calculation-inline-form{grid-template-columns:1fr}.standards-detail-meta{flex-wrap:wrap;gap:12px}.calculation-inline-actions{flex-direction:column;align-items:stretch}.calculation-inline-actions .button{justify-content:center}}
+
+.sales-workspace .calculation-rate-reference-list>.calculation-section-text{margin:0;padding:10px 16px;border-bottom:1px solid var(--border)}

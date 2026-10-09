@@ -5,13 +5,17 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
 
 const nullableNumber = z.number().finite().nonnegative().nullable().optional();
+const knownUnits = ["hour","ч","час","₽/ч","shift","смена","₽/смену","month","месяц","мес","₽/мес"];
+const importedUnit = z.string().trim().max(40).refine(value => knownUnits.includes(value.toLowerCase()), {
+  message: "Неизвестная единица ставки",
+});
 const rateRow = z.object({
   specialty: z.string().trim().min(1).max(180),
   region: z.string().trim().max(180).optional().default(""),
   priceZone: z.string().trim().max(180).nullable().optional(),
   employmentModel: z.string().trim().max(120).optional().default("Не указано"),
   amountMin: nullableNumber, amountMax: nullableNumber,
-  unit: z.string().trim().max(40).optional().default("hour"),
+  unit: importedUnit.optional().default("hour"),
   grossNet: z.string().trim().max(60).optional().default("На руки"),
   source: z.string().trim().max(500).optional().default("Импорт компании"),
   sourceType: z.enum(["manual","import","calculation","proposal","object","reference"]).optional().default("import"),

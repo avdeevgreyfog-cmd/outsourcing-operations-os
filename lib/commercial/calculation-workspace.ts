@@ -3,6 +3,7 @@ import { requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import * as demo from "@/lib/demo/data";
+import { rankRateReferences } from "@/lib/commercial/rate-selection.mjs";
 
 export type CalculationWorkspaceMeta = {
   id: string;
@@ -36,6 +37,11 @@ export type RateReference = {
   source: string;
   sourceDate: string;
   confidence: string;
+  regionId?: string | null;
+  sourceType?: string | null;
+  sourceStatus?: string | null;
+  scheduleLabel?: string | null;
+  alternatives?: RateReference[];
 };
 
 export type SupplyKitReference = {
@@ -196,32 +202,28 @@ export async function getRateReferencesForRoles(
     const output: Record<string, RateReference> = {};
     for (const role of roles) {
       if (!role.specialtyId) continue;
-      const [reference] = await sql<Array<{
-        id:string;amountMin:number|string;amountMax:number|string;unit:string;paySemantics:string;employmentModel:string;source:string;sourceDate:string;confidence:string;
+      const candidates = await sql<Array<{
+        id:string;amountMin:number|string;amountMax:number|string|null;unit:string;paySemantics:string;
+        employmentModel:string;source:string;sourceDate:string;confidence:string;regionId:string|null;
+        sourceType:string;sourceStatus:string;scheduleLabel:string|null;
       }>>`
-        SELECT id,amount_min "amountMin",COALESCE(amount_max,amount_min) "amountMax",unit,pay_semantics "paySemantics",employment_model "employmentModel",
-          source,source_date::text "sourceDate",confidence
-        FROM rate_reference_entries
-        WHERE specialty_id=${role.specialtyId}::uuid
-          AND amount_min IS NOT NULL
-          AND (${regionId ?? null}::uuid IS NULL OR region_id=${regionId ?? null}::uuid OR region_id IS NULL)
-          AND valid_from<=COALESCE(${date}::date,current_date)
-          AND (valid_to IS NULL OR valid_to>=COALESCE(${date}::date,current_date))
-        ORDER BY (region_id=${regionId ?? null}::uuid) DESC,source_date DESC,created_at DESC
-        LIMIT 1
+        SELECT rr.id,rr.amount_min "amountMin",COALESCE(rr.amount_max,rr.amount_min) "amountMax",
+          rr.unit,rr.pay_semantics "paySemantics",rr.employment_model "employmentModel",
+          rr.source,rr.source_date::text "sourceDate",rr.confidence,rr.region_id "regionId",
+          rr.source_type "sourceType",rr.source_status "sourceStatus",rr.schedule_label "scheduleLabel"
+        FROM rate_reference_entries rr
+        WHERE rr.organization_id=${actor.organizationId}::uuid AND rr.specialty_id=${role.specialtyId}::uuid
+          AND rr.amount_min IS NOT NULL
+          AND (${regionId ?? null}::uuid IS NULL OR rr.region_id=${regionId ?? null}::uuid OR rr.region_id IS NULL)
+          AND rr.source_date<=COALESCE(${date}::date,current_date)
+          AND rr.valid_from<=COALESCE(${date}::date,current_date)
+          AND (rr.valid_to IS NULL OR rr.valid_to>=COALESCE(${date}::date,current_date))
+        ORDER BY rr.source_date DESC,rr.created_at DESC LIMIT 60
       `;
-      if (reference) {
-        output[role.id] = {
-          id: reference.id,
-          amountMin: Number(reference.amountMin),
-          amountMax: Number(reference.amountMax),
-          unit: reference.unit,
-          paySemantics: reference.paySemantics,
-          employmentModel: reference.employmentModel,
-          source: reference.source,
-          sourceDate: reference.sourceDate,
-          confidence: reference.confidence,
-        };
+      const selected=rankRateReferences(candidates,regionId??null,date??new Date().toISOString().slice(0,10));
+      if(selected.length){
+        const resolved=selected.map(row=>({...row,amountMin:Number(row.amountMin),amountMax:Number(row.amountMax)}));
+        output[role.id]={...resolved[0],alternatives:resolved.slice(1)};
       }
     }
     return output;
