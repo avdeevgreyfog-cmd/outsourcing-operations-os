@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {isDestructiveMigration} from "../scripts/migration-safety.mjs";
 
 const root=fileURLToPath(new URL("../migrations/",import.meta.url));
 const historicalAllowlist=new Set(["0052_personal_workspace_owner_repair.sql","0053_clean_personal_workspace.sql"]);
@@ -27,6 +28,15 @@ test("new migrations cannot reset a persistent customer workspace",()=>{
   );
 });
 
+
+test("migration safety allows DROP NOT NULL but still blocks destructive DROP operations",()=>{
+  assert.equal(isDestructiveMigration("ALTER TABLE contracts ALTER COLUMN request_id DROP NOT NULL;"),false);
+  assert.equal(isDestructiveMigration("ALTER TABLE contracts DROP COLUMN request_id;"),true);
+  assert.equal(isDestructiveMigration("ALTER TABLE contracts DROP CONSTRAINT contracts_source_exactly_one;"),true);
+  assert.equal(isDestructiveMigration("DROP TABLE contracts;"),true);
+  assert.equal(isDestructiveMigration("TRUNCATE contracts;"),true);
+  assert.equal(isDestructiveMigration("DELETE FROM contracts;"),true);
+});
 
 test("migration runner is fail-closed for destructive changes",()=>{
   const runner=readFileSync(fileURLToPath(new URL("../scripts/migrate.mjs",import.meta.url)),"utf8");
