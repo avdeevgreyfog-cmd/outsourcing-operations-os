@@ -44,6 +44,7 @@ jobs:
           rm -rf app/api
           rm -rf app/login app/activate
           rm -rf app/request-form app/request-intake
+          rm -rf app/employee-timesheet
 
       - name: Build the real OPERIS app for GitHub Pages
         run: npm run build

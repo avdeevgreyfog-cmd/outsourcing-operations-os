@@ -108,6 +108,7 @@ jobs:
           rm -rf app/api
           rm -rf app/login app/activate
           rm -rf app/request-form app/request-intake
+          rm -rf app/employee-timesheet
       - name: Build GitHub Pages demo from the real app
         run: npm run build
       - name: Verify static export

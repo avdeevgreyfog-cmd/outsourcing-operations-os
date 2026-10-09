@@ -14,7 +14,7 @@ import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
 import { ObjectSupplyWorkspace } from "@/components/ObjectSupplyWorkspace";
-import { ObjectShiftsWorkspace } from "@/components/ObjectShiftsWorkspace";
+import { ObjectPlanningWorkspace } from "@/components/ObjectPlanningWorkspace";
 import { ObjectStaffingWorkspace } from "@/components/ObjectStaffingWorkspace";
 import { ObjectFinanceWorkspace } from "@/components/ObjectFinanceWorkspace";
 import { ObjectDocumentsWorkspace } from "@/components/ObjectDocumentsWorkspace";
@@ -32,7 +32,7 @@ const labels:Record<string,string>={
   launch:"Запуск",
   staffing:"Комплектация",
   workforce:"Персонал",
-  shifts:"Смены",
+  shifts:"Планирование",
   timesheets:"Табели",
   supply:"Обеспечение",
   quality:"Инциденты",
@@ -306,7 +306,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
 
     {panel("workforce",<div className="object-module-shell"><div className="object-module-head"><div><h2>Персонал</h2><p>Сотрудники объекта, текущие состояния, графики, документы и обеспечение.</p></div></div><ObjectWorkforceWorkspace workers={objectWorkers} today={todayIso} objectId={id} objectName={object.name} objects={workforceOptions.objects} canEdit={canEditWorkers} canOffboard={canOffboard} canManageAssets={canManageAssets} demo={actor.demo} specialties={workforceOptions.specialties} pilot/>{!objectWorkers.length&&<Empty title="Назначений нет" text="На объект пока не назначены сотрудники."/>}</div>)}
 
-    {panel("shifts",<div className="object-module-shell"><div className="object-module-head"><div><h2>Смены</h2><p>Планирование выходов, покрытие потребности и работа с отклонениями. Факт приходит из табеля.</p></div></div><ObjectShiftsWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canPlanAbsence={canEditWorkers} demo={actor.demo} pilot/></div>)}
+    {panel("shifts",<div className="object-module-shell"><div className="object-module-head"><div><h2>Планирование</h2><p>График выходов сотрудников, подтверждения на ближайшие дни и персональные ссылки.</p></div></div><ObjectPlanningWorkspace objectId={id} rows={objectShifts} workers={objectWorkers} today={todayIso} canEdit={canEditShifts} canReconcile={hasCapability(actor.access,"time.time_entry.edit")} canPlanAbsence={canEditWorkers} demo={actor.demo}/></div>)}
 
     {panel("timesheets",<div className="object-module-shell"><div className="object-module-head"><div><h2>Табели</h2><p>Фактические выходы и часы, фиксация согласованного табеля и отдельный финансовый контур.</p></div></div>{objectTimesheet?<TimesheetWorkspace data={objectTimesheet} options={timesheetOptions} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"time.time_entry.edit")} canSubmit={hasCapability(actor.access,"time.timesheet.submit")} canReview={hasCapability(actor.access,"time.timesheet.review")} canClose={hasCapability(actor.access,"finance.worker_accrual.edit")} embedded pilot/>:<Empty title="Нет доступного табеля" text="Для объекта пока нет сотрудников или доступного периода."/>}</div>)}
 

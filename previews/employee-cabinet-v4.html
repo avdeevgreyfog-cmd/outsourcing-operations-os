@@ -1,0 +1,307 @@
+<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>OPERIS — Личный кабинет сотрудника</title><style>:root{color-scheme:light;--bg:#f5f7f8;--panel:#fff;--panel-2:#f8f9f9;--panel-3:#eef1f2;--text:#182028;--muted:#5f6b75;--soft:#87929b;--border:rgba(22,34,44,.10);--border-strong:rgba(22,34,44,.18);--accent:#e9661e;--accent-hover:#d95a15;--accent-soft:#fff2ea;--good:#238f4b;--good-bg:#edf8f1;--warn:#a66a16;--warn-bg:#fff7e7;--bad:#cf4c46;--bad-bg:#fff1ef}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif;font-size:13px}button,input,textarea,select{font:inherit;color:inherit}a{text-decoration:none;color:inherit}:root[data-theme=dark]{color-scheme:dark;--bg:#0a1016;--panel:#111820;--panel-2:#151e27;--panel-3:#1a2530;--text:#f4f6f8;--muted:#a8b2ba;--soft:#788590;--border:rgba(255,255,255,.08);--border-strong:rgba(255,255,255,.15);--accent:#ff762b;--accent-hover:#ff8e52;--accent-soft:#2c1c13;--good:#79d283;--good-bg:#17271b;--warn:#e3a456;--warn-bg:#2c2418);--bad:#ef6f66;--bad-bg:#2d1918}/* OPERIS Employee Self-Service v3. Compact, data-first; native design tokens. */
+body:has(.worker-self){min-width:0!important}
+.worker-self{min-height:100dvh;background:var(--bg);color:var(--text);font-size:13px;padding:18px}
+.worker-self-frame{width:min(1180px,100%);min-height:calc(100dvh - 36px);margin:auto;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel)}
+.worker-self-header{height:69px;padding:0 24px;display:flex;align-items:center;gap:20px;justify-content:space-between;border-bottom:1px solid var(--border);background:var(--panel)}
+.worker-self-brand{display:flex;align-items:center;gap:10px}.worker-self-brand>div{display:grid;gap:2px}
+.worker-self-brand small{font-size:9px;font-weight:750;color:var(--accent);letter-spacing:.09em}.worker-self-brand strong{font-size:15px;letter-spacing:-.02em}
+.worker-self-logo{display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);width:34px;height:34px;border-radius:6px;font-size:17px;font-weight:850}
+.worker-self-identity{display:grid;gap:4px;font-size:12px;margin-left:auto;text-align:right}
+.worker-self-identity span{font-size:11px;color:var(--muted)}
+.worker-self-header-actions{display:flex;gap:6px}.worker-self-icon-button{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--border);border-radius:5px;background:var(--panel);cursor:pointer;color:var(--text)}
+.worker-self-icon-button:hover{background:var(--panel-2)}
+.worker-self-layout{display:grid;grid-template-columns:224px minmax(0,1fr);min-height:720px}
+.worker-self-sidebar{padding:20px 10px;border-right:1px solid var(--border);background:var(--panel-2);display:flex;flex-direction:column}
+.worker-self-sidebar>p{margin:0 11px 14px;font-size:10px;font-weight:750;letter-spacing:.06em;color:var(--soft)}
+.worker-self-sidebar>button{width:100%;height:40px;display:flex;align-items:center;gap:11px;text-align:left;padding:0 12px;border:none;border-radius:5px;background:transparent;color:var(--muted);font-size:12px;font-weight:620;cursor:pointer}
+.worker-self-sidebar>button:hover{background:var(--panel)}
+.worker-self-sidebar>button.active{background:var(--panel);color:var(--text);box-shadow:inset 2px 0 var(--accent);font-weight:720}
+.worker-self-sidebar>button.active svg{color:var(--accent)}
+.worker-self-sidebar-foot{font-weight:650;margin-top:auto;padding:15px 12px;border-top:1px solid var(--border);font-size:11px}
+.worker-self-sidebar-foot small{display:block;color:var(--soft);font-weight:450;margin-top:5px}
+.worker-self-main{padding:26px 28px 30px;max-width:100%;min-width:0}
+.worker-self-page-title{margin-bottom:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.worker-self-page-title h1{font-size:21px;font-weight:720;letter-spacing:-.03em;margin:0}
+.worker-self-page-title p{margin:6px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
+.worker-self-primary-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.worker-self-panel{border:1px solid var(--border);border-radius:7px;background:var(--panel);padding:18px;min-width:0}
+.worker-self-priority{border-color:var(--border-strong)}
+.worker-self-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:24px;font-size:11px;font-weight:720}
+.worker-self-panel-head>span:first-child{display:flex;align-items:center;gap:8px}
+.worker-self-panel-head svg{color:var(--accent);flex:none}
+.worker-self-dot{font-size:10px;color:var(--warn);font-weight:650;white-space:nowrap}
+.worker-self-dot:before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:var(--warn)}
+.worker-self-dot.good{color:var(--good)}.worker-self-dot.good:before{background:var(--good)}
+.worker-self-panel h2{font-size:17px;line-height:1.2;font-weight:700;margin:15px 0 8px;letter-spacing:-.015em}
+.worker-self-shift{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 19px}
+.worker-self-shift svg{flex:none}.worker-self-shift strong{color:var(--text);font-weight:650}.worker-self-shift>span{color:var(--muted)}
+.worker-self-question{font-weight:700;font-size:12px;margin:10px 0}
+.worker-self-main-button,.worker-self-light-button{width:100%;min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;padding:8px 12px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:5px;font-weight:700;font-size:12px;text-decoration:none;text-align:center}
+.worker-self-main-button:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.worker-self-light-button{width:auto;background:var(--panel);color:var(--text);border-color:var(--border-strong);font-weight:620}
+.worker-self-light-button:hover{background:var(--panel-2)}
+.worker-self-light-button.full{width:100%;margin-top:8px}
+.worker-self-main-button:disabled,.worker-self-light-button:disabled{opacity:.5;cursor:not-allowed}
+.worker-self-quiet{border:0;background:transparent;color:var(--accent);padding:7px 1px;font-size:11px;font-weight:680;display:inline-flex;align-items:center;gap:5px;cursor:pointer;text-align:left}
+.worker-self-quiet:hover{text-decoration:underline}
+.worker-self-deadline{margin-top:16px;padding-top:12px;display:flex;gap:7px;align-items:flex-start;border-top:1px solid var(--border);font-size:10px;line-height:1.6;color:var(--muted)}
+.worker-self-deadline svg{flex:none;margin-top:2px}
+.worker-self-done{display:flex;align-items:flex-start;gap:8px;background:var(--good-bg);border-radius:5px;padding:10px 12px;color:var(--good);font-size:12px;margin:14px 0;line-height:1.5}
+.worker-self-done svg{flex:none}
+.worker-self-warning{margin:13px 0;padding:10px;background:var(--warn-bg);color:var(--warn);font-size:12px;line-height:1.5;border-radius:5px}
+.worker-self-hint{background:var(--panel-2);color:var(--muted);border-left:2px solid var(--warn);padding:9px 10px;font-size:11px;line-height:1.5}
+.worker-self-muted{font-size:11px;color:var(--muted);line-height:1.55;margin:12px 0}
+.worker-self-future,.worker-self-additional{margin-top:14px}
+.worker-self-days{display:grid;grid-template-columns:1fr 1fr;gap:0 15px;margin-top:10px}
+.worker-self-day{display:grid;grid-template-columns:20px minmax(0,1fr) 24px;align-items:center;gap:9px;min-height:57px;border-top:1px solid var(--border)}
+.worker-self-day>input{width:15px;height:15px;accent-color:var(--accent)}
+.worker-self-day-content{padding:8px 0;background:none;border:0;text-align:left;display:grid;gap:4px;cursor:pointer;min-width:0}
+.worker-self-day-content strong{font-size:12px;font-weight:660;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.worker-self-day-content span{font-size:11px;color:var(--muted);text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.worker-self-day-action{border:0;background:none;padding:5px;color:var(--muted);cursor:pointer}
+.worker-self-selected{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--border);border-radius:5px;background:var(--panel-2);padding:10px;font-size:11px}
+.worker-self-selected>button:not(.worker-self-quiet){background:var(--accent);border:0;color:white;border-radius:5px;font-size:11px;font-weight:650;padding:9px;cursor:pointer}
+.worker-self-edit{margin-top:12px;border:1px solid var(--border);background:var(--panel-2);border-radius:6px;padding:14px;display:grid;gap:10px}
+.worker-self-edit>label,.worker-self-hours,.worker-self-fields label{display:grid;gap:6px;font-size:11px;font-weight:650;color:var(--muted)}
+.worker-self-edit textarea,.worker-self-hours input,.worker-self-fields input{min-height:39px;width:100%;min-width:0;max-width:100%;padding:8px 10px;border:1px solid var(--border-strong);border-radius:5px;background:var(--panel);color:var(--text);font-size:13px;resize:vertical}
+.worker-self-edit-title{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.worker-self-edit p{margin:0;color:var(--muted);font-size:11px;line-height:1.5}
+.worker-self-choices{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.worker-self-choices button{flex:1;min-width:80px;min-height:37px;border:1px solid var(--border);border-radius:5px;background:var(--panel);font-size:12px;cursor:pointer}
+.worker-self-choices button.selected{background:var(--accent-soft);border-color:var(--accent);font-weight:720}
+.worker-self-hours{margin:12px 0}
+.worker-self-totals{border:1px solid var(--border);border-radius:6px;background:var(--panel-2);display:grid;grid-template-columns:1fr 1fr;margin-bottom:14px}
+.worker-self-totals>div{display:grid;gap:6px;padding:14px 18px}
+.worker-self-totals>div+div{border-left:1px solid var(--border)}
+.worker-self-totals small{font-size:11px;color:var(--muted)}.worker-self-totals strong{font-size:24px}
+.worker-self-timesheet-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:47px;border-top:1px solid var(--border);font-size:12px}
+.worker-self-timesheet-row>div:first-child{display:flex;align-items:center;gap:15px}
+.worker-self-timesheet-row span{color:var(--muted)}
+.worker-self-extra-list{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.worker-self-extra-list button{min-height:84px;display:grid;align-items:center;grid-template-columns:25px 1fr 17px;gap:10px;padding:15px;border:1px solid var(--border);border-radius:6px;background:var(--panel);text-align:left;cursor:pointer}
+.worker-self-extra-list button:hover{background:var(--panel-2)}
+.worker-self-extra-list button>svg:first-child{color:var(--accent)}
+.worker-self-extra-list button span{display:grid;gap:4px;min-width:0}
+.worker-self-extra-list strong{font-size:12px}
+.worker-self-extra-list small{font-size:11px;color:var(--muted);line-height:1.3}
+.worker-self-back{border:0;background:none;color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;margin-bottom:14px;padding:5px}
+.worker-self-back:hover{color:var(--text)}
+.worker-self-doc-list{margin-top:15px;border-top:1px solid var(--border)}
+.worker-self-doc-row{min-height:67px;padding:12px 0;display:grid;align-items:center;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;border-bottom:1px solid var(--border)}
+.worker-self-doc-row>div{min-width:0;display:grid;gap:5px;overflow-wrap:anywhere}
+.worker-self-doc-row strong{font-size:12px;font-weight:700}
+.worker-self-doc-row small{font-size:11px;color:var(--muted);line-height:1.4}
+.worker-self-doc-row>button{width:auto;min-width:75px;white-space:nowrap;min-height:32px;padding:5px 11px;font-size:11px;font-weight:650;border:1px solid var(--border-strong);border-radius:5px;background:var(--panel);cursor:pointer}
+.worker-self-doc-row>button:hover{background:var(--panel-2)}
+.worker-self-doc-icon{height:20px;width:20px;border:1px solid var(--border);border-radius:50%;color:transparent;display:grid;place-items:center}
+.worker-self-doc-icon.verified{color:var(--good);border-color:var(--good)}
+.worker-self-doc-icon.reported{color:var(--warn);border-color:var(--warn)}
+.worker-self-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:15px 0}
+.worker-self-check{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);margin:10px 0}
+.worker-self-check input{accent-color:var(--accent);width:16px;height:16px}
+.worker-self-asset-row{display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);gap:12px;min-height:59px;font-size:12px}
+.worker-self-asset-row>span:first-child{display:grid;gap:5px}.worker-self-asset-row small{color:var(--muted);font-size:11px}
+.worker-self-asset-tag{font-size:11px;font-weight:650;color:var(--warn)}.worker-self-asset-tag.issued{color:var(--good)}
+.worker-self-contact>small{color:var(--soft);font-size:10px;font-weight:750}
+.worker-self-contact h2{font-size:17px;margin:9px 0 3px}
+.worker-self-contact>p{color:var(--muted);font-size:12px;margin:0 0 18px}
+.worker-self-contact>a{max-width:360px}
+.worker-self-alert{margin-bottom:14px;border:1px solid var(--border);border-left:3px solid var(--bad);padding:12px;display:flex;gap:8px;align-items:center;font-size:12px;line-height:1.45}
+.worker-self-alert.success{border-left-color:var(--good);color:var(--good)}
+.worker-self-footer{padding-top:24px;text-align:center;color:var(--soft);font-size:10px}
+.worker-self-bottom-nav{display:none}
+.worker-self-loading{padding:50px 25px;margin:100px auto;max-width:420px;border:1px solid var(--border);background:var(--panel);border-radius:8px}
+@media(max-width:820px){
+ .worker-self{padding:0}.worker-self-frame{border:0;border-radius:0;min-height:100dvh}
+ .worker-self-header{height:63px;padding:0 15px}.worker-self-logo{width:32px;height:32px}
+ .worker-self-brand strong{font-size:14px}.worker-self-identity{display:none}
+ .worker-self-layout{display:block;min-height:0}
+ .worker-self-sidebar{display:none}.worker-self-main{padding:20px 13px 100px}
+ .worker-self-page-title{flex-wrap:wrap;align-items:center;margin-bottom:16px}.worker-self-page-title h1{font-size:19px}
+ .worker-self-page-title>button{min-height:31px;font-size:11px}
+ .worker-self-primary-grid{grid-template-columns:1fr;gap:10px}
+ .worker-self-panel{padding:14px}
+ .worker-self-panel h2{font-size:16px}
+ .worker-self-main-button,.worker-self-light-button{min-height:45px}
+ .worker-self-days{grid-template-columns:1fr}
+ .worker-self-extra-list{grid-template-columns:1fr;gap:8px}.worker-self-extra-list button{min-height:68px}
+ .worker-self-bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:10;display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border-top:1px solid var(--border);padding:5px max(10px,env(safe-area-inset-left)) calc(5px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-right));box-shadow:0 -5px 18px rgba(0,0,0,.03)}
+ .worker-self-bottom-nav button{min-height:55px;display:grid;place-content:center;justify-items:center;gap:3px;color:var(--muted);background:transparent;border:0;font-size:11px;font-weight:550;cursor:pointer}
+ .worker-self-bottom-nav button.active{color:var(--accent);font-weight:750}
+}
+@media(max-width:400px){.worker-self-doc-row{grid-template-columns:20px minmax(0,1fr) auto;gap:8px}.worker-self-doc-row>button{min-width:67px;padding-inline:6px}.worker-self-fields{gap:9px}.worker-self-page-title p{font-size:11px}}
+/* Allow both modes to be shown side-by-side during desktop review without route duplication. */
+.worker-self-phone{max-width:435px;margin:auto;box-shadow:0 0 0 1px var(--border);padding:0}
+.worker-self-phone .worker-self-frame{border:0;min-height:780px;border-radius:0}
+.worker-self-phone .worker-self-sidebar,.worker-self-phone .worker-self-identity{display:none}
+.worker-self-phone .worker-self-layout{display:block;min-height:0}
+.worker-self-phone .worker-self-main{padding:20px 13px 110px}
+.worker-self-phone .worker-self-primary-grid,.worker-self-phone .worker-self-extra-list{grid-template-columns:1fr}
+.worker-self-phone .worker-self-days{grid-template-columns:1fr}
+.worker-self-phone .worker-self-bottom-nav{position:sticky;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);z-index:10;border-top:1px solid var(--border);background:var(--panel);padding:5px}
+.worker-self-phone .worker-self-bottom-nav button{min-height:53px;border:0;background:none;display:grid;justify-items:center;align-content:center;gap:4px;font-size:11px;color:var(--muted)}
+.worker-self-phone .worker-self-bottom-nav button.active{color:var(--accent)}
+.worker-self-phone .worker-self-header{height:63px;padding:0 15px}
+.worker-self-demo-strip{background:var(--panel-2);padding:9px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}.worker-self-demo-strip select{border:1px solid var(--border);padding:5px;border-radius:4px;background:var(--panel);color:var(--text)}.worker-self-demo-strip button{padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;cursor:pointer}.worker-self-demo-msg{padding:9px 12px;margin:0 0 12px;background:var(--good-bg);color:var(--good);border-left:2px solid var(--good);font-size:12px}.worker-self-demo-tools{display:flex;align-items:center;gap:6px}.worker-self-demo-label{font-weight:700;font-size:10px;color:var(--accent)}.worker-self-demo-nav{display:flex;align-items:center;gap:10px}.worker-self-demo-nav a{color:var(--accent);text-decoration:underline;font-size:11px}.worker-self-demo-nav button{border:1px solid var(--border);background:var(--panel);border-radius:5px;padding:6px 9px;cursor:pointer}.worker-self-demo-check{accent-color:var(--accent)}.worker-self-demo-muted{font-size:11px;color:var(--muted)}.worker-self-icon-button{font-size:16px}.worker-self-day-action{font-size:18px}.worker-self-asset-row small{display:block}.worker-self-demo-alert{font-size:11px;color:var(--muted);margin:12px 0}.worker-self-phone{max-width:435px}.worker-self-phone .worker-self-bottom-nav{position:sticky}@media(max-width:820px){.worker-self-demo-strip{padding:7px 10px}.worker-self-demo-nav{gap:6px}}/* v4: daily actions remain prominent; prefilled schedule stays read-only until a change is requested. */
+.worker-self-date-row{display:flex;align-items:center;justify-content:space-between;text-align:left;gap:14px;min-height:58px;width:100%;border:0;border-top:1px solid var(--border);background:transparent;color:var(--text);padding:9px 0;cursor:pointer}
+.worker-self-date-row:hover{background:var(--panel-2)}
+.worker-self-date-info{display:grid;gap:4px;min-width:0}
+.worker-self-date-info strong{font-size:12px;font-weight:680;line-height:1.4}
+.worker-self-date-info small{font-size:11px;color:var(--muted);line-height:1.35}
+.worker-self-date-right{flex:none;display:flex;gap:9px;align-items:center;color:var(--muted);font-size:11px}
+.worker-self-date-right>span{font-weight:650;color:var(--text)}
+.worker-self-date-right>span.worker-self-day-off{color:var(--muted);font-weight:570}
+.worker-self-week-tool{border-top:1px solid var(--border);margin-top:12px;padding-top:15px;display:grid;gap:9px}
+.worker-self-week-tool>div>strong{font-size:12px;font-weight:720}
+.worker-self-week-tool>.worker-self-light-button{justify-self:start}
+.worker-self-week-editor{background:var(--panel-2);border:1px solid var(--border);border-radius:6px;padding:12px;display:grid;gap:12px}
+.worker-self-week-label{font-size:11px;color:var(--muted);line-height:1.5}
+.worker-self-week-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.worker-self-week-grid button{display:grid;justify-items:center;align-content:center;gap:5px;min-width:0;min-height:63px;background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:5px;cursor:pointer;font-size:10px;padding:5px 0}
+.worker-self-week-grid button.off{border-color:var(--accent);background:var(--accent-soft);color:var(--text)}
+.worker-self-week-grid button strong{font-size:10px;font-weight:680}
+.worker-self-week-grid button span{font-size:13px;font-weight:720}
+.worker-self-schedule-attributes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:18px 0}
+.worker-self-schedule-attributes>div{display:grid;gap:6px;min-width:0}
+.worker-self-schedule-attributes small{color:var(--muted);font-size:11px}
+.worker-self-schedule-attributes strong{font-size:13px;font-weight:730;line-height:1.45}
+.worker-self-setting-date{display:grid;gap:7px;color:var(--muted);font-size:11px;font-weight:670;margin-top:16px}
+.worker-self-setting-date>input,.worker-self-fields select{width:100%;min-width:0;min-height:40px;padding:8px 10px;border-radius:5px;border:1px solid var(--border-strong);background:var(--panel);color:var(--text);font-size:12px}
+.worker-self-setting-section{display:grid;gap:10px;margin:17px 0 3px;padding-top:14px;border-top:1px solid var(--border)}
+.worker-self-setting-section>strong{font-size:12px;font-weight:730}
+.worker-self-timesheet-panel .worker-self-panel-head{padding-bottom:10px}
+.worker-self-ledger-hint{font-size:10px;color:var(--muted);font-weight:570}
+.worker-self-ledger-header{display:flex;align-items:center;justify-content:space-between;background:var(--panel-2);font-size:10px;color:var(--muted);padding:8px 12px;margin:0 -4px}
+.worker-self-ledger-row{min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;border-bottom:1px solid var(--border)}
+.worker-self-ledger-date{display:flex;align-items:center;gap:14px;min-width:0}
+.worker-self-ledger-date strong{min-width:40px;font-size:12px;font-weight:690}
+.worker-self-ledger-date small{color:var(--muted);font-size:11px;line-height:1.4}
+.worker-self-ledger-result{display:grid;justify-items:end;gap:3px;flex:none}
+.worker-self-ledger-result strong{font-size:12px;font-weight:690;color:var(--muted)}
+.worker-self-ledger-result strong.actual{font-weight:760;color:var(--text);font-variant-numeric:tabular-nums}
+.worker-self-ledger-result small{font-size:9px;color:var(--muted)}
+.worker-self-ledger-separator{height:7px;background:var(--panel-2);border-bottom:1px solid var(--border)}
+.worker-self-totals span{font-size:10px;color:var(--muted)}
+@media(max-width:820px){
+ .worker-self-date-row{min-height:59px;padding:10px 0}
+ .worker-self-week-grid{gap:3px}
+ .worker-self-week-grid button{min-height:60px;padding:4px 0;font-size:9px}
+ .worker-self-week-grid button span{font-size:12px}
+ .worker-self-schedule-attributes{gap:13px}
+ .worker-self-ledger-date{gap:12px}
+}
+</style></head><body><div id="app"></div><script>(()=>{"use strict";
+const icon={
+ calendar:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/></svg>',
+ clipboard:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 14l2 2 4-5"/></svg>',
+ more:'<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+ phone:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3l3 4-2 3c1 2.5 3.5 5 6 6l3-2 4 3-2 4C11 22 2 14 3 5z"/></svg>',
+ gear:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg>',
+ doc:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 2h8l5 5v15H6zM14 2v6h5M9 12h7M9 16h7"/></svg>',
+ shirt:'<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3l4 2 4-2 5 5-4 3v10H7V11L3 8z"/></svg>'
+};
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+let state;
+function fresh(){return{tab:"shifts",more:"overview",owner:"worker",tomorrow:"night",confirmed:false,missed:false,reason:"",confirmHours:null,hoursEdit:false,hoursText:"11",plans:{0:"night",1:"night",2:"off",3:"off",4:"night",5:"night",6:"night",7:"night",8:"night",9:"off",10:"off"},selected:[],floating:false,settingsOpen:false,editDay:null,kind:"night",notice:"",settingsKind:"night",timeStart:"20:00",timeEnd:"08:00",nextDay:true,doc:{passport:"verified",snils:"verified",inn:"needed",bank:"reported"},clothing:"52–54",shoe:"43",showFull:false}}
+function day(n){const d=new Date("2026-10-08T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return new Intl.DateTimeFormat("ru-RU",{weekday:"long",day:"numeric",month:"long",timeZone:"UTC"}).format(d)}
+function short(n){const d=new Date("2026-10-08T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"short",timeZone:"UTC"}).format(d)}
+const kindLabel=k=>k==="night"?"Ночная смена":k==="day"?"Дневная смена":k==="off"?"Выходной":"Не запланировано";
+const kindShort=k=>k==="night"?"Ночь":k==="day"?"День":k==="off"?"Выходной":"Нет плана";
+const button=(action,label,cls="worker-self-main-button")=>'<button type="button" class="'+cls+'" data-act="'+action+'">'+label+'</button>';
+function navigation(){return [['shifts','Смены','calendar'],['timesheet','Табель','clipboard'],['more','Ещё','more']].map(([key,label,ic])=>'<button data-tab="'+key+'" class="'+(state.tab===key?"active":"")+'">'+icon[ic]+' '+label+'</button>').join("")}
+function render(){
+const mobile=new URLSearchParams(location.search).get("layout")==="mobile";
+let h='<div class="worker-self '+(mobile?"worker-self-phone":"worker-self-desktop")+'"><div class="worker-self-frame">';
+h+='<div class="worker-self-demo-strip"><span class="worker-self-demo-label">OPERIS · ДЕМО ИНТЕРФЕЙСА · БЕЗ БАЗЫ ДАННЫХ</span><div class="worker-self-demo-tools"><label>Сценарий: <select id="scenario"><option value="fixed" '+(!state.floating?"selected":"")+'>5/2 · обычные выходные</option><option value="floating" '+(state.floating?"selected":"")+'>5/2 · плавающие выходные</option></select></label>'+button("theme","◐ Тема","")+'</div></div>';
+h+='<header class="worker-self-header"><div class="worker-self-brand"><span class="worker-self-logo">O</span><div><small>OPERIS · СОТРУДНИК</small><strong>Личный кабинет</strong></div></div><div class="worker-self-identity"><strong>Иванов Иван</strong><span>Можайское · Комплектовщик</span></div><div class="worker-self-header-actions">'+button("contact",icon.phone,"worker-self-icon-button")+'</div></header>';
+h+='<div class="worker-self-layout"><aside class="worker-self-sidebar"><p>РАБОЧЕЕ ПРОСТРАНСТВО</p>'+navigation()+'<div class="worker-self-sidebar-foot">Иванов Иван<small>Можайское · Комплектовщик</small></div></aside><div class="worker-self-main">';
+if(state.notice)h+='<div role="status" class="worker-self-demo-msg">'+esc(state.notice)+' · Демонстрация</div>';
+if(state.tab==="shifts"){
+h+='<div class="worker-self-page-title"><div><h1>Мои смены</h1><p>Можайское · Комплектовщик</p></div>'+button("settings",icon.gear+' Настройки графика',"worker-self-light-button")+'</div><div class="worker-self-primary-grid">';
+h+='<section class="worker-self-panel worker-self-priority"><div class="worker-self-panel-head"><span>'+icon.calendar+' Ближайший день</span><span class="worker-self-dot '+(state.confirmed?"good":"")+'">'+(state.confirmed?"Подтверждено":state.missed?"Не выйду":"Требует внимания")+'</span></div><h2>'+day(1)+'</h2><p class="worker-self-shift"><strong>'+kindLabel(state.plans[1])+'</strong><span>20:00–08:00</span></p>';
+if(state.plans[1]==="off")h+='<p class="worker-self-muted">По графику выходной. Подтверждать его не нужно.</p>'+button("edit-1",state.owner==="manager"?"Запросить рабочую смену":"Изменить день","worker-self-light-button full");
+else h+=(state.confirmed?'<div class="worker-self-done">✓ Вы подтвердили выход.</div>':state.missed?'<p class="worker-self-warning">Вы сообщили, что не выйдете: '+esc(state.reason)+'</p>':'<p class="worker-self-question">Выйдете на смену?</p>')+(state.confirmed?"":button("confirm","✓ Подтвердить выход"))+button("decline",state.confirmed?"Изменились планы":"Не смогу выйти","worker-self-light-button full")+button("edit-1","Предложить изменение графика","worker-self-quiet");
+if(state.decline)h+='<div class="worker-self-edit"><label>Причина изменения<textarea id="reason" rows="2" placeholder="Например, заболел">'+esc(state.reason)+'</textarea></label>'+button("saveDecline","Сообщить менеджеру")+'</div>';
+h+='<div class="worker-self-deadline">Подтверждение до 8 октября, 22:00. Об изменениях сообщайте сразу.</div></section>';
+h+='<section class="worker-self-panel"><div class="worker-self-panel-head"><span>'+icon.clipboard+' Последняя завершённая смена</span><span class="worker-self-dot '+(state.confirmHours!==null?"good":"")+'">'+(state.confirmHours===null?"Нужны часы":"Часы переданы")+'</span></div><h2>'+day(-1)+'</h2><p class="worker-self-shift">Ночная смена · 7 октября, 20:00 — 8 октября, 08:00</p>';
+if(state.confirmHours!==null&&!state.hoursEdit)h+='<div class="worker-self-done">✓ '+state.confirmHours+' часов переданы для сверки.</div>'+button("editHours","Исправить часы","worker-self-light-button full");
+else h+='<p class="worker-self-question">Сколько часов вы отработали?</p>'+(state.hoursEdit?'<label class="worker-self-hours">Отработано часов<input id="hours" type="number" min="0" max="24" step=".5" value="'+esc(state.hoursText)+'"/></label>':'')+button(state.hoursEdit?"saveHours":"confirmHours",state.hoursEdit?"Сохранить часы":"✓ 11 часов — верно")+(state.hoursEdit?"":button("editHours","Указать другое количество","worker-self-light-button full"));
+h+='<div class="worker-self-deadline">Ночная смена учитывается по дате её начала. Часы проверяет менеджер.</div></section></div>';
+h+='<section class="worker-self-panel worker-self-future"><div class="worker-self-panel-head"><span>'+icon.calendar+' Ближайшие дни</span>'+button("showFull",state.showFull?"Свернуть":"Весь график ▾","worker-self-quiet")+'</div><p class="worker-self-muted">График уже заполнен. Нажмите на дату, только если планы изменились.</p><div class="worker-self-days">';
+for(let n=1;n<=(state.showFull?10:5);n++){
+ const k=state.plans[n]||"night";
+ h+='<button class="worker-self-date-row" data-act="edit-'+n+'"><span class="worker-self-date-info"><strong>'+day(n)+'</strong><small>'+(k==="off"?"Выходной по графику":"Запланирована ночная смена")+'</small></span><span class="worker-self-date-right"><span class="'+(k==="off"?"worker-self-day-off":"")+'">'+kindShort(k)+'</span>›</span></button>';
+}
+h+='</div>';
+if(state.floating){h+='<div class="worker-self-week-tool"><div><strong>Плавающие выходные</strong><p class="worker-self-muted">Выберите два выходных на следующую неделю. Остальные дни рабочие.</p></div>'+button("weekly",state.weekly?"Свернуть":"Выбрать дни отдыха","worker-self-light-button");
+if(state.weekly){h+='<div class="worker-self-week-editor"><div class="worker-self-week-label">12–18 октября · Выходные '+state.selected.length+' из 2</div><div class="worker-self-week-grid">';
+for(let n=4;n<=10;n++){h+='<button class="'+(state.selected.includes(n)?"off":"")+'" data-act="rest-'+n+'"><strong>'+day(n).slice(0,2)+'</strong><span>'+(8+n)+'</span>'+(state.selected.includes(n)?"Вых.":"Раб.")+'</button>'}
+h+='</div>'+button("saveWeek","Сохранить неделю")+'</div>'}
+h+='</div>'}
+if(state.editDay!==null){h+='<div class="worker-self-edit"><div class="worker-self-edit-title"><strong>'+day(state.editDay)+'</strong>'+button("cancel","Закрыть","worker-self-quiet")+'</div><p>Выберите желаемую смену или выходной. Изменение фиксированного графика поступит менеджеру.</p><div class="worker-self-choices">'+["day","night","off"].map(k=>button("pick-"+k,kindShort(k),state.kind===k?"selected":"")).join("")+'</div>'+button("saveDay","Отправить изменение")+'</div>'}
+h+='</section>';
+}else if(state.tab==="timesheet"){
+h+='<div class="worker-self-page-title"><div><h1>Мой табель</h1><p>Текущий месяц · Плановые дни не учитываются в итогах.</p></div></div><div class="worker-self-totals"><div><small>Отработано часов</small><strong>'+(44+(state.confirmHours??0))+'</strong><span>Предварительный итог</span></div><div><small>Отработано смен</small><strong>'+(4+(state.confirmHours===null?0:1))+'</strong><span>Только факт</span></div></div><section class="worker-self-panel worker-self-timesheet-panel"><div class="worker-self-panel-head"><span>'+icon.clipboard+' Дни месяца</span><span class="worker-self-ledger-hint">План → Факт → Сверка</span></div><div class="worker-self-ledger-header"><span>Дата / Смена</span><span>Результат</span></div>';
+for(let n=0;n<=7;n++){
+ const date=8-n,actual=n===1?state.confirmHours:[2,3,6,7].includes(n)?11:null,off=n===4||n===5;
+ if(n===0||n===4)h+='<div class="worker-self-ledger-separator"></div>';
+ h+='<div class="worker-self-ledger-row"><div class="worker-self-ledger-date"><strong>'+date+'.10</strong><small>'+(off?"Выходной":"Ночная смена")+'</small></div><div class="worker-self-ledger-result"><strong class="'+(actual!==null?"actual":"")+'">'+(actual!==null?actual+" ч":off?"В":"План")+'</strong>'+(actual!==null?"<small>Учтено</small>":"")+'</div></div>';
+}
+h+='<p class="worker-self-muted">В итоги входят только завершённые и отмеченные отработанные смены. План не увеличивает часы.</p></section>';
+}else if(state.more==="overview"){
+h+='<div class="worker-self-page-title"><div><h1>Дополнительно</h1><p>Документы, обеспечение, контакты и настройки.</p></div></div><div class="worker-self-extra-list">'+[['documents',"Документы","Что необходимо передать","doc"],['workwear',"Спецодежда и СИЗ","Размеры и выдача","shirt"],['contact',"Важные контакты","Ваш менеджер объекта","phone"],['settings',"Настройки графика","Моя обычная смена","gear"]].map(([id,title,subtitle,ic])=>'<button data-more="'+id+'">'+icon[ic]+'<span><strong>'+title+'</strong><small>'+subtitle+'</small></span>›</button>').join("")+'</div>';
+}else{
+h+=button("back","← Все разделы","worker-self-back");
+if(state.more==="documents"){
+h+='<div class="worker-self-page-title"><div><h1>Мои документы</h1><p>ГПХ · Перечень по требованиям объекта.</p></div></div><section class="worker-self-panel"><div class="worker-self-panel-head"><span>'+icon.doc+' Чек-лист документов</span></div><p class="worker-self-muted">Отметьте переданные документы. Получение подтвердит менеджер. Сканы здесь не нужны.</p><div class="worker-self-doc-list">';
+const documents=[["passport","Паспорт"],["snils","СНИЛС"],["inn","ИНН"],["bank","Реквизиты для выплаты"]];
+h+=documents.map(([id,label])=>{const status=state.doc[id];return '<div class="worker-self-doc-row"><span class="worker-self-doc-icon '+(status==="verified"?"verified":status==="reported"?"reported":"")+'">✓</span><div><strong>'+label+'</strong><small>'+(status==="verified"?"Получено менеджером":status==="reported"?"Отметили передачу · ожидает проверки":"Требуется передать")+'</small></div>'+(status==="verified"?"":button("doc-"+id,status==="reported"?"Отменить":"Передал",""))+'</div>'}).join("")+'</div></section>';
+}else if(state.more==="workwear"){
+h+='<div class="worker-self-page-title"><div><h1>Спецодежда и СИЗ</h1><p>Размеры и фактическая выдача на объекте.</p></div></div><section class="worker-self-panel"><div class="worker-self-panel-head"><span>'+icon.shirt+' Мои размеры</span></div><div class="worker-self-fields"><label>Размер одежды<input id="clothing" value="'+esc(state.clothing)+'"/></label><label>Размер обуви<input id="shoe" value="'+esc(state.shoe)+'"/></label></div>'+button("saveSizes","Сохранить размеры")+'</section><section class="worker-self-panel worker-self-additional"><div class="worker-self-panel-head"><span>Что мне выдано</span></div>';
+h+=[["Рабочая куртка","Выдано","issued"],["Рабочие брюки","Выдано","issued"],["Защитная обувь","Не выдано",""]].map(([name,result,cls])=>'<div class="worker-self-asset-row"><span><strong>'+name+'</strong></span><span class="worker-self-asset-tag '+cls+'">'+result+'</span></div>').join("")+'</section>';
+}else if(state.more==="contact"){
+h+='<div class="worker-self-page-title"><div><h1>Важные контакты</h1><p>Для вопросов и изменений графика.</p></div></div><section class="worker-self-panel worker-self-contact"><small>МЕНЕДЖЕР ОБЪЕКТА</small><h2>Менеджер объекта</h2><p>Можайское · Контактный номер заполняется в OPERIS.</p><p class="worker-self-muted">В демонстрации реальный номер не показан. После настройки появится кнопка «Позвонить».</p></section>';
+}else{
+h+='<div class="worker-self-page-title"><div><h1>Мой график</h1><p>График подставлен из OPERIS. Изменения направляются менеджеру.</p></div></div><section class="worker-self-panel worker-self-schedule-summary"><div class="worker-self-panel-head"><span>'+icon.calendar+' Действующий график</span></div><div class="worker-self-schedule-attributes"><div><small>Режим</small><strong>5/2</strong></div><div><small>Смена</small><strong>Ночная</strong></div><div><small>Выходные</small><strong>'+(state.floating?"Плавающие":"Сб, вс")+'</strong></div><div><small>Время</small><strong>20:00–08:00</strong></div></div><p class="worker-self-muted">Если условия не изменились, ничего заполнять не нужно.</p>'+button("toggleSettings",state.settingsOpen?"Скрыть форму":"Предложить изменение","worker-self-light-button full")+'</section>';
+if(state.settingsOpen){h+='<section class="worker-self-panel worker-self-additional"><div class="worker-self-panel-head"><span>'+icon.gear+' Запрос на изменение</span></div><p class="worker-self-muted">Новый график начнёт действовать после согласования.</p><label class="worker-self-setting-date">Действует с <input id="effective" type="date" value="2026-10-12"/></label><div class="worker-self-setting-section"><strong>1. Режим работы</strong><div class="worker-self-fields"><label>График <select id="schedule"><option>5/2</option><option>6/1</option><option>2/2</option><option>3/3</option></select></label><label>Тип смены <select id="shift-kind"><option>Ночная</option><option>Дневная</option></select></label></div><label class="worker-self-check"><input id="patternFloating" type="checkbox" '+(state.floating?"checked":"")+'/> Плавающие выходные</label>'+button("requestPattern","Запросить изменение режима","worker-self-light-button full")+'</div><div class="worker-self-setting-section"><strong>2. Время работы</strong><div class="worker-self-fields"><label>Начало <input id="startTime" type="time" value="'+esc(state.timeStart)+'"/></label><label>Окончание <input id="endTime" type="time" value="'+esc(state.timeEnd)+'"/></label></div><label class="worker-self-check"><input id="nextDay" type="checkbox" checked/> Окончание на следующий день</label>'+button("saveSettings","Запросить изменение времени","worker-self-light-button full")+'</div></section>'}
+
+}}
+h+='</div></div><nav class="worker-self-bottom-nav">'+navigation()+'</nav></div></div>';
+document.getElementById("app").innerHTML=h;
+}
+document.addEventListener("change",e=>{
+if(e.target?.id==="scenario"){state.floating=e.target.value==="floating";state.selected=[9,10];state.notice="Сценарий демо изменён";render();return}
+if(e.target?.dataset?.check){const n=Number(e.target.dataset.check);state.selected=e.target.checked?[...state.selected,n]:state.selected.filter(x=>x!==n)}
+});
+document.addEventListener("click",e=>{
+const tab=e.target.closest("[data-tab]");if(tab){state.tab=tab.dataset.tab;state.more="overview";state.notice="";render();return}
+const more=e.target.closest("[data-more]");if(more){state.more=more.dataset.more;state.notice="";render();return}
+const x=e.target.closest("[data-act]");if(!x)return;const a=x.dataset.act;state.notice="";
+if(a==="theme"){document.documentElement.dataset.theme=document.documentElement.dataset.theme==="dark"?"light":"dark";return}
+if(a==="contact"){state.tab="more";state.more="contact"}
+else if(a==="settings"){state.tab="more";state.more="settings"}
+else if(a==="back"){state.more="overview"}
+else if(a==="confirm"){state.confirmed=true;state.missed=false;state.notice="Выход подтверждён"}
+else if(a==="decline"){state.decline=!state.decline}
+else if(a==="saveDecline"){const v=document.getElementById("reason").value.trim();if(!v){state.notice="Укажите причину";render();return}state.reason=v;state.missed=true;state.confirmed=false;state.decline=false;state.notice="Изменение передано менеджеру"}
+else if(a==="confirmHours"){state.confirmHours=11;state.notice="Отработанные часы переданы"}
+else if(a==="editHours"){state.hoursEdit=true}
+else if(a==="saveHours"){const n=Number(document.getElementById("hours").value);if(!Number.isFinite(n)||n<0||n>24){state.notice="Укажите часы от 0 до 24";render();return}state.confirmHours=n;state.hoursEdit=false;state.notice="Часы переданы"}
+else if(a==="showFull"){state.showFull=!state.showFull}
+else if(a==="weekly"){state.weekly=!state.weekly;state.selected=[9,10]}
+else if(a.startsWith("rest-")){const n=Number(a.slice(5));if(state.selected.includes(n))state.selected=state.selected.filter(x=>x!==n);else if(state.selected.length<2)state.selected.push(n)}
+else if(a==="saveWeek"){if(state.selected.length!==2){state.notice="Нужно выбрать ровно два выходных"}else{for(let n=4;n<=10;n++)state.plans[n]=state.selected.includes(n)?"off":"night";state.weekly=false;state.notice="Плавающие выходные на неделю сохранены"}}
+else if(a.startsWith("edit-")){state.editDay=Number(a.split("-")[1]);state.kind=state.plans[state.editDay]||"night"}
+else if(a==="cancel"){state.editDay=null}
+else if(a.startsWith("pick-")){state.kind=a.slice(5)}
+else if(a==="saveDay"){state.notice="Запрос об изменении передан менеджеру";state.editDay=null}
+else if(a.startsWith("doc-")){const k=a.slice(4);state.doc[k]=state.doc[k]==="reported"?"needed":"reported";state.notice="Отметка о передаче обновлена"}
+else if(a==="saveSizes"){state.clothing=document.getElementById("clothing").value;state.shoe=document.getElementById("shoe").value;state.notice="Размеры сохранены"}
+else if(a.startsWith("setting-")){state.settingsKind=a.slice(8)}
+else if(a==="toggleSettings"){state.settingsOpen=!state.settingsOpen}
+else if(a==="requestPattern"){state.notice="Изменение режима отправлено на согласование"}
+else if(a==="saveSettings"){state.timeStart=document.getElementById("startTime").value;state.timeEnd=document.getElementById("endTime").value;state.nextDay=document.getElementById("nextDay").checked;state.notice="Изменение графика направлено менеджеру"}
+render();
+});
+state=fresh();render();
+})();</script></body></html>
