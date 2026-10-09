@@ -160,18 +160,35 @@ export async function POST(request:Request){
       if(isCommercialScenario&&Object.keys(serverResult).length===0)throw new Error("Не удалось рассчитать экономику сценария");
 
       let referenceSnapshot:JsonRecord|null=null;
+      const appliedRateReferenceId=b.inputs.rateReferenceId;
+      if(appliedRateReferenceId!=null&&(typeof appliedRateReferenceId!=="string"
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(appliedRateReferenceId)))
+        throw new Error("Неверный идентификатор ориентира ставки");
       if(specialtyId){
         const [reference]=await tx<Array<{id:string;amountMin:number|string;amountMax:number|string|null;unit:string;paySemantics:string;employmentModel:string;source:string;sourceDate:string;confidence:string}>>`
           SELECT id,amount_min "amountMin",amount_max "amountMax",unit,pay_semantics "paySemantics",employment_model "employmentModel",source,source_date::text "sourceDate",confidence
           FROM rate_reference_entries
-          WHERE specialty_id=${specialtyId}::uuid
+          WHERE organization_id=${actor.organizationId}::uuid AND specialty_id=${specialtyId}::uuid
+            AND (${appliedRateReferenceId??null}::uuid IS NULL OR id=${appliedRateReferenceId??null}::uuid)
+            AND amount_min IS NOT NULL
             AND (${sourceRow.regionId}::uuid IS NULL OR region_id=${sourceRow.regionId}::uuid OR region_id IS NULL)
+            AND source_date<=${economicsDate}::date
             AND valid_from<=${economicsDate}::date AND (valid_to IS NULL OR valid_to>=${economicsDate}::date)
           ORDER BY (region_id=${sourceRow.regionId}::uuid) DESC,source_date DESC,created_at DESC LIMIT 1
         `;
+        if(appliedRateReferenceId&&!reference)throw new Error("Выбранный ориентир недоступен для позиции, региона или даты расчёта");
+        if(appliedRateReferenceId&&reference){
+          const value=numberFromJson(b.inputs.workerPayAmount,-1);
+          const minimum=Number(reference.amountMin);
+          const maximum=Number(reference.amountMax??reference.amountMin);
+          if(reference.paySemantics!=="net"||reference.unit!==b.inputs.workerPayUnit
+            ||value<minimum-0.01||value>maximum+0.01)
+            throw new Error("Выплата сотруднику не соответствует выбранному ориентиру");
+        }
         referenceSnapshot=reference?{
           id:reference.id,amountMin:Number(reference.amountMin),amountMax:reference.amountMax==null?null:Number(reference.amountMax),unit:reference.unit,
           paySemantics:reference.paySemantics,employmentModel:reference.employmentModel,source:reference.source,sourceDate:reference.sourceDate,confidence:reference.confidence,
+          selectionMode:appliedRateReferenceId?"applied":"suggested",
         }:null;
       }
 
