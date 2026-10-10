@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import {Fragment,useEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from "react";
+import {TenderDataEditor} from "@/components/TenderDataEditor";
+import {Fragment,useEffect,useMemo,useRef,useState,type ReactNode} from "react";
 import {useRouter} from "next/navigation";
 import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Pencil,Plus,X,ChevronRight,ArrowDownUp,ArrowUpRight,ExternalLink,RotateCcw} from "lucide-react";
 import {DEMO_TENDER_PREVIEW_PREFIX,loadDemoTenderSnapshot,saveDemoTenderSnapshot} from "@/components/sales/DemoTenderPreview";
@@ -107,9 +108,6 @@ function TenderStatus({row}:{row:TenderRow}) {
 function sourceHref(value:string|null){try {const url=new URL(value??"");return ["http:","https:"].includes(url.protocol)?url.href:null;}catch{return null;}}
 const numeric=(value:unknown)=>value===null||value===undefined||value===""?null:Number.isFinite(Number(value))?Number(value):null;
 const dateNumber=(value:string|null)=>value&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
-function inputDateTime(value:string|null){return tenderDateTimeInput(value);}
-function inputDate(value:string|null){if(!value)return "";const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toISOString().slice(0,10);}
-function isoDateTime(value:string,original?:string|null){return tenderDateTimeIso(value,original);}
 
 
 export function TendersWorkspace({rows,options,analytics,metricPreferences,canConfigureAnalytics,demo,canCreate,canImport,canEdit,canSubmit=false,editableIds=[],preferenceScope,now,initialView="list"}: {
@@ -175,29 +173,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     for(const item of imported){const candidate=toDemoRow(item);const key=uniqueKey(candidate);if(keys.has(key)){skipped++;continue;}keys.add(key);snapshot(candidate);created.push(candidate);}
     setLocalRows(current=>[...created,...current]);return {imported:created.length,skipped};
   }
-  function saveDemoEdit(event:FormEvent<HTMLFormElement>){
-    event.preventDefault();if(!demoEditing)return;const fd=new FormData(event.currentTarget);
-    const initialPriceRaw=String(fd.get("initialPrice")??"").trim();
-    const next:TenderRow={...demoEditing,
-      title:String(fd.get("title")??"").trim(),
-      customer:String(fd.get("customer")??"").trim()||"Заказчик не указан",
-      platform:String(fd.get("platform")??"").trim()||null,
-      procedureNumber:String(fd.get("procedureNumber")??"").trim()||null,
-      sourceUrl:String(fd.get("sourceUrl")??"").trim()||null,
-      sourceName:String(fd.get("sourceName")??"").trim()||null,
-      publicationDate:String(fd.get("publicationDate")??"").trim()||null,
-      submissionDeadline:isoDateTime(String(fd.get("submissionDeadline")??""),demoEditing.submissionDeadline),
-      initialPrice:initialPriceRaw?Number(initialPriceRaw):null,
-      stage:String(fd.get("stage")??demoEditing.stage) as TenderRow["stage"],
-      decision:String(fd.get("decision")??demoEditing.decision) as TenderRow["decision"],
-      priority:String(fd.get("priority")??demoEditing.priority) as TenderRow["priority"],
-      potential:String(fd.get("potential")??demoEditing.potential) as TenderRow["potential"],
-      nextActionText:String(fd.get("nextActionText")??"").trim()||null,
-      analysisSummary:String(fd.get("analysisSummary")??"").trim()||null,
-      updatedAt:new Date().toISOString(),
-    };
-    snapshot(next);setLocalRows(current=>[next,...current.filter(row=>row.id!==next.id)]);setDemoEditing(null);setSelectedId(next.id);
-  }
+
   const filtered=useMemo(()=>{
     const result=items.filter(row=>{
       if((row.stage==="completed")!==(settings.bucket==="completed"))return false;
@@ -293,35 +269,11 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       <HorizontalScrollDock scrollRef={view==="list"?tableRef:boardRef} disabled={Boolean(selected||demoEditing)||!filtered.length} revision={`${view}:${settings.columns.join(",")}:${settings.group}:${settings.subgroup}:${filtered.map(row=>row.id).join(",")}`} label={view==="list"?"Горизонтальная прокрутка тендеров":"Горизонтальная прокрутка доски тендеров"}/>
     </>}
     {view==="analytics"&&<TenderAnalytics data={analytics} options={options} metricPreferences={metricPreferences} canConfigure={canConfigureAnalytics} demo={demo}/>}
-    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<><button className="button" type="button" onClick={()=>setSelectedId(null)}>Закрыть</button>{mayEdit(selected)&&<Link className="button" href={`/tenders/${selected.id}?edit=1`} onClick={()=>setSelectedId(null)}><Pencil size={14}/> Редактировать</Link>}{demo&&canEdit&&<button className="button" type="button" onClick={()=>{setDemoEditing(selected);setSelectedId(null)}}><Pencil size={14}/> Редактировать</button>}{<Link className="button primary" href={tenderHref(selected)} onClick={()=>{snapshot(selected);setSelectedId(null)}}>Открыть карточку<ArrowUpRight size={15}/></Link>}</>}>
+    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<><button className="button" type="button" onClick={()=>setSelectedId(null)}>Закрыть</button>{((demo&&canEdit)||mayEdit(selected))&&<button className="button" type="button" onClick={()=>{setDemoEditing(selected);setSelectedId(null)}}><Pencil size={14}/> Быстрое редактирование</button>}{<Link className="button primary" href={tenderHref(selected)} onClick={()=>{snapshot(selected);setSelectedId(null)}}>Открыть карточку<ArrowUpRight size={15}/></Link>}</>}>
       <section className="tender-preview-section"><h3>Состояние и подача</h3><TenderStatus row={selected}/><dl className="tender-preview-facts"><div><dt>Решение</dt><dd>{tenderDecisionLabels[selected.decision]??"Уточняется"}</dd></div><div><dt>Подача до</dt><dd>{formatDate(selected.submissionDeadline)}</dd></div><div><dt>Срок</dt><dd>{tenderDeadlineState(selected.submissionDeadline,currentDate).label}</dd></div><div><dt>Ответственный</dt><dd>{selected.owner??"Не назначен"}</dd></div><div><dt>Следующее действие</dt><dd>{selected.nextActionText??"—"}</dd></div><div><dt>Дата действия</dt><dd>{formatDate(selected.nextActionAt)}</dd></div></dl></section>
       <section className="tender-preview-section"><h3>Условия закупки</h3><dl className="tender-preview-facts"><div><dt>Начальная цена</dt><dd>{numeric(selected.initialPrice)===null?"—":rub(selected.initialPrice!)}</dd></div><div><dt>Тарификация</dt><dd>{tenderBillingLabels[selected.billingUnit]??"Уточняется"}</dd></div><div><dt>Потенциал</dt><dd>{tenderPotentialLabels[selected.potential]??"Уточняется"}</dd></div><div><dt>Площадка</dt><dd>{selected.platform??"—"}</dd></div><div><dt>Номер торга</dt><dd>{selected.procedureNumber??"—"}</dd></div><div><dt>Источник</dt><dd>{selected.sourceName??"—"}</dd></div></dl>{sourceHref(selected.sourceUrl)&&<a className="button" href={sourceHref(selected.sourceUrl)!} target="_blank" rel="noreferrer">Закупка на площадке<ExternalLink size={14}/></a>}</section>
       <section className="tender-preview-section"><h3>Готовность</h3><dl className="tender-preview-facts"><div><dt>Позиции / расчёты</dt><dd>{selected.roleCount} / {selected.calculationCount}</dd></div><div><dt>Документы готовы</dt><dd>{selected.requirementCount?`${selected.readyRequirementCount} из ${selected.requirementCount}`:"Требования не заданы"}</dd></div><div><dt>Блокеры</dt><dd>{selected.blockerCount}</dd></div></dl>{selected.analysisSummary&&<p>{selected.analysisSummary}</p>}{selected.closeReason&&<p>{selected.closeReason}</p>}</section>
     </SalesDrawer>}
-    {demoEditing&&<SalesDrawer title="Редактировать тендер" subtitle="Демонстрационная копия сохраняется в этой вкладке браузера." overline="Демонстрационный режим" onClose={()=>setDemoEditing(null)}
-      footer={<><button className="button" type="button" onClick={()=>setDemoEditing(null)}>Отмена</button><button className="button primary" type="submit" form="demo-tender-edit-form">Сохранить изменения</button></>}>
-      <form id="demo-tender-edit-form" className="client-create-form client-create-form-unified tender-demo-edit-form" onSubmit={saveDemoEdit}>
-        <section className="client-form-section"><div className="client-form-section-head"><strong>Закупка</strong><span>Основные данные реестра и карточки.</span></div>
-          <label><span>Название тендера <b>*</b></span><input name="title" required minLength={3} maxLength={300} defaultValue={demoEditing.title}/></label>
-          <label><span>Заказчик</span><input name="customer" maxLength={300} defaultValue={demoEditing.customer}/></label>
-          <label><span>Площадка</span><input name="platform" maxLength={160} defaultValue={demoEditing.platform??""}/></label>
-          <label><span>Номер закупки</span><input name="procedureNumber" maxLength={180} defaultValue={demoEditing.procedureNumber??""}/></label>
-          <label><span>Ссылка на закупку</span><input name="sourceUrl" type="url" maxLength={2000} defaultValue={demoEditing.sourceUrl??""}/></label>
-          <label><span>Источник</span><input name="sourceName" maxLength={180} defaultValue={demoEditing.sourceName??""}/></label>
-          <label><span>Дата публикации</span><input name="publicationDate" type="date" defaultValue={inputDate(demoEditing.publicationDate)}/></label>
-          <label><span>Подача до (МСК)</span><input name="submissionDeadline" type="datetime-local" defaultValue={inputDateTime(demoEditing.submissionDeadline)}/></label>
-          <label><span>НМЦК / начальная цена, ₽</span><input name="initialPrice" type="number" min="0" step="any" defaultValue={demoEditing.initialPrice??""}/></label>
-        </section>
-        <section className="client-form-section"><div className="client-form-section-head"><strong>Рабочее состояние</strong><span>Для проверки воронки можно менять этап и решение.</span></div>
-          <label><span>Этап</span><select name="stage" defaultValue={demoEditing.stage}>{tenderStages.map(stage=><option key={stage.code} value={stage.code}>{stage.label}</option>)}</select></label>
-          <label><span>Решение</span><select name="decision" defaultValue={demoEditing.decision}><option value="undecided">Не определено</option><option value="participate">Участвуем</option><option value="needs_clarification">Нужно уточнение</option><option value="no_bid">Не участвуем</option></select></label>
-          <label><span>Приоритет</span><select name="priority" defaultValue={demoEditing.priority}><option value="low">Низкий</option><option value="normal">Обычный</option><option value="high">Высокий</option></select></label>
-          <label><span>Потенциал</span><select name="potential" defaultValue={demoEditing.potential}><option value="low">Низкий</option><option value="medium">Средний</option><option value="high">Высокий</option></select></label>
-          <label><span>Следующее действие</span><input name="nextActionText" maxLength={1000} defaultValue={demoEditing.nextActionText??""}/></label>
-          <label><span>Аналитическая заметка</span><textarea name="analysisSummary" maxLength={12000} defaultValue={demoEditing.analysisSummary??""}/></label>
-        </section>
-        <p className="client-demo-note">В рабочем контуре изменения сохраняются через API и права доступа. Здесь изменения сохраняются в текущей вкладке браузера для проверки интерфейса.</p>
-      </form>
-    </SalesDrawer>}
+    {demoEditing&&<TenderDataEditor tender={demoEditing} options={options} quick demoScope={demo?snapshotScope:undefined} onCancel={()=>setDemoEditing(null)} onSaved={()=>{if(!demo){setDemoEditing(null);router.refresh();return;}const next=loadDemoTenderSnapshot(snapshotScope,demoEditing.id);if(next){setLocalRows(current=>[next,...current.filter(row=>row.id!==next.id)]);setSelectedId(next.id);}setDemoEditing(null);}}/>}
   </div>;
 }

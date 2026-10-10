@@ -1,14 +1,16 @@
 "use client";
 import {useEffect,useState} from "react";
-import type {ClientRow,ClientEditOptions,listRequests,listObjects,listCalculations,listFinance,listClientContacts,listProposals} from "@/lib/data/service";
+import type {ClientRow,ClientEditOptions,ClientActivityRow,listRequests,listObjects,listCalculations,listFinance,listClientContacts,listProposals} from "@/lib/data/service";
 import type {TenderRow} from "@/lib/tenders/service";
 import {loadDemoClientSnapshot} from "@/components/sales/DemoClientPreview";
 import Link from "next/link";
+import {SalesHistoryChanges} from "@/components/sales/SalesHistoryChanges";
 import type {ReactNode} from "react";
 import {Empty,EntityTabs,KeyValue,PageHeader,Section,Status} from "@/components/UI";
 import {StaticDemoQueryTabsController} from "@/components/StaticDemoQueryTabsController";
 import {modelLabel,pct,rub} from "@/lib/ui/format";
-import {ClientContactEditButton,ClientEditButton} from "@/components/ClientEntityEditor";
+import {SalesEditProvider} from "@/components/sales/SalesEditSection";
+import {ClientContactEditButton,ClientDataSection} from "@/components/ClientEntityEditor";
 import {tenderEnumLabel,tenderResultLabels,tenderStageLabel} from "@/lib/tenders/model";
 import {formatTenderDateTime} from "@/lib/tenders/datetime";
 
@@ -21,6 +23,7 @@ const labels:Record<string,string>={
   proposals:"КП",
   objects:"Объекты",
   finance:"Финансы",
+  history:"История",
 };
 const statusLabels:Record<string,string>={
   active:"Активен",inactive:"Неактивен",archived:"Архив",blocked:"Заблокирован",
@@ -47,17 +50,18 @@ function contactSecondary(item:{phone?:string|null;email?:string|null;telegram?:
 }
 const contactRoleLabels:Record<string,string>={
   operations:"Операционные вопросы",timesheet:"Табель",security:"СБ / пропуска",warehouse_ppe:"Склад / СИЗ",documents:"Документы",
-  finance:"Финансы",approval:"Согласования",contract_signer:"Подписание договора",closing_signer:"Подписание закрывающих",other:"Другое",
+  finance:"Финансы",
+  history:"История",approval:"Согласования",contract_signer:"Подписание договора",closing_signer:"Подписание закрывающих",other:"Другое",
 };
 
-type Props={id:string;rawTab?:string;staticDemo:boolean;demo:boolean;scope:string;demoCanEdit:boolean;client:ClientRow|null;canEdit:boolean;clientEditOptions:ClientEditOptions|null;canReadRequests:boolean;canReadTenders:boolean;canReadObjects:boolean;canReadCalculations:boolean;canReadFinance:boolean;canReadProposals:boolean;requests:Awaited<ReturnType<typeof listRequests>>;objects:Awaited<ReturnType<typeof listObjects>>;calculations:Awaited<ReturnType<typeof listCalculations>>;finance:Awaited<ReturnType<typeof listFinance>>;contacts:Awaited<ReturnType<typeof listClientContacts>>;proposals:Awaited<ReturnType<typeof listProposals>>;tenders:TenderRow[]};
+type Props={activity:ClientActivityRow[];id:string;rawTab?:string;staticDemo:boolean;demo:boolean;scope:string;demoCanEdit:boolean;client:ClientRow|null;canEdit:boolean;clientEditOptions:ClientEditOptions|null;canReadRequests:boolean;canReadTenders:boolean;canReadObjects:boolean;canReadCalculations:boolean;canReadFinance:boolean;canReadProposals:boolean;requests:Awaited<ReturnType<typeof listRequests>>;objects:Awaited<ReturnType<typeof listObjects>>;calculations:Awaited<ReturnType<typeof listCalculations>>;finance:Awaited<ReturnType<typeof listFinance>>;contacts:Awaited<ReturnType<typeof listClientContacts>>;proposals:Awaited<ReturnType<typeof listProposals>>;tenders:TenderRow[]};
 export function ClientEntityWorkspace(props:Props){
  const {id,rawTab,staticDemo,demo,scope,demoCanEdit,canEdit,clientEditOptions,canReadRequests,canReadTenders,canReadObjects,canReadCalculations,canReadFinance,canReadProposals,requests,objects,calculations,finance,contacts:seedContacts,proposals,tenders}=props;
- const [local,setLocal]=useState<ClientRow|null>(null);const [loaded,setLoaded]=useState(!demo);
- useEffect(()=>{if(!demo)return;const timer=setTimeout(()=>{setLocal(loadDemoClientSnapshot(scope,id));setLoaded(true)},0);return()=>clearTimeout(timer)},[demo,scope,id]);
+ const [local,setLocal]=useState<(ClientRow&{contactRows?:Awaited<ReturnType<typeof listClientContacts>>})|null>(null);const [loaded,setLoaded]=useState(!demo);
+ useEffect(()=>{if(!demo)return;const sync=()=>{setLocal(loadDemoClientSnapshot(scope,id));setLoaded(true)};const timer=setTimeout(sync,0);window.addEventListener("operis:demo-client-edit",sync);return()=>{clearTimeout(timer);window.removeEventListener("operis:demo-client-edit",sync)}},[demo,scope,id]);
  const client=demo&&local?local:props.client;
  if(!client){return loaded?<Empty title="Клиент недоступен" text="Запись не найдена в этой вкладке браузера."/>:<p role="status">Загружаю карточку…</p>;}
- const contacts=local?seedContacts.map((contact,index)=>index===0?{...contact,fullName:client.primaryContactName??contact.fullName,phone:client.primaryContactPhone,email:client.primaryContactEmail}:contact):seedContacts;
+ const contacts=local?.contactRows??(local?seedContacts.map((contact,index)=>index===0?{...contact,fullName:client.primaryContactName??contact.fullName,phone:client.primaryContactPhone,email:client.primaryContactEmail}:contact):seedContacts);
   const clientRequests=requests.filter(item=>item.clientId===id);
   const clientTenders=tenders.filter(item=>item.clientId===id);
   const requestIds=new Set(clientRequests.map(item=>item.id));
@@ -90,8 +94,10 @@ export function ClientEntityWorkspace(props:Props){
     return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
   };
 
-  const workspace=<div className="client-entity-workspace">
-    <PageHeader title={client.name} subtitle={client.legalName??"Юридическое наименование не указано"} breadcrumbs={[{label:"Коммерция"},{label:"Клиенты",href:"/clients"},{label:client.name}]} actions={demoCanEdit?<Link className="button" href={`/clients?demoEdit=${id}`}>Редактировать</Link>:canEdit&&clientEditOptions?<ClientEditButton client={client} options={clientEditOptions}/>:undefined}/>
+  const contactProps={clientId:id,demoClient:demo?client:undefined,demoScope:demo?scope:undefined,contacts};
+  const editProps={client,options:clientEditOptions??{canAssign:false,members:[],regions:[],teams:[]},demoScope:demo?scope:undefined,canEdit:demoCanEdit||canEdit};
+  const workspace=<SalesEditProvider><div className="client-entity-workspace">
+    <PageHeader title={client.name} subtitle={client.legalName??"Юридическое наименование не указано"} breadcrumbs={[{label:"Коммерция"},{label:"Клиенты",href:"/clients"},{label:client.name}]}/>
     <EntityTabs items={tabs} active={labels[tab]}/>
 
     {panel("overview",<div className="request-entity-tab-content request-entity-overview client-entity-overview">
@@ -109,23 +115,21 @@ export function ClientEntityWorkspace(props:Props){
           <div className="stack-list request-entity-stack">{clientObjects.length?clientObjects.map(item=><Link className="stack-item" href={"/objects/"+item.id} key={item.id}><div><strong>{item.name}</strong><small>{item.region} · укомплектованность {item.coverage}%</small></div><Status tone={item.risk==="critical"?"bad":item.risk==="high"?"warn":tone(item.status)}>{statusLabel(item.status)}</Status></Link>):<Empty title="Объектов пока нет" text="Объекты появятся после передачи согласованного заказа в запуск."/>}</div>
         </Section>}
 
-        <Section title="Ключевые контакты" note={contacts.length+" контактов"} actions={canEdit?<ClientContactEditButton clientId={id}/>:undefined}>
+        <Section title="Ключевые контакты" note={contacts.length+" контактов"} actions={(canEdit||demoCanEdit)?<ClientContactEditButton {...contactProps}/>:undefined}>
           {contacts.length?<div className="client-contact-summary">{contacts.slice(0,4).map(item=><div key={item.id}><div><strong>{item.fullName}</strong><small>{item.position??"Должность не указана"}</small></div><span>{contactPrimary(item)}</span></div>)}</div>:<Empty title="Контактов пока нет" text="Добавьте контакт клиента, когда появится подтверждённое контактное лицо."/>}
         </Section>
-        {client.notes&&<Section title="Комментарий"><p className="client-overview-note">{client.notes}</p></Section>}
+        <ClientDataSection {...editProps} section="notes" title="Внутренние заметки"><p className="client-overview-note">{client.notes||"Заметок пока нет"}</p></ClientDataSection>
       </main>
 
       <aside className="request-entity-side">
-        <Section title="Карточка клиента">
+        <ClientDataSection {...editProps} section="details" title="Карточка клиента">
           <div className="request-entity-side-body">
             <KeyValue label="Статус" value={<Status tone={tone(client.status)}>{statusLabel(client.status)}</Status>}/>
             <KeyValue label="Юр. наименование" value={client.legalName??"—"}/>
             <KeyValue label="ИНН" value={client.inn??"—"}/>
-            <KeyValue label="Ответственный" value={client.ownerName??"Не назначен"}/>
-            <KeyValue label="Регион" value={client.region??"Не указан"}/>
-            <KeyValue label="Команда" value={client.teamName??"Не назначена"}/>
           </div>
-        </Section>
+        </ClientDataSection>
+        <ClientDataSection {...editProps} canEdit={editProps.canEdit&&editProps.options.canAssign} section="responsibility" title="Ответственность"><div className="request-entity-side-body"><KeyValue label="Ответственный" value={client.ownerName??"Не назначен"}/><KeyValue label="Регион" value={client.region??"Не указан"}/><KeyValue label="Команда" value={client.teamName??"Не назначена"}/></div></ClientDataSection>
         <Section title="Основной контакт">
           <div className="request-entity-side-body">
             <KeyValue label="Контакт" value={client.primaryContactName??"—"}/>
@@ -138,8 +142,8 @@ export function ClientEntityWorkspace(props:Props){
       </aside>
     </div>)}
 
-    {panel("contacts",<div className="request-entity-tab-content"><Section title="Контакты клиента" note={contacts.length+" контактов"} actions={canEdit?<ClientContactEditButton clientId={id}/>:undefined}>
-      {contacts.length?<div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table client-contact-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th>{canEdit&&<th aria-label="Действия"/>}</tr></thead><tbody>{contacts.map(item=><tr key={item.id}><td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position??"Должность не указана"}</span></td><td><strong>{contactPrimary(item)}</strong><span className="cell-sub">{contactSecondary(item)}</span></td><td>{item.objectAssignments.length?item.objectAssignments.map(link=><div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role=>contactRoleLabels[role]??role).join(" · ")}</span></div>):"Не привязан к объектам"}</td>{canEdit&&<td className="client-contact-action-cell"><ClientContactEditButton clientId={id} contact={item}/></td>}</tr>)}</tbody></table></div>:<Empty title="Контактов пока нет" text="Контакты можно добавить из этой вкладки или при создании клиента."/>}
+    {panel("contacts",<div className="request-entity-tab-content"><Section title="Контакты клиента" note={contacts.length+" контактов"} actions={(canEdit||demoCanEdit)?<ClientContactEditButton {...contactProps}/>:undefined}>
+      {contacts.length?<div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table client-contact-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th>{(canEdit||demoCanEdit)&&<th aria-label="Действия"/>}</tr></thead><tbody>{contacts.map(item=><tr key={item.id}><td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position??"Должность не указана"}</span></td><td><strong>{contactPrimary(item)}</strong><span className="cell-sub">{contactSecondary(item)}</span></td><td>{item.objectAssignments.length?item.objectAssignments.map(link=><div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role=>contactRoleLabels[role]??role).join(" · ")}</span></div>):"Не привязан к объектам"}</td>{(canEdit||demoCanEdit)&&<td className="client-contact-action-cell"><ClientContactEditButton {...contactProps} contact={item}/></td>}</tr>)}</tbody></table></div>:<Empty title="Контактов пока нет" text="Контакты можно добавить из этой вкладки или при создании клиента."/>}
     </Section></div>)}
 
     {panel("requests",<div className="request-entity-tab-content"><Section title="Заявки клиента" note={clientRequests.length+" заявок"}>
@@ -163,7 +167,8 @@ export function ClientEntityWorkspace(props:Props){
     </Section></div>)}
 
     {canReadFinance&&panel("finance",<div className="request-entity-tab-content"><Section title="Финансы клиента" note="Доступно только ролям с финансовым доступом"><div className="client-finance-summary"><div><span>Выручка</span><strong>{rub(revenue)}</strong></div><div><span>Вклад в прибыль</span><strong>{rub(contribution)}</strong></div><div><span>Маржа</span><strong>{revenue?pct(contribution/revenue*100):"—"}</strong></div></div></Section></div>)}
-  </div>;
+    {panel("history",<Section title="История клиента">{props.activity.length?props.activity.map(item=><article className="request-history-item" key={item.id}><strong>{item.summary}</strong><p className="muted">{item.actor??"Система"} · {new Date(item.createdAt).toLocaleString("ru-RU",{timeZone:"Europe/Moscow"})}</p><SalesHistoryChanges changes={item.changes}/></article>):<p className="muted">Зафиксированных событий пока нет.</p>}</Section>)}
+  </div></SalesEditProvider>;
 
   return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }

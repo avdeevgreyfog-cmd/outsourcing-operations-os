@@ -2,7 +2,7 @@ import {ClientEntityWorkspace} from "@/components/ClientEntityWorkspace";
 import {isGithubPagesDemo} from "@/lib/demo/pages";
 import {notFound} from "next/navigation";
 import {requireActor} from "@/lib/auth/server";
-import {getClientEditOptions,listCalculations,listClientContacts,listClients,listFinance,listObjects,listProposals,listRequests} from "@/lib/data/service";
+import {listClientActivity,getClientEditOptions,listCalculations,listClientContacts,listClients,listFinance,listObjects,listProposals,listRequests} from "@/lib/data/service";
 import {canReadRow,hasCapability} from "@/lib/core/access.mjs";
 import {listTenders} from "@/lib/tenders/service";
 
@@ -21,9 +21,9 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const client=clients.find(item=>item.id===id);
   if(!client&&!actor.demo)notFound();
   const canEdit=Boolean(client)&&!actor.demo&&canReadRow(actor.access,"sales.client.edit",client!,actor);
-  const clientEditOptions=canEdit?await getClientEditOptions(actor):null;
+  const clientEditOptions=(canEdit||(actor.demo&&hasCapability(actor.access,"sales.client.edit")))?await getClientEditOptions(actor):null;
 
-  const [requests,objects,calculations,finance,contacts,proposals,tenders]=await Promise.all([
+  const [requests,objects,calculations,finance,contacts,proposals,tenders,activity]=await Promise.all([
     canReadRequests?listRequests(actor):Promise.resolve([]),
     canReadObjects?listObjects(actor):Promise.resolve([]),
     canReadCalculations?listCalculations(actor):Promise.resolve([]),
@@ -31,6 +31,7 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
     listClientContacts(actor,id),
     canReadProposals?listProposals(actor):Promise.resolve([]),
     canReadTenders?listTenders(actor):Promise.resolve([]),
+    listClientActivity(actor,id),
   ]);
 
   const relatedRequests=requests.filter(item=>item.clientId===id);
@@ -38,5 +39,5 @@ export default async function ClientPage({params,searchParams}:{params:Promise<{
   const requestIds=new Set(relatedRequests.map(item=>item.id));
   const objectIds=new Set(relatedObjects.map(item=>item.id));
 
-  return <ClientEntityWorkspace id={id} rawTab={rawTab} staticDemo={staticDemo} demo={actor.demo} scope={`${actor.organizationId}:${actor.userId}:${actor.roleCode}:demo`} demoCanEdit={actor.demo&&(client?canReadRow(actor.access,"sales.client.edit",client,actor):hasCapability(actor.access,"sales.client.edit"))} client={client??null} canEdit={canEdit} clientEditOptions={clientEditOptions} canReadRequests={canReadRequests} canReadTenders={canReadTenders} canReadObjects={canReadObjects} canReadCalculations={canReadCalculations} canReadFinance={canReadFinance} canReadProposals={canReadProposals} requests={relatedRequests} objects={relatedObjects} calculations={calculations.filter(item=>requestIds.has(item.requestId))} finance={finance.filter(item=>objectIds.has(item.objectId))} contacts={contacts} proposals={proposals.filter(item=>requestIds.has(item.requestId))} tenders={tenders.filter(item=>item.clientId===id)}/>;
+  return <ClientEntityWorkspace activity={activity} id={id} rawTab={rawTab} staticDemo={staticDemo} demo={actor.demo} scope={`${actor.organizationId}:${actor.userId}:${actor.roleCode}:demo`} demoCanEdit={actor.demo&&(client?canReadRow(actor.access,"sales.client.edit",client,actor):hasCapability(actor.access,"sales.client.edit"))} client={client??null} canEdit={canEdit} clientEditOptions={clientEditOptions} canReadRequests={canReadRequests} canReadTenders={canReadTenders} canReadObjects={canReadObjects} canReadCalculations={canReadCalculations} canReadFinance={canReadFinance} canReadProposals={canReadProposals} requests={relatedRequests} objects={relatedObjects} calculations={calculations.filter(item=>requestIds.has(item.requestId))} finance={finance.filter(item=>objectIds.has(item.objectId))} contacts={contacts} proposals={proposals.filter(item=>requestIds.has(item.requestId))} tenders={tenders.filter(item=>item.clientId===id)}/>;
 }

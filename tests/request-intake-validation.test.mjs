@@ -66,6 +66,7 @@ function workflowFixture({ validLink = true, validRegion = true, validSpecialty 
   tx.json = value => value;
   // postgres TransactionSql intentionally exposes no nested begin method.
   const workflowServer = load('lib/commercial/request-workflow-server.ts', {
+    '@/lib/commercial/edit-history':load('lib/commercial/edit-history.ts'),
     '@/lib/commercial/public-intake-validation': validation,
     '@/lib/access/server': { requireCapability() {} },
     '@/lib/core/access.mjs': { hasCapability() { return false; }, canReadRow() { return true; } },
@@ -78,6 +79,7 @@ function workflowFixture({ validLink = true, validRegion = true, validSpecialty 
       return callback(tx);
     } },
     '@/lib/demo/data': {},
+    '@/lib/commercial/edit-conflict':load('lib/commercial/edit-conflict.ts'),'@/lib/commercial/request-section':load('lib/commercial/request-section.ts',{'@/lib/commercial/request-intake':intakeModule}),'@/lib/commercial/request-intake-server':{getRequestIntake:async()=>intakeModule.emptyRequestIntake()},'@/lib/commercial/request-workflow-server':{getRequestWorkflowMeta:async()=>({observers:[]})},
     '@/lib/commercial/request-intake': intakeModule,
     '@/lib/commercial/request-workflow': {},
   });
@@ -124,6 +126,8 @@ function internalRouteFixture({ deny = false } = {}) {
   const writes = [];
   const tx = async (strings, ...values) => {
     const query = strings.join('?');
+    if(query.startsWith('SELECT updated_at'))return [{updatedAt:'v1',status:'draft',archivedAt:null}];
+    if(query.startsWith('INSERT INTO activity_events')){writes.push({query,values});return [];}
     if (query.includes('FROM organization_memberships')) return [{ id: ownerId }];
     if (query.startsWith('INSERT INTO requests')) { writes.push({ query, values }); return [{ id: requestId }]; }
     if (query.startsWith('UPDATE requests') || query.startsWith('DELETE FROM request_observers')) { writes.push({ query, values }); return []; }
@@ -141,6 +145,7 @@ function internalRouteFixture({ deny = false } = {}) {
       assert.equal(org, actor.organizationId); assert.equal(user, ownerId);
       return callback(tx);
     } },
+    '@/lib/commercial/edit-conflict':load('lib/commercial/edit-conflict.ts'),'@/lib/commercial/request-section':load('lib/commercial/request-section.ts',{'@/lib/commercial/request-intake':intakeModule}),'@/lib/commercial/request-intake-server':{getRequestIntake:async()=>intakeModule.emptyRequestIntake()},'@/lib/commercial/request-workflow-server':{getRequestWorkflowMeta:async()=>({observers:[]})},
     '@/lib/commercial/request-intake': intakeModule,
     '@/lib/commercial/service': { getCommercialRequest: async () => ({
       id: requestId, ownerUserId: ownerId, status: 'draft', archivedAt: null, roles: [],

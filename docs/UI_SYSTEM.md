@@ -10,6 +10,10 @@
 - **Surfaces:** 7 px controls, 9 px panels, borders before shadows, cards only for bounded working surfaces.
 - **Motion:** short state transitions only; reduced-motion respected.
 
+## Sales editing
+
+Requests, tenders and clients use read-only preview drawers, filled quick editors and the existing full cards with one editable block at a time. Save/cancel, retained unrelated data and version conflicts follow `docs/SALES_EDITING_CONTRACT.md`. Creation stays separate from editing.
+
 ## Navigation
 
 The target information architecture is declared once in `lib/core/navigation.mjs`. Every item has a canonical section, group and route. Modules marked `foundation` have a real baseline workspace describing their purpose, process, core fields, relations and next implementation scope. They are visible in demo and platform-administration contexts, remain capability-safe in the production context and contain no fake operations or demo records.

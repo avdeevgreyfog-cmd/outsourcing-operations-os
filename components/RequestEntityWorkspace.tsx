@@ -9,6 +9,9 @@ import {normalizeRequestIntake,normalizeRequestStartDate,type RequestIntake} fro
 import type {RequestBoardRow,RequestWorkflowMeta,RequestStageDefinition,RequestWorkspaceOptions} from "@/lib/commercial/request-workflow";
 import {getDemoRequest,subscribeDemoRequests,type DemoRequestRecord} from "@/lib/commercial/demo-workspace-client";
 import Link from "next/link";
+import {SalesHistoryChanges} from "@/components/sales/SalesHistoryChanges";
+import {RequestSectionEditor} from "@/components/RequestSectionEditor";
+import {SalesEditProvider} from "@/components/sales/SalesEditSection";
 import type { ReactNode } from "react";
 import { calculateRequestCompleteness } from "@/lib/commercial/request-intake";
 import { stageByCode } from "@/lib/commercial/request-workflow";
@@ -197,6 +200,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
     return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
   };
 
+  const editProps={request,intake,options:workspaceOptions,workflowMeta:workflow,demo,demoRequestId:demo?id:undefined,demoRequestBase:boardRow,canEdit:canEdit&&!archived&&!locked};
   const actions = <>
     {canEdit && !archived && !locked && <Link className="button" href={seed?`/requests/${id}/edit`:`/requests/new?draft=${encodeURIComponent(id)}`}>Редактировать</Link>}
     {canEdit && !demo && !archived && !locked && <RequestShareHeaderButton requestId={id}/>}
@@ -219,7 +223,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
     </div>
   </Section>;
 
-  const workspace=<>
+  const workspace=<SalesEditProvider>
     <PageHeader
       eyebrow="Заявка"
       title={request.title}
@@ -246,7 +250,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
 
       <div className="request-entity-overview">
         <div className="request-entity-main">
-          <Section title="Ключевые условия">
+          <RequestSectionEditor {...editProps} section="general" title="Ключевые условия">
             <div className="request-entity-facts">
               <article>
                 <span>Заказчик</span>
@@ -281,10 +285,12 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
                 <small>{billingLabel(intake.commercial.billingUnit)}</small>
               </article>
             </div>
-          </Section>
+          </RequestSectionEditor>
 
+          <RequestSectionEditor {...editProps} section="schedule" title="График и часы"><div className="request-entity-side-body"><KeyValue label="График" value={intake.schedule.pattern==="custom"?intake.schedule.customPattern:intake.schedule.pattern||"Уточняется"}/><KeyValue label="Оплачиваемых часов" value={intake.schedule.paidHours??"Уточняется"}/><KeyValue label="Обед" value={intake.schedule.lunchPaid?"Оплачивается":"Не оплачивается"}/></div></RequestSectionEditor>
+          <RequestSectionEditor {...editProps} section="commercial" title="Коммерческие условия и ответственность"><div className="request-entity-side-body"><KeyValue label="Лимит заказчика" value={intake.commercial.clientLimit==null?"Не указан":rub(intake.commercial.clientLimit)}/><KeyValue label="Ответственный" value={workflow.owner??"Не назначен"}/><KeyValue label="Комментарий" value={request.comments||"Не указан"}/></div>{calculations.length>0&&<p className="muted">При изменении численности, графика или ставок пересмотрите расчёт. Сохранённые расчёты и КП сохраняют свои условия.</p>}</RequestSectionEditor>
           <div className="request-entity-overview-grid">
-            <Section title="Обеспечение и логистика">
+            <RequestSectionEditor {...editProps} section="provision" title="Обеспечение и логистика">
               <div className="request-entity-condition-list">
                 {knownProvision.map((key) => <div key={key}>
                   <span>{provisionLabels[key]}</span>
@@ -294,9 +300,9 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
                 {unknownProvision.length > 0 && <details className="sales-missing-provision"><summary>Не уточнено условий: {unknownProvision.length}</summary><ul>{unknownProvision.map(key => <li key={key}>{provisionLabels[key]}</li>)}</ul></details>}
                 <div><span>Бригадир</span><strong>{providerLabel(intake.logistics.brigadierProvider)}</strong></div>
               </div>
-            </Section>
+            </RequestSectionEditor>
 
-            <Section title="Требования к работникам">
+            <RequestSectionEditor {...editProps} section="compliance" title="Требования к работникам">
               <div className="request-entity-condition-list request-entity-condition-list-wide">
                 <div>
                   <span>Категории работников</span>
@@ -309,7 +315,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
                 </div>
                 {intake.compliance.comment && <div><span>Комментарий</span><strong>{intake.compliance.comment}</strong></div>}
               </div>
-            </Section>
+            </RequestSectionEditor>
           </div>
         </div>
 
@@ -328,7 +334,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
     </>)}
 
     {panel("positions",<div className="request-entity-tab-content">
-      <Section title="Позиции" note={`${total} человек · ${request.roles.length} позиций`}>
+      <RequestSectionEditor {...editProps} section="need" title="Позиции" note={`${total} человек · ${request.roles.length} позиций`}>
         <div className="request-position-list request-position-list-tab">{request.roles.map((role) => {
           const requirements = role.requirements ?? {};
           const stat = workspaceOptions.specialties.find((item) => item.id === role.specialtyId);
@@ -347,7 +353,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
             {stat && stat.stats.sampleCount > 0 && <small className="request-rate-inline">История: {rub(stat.stats.clientRateMin ?? 0)}–{rub(stat.stats.clientRateMax ?? 0)} / ч · {stat.stats.sampleCount} расчётов</small>}
           </article>;
         })}</div>
-      </Section>
+      </RequestSectionEditor>
     </div>)}
 
     {panel("calculations",<div className="request-entity-tab-content">
@@ -380,10 +386,10 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
       <Section title="История заявки" note={`${workflow.timeline.length} событий`}>
         <div className="request-timeline request-entity-timeline">{workflow.timeline.length ? workflow.timeline.slice().reverse().map((item) => <article key={item.id}>
           <i/>
-          <div><header><strong>{timelineText(item.title)}</strong><span>{fmtDate(item.at)}</span></header><p>{timelineText(item.detail)}</p><small>{item.actor}</small></div>
+          <div><header><strong>{timelineText(item.title)}</strong><span>{fmtDate(item.at)}</span></header><p>{timelineText(item.detail)}</p><small>{item.actor}</small><SalesHistoryChanges changes={item.changes}/></div>
         </article>) : <div className="empty-inline">История пока пуста</div>}</div>
       </Section>
     </div>)}
-  </>;
+  </SalesEditProvider>;
   return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import type {ClientRow} from "@/lib/data/service";
+import type {ClientRow,ClientContactRow} from "@/lib/data/service";
 
 const PREFIX="operis:clients:preview:";
 export function demoClientSnapshotKey(scope:string,id:string){return `${PREFIX}${scope}:${id}`;}
-export function loadDemoClientSnapshot(scope:string,id:string):ClientRow|null{
+export function loadDemoClientSnapshot(scope:string,id:string):(ClientRow&{contactRows?:ClientContactRow[]})|null{
   if(typeof window==="undefined")return null;
   try{
     const raw=sessionStorage.getItem(demoClientSnapshotKey(scope,id));
@@ -16,7 +16,7 @@ export function saveDemoClientSnapshot(scope:string,row:ClientRow,modified=false
   if(typeof window==="undefined")return false;
   try{
     const key=demoClientSnapshotKey(scope,row.id),previous=JSON.parse(sessionStorage.getItem(key)??"null");
-    sessionStorage.setItem(key,JSON.stringify({scope,row,modified:modified||previous?.modified===true}));return true;
+    sessionStorage.setItem(key,JSON.stringify({scope,row:{...loadDemoClientSnapshot(scope,row.id),...row},modified:modified||previous?.modified===true}));window.dispatchEvent(new Event("operis:demo-client-edit"));return true;
   }catch{return false;}
 }
 export function loadDemoClientRows(scope:string):ClientRow[]{

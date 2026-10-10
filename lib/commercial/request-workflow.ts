@@ -64,6 +64,7 @@ export type RequestBoardRow = {
 };
 
 export type RequestTimelineItem = {
+  changes?:import("@/lib/commercial/edit-history").EditChange[];
   id: string;
   at: string;
   actor: string;

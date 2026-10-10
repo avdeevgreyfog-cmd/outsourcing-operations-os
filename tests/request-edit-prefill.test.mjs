@@ -12,6 +12,7 @@ function load(path,dependencies={}){
   return result;
 }
 const intake=load('lib/commercial/request-intake.ts');
+const sections=load("lib/commercial/request-section.ts",{"@/lib/commercial/request-intake":intake});
 const source='components/RequestIntakeWorkspacePolished.tsx';
 const options={currentUserId:'owner',clients:[{id:'client',name:'Заказчик'}],members:[{id:'owner',name:'Менеджер'}],specialties:[],regions:[]};
 function harness(props,record){
@@ -20,7 +21,7 @@ function harness(props,record){
   const windowMock={setTimeout(callback){timers.push(callback);return timers.length;},clearTimeout(){},addEventListener(){},removeEventListener(){}};
   const priorWindow=globalThis.window,priorDocument=globalThis.document;
   globalThis.window=windowMock;globalThis.document={addEventListener(){},removeEventListener(){}};
-  const Component=load(source,{react,'next/link':{default:'a'},'next/navigation':{useRouter:()=>({push:path=>{pushed=path;},refresh(){}})},'@/lib/commercial/request-intake':intake,'@/lib/commercial/demo-workspace-client':{getDemoRequest:()=>record,saveDemoRequest:(payload,settings)=>{saved={payload,settings};return {id:settings.id};}}}).RequestIntakeWorkspacePolished;
+  const Component=load(source,{react,'next/link':{default:'a'},'next/navigation':{useRouter:()=>({push:path=>{pushed=path;},refresh(){}})},'@/lib/commercial/request-intake':intake,'@/lib/commercial/request-section':sections,'@/lib/commercial/demo-workspace-client':{getDemoRequest:()=>record,saveDemoRequest:(payload,settings)=>{saved={payload,settings};return {id:settings.id};}}}).RequestIntakeWorkspacePolished;
   function render(){cursor=0;return Component(props);}
   try{render();for(const effect of effects)effect();for(const timer of timers)timer();mounted=true;}finally{globalThis.window=priorWindow;globalThis.document=priorDocument;}
   return {render,saved:()=>saved,pushed:()=>pushed};
@@ -39,15 +40,14 @@ test('demo editing prefills saved positions and can save the same entity with it
   assert.ok(fields.some(node=>node.props.value===payload.title));
   assert.ok(fields.some(node=>node.props.value==='Комплектовщик'));
   assert.ok(fields.some(node=>node.props.value===12));
-  const save=nodes(tree).find(node=>node.type==='button'&&textOf(node)==='Сохранить изменения');
-  await save.props.onClick();
+  await nodes(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});
   assert.equal(editor.saved().settings.id,board.id);
   assert.equal(editor.saved().settings.base.workflowStageCode,board.workflowStageCode);
   assert.equal(editor.saved().settings.base.proposalVersion,board.proposalVersion);
   assert.equal(editor.saved().payload.roles[0].id,'role-1');
   assert.equal(editor.saved().payload.roles[0].requirements.experienceMode,'required');
   assert.equal(editor.saved().payload.intake.provision.housing.provider,'unknown');
-  assert.equal(editor.pushed(),'/requests?demo=demo-local-1');
+  assert.equal(editor.pushed(),'/requests/demo-local-1');
 });
 
 test('missing demo draft shows unavailable state without allowing a blank save',()=>{
@@ -73,8 +73,7 @@ test('stage-only demo override keeps seed role identifiers and detailed intake',
   const payload={...request,observerUserIds:[],intake:{},roles:[{specialtyName:'Грузчик',count:4,schedule:{},requirements:{},targetClientRate:null}]};
   const editor=harness({options,demo:true,demoRequestId:'seed',request,intake:initialIntake},{id:'seed',payload,board:{id:'seed',workflowStageCode:'negotiation'}});
   const tree=editor.render();
-  const save=nodes(tree).find(node=>node.type==='button'&&textOf(node)==='Сохранить изменения');
-  await save.props.onClick();
+  await nodes(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});
   assert.equal(editor.saved().payload.intake.contact.phone,initialIntake.contact.phone);
   assert.equal(editor.saved().payload.roles[0].id,'seed-role');
   assert.equal(editor.saved().payload.roles[0].specialtyId,'seed-specialty');
@@ -83,10 +82,10 @@ test('stage-only demo override keeps seed role identifiers and detailed intake',
 test('real existing request sends PATCH for the original ID and retains saved role IDs',async()=>{
   const request={id:'existing-request',title:'Сохранённая заявка',clientId:'client',source:'manual',location:'Склад',schedule:{},roles:[{id:'saved-role',specialtyId:'specialty',specialty:'Грузчик',count:4,schedule:{},requirements:{},targetClientRate:650}]};
   const editor=harness({options,request,intake:intake.emptyRequestIntake()},null);
-  const save=nodes(editor.render()).find(node=>node.type==='button'&&textOf(node)==='Сохранить изменения');
+  const tree=editor.render();
   const priorFetch=globalThis.fetch;let sent;
   globalThis.fetch=async(url,settings)=>{sent={url,settings};return {ok:true,json:async()=>({id:request.id})};};
-  try{await save.props.onClick();}finally{globalThis.fetch=priorFetch;}
+  try{await nodes(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});}finally{globalThis.fetch=priorFetch;}
   assert.equal(sent.url,'/api/requests/existing-request/v2');
   assert.equal(sent.settings.method,'PATCH');
   const payload=JSON.parse(sent.settings.body);
@@ -140,6 +139,6 @@ test('legacy request start date stays September 3 when editing and saving',async
   const editor=harness({options,demo:true,demoRequestId:'seed',request},null);
   const tree=editor.render();
   assert.ok(nodes(tree).some(node=>node.type==='input'&&node.props.type==='date'&&node.props.value==='2026-09-03'));
-  await nodes(tree).find(node=>node.type==='button'&&textOf(node)==='Сохранить изменения').props.onClick();
+  await nodes(tree).find(node=>node.type==='form').props.onSubmit({preventDefault(){}});
   assert.equal(editor.saved().payload.startDate,'2026-09-03');
 });

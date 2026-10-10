@@ -4243,3 +4243,45 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace .tender-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
 .sales-workspace .tender-danger-button{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 34%,var(--border))}
 .sales-workspace .tender-danger-button:hover{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 52%,var(--border))}
+
+/* Saved commercial records: the same edit/save contract in all three modules. */
+.sales-edit-trigger { flex-shrink: 0; gap: 6px; }
+.sales-section-editor { padding: 16px 18px; min-width: 0; }
+.sales-edit-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sales-edit-footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.sales-save-feedback { padding: 0 18px 12px; color: var(--muted); font-size: 12px; }
+.sales-section-editor input, .sales-section-editor select, .sales-section-editor textarea { max-width: 100%; min-width: 0; }
+.sales-embedded-request-editor.request-v2-layout { display: block; margin: 0; min-width: 0; }
+.sales-embedded-request-editor .request-v2-main { padding: 0; min-width: 0; }
+.sales-embedded-request-editor .request-v2-section { border: 0; background: transparent; box-shadow: none; padding: 0; }
+.sales-embedded-request-editor .request-v2-section > header { display: none; }
+.sales-embedded-request-editor .request-v2-sticky { position: static; margin-top: 16px; border-radius: 0; border: 0; border-top: 1px solid var(--border); padding: 16px 0 0; background: transparent; box-shadow: none; flex-wrap: wrap; }
+.request-entity-overview-grid > .section:has(.sales-section-editor) { grid-column: 1 / -1; }
+.sales-drawer .sales-embedded-request-editor .request-form-grid { grid-template-columns: 1fr; }
+@media (max-width: 600px) {
+ .sales-section-editor { padding: 14px; }
+ .sales-embedded-request-editor .request-form-grid { grid-template-columns: 1fr; }
+ .sales-embedded-request-editor .request-v2-sticky > div { flex-wrap: wrap; }
+ .sales-edit-trigger { font-size: 12px; padding-inline: 8px; }
+}
+
+.sales-workspace .sales-section-editor .client-edit-form { min-height: 0; display: block; }
+.sales-workspace .sales-edit-footer { align-items: center; height: auto; min-height: 0; }
+.sales-workspace .sales-edit-footer .button { height: 38px; min-height: 38px; }
+.sales-workspace .section-head:has(.sales-edit-trigger) { flex-wrap: wrap; gap: 8px; }
+.sales-workspace .section-head:has(.sales-edit-trigger) > div { min-width: 0; }
+.sales-history-changes { margin-top: 8px; font-size: 12px; }
+.sales-history-changes summary { cursor: pointer; color: var(--muted); }
+.sales-history-changes dl { display: grid; gap: 8px; }
+.sales-history-changes dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+
+.sales-workspace .request-intake-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+
+.sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid { display: grid; gap: 14px 16px; min-width: 0; }
+.sales-workspace .sales-section-editor .form-grid.two { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid > .span-2 { grid-column: 1 / -1; }
+.sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid > label { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid > label > span { font-size: 12px; font-weight: 600; color: var(--muted); }
+.sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid :is(input,select,textarea) { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; padding: 8px 10px; }
+.sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid textarea { min-height: 96px; resize: vertical; }
+@media(max-width:600px) { .sales-workspace .sales-section-editor .form-grid.two { grid-template-columns: 1fr; } }

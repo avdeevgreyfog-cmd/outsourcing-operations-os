@@ -1,0 +1,7 @@
+import type {EditChange} from "@/lib/commercial/edit-history";
+const labels:Record<string,string>={active:"Активен",inactive:"Неактивен",blocked:"Заблокирован",archived:"Архив",low:"Низкий",normal:"Обычный",medium:"Средний",high:"Высокий",unknown:"Не определено",client:"Заказчик",ours:"Наша компания",shared:"Совместно",not_needed:"Не требуется",day:"Дневная",night:"Ночная",with_vat:"С НДС",without_vat:"Без НДС",hour:"Человеко-час",shift:"Смена",worker_month:"Сотрудник / месяц",project:"Проект",mixed:"Смешанный",unit:"Единица",piecework:"Объём работ"};
+function value(input:unknown){if(input==null||input==="")return "Не указано";if(typeof input==="boolean")return input?"Да":"Нет";if(Array.isArray(input))return input.length?input.map(item=>typeof item==="object"?"Запись":labels[String(item)]??String(item)).join(", "):"Не указано";if(typeof input==="object")return "Заполнено";const text=String(input);if(/^[\da-f]{8}-[\da-f-]{27}$/i.test(text))return "Назначение";return labels[text]??text;}
+export function SalesHistoryChanges({changes}:{changes?:EditChange[]}){
+  if(!changes?.length)return null;
+  return <details className="sales-history-changes"><summary>Что изменилось · {changes.length}</summary><dl>{changes.map(change=><div key={change.field}><dt>{change.label}</dt><dd><span>{value(change.before)}</span><span aria-label="изменено на"> → </span><strong>{value(change.after)}</strong></dd></div>)}</dl></details>;
+}

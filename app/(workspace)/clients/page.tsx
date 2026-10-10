@@ -12,7 +12,7 @@ export default async function Clients({searchParams}:{searchParams:Promise<{prev
   const preferenceScope=actor.organizationId+":"+actor.userId+":"+actor.roleCode+":"+(actor.demo?"demo":"live");
   if(actor.demo&&query.preview)redirect(`/clients/${encodeURIComponent(query.preview)}`);
   const editableIds=rows.filter(row=>canReadRow(actor.access,"sales.client.edit",row,actor)).map(row=>row.id);
-  const editOptions=!actor.demo&&editableIds.length?await getClientEditOptions(actor):null;
+  const editOptions=editableIds.length?await getClientEditOptions(actor):null;
   return <ClientsWorkspaceBaseline
     rows={rows}
     editableIds={editableIds}
