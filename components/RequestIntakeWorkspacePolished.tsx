@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { emptyRequestIntake, normalizeRequestIntake, provisionKeys, type ProvisionKey, type RequestIntake } from "@/lib/commercial/request-intake";
+import { emptyRequestIntake, normalizeRequestIntake, normalizeRequestStartDate, provisionKeys, type ProvisionKey, type RequestIntake } from "@/lib/commercial/request-intake";
 import type { RequestBoardRow, RequestWorkflowMeta, RequestWorkspaceOptions, WorkspaceSpecialty } from "@/lib/commercial/request-workflow";
 import { getDemoRequest, saveDemoRequest, type DemoRequestPayload } from "@/lib/commercial/demo-workspace-client";
 
@@ -66,7 +66,7 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   const [source,setSource]=useState(request?.source==="manual"?"":request?.source??"");
   const [location,setLocation]=useState(request?.location??"");
   const [regionId,setRegionId]=useState(request?.regionId??"");
-  const [startDate,setStartDate]=useState(request?.startDate??"");
+  const [startDate,setStartDate]=useState(normalizeRequestStartDate(request?.startDate));
   const [durationText,setDurationText]=useState(request?.durationText??"");
   const [vatMode,setVatMode]=useState(request?.vatMode??"with_vat");
   const [comments,setComments]=useState(request?.comments??"");
@@ -124,7 +124,7 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
     }
     const timer = window.setTimeout(() => {
       setTitle(draft.title); setClientId(draft.clientId ?? ""); setSource(draft.source === "manual" ? "" : draft.source);
-      setLocation(draft.location); setRegionId(draft.regionId ?? ""); setStartDate(draft.startDate ?? ""); setDurationText(draft.durationText ?? "");
+      setLocation(draft.location); setRegionId(draft.regionId ?? ""); setStartDate(normalizeRequestStartDate(draft.startDate)); setDurationText(draft.durationText ?? "");
       setVatMode(draft.vatMode ?? "with_vat"); setComments(draft.comments ?? ""); setOwnerUserId(draft.ownerUserId ?? options.currentUserId); setObserverUserIds(draft.observerUserIds ?? []);
       setIntake(normalizeLegacyIntake(Object.keys(draft.intake??{}).length?draft.intake:initialIntake));
       const draftIntake=normalizeRequestIntake(Object.keys(draft.intake??{}).length?draft.intake:initialIntake);

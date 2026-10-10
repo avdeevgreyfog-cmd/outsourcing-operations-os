@@ -16,7 +16,7 @@ import { HorizontalScrollDock } from "@/components/registry/HorizontalScrollDock
 import { orderedRegistryColumns, registryPinnedOffset, registryWidth } from "@/lib/ui/registry-layout";
 import type { RequestGroupId, RequestSortId } from "@/lib/commercial/request-registry";
 import { KeyValue } from "@/components/UI";
-import { loadDemoRequests, mergeDemoRequestRows, subscribeDemoRequests, updateDemoRequestStage } from "@/lib/commercial/demo-workspace-client";
+import { mergeDemoRequestRows, subscribeDemoRequests, updateDemoRequestStage } from "@/lib/commercial/demo-workspace-client";
 
 type LossReasonOption={code:string;name:string};
 type Props = { rows: RequestBoardRow[]; stages: RequestStageDefinition[]; options:RequestWorkspaceOptions; analytics:RequestAnalyticsData; metricPreferences:RequestAnalyticsMetricPreference[]; canConfigureMetrics:boolean; lossReasons: LossReasonOption[]; canCreate: boolean; canConfigure: boolean; canEdit: boolean; editableIds?:string[]; now: number; demo?: boolean; preferenceScope?:string; initialMode?:ViewMode; onModeChange?:(mode:ViewMode)=>void };
@@ -61,11 +61,11 @@ export function RequestsWorkspaceBaseline({ rows, stages, options, analytics, me
   const [pendingLoss,setPendingLoss]=useState<RequestBoardRow|null>(null);
   const [lossReasonCode,setLossReasonCode]=useState("");
   const [lossComment,setLossComment]=useState("");
-  const [demoOverrideIds,setDemoOverrideIds]=useState<string[]>([]);
+
   const [demoRows, setDemoRows] = useState<RequestBoardRow[]>(rows);
   useEffect(() => {
     if (!demo) return;
-    const refresh = () => {setDemoRows(mergeDemoRequestRows(rows));setDemoOverrideIds(loadDemoRequests().map(item=>item.id));};
+    const refresh = () => {setDemoRows(mergeDemoRequestRows(rows));};
     refresh();
     return subscribeDemoRequests(refresh);
   }, [demo, rows]);
@@ -73,7 +73,7 @@ export function RequestsWorkspaceBaseline({ rows, stages, options, analytics, me
   const selected = liveRows.find(row => row.id === selectedId);
   const owners = [...new Map(liveRows.filter(row => row.ownerUserId).map(row => [row.ownerUserId!, row.owner ?? "Ответственный"])).entries()];
   const mayEdit = (row:RequestBoardRow) => canEdit && (!editableIds || editableIds.includes(row.id) || (demo && row.id.startsWith("demo-local-")));
-  const requestHref = (id: string) => demo && (id.startsWith("demo-local-") || demoOverrideIds.includes(id)) ? `/requests/new?preview=${encodeURIComponent(id)}` : `/requests/${id}`;
+  const requestHref = (id: string) => `/requests/${id}`;
   const editHref = (id: string) => demo && id.startsWith("demo-local-") ? `/requests/new?draft=${encodeURIComponent(id)}` : `/requests/${id}/edit`;
   const resetFilters = () => { setAnalyticsRequestIds(null); setQuery(""); update({ stage: "", owner: "", client: "", source: "" }); };
   const hasFilters = Boolean(analyticsRequestIds || query || stageFilter || ownerFilter || settings.client || settings.source);

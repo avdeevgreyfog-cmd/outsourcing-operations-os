@@ -254,3 +254,5 @@ approval of every visual change. The 4 October scope is recorded in standard v1.
 ## Sales record interactions — 2026-10-10
 
 Requests, clients and tenders share `SalesRecordTitle` (quick preview) and `SalesRecordActions` (Eye → preview, ArrowUpRight → full record). The action column is 88 px. Editing is explicit, prefilled and retains identity; creation remains separate. Compact editors use SalesDrawer; requests retain their detailed form. Browser-only demo copies are labeled and do not send business mutations. Missing demo records cannot be saved as empty replacements.
+
+Full sales records retain the existing entity layouts and canonical /requests/[id], /clients/[id], /tenders/[id] URLs. Browser demo overrides merge into these same layouts without replacing tabs, related records or detailed content with summary-only pages. Creation and explicit prefilled editing remain distinct.

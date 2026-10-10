@@ -132,3 +132,14 @@ test('legacy custom schedule labels survive as an explicit custom pattern',()=>{
   assert.equal(result.schedule.pattern,'custom');
   assert.equal(result.schedule.customPattern,'Вахта 45/15');
 });
+
+test('legacy request start date stays September 3 when editing and saving',async()=>{
+  assert.equal(intake.normalizeRequestStartDate('03.09.2026'),'2026-09-03');
+  assert.equal(intake.normalizeRequestStartDate('2026-09-03'),'2026-09-03');
+  const request={id:'seed',title:'Существующая заявка',clientId:'client',source:'manual',location:'Склад',startDate:'03.09.2026',roles:[{id:'role',specialtyId:'specialty',specialty:'Грузчик',count:4,schedule:{},requirements:{},targetClientRate:null}]};
+  const editor=harness({options,demo:true,demoRequestId:'seed',request},null);
+  const tree=editor.render();
+  assert.ok(nodes(tree).some(node=>node.type==='input'&&node.props.type==='date'&&node.props.value==='2026-09-03'));
+  await nodes(tree).find(node=>node.type==='button'&&textOf(node)==='Сохранить изменения').props.onClick();
+  assert.equal(editor.saved().payload.startDate,'2026-09-03');
+});

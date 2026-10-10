@@ -115,6 +115,11 @@ try{
       await page.getByRole("button",{name:"QA Заявка изменена",exact:true}).waitFor();
       const row=page.locator(".sales-request-table tbody tr").filter({has:page.getByRole("button",{name:"QA Заявка изменена",exact:true})});
       await row.getByText("Комплектовщик · 14",{exact:true}).waitFor();
+      await row.getByRole("link",{name:"Открыть карточку: QA Заявка изменена",exact:true}).click();
+      await page.getByRole("heading",{name:"QA Заявка изменена",exact:true}).waitFor();
+      await page.locator("nav.entity-tabs").getByRole("link",{name:/Позиции/}).click();
+      await page.getByRole("heading",{name:"Позиции",exact:true}).waitFor();
+      await page.getByText("Комплектовщик",{exact:true}).waitFor();
     }finally{await context.close();}
   }
 

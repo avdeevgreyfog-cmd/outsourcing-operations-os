@@ -29,7 +29,6 @@ function formatDate(value:string|null){
   return Number.isNaN(date.getTime())?value:date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"});
 }
 function deadlineClass(key:string){return key==="overdue"||key==="today"?"danger":key==="urgent"?"warn":"neutral";}
-function isClientDemoRow(row:TenderRow){return row.id.startsWith("sample-user-")||row.id.startsWith("demo-local-");}
 function uniqueKey(row:Pick<TenderRow,"platform"|"procedureNumber"|"sourceUrl"|"title"|"customer">){
   if(row.sourceUrl)return `url:${row.sourceUrl.toLowerCase()}`;
   if(row.platform&&row.procedureNumber)return `procedure:${row.platform.toLowerCase()}:${row.procedureNumber.toLowerCase()}`;
@@ -157,7 +156,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     const editId=params.get("demoEdit");
     const stored:TenderRow[]=[];
     try{const prefix=`${DEMO_TENDER_PREVIEW_PREFIX}${snapshotScope}:`;for(let i=0;i<sessionStorage.length;i++){const key=sessionStorage.key(i);if(key?.startsWith(prefix)){const row=loadDemoTenderSnapshot(snapshotScope,key.slice(prefix.length));if(row)stored.push(row);}}}catch{/* Storage is optional in demo mode. */}
-    const editRow=editId?loadDemoTenderSnapshot(snapshotScope,editId):null;
+    const editRow=editId?(loadDemoTenderSnapshot(snapshotScope,editId)??rows.find(item=>item.id===editId)):null;
     const timer=window.setTimeout(()=>{
       setLocalRows(current=>[...current,...stored.filter(row=>!current.some(item=>item.id===row.id))]);
       if(editRow&&canEdit){setLocalRows(current=>[editRow,...current.filter(row=>row.id!==editRow.id)]);setDemoEditing(editRow);}
@@ -165,7 +164,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
     },0);
     return()=>window.clearTimeout(timer);
   },[demo,rows,snapshotScope,canEdit]);
-  function tenderHref(row:TenderRow){return demo&&(isClientDemoRow(row)||localRows.some(item=>item.id===row.id))?`/tenders/new?preview=${encodeURIComponent(row.id)}`:`/tenders/${row.id}`;}
+  function tenderHref(row:TenderRow){return `/tenders/${row.id}`}
   function snapshot(row:TenderRow){if(demo&&!saveDemoTenderSnapshot(snapshotScope,row))setError("Браузер не разрешает сохранить демонстрационную карточку для перехода. Быстрый просмотр остаётся доступен.");}
   const items=useMemo(()=>{if(!demo)return rows;const overrides=new Set(localRows.map(row=>row.id));return [...localRows,...rows.filter(row=>!overrides.has(row.id))]},[demo,localRows,rows]);
   const editable=new Set(editableIds);

@@ -15,7 +15,7 @@ const errors=[],writes=[];
 let checks=0;
 try {
  for(const width of [1440,1024,768,390]) for(const theme of ['light','dark']) {
-  const context=await browser.newContext({viewport:{width,height:900},colorScheme:theme});
+  const context=await browser.newContext({viewport:{width,height:900},colorScheme:theme,timezoneId:"Europe/Moscow"});
   await context.addCookies([{name:'oo_workspace_mode',value:'demo',url:base},{name:'oo_demo_role',value:'director',url:base},{name:'oo_theme',value:theme,url:base}]);
   await context.route('**/api/**',async route=>{if(['POST','PATCH','PUT','DELETE'].includes(route.request().method())){writes.push(route.request().url());await route.abort();}else await route.continue();});
   const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(/hydration|hydrated/i.test(m.text()))errors.push(m.text());});
@@ -41,7 +41,11 @@ try {
     await page.getByRole('button',{name:'QA Сохранённая заявка',exact:true}).click();
     await page.getByRole('dialog').getByRole('link',{name:'Открыть карточку',exact:true}).click();
     await page.getByRole('heading',{name:'QA Сохранённая заявка',exact:true}).waitFor();
-    assert.equal(await page.getByRole('button',{name:'Сохранить изменения',exact:true}).count(),0,'full preview is not editing');
+    assert.equal(await page.getByRole('button',{name:'Сохранить изменения',exact:true}).count(),0,'full card is not editing');
+    assert.match(page.url(),/\/requests\/[^/?]+$/);
+    for(const tab of ['Обзор','Позиции','Расчёты','КП','История'])await page.locator('nav.entity-tabs').getByRole('link',{name:new RegExp(tab)}).waitFor();
+    await page.screenshot({path:`${output}/request-full-restored.png`});
+    await page.locator('nav.entity-tabs').getByRole('link',{name:/Позиции/}).click();await page.getByRole('heading',{name:'Позиции',exact:true}).waitFor();
    }
    if(entity==='tenders'&&width===1440&&theme==='light') {
     await title.click();await page.getByRole('dialog').getByRole('button',{name:'Редактировать',exact:true}).click();
@@ -51,6 +55,9 @@ try {
     await page.reload({waitUntil:'networkidle'});await page.getByRole('button',{name:'QA Тендер сохранён',exact:true}).waitFor();
     await page.getByRole('link',{name:'Открыть карточку: QA Тендер сохранён',exact:true}).click();
     await page.getByRole('heading',{name:'QA Тендер сохранён',exact:true}).waitFor();
+    assert.match(page.url(),/\/tenders\/[^/?]+$/);
+    for(const tab of ['Обзор','Анализ','Документы','Расчёты','Согласования','Подача','Торги','Результат','История'])await page.locator('nav.entity-tabs').getByRole('link',{name:new RegExp(tab)}).waitFor();
+    await page.screenshot({path:`${output}/tender-full-restored.png`});
     await page.getByRole('link',{name:'Редактировать',exact:true}).click();
     await page.getByRole('dialog').locator('input[name="title"]').waitFor();
     assert.equal(await page.getByRole('dialog').locator('input[name="title"]').inputValue(),'QA Тендер сохранён');
@@ -68,10 +75,29 @@ try {
     await page.getByRole('dialog').getByRole('button',{name:'Сохранить изменения',exact:true}).click();await page.keyboard.press('Escape');
     await page.reload({waitUntil:'networkidle'});await page.getByRole('button',{name:'QA Клиент сохранён',exact:true}).waitFor();
     await page.getByRole('link',{name:'Открыть карточку: QA Клиент сохранён',exact:true}).click();await page.getByRole('heading',{name:'QA Клиент сохранён',exact:true}).waitFor();
+    assert.match(page.url(),/\/clients\/[^/?]+$/);
+    for(const tab of ['Обзор','Контакты','Заявки','Тендеры','Расчёты','КП','Объекты','Финансы'])await page.locator('nav.entity-tabs').getByRole('link',{name:new RegExp(tab)}).waitFor();
+    await page.screenshot({path:`${output}/client-full-restored.png`});
    }
   }
   await context.close();console.log(`PASS ${width} ${theme}`);
  }
+ // Direct full-card entry must allow editing without a registry-created snapshot.
+ const direct=await browser.newContext({timezoneId:'Europe/Moscow'});await direct.addCookies([{name:'oo_workspace_mode',value:'demo',url:base},{name:'oo_demo_role',value:'director',url:base}]);
+ await direct.route('**/api/**',async route=>{if(['POST','PATCH','PUT','DELETE'].includes(route.request().method())){writes.push(route.request().url());await route.abort();}else await route.continue();});
+ const full=await direct.newPage();full.on('pageerror',e=>errors.push(e.message));full.on('console',m=>{if(/hydration|hydrated/i.test(m.text()))errors.push(m.text());});
+ await full.goto(`${base}/tenders/a1000000-0000-4000-8000-000000000001`,{waitUntil:'networkidle'});
+ const oldDocuments=await full.locator('nav.entity-tabs').getByRole('link',{name:/Документы/}).innerText();
+ await full.getByRole('link',{name:'Редактировать',exact:true}).click();
+ await full.getByRole('dialog').locator('input[name="title"]').fill('QA Полный тендер');
+ await full.getByRole('dialog').getByRole('button',{name:'Сохранить изменения',exact:true}).click();await full.keyboard.press('Escape');
+ await full.getByRole('link',{name:'Открыть карточку: QA Полный тендер',exact:true}).click();
+ await full.getByRole('heading',{name:'QA Полный тендер',exact:true}).waitFor();
+ assert.equal(await full.locator('nav.entity-tabs').getByRole('link',{name:/Документы/}).innerText(),oldDocuments);
+ await full.locator('nav.entity-tabs').getByRole('link',{name:/Документы/}).click();await full.getByText('Техническое задание.pdf',{exact:true}).waitFor();
+ await full.goto(`${base}/clients`,{waitUntil:'networkidle'});const clientHref=await full.getByRole('link',{name:/Открыть карточку:/}).first().getAttribute('href');
+ await full.goto(base+clientHref,{waitUntil:'networkidle'});await full.getByRole('link',{name:'Редактировать',exact:true}).click();await full.getByRole('dialog').locator('input[name="name"]').waitFor();
+ await direct.close();
  // Lost local draft cannot be saved as an empty replacement.
  const context=await browser.newContext();await context.addCookies([{name:'oo_workspace_mode',value:'demo',url:base},{name:'oo_demo_role',value:'director',url:base}]);
  const page=await context.newPage();await page.goto(`${base}/requests/new?draft=demo-local-missing`,{waitUntil:'networkidle'});

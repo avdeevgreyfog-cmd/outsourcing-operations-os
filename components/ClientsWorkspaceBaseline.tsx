@@ -69,10 +69,10 @@ export function ClientsWorkspaceBaseline({rows,canCreate=false,canEdit=false,dem
     if(cancelled)return;
     const restored=loadDemoClientRows(preferenceScope).filter(row=>row.organizationId==="demo"||rows.some(source=>source.id===row.id));
     setDemoRows(restored);
-    if(demoEditId){const row=loadDemoClientSnapshot(preferenceScope,demoEditId);if(row&&(editableIds.includes(row.id)||(row.organizationId==="demo"&&canEdit))){setDemoEditing(row);const query=new URLSearchParams(window.location.search);query.delete("demoEdit");window.history.replaceState(null,"",`/clients${query.size?`?${query}`:""}`)}}
+    if(demoEditId){const row=loadDemoClientSnapshot(preferenceScope,demoEditId)??rows.find(item=>item.id===demoEditId);if(row&&(editableIds.includes(row.id)||(row.organizationId==="demo"&&canEdit))){setDemoEditing(row);const query=new URLSearchParams(window.location.search);query.delete("demoEdit");window.history.replaceState(null,"",`/clients${query.size?`?${query}`:""}`)}}
   });return()=>{cancelled=true}},[demo,preferenceScope,demoEditId,rows,editableIds,canEdit]);
   function saveSnapshot(row:ClientRow,modified=false){if(demo&&!saveDemoClientSnapshot(preferenceScope,row,modified))setStorageError("Демонстрационные изменения действуют до перехода со страницы: браузер не разрешил сохранение в этой вкладке.")}
-  function fullHref(row:ClientRow){return demo&&(ephemeral(row)||demoRows.some(item=>item.id===row.id))?"/clients?preview="+encodeURIComponent(row.id):"/clients/"+row.id}
+  function fullHref(row:ClientRow){return "/clients/"+row.id}
 
   useEffect(()=>{let cancelled=false;queueMicrotask(()=>{if(cancelled)return;let current:View=BASE,saved:View[]=[];try{const raw=JSON.parse(localStorage.getItem(key)??"null");current=safeView(raw?.current)??BASE;saved=Array.isArray(raw?.custom)?raw.custom.map((item:unknown)=>safeView(item)).filter((item:View|null):item is View=>Boolean(item)).slice(0,20):[]}catch{}setView(current);setCustom(saved);setFilters(current.filters);setTab(current.tab);setSort(current.sort);setLoadedKey(key)});return()=>{cancelled=true}},[key]);
   useEffect(()=>{if(loadedKey!==key)return;try{localStorage.setItem(key,JSON.stringify({current:{...view,filters,tab,sort},custom}))}catch{setTimeout(()=>setStorageError("Настройки действуют до закрытия вкладки: браузер не разрешил сохранение."),0)}},[view,filters,tab,sort,custom,key,loadedKey]);
