@@ -2,7 +2,7 @@ name: Deploy OPERIS GitHub Demo
 
 on:
   push:
-    branches: [main, "fix/sales-entity-interactions-20261010"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
