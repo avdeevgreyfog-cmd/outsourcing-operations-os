@@ -104,7 +104,7 @@ function billingLabel(value: string) {
 
 function scheduleLabel(value: string) {
   const known = ({ rotation: "Вахта", on_demand: "По заявке", custom: "Другой" } as Record<string, string>)[value];
-  return known || value || "Уточняется";
+  return known || (/[A-Za-z_]/.test(value) ? "Уточняется" : value) || "Уточняется";
 }
 
 function statusLabel(value: string) {
@@ -202,7 +202,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
 
   const editProps={request,intake,options:workspaceOptions,workflowMeta:workflow,demo,demoRequestId:demo?id:undefined,demoRequestBase:boardRow,canEdit:canEdit&&!archived&&!locked};
   const actions = <>
-    {canEdit && !archived && !locked && <Link className="button" href={seed?`/requests/${id}/edit`:`/requests/new?draft=${encodeURIComponent(id)}`}>Редактировать</Link>}
+    {canEdit && !archived && !locked && <Link className="button" href={seed?`/requests/${id}/edit`:`/requests/new?draft=${encodeURIComponent(id)}`}>Все поля заявки</Link>}
     {canEdit && !demo && !archived && !locked && <RequestShareHeaderButton requestId={id}/>}
     {canCreateCalculation && !archived && !locked && <Link href={`/calculations?request=${id}`} className="button primary">Открыть расчёт</Link>}
   </>;
@@ -287,8 +287,8 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
             </div>
           </RequestSectionEditor>
 
-          <RequestSectionEditor {...editProps} section="schedule" title="График и часы"><div className="request-entity-side-body"><KeyValue label="График" value={intake.schedule.pattern==="custom"?intake.schedule.customPattern:intake.schedule.pattern||"Уточняется"}/><KeyValue label="Оплачиваемых часов" value={intake.schedule.paidHours??"Уточняется"}/><KeyValue label="Обед" value={intake.schedule.lunchPaid?"Оплачивается":"Не оплачивается"}/></div></RequestSectionEditor>
-          <RequestSectionEditor {...editProps} section="commercial" title="Коммерческие условия и ответственность"><div className="request-entity-side-body"><KeyValue label="Лимит заказчика" value={intake.commercial.clientLimit==null?"Не указан":rub(intake.commercial.clientLimit)}/><KeyValue label="Ответственный" value={workflow.owner??"Не назначен"}/><KeyValue label="Комментарий" value={request.comments||"Не указан"}/></div>{calculations.length>0&&<p className="muted">При изменении численности, графика или ставок пересмотрите расчёт. Сохранённые расчёты и КП сохраняют свои условия.</p>}</RequestSectionEditor>
+          <RequestSectionEditor {...editProps} section="schedule" title="График и часы"><div className="request-entity-side-body"><KeyValue label="График" value={intake.schedule.pattern==="custom"?intake.schedule.customPattern||"Уточняется":scheduleLabel(intake.schedule.pattern)}/><KeyValue label="Оплачиваемых часов" value={intake.schedule.paidHours??"Уточняется"}/><KeyValue label="Обед" value={intake.schedule.lunchPaid?"Оплачивается":"Не оплачивается"}/></div></RequestSectionEditor>
+          <RequestSectionEditor {...editProps} section="commercial" title="Коммерческие условия и ответственность"><div className="request-entity-side-body"><KeyValue label="Лимит заказчика" value={intake.commercial.clientLimit==null?"Не указан":rub(intake.commercial.clientLimit)}/><KeyValue label="Ответственный" value={workflow.owner??"Не назначен"}/><KeyValue label="Комментарий" value={request.comments||"Не указан"}/></div>{calculations.length>0&&<p className="muted sales-section-note">При изменении численности, графика или ставок пересмотрите расчёт. Сохранённые расчёты и КП сохраняют свои условия.</p>}</RequestSectionEditor>
           <div className="request-entity-overview-grid">
             <RequestSectionEditor {...editProps} section="provision" title="Обеспечение и логистика">
               <div className="request-entity-condition-list">

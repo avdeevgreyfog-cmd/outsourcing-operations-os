@@ -23,3 +23,5 @@ Live mode uses the existing authenticated tenant APIs and capability/row scope c
 Live history shows actual before/after changes from existing request audit records and client/tender activity events. No schema migration is required.
 
 Verification: `npm test`, `npm run lint`, `npm run build`; `QA_START_SERVER=1 QA_PRODUCTION=1 node tests/sales-block-editing-browser.mjs` checks all three registries in both themes at 1440, 1024, 768 and 390 px, quick edit save/cancel, block save/reload, retained detailed data, new request creation and subsequent editing. The older commercial browser entry points delegate to this shared suite.
+
+Typography follow-up: keep the existing Segoe UI stack; use Russian labels for request schedules, tender analysis choices and saved cost calculations. Framed counters and buttons center their labels, status badges accommodate the text height, and long section/drawer headings wrap. Plain section headings retain their existing alignment.

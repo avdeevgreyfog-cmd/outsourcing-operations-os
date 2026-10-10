@@ -1,5 +1,6 @@
 "use client";
 
+import {Section} from "@/components/UI";
 import {SalesEditSection} from "@/components/sales/SalesEditSection";
 import {TenderAnalysisEditor} from "@/components/TenderAnalysisEditor";
 import {useState} from "react";
@@ -17,6 +18,8 @@ async function jsonRequest(url:string,method:string,body:unknown){
   return json;
 }
 function condition(value:unknown){return typeof value==="string"?value:"";}
+const conditionLabels:Record<string,string>={yes:"Да",no:"Нет",partial:"Частично / минимальный объём",with_vat:"С НДС",without_vat:"Без НДС",not_applicable:"Не применяется"};
+function conditionLabel(value:unknown){const text=condition(value);return conditionLabels[text]??(text||"Не указано");}
 
 export function TenderAnalysisWorkspace({tender,options,canEdit,demoScope}:{tender:TenderDetail;options:TenderOptions;canEdit:boolean;demoScope?:string}){
   const router=useRouter();
@@ -40,13 +43,12 @@ export function TenderAnalysisWorkspace({tender,options,canEdit,demoScope}:{tend
 
   return <div className="tender-tab-stack">
     <SalesEditSection title="Анализ тендера" note="Предмет закупки, условия, риски и заключение аналитика" canEdit={canEdit} editor={(onSaved,onCancel)=><TenderAnalysisEditor tender={tender} demoScope={demoScope} onSaved={onSaved} onCancel={onCancel}/>}>
-<p className="tender-overview-summary">{tender.analysisSummary||"Аналитическое заключение пока не заполнено."}</p><div className="request-entity-condition-list">{Object.entries({"subject": "Предмет закупки", "workFormat": "Формат работ", "schedule": "График", "region": "Регион / место", "projectDuration": "Срок проекта", "guaranteedVolume": "Гарантированный объём", "requestLeadTime": "Срок заявки на персонал", "housing": "Проживание", "travel": "Проезд / транспорт", "ppe": "СИЗ", "medical": "Медицинские требования", "vatMode": "НДС", "paymentTerms": "Условия оплаты", "bidSecurity": "Обеспечение заявки", "contractSecurity": "Обеспечение договора", "participantRequirements": "Требования к участнику", "penaltiesRisks": "Штрафы и риски", "openQuestions": "Что уточнить"}).map(([key,label])=><div key={key}><span>{label}</span><strong>{condition(tender.conditions[key])||"Не указано"}</strong></div>)}</div></SalesEditSection>
+<p className="tender-overview-summary">{tender.analysisSummary||"Аналитическое заключение пока не заполнено."}</p><div className="request-entity-condition-list">{Object.entries({"subject": "Предмет закупки", "workFormat": "Формат работ", "schedule": "График", "region": "Регион / место", "projectDuration": "Срок проекта", "guaranteedVolume": "Гарантированный объём", "requestLeadTime": "Срок заявки на персонал", "housing": "Проживание", "travel": "Проезд / транспорт", "ppe": "СИЗ", "medical": "Медицинские требования", "vatMode": "НДС", "paymentTerms": "Условия оплаты", "bidSecurity": "Обеспечение заявки", "contractSecurity": "Обеспечение договора", "participantRequirements": "Требования к участнику", "penaltiesRisks": "Штрафы и риски", "openQuestions": "Что уточнить"}).map(([key,label])=><div key={key}><span>{label}</span><strong>{conditionLabel(tender.conditions[key])}</strong></div>)}</div></SalesEditSection>
 
-    <section className="section">
-      <div className="tender-section-head"><div><h3>Позиции и объём</h3><p className="muted">Структурируем то, что потребуется посчитать в общем калькуляторе OPERIS.</p></div>{tender.roles.length>0&&<strong>{tender.roles.length} поз.</strong>}</div>
+    <Section title="Позиции и объём" note="Специальности, численность и ставки для расчёта стоимости" actions={tender.roles.length>0?<span className="sales-section-count">{tender.roles.length} поз.</span>:undefined}>
       <div className="grid-scroll"><table className="data-table"><thead><tr><th>Специальность / работа</th><th>Количество</th><th>Объём</th><th>Единица</th><th>Ориентир ставки</th><th></th></tr></thead><tbody>{tender.roles.map(item=><tr key={item.id}><td><strong>{item.title}</strong>{item.notes&&<span className="cell-sub">{item.notes}</span>}</td><td>{item.count??"—"}</td><td>{item.volume??"—"}</td><td>{tenderBillingLabels[item.billingUnit]??item.billingUnit}</td><td>{item.targetClientRate??"—"}</td><td>{canEdit&&<TenderRoleEditButton tenderId={tender.id} role={item} options={options} demoScope={demoScope} tender={tender}/>} {canEdit&&<button className="icon-button" type="button" onClick={()=>void removeRole(item.id)} aria-label="Удалить позицию"><Trash2 size={14}/></button>}</td></tr>)}</tbody></table></div>
       {canEdit&&<div className="tender-add-row"><select value={role.specialtyId} onChange={event=>{const found=options.specialties.find(item=>item.id===event.target.value);setRole(value=>({...value,specialtyId:event.target.value,title:found?.name??value.title}));}}><option value="">Специальность из справочника</option>{options.specialties.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><input value={role.title} onChange={event=>setRole(value=>({...value,title:event.target.value}))} placeholder="Название позиции"/><input type="number" min="1" value={role.count} onChange={event=>setRole(value=>({...value,count:event.target.value}))} placeholder="Кол-во"/><select value={role.billingUnit} onChange={event=>setRole(value=>({...value,billingUnit:event.target.value}))}>{Object.entries(tenderBillingLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><button className="button" type="button" disabled={!role.title.trim()} onClick={()=>void addRole()}><Plus size={14}/> Добавить</button></div>}
-      {state&&<p role="status">{state}</p>}
-    </section>
+      {state&&<p className="sales-section-note" role="status">{state}</p>}
+    </Section>
   </div>;
 }

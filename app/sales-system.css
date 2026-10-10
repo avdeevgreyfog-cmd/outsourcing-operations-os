@@ -6,7 +6,7 @@
 .sales-workspace .page-header h1{font-size:28px;line-height:1.22;letter-spacing:-.035em;font-weight:700}
 .sales-workspace .page-header p{font-size:13px;line-height:1.6;max-width:760px;margin-top:7px}
 .sales-workspace .page-actions{flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;max-width:48%}
-.sales-workspace .button{min-height:38px;padding:8px 13px;font-size:13px;line-height:1.3;border-radius:7px;box-shadow:none}
+.sales-workspace .button{justify-content:center;text-align:center;min-height:38px;padding:8px 13px;font-size:13px;line-height:1.3;border-radius:7px;box-shadow:none}
 .sales-workspace .button.primary{background:#c64c0b;border-color:#c64c0b;color:#fff}
 .sales-workspace .button.primary:hover{background:#ab3e05;border-color:#ab3e05}
 :root[data-theme=dark] .sales-workspace .button.primary{background:var(--accent);border-color:var(--accent);color:#211307}
@@ -23,7 +23,7 @@
 .sales-workspace .section+.section{margin-top:0}
 .sales-workspace .entity-tabs{gap:22px;overflow-x:auto;margin-bottom:20px;scrollbar-width:thin}
 .sales-workspace .entity-tabs a{font-size:13px;padding:12px 0;white-space:nowrap}
-.sales-workspace .entity-tabs a span{font-size:11px;padding:2px 6px;background:var(--panel-3);border-radius:5px}
+.sales-workspace .entity-tabs a span{display:inline-flex;align-items:center;justify-content:center;min-width:22px;min-height:20px;text-align:center;font-size:11px;padding:2px 6px;background:var(--panel-3);border-radius:5px}
 .sales-workspace .summary-strip{padding:14px 18px;gap:14px 28px;flex-wrap:wrap;min-height:56px;margin-bottom:20px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;font-size:13px}
 .sales-workspace .summary-strip>span{display:flex;gap:8px;color:var(--muted)}
 .sales-workspace .summary-strip strong{color:var(--text);font-weight:650}
@@ -69,7 +69,7 @@
 .sales-workspace .sales-client-table{min-width:620px}.sales-client-table th:first-child{width:40%}
 .sales-workspace .sales-client-table td:nth-child(n+3),.sales-workspace .sales-client-table th:nth-child(n+3){text-align:right;font-variant-numeric:tabular-nums}
 .sales-workspace :is(.status,.request-stage-badge-polished){font-size:12px;line-height:1.4;font-weight:550;white-space:normal}
-.sales-workspace .status{padding:4px 8px;border-radius:5px}
+.sales-workspace .status{height:auto;min-height:26px;align-items:center;justify-content:center;text-align:center;max-width:100%;padding:4px 8px;border-radius:5px}
 .sales-workspace .request-stage-badge-polished{gap:7px;color:var(--text)}
 .sales-workspace .request-stage-badge-polished i{width:7px;height:7px;flex-shrink:0}
 .sales-secondary,.sales-workspace .proposal-activity{color:var(--muted);font-size:12px}
@@ -4285,3 +4285,18 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid :is(input,select,textarea) { width: 100%; min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; padding: 8px 10px; }
 .sales-workspace :is(.sales-drawer,.sales-section-editor) .form-grid textarea { min-height: 96px; resize: vertical; }
 @media(max-width:600px) { .sales-workspace .sales-section-editor .form-grid.two { grid-template-columns: 1fr; } }
+
+/* Keep long Russian labels readable without changing the established typeface. */
+.sales-workspace :is(.section-head,.sales-drawer-content>header)>div { min-width:0; }
+.sales-workspace :is(.section-head h2,.sales-drawer h2,.sales-drawer header p,.sales-section-editor label>span) { overflow-wrap:anywhere; }
+.sales-workspace .button>svg { flex-shrink:0; }
+.sales-workspace :is(.tender-entity,.client-entity-workspace) .status { min-height:0; }
+
+.sales-workspace .sales-section-note { margin:12px 18px 16px; font-size:12px; line-height:1.5; }
+
+.sales-workspace .sales-section-count { display:inline-flex; align-items:center; justify-content:center; min-height:26px; padding:3px 8px; border:1px solid var(--border); border-radius:5px; font-size:12px; line-height:1.4; text-align:center; white-space:nowrap; }
+.sales-workspace .tender-add-row { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) minmax(70px,.45fr) minmax(0,.8fr) auto; gap:8px; padding:14px 18px; border-top:1px solid var(--border); align-items:center; }
+.sales-workspace .tender-add-row :is(input,select) { width:100%; min-width:0; }
+.sales-workspace .tender-add-row input { padding:8px 10px; }
+@media(max-width:900px) { .sales-workspace .tender-add-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .sales-workspace .tender-add-row>.button { grid-column:1/-1; } }
+@media(max-width:600px) { .sales-workspace .tender-add-row { grid-template-columns:1fr; padding:14px; } }
