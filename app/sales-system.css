@@ -4300,3 +4300,49 @@ button.sales-funnel-step:active{transform:translateY(1px)}
 .sales-workspace .tender-add-row input { padding:8px 10px; }
 @media(max-width:900px) { .sales-workspace .tender-add-row { grid-template-columns:repeat(2,minmax(0,1fr)); } .sales-workspace .tender-add-row>.button { grid-column:1/-1; } }
 @media(max-width:600px) { .sales-workspace .tender-add-row { grid-template-columns:1fr; padding:14px; } }
+
+/* Shared sales card spacing, plain statuses and related-record forms. */
+:root[data-operis-ui] .sales-workspace .entity-tabs { padding-inline:18px; scroll-padding-inline:18px; }
+:root[data-operis-ui] .sales-workspace .status { height:auto;min-height:0;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);font-size:12px;line-height:18px;justify-content:flex-start;text-align:left;gap:6px; }
+:root[data-operis-ui] .sales-workspace .status i { width:6px;height:6px;flex:0 0 6px; }
+:root[data-operis-ui] .sales-workspace .request-position-list-tab>article { padding:10px 18px;gap:6px;min-height:60px; }
+:root[data-operis-ui] .sales-workspace .request-position-main { align-items:center; }
+:root[data-operis-ui] .sales-workspace .request-position-main .status { align-self:center; }
+:root[data-operis-ui] .sales-workspace .request-position-main strong { font-size:13px;line-height:20px; }
+:root[data-operis-ui] .sales-workspace .request-position-main>div>span { font-size:12px;line-height:18px; }
+:root[data-operis-ui] .sales-workspace .request-position-details span { padding:0;border:0;border-radius:0;background:transparent;font-size:12px; }
+:root[data-operis-ui] .sales-workspace .request-position-more { font-size:12px;line-height:18px;color:var(--muted); }
+:root[data-operis-ui] .sales-workspace .request-position-more summary { cursor:pointer; }
+:root[data-operis-ui] .sales-workspace .request-position-more[open] summary { margin-bottom:8px; }
+:root[data-operis-ui] .sales-workspace .sales-inline-form { padding:16px 18px;border-top:1px solid var(--border);background:var(--panel-2); }
+:root[data-operis-ui] .sales-workspace .sales-inline-form>h3 { margin:0 0 14px;font-size:15px;line-height:1.4; }
+:root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid { display:grid;gap:14px 16px;min-width:0; }
+:root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
+:root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid>.span-2 { grid-column:1/-1; }
+:root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid>label,.sales-contact-method>label,.sales-contact-add { display:grid;gap:6px;min-width:0;align-content:start; }
+:root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid>label>span,.sales-contact-fields label>span { font-size:12px;font-weight:600;color:var(--muted); }
+:root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid :is(input:not([type=checkbox]),select,textarea),.sales-contact-fields :is(input:not([type=hidden]),select) { width:100%;min-width:0;min-height:38px;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--panel);color:var(--text);font:inherit; }
+.sales-contact-fields { display:grid;gap:12px; }
+.sales-contact-method { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end; }
+.sales-contact-add { max-width:360px; }
+:root[data-operis-ui] .sales-workspace .tender-entity .section>h3,:root[data-operis-ui] .sales-workspace .tender-entity :is(.tender-submission-head,.tender-section-head) { padding:15px 18px;margin:0;border-bottom:1px solid var(--border); }
+:root[data-operis-ui] .sales-workspace .tender-entity :is(.tender-submission-head,.tender-section-head) { display:flex;justify-content:space-between;align-items:center;gap:14px; }
+:root[data-operis-ui] .sales-workspace .tender-entity .section>h3,:root[data-operis-ui] .sales-workspace .tender-submission-head h3 { font-size:15px;line-height:1.4;margin:0; }
+:root[data-operis-ui] .sales-workspace .tender-entity .section>p { margin:12px 18px;font-size:12px;line-height:1.5; }
+:root[data-operis-ui] .sales-workspace .tender-entity .section>.form-grid { margin:16px 18px; }
+:root[data-operis-ui] .sales-workspace .tender-submit-checklist { display:grid;gap:8px;padding:16px 18px;margin:0; }
+:root[data-operis-ui] .sales-workspace .tender-submit-checklist label { display:flex;align-items:center;gap:8px;min-height:28px;font-size:13px; }
+:root[data-operis-ui] .sales-workspace .tender-submit-checklist input { min-height:0;width:16px;height:16px;margin:0; }
+:root[data-operis-ui] .sales-workspace .tender-submit-actions { display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 16px; }
+@media(max-width:600px) { :root[data-operis-ui] .sales-workspace .entity-tabs { padding-inline:14px;scroll-padding-inline:14px; } :root[data-operis-ui] .sales-workspace :is(.sales-inline-form,.tender-entity) .form-grid.two { grid-template-columns:1fr; } :root[data-operis-ui] .sales-workspace .sales-inline-form { padding:14px; } :root[data-operis-ui] .sales-workspace .request-position-main { flex-wrap:wrap; } }
+
+.sales-section-actions { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+:root[data-operis-ui] .sales-workspace .section-head:has(.sales-section-actions) { flex-wrap:wrap;gap:8px; }
+
+:root[data-operis-ui] .sales-workspace .status-good i { background:var(--good); }
+:root[data-operis-ui] .sales-workspace .status-warn i { background:var(--warn); }
+:root[data-operis-ui] .sales-workspace .status-bad i { background:var(--bad); }
+:root[data-operis-ui] .sales-workspace .status-info i { background:var(--info); }
+:root[data-operis-ui] .sales-workspace .status-neutral i { background:var(--muted); }
+:root[data-operis-ui] .sales-workspace .section>p.muted { margin:12px 18px; font-size:12px;line-height:1.5; }
+:root[data-operis-ui] .sales-workspace .sales-section-editor .sales-contact-fields { margin-top:14px; }

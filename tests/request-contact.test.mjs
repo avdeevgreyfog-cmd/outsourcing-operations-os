@@ -1,0 +1,29 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+function load(path,deps={}){const code=ts.transpileModule(fs.readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const out={};new Function('exports','require',code)(out,name=>deps[name]??require(name));return out;}
+const intake=load('lib/commercial/request-intake.ts');const snapshots=load('lib/commercial/contact-snapshot.ts',{'./request-intake':intake});const conflict=load('lib/commercial/edit-conflict.ts');
+const values={fullName:'Новый контакт',position:'Менеджер',phone:'+79990000000',email:'contact@example.ru',telegram:'@new',whatsapp:'',maxContact:''};
+test('contact changes retain other intake blocks, costs and historical fields',()=>{const raw={schedule:{pattern:'6/1',extra:42},provision:{housing:{cost:1500}},custom:{legacy:'keep'},contact:{name:'Старый',phone:'1',extra:'keep',messengers:[{type:'telegram',value:'@old'},{type:'telegram',value:'@second'},{type:'other',value:'legacy'}]}};const next=snapshots.mergeContactIntake(raw,values);assert.deepEqual(next.schedule,raw.schedule);assert.deepEqual(next.provision,raw.provision);assert.deepEqual(next.custom,raw.custom);assert.equal(next.contact.extra,'keep');assert.equal(next.contact.phone,values.phone);assert.deepEqual(next.contact.messengers,[{type:'telegram',value:'@new'},{type:'telegram',value:'@second'},{type:'other',value:'legacy'}]);assert.equal(raw.contact.phone,'1');});
+test('selecting a different client contact replaces known contact channels',()=>{const next=snapshots.mergeContactIntake({contact:{messengers:[{type:'telegram',value:'@old'},{type:'telegram',value:'@second'}]}},values,false);assert.deepEqual(next.contact.messengers,[{type:'telegram',value:'@new'}]);});
+const id='73000000-0000-4000-8000-000000000001',clientId='70000000-0000-4000-8000-000000000001',contactId='71000000-0000-4000-8000-000000000001',version='2026-10-10 10:00:00+00';
+class AccessDeniedError extends Error{}
+function route(config={}){const queries=[];const actor={organizationId:'00000000-0000-4000-8000-000000000001',userId:'10000000-0000-4000-8000-000000000001',access:{},demo:config.demo??false};const record={id,clientId,status:'draft',updatedAt:version};
+const tx=async(strings,...args)=>{const sql=strings.join('?');queries.push({sql,args});if(sql.includes('FROM requests')&&sql.includes('FOR UPDATE'))return [{updatedAt:config.lockedVersion??version,status:config.status??'draft',archivedAt:null,clientId:config.clientless?null:clientId,intake:{schedule:{pattern:'6/1'},extra:'keep'}}];if(sql.includes('FROM client_companies'))return [{id:clientId,organizationId:actor.organizationId}];if(sql.includes('SELECT id FROM contacts'))return config.duplicate?[{id:contactId}]:[];if(sql.includes('FROM contacts'))return config.foreign?[]:[{id:contactId,...values,fullName:'Из справочника'}];if(sql.includes('INSERT INTO contacts'))return [{id:contactId}];return [];};tx.json=x=>x;
+const out=load('app/api/requests/[id]/contact/route.ts',{'@/lib/auth/server':{getCurrentActor:async()=>actor},'@/lib/access/server':{AccessDeniedError,requireCapability(_actor,cap){if(config.deny===cap)throw new AccessDeniedError();}},'@/lib/core/access.mjs':{canReadRow:(_access,cap)=>config.scopeDeny!==cap},'@/lib/commercial/service':{getCommercialRequest:async()=>record},'@/lib/commercial/contact-snapshot':snapshots,'@/lib/commercial/request-intake':intake,'@/lib/commercial/edit-conflict':conflict,'@/lib/db/client':{withTenant:async(org,user,callback)=>{assert.equal(org,actor.organizationId);assert.equal(user,actor.userId);return callback(tx);}}});
+return {queries,patch:body=>out.PATCH(new Request('http://local/api/requests/'+id+'/contact',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({expectedUpdatedAt:version,mode:'snapshot',contactId:null,values,...body})}),{params:Promise.resolve({id})})};}
+for(const [name,config,body,status] of [
+['stale form writes nothing',{lockedVersion:'new'}, {},409],
+['archived business stage cannot be changed',{status:'accepted'}, {},400],
+['cross-client contact is rejected',{foreign:true},{mode:'existing',contactId},400],
+['creating contact requires client edit capability',{deny:'sales.client.edit'},{mode:'new'},403],
+['client edit row scope is enforced',{scopeDeny:'sales.client.edit'},{mode:'new'},403],
+['request edit row scope is enforced',{scopeDeny:'sales.request.edit'}, {},403],
+['a duplicate contact is not inserted',{duplicate:true},{mode:'new'},400],
+['demo endpoint never writes',{demo:true}, {},409],
+])test(name,async()=>{const r=route(config),response=await r.patch(body);assert.equal(response.status,status);assert.equal(r.queries.some(q=>/UPDATE |INSERT INTO/.test(q.sql)),false);});
+test('selecting an existing contact uses canonical values and preserves other intake data',async()=>{const r=route(),response=await r.patch({mode:'existing',contactId});assert.equal(response.status,200);assert.equal(r.queries.some(q=>q.sql.includes('INSERT INTO contacts')),false);const update=r.queries.find(q=>q.sql.includes('UPDATE requests'));assert.ok(update.args.includes(contactId));const raw=update.args.find(x=>x&&typeof x==='object'&&x.contact);assert.equal(raw.extra,'keep');assert.deepEqual(raw.schedule,{pattern:'6/1'});assert.equal(raw.contact.name,'Из справочника');});
+test('new contact and request link are saved in the same tenant transaction',async()=>{const r=route(),response=await r.patch({mode:'new'});assert.equal(response.status,200);assert.equal((await response.json()).contactId,contactId);assert.equal(r.queries.filter(q=>q.sql.includes('INSERT INTO contacts')).length,1);assert.equal(r.queries.filter(q=>q.sql.includes('UPDATE requests')).length,1);});

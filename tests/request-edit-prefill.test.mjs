@@ -21,7 +21,7 @@ function harness(props,record){
   const windowMock={setTimeout(callback){timers.push(callback);return timers.length;},clearTimeout(){},addEventListener(){},removeEventListener(){}};
   const priorWindow=globalThis.window,priorDocument=globalThis.document;
   globalThis.window=windowMock;globalThis.document={addEventListener(){},removeEventListener(){}};
-  const Component=load(source,{react,'next/link':{default:'a'},'next/navigation':{useRouter:()=>({push:path=>{pushed=path;},refresh(){}})},'@/lib/commercial/request-intake':intake,'@/lib/commercial/request-section':sections,'@/lib/commercial/demo-workspace-client':{getDemoRequest:()=>record,saveDemoRequest:(payload,settings)=>{saved={payload,settings};return {id:settings.id};}}}).RequestIntakeWorkspacePolished;
+  const Component=load(source,{react,'next/link':{default:'a'},'next/navigation':{useRouter:()=>({push:path=>{pushed=path;},refresh(){}})},'@/lib/commercial/request-intake':intake,'@/components/sales/ContactFields':{ContactFields:()=>null,emptyContact:{}},'@/lib/commercial/contact-snapshot':load('lib/commercial/contact-snapshot.ts',{'./request-intake':intake}),'@/lib/commercial/request-section':sections,'@/lib/commercial/demo-workspace-client':{getDemoRequest:()=>record,saveDemoRequest:(payload,settings)=>{saved={payload,settings};return {id:settings.id};}}}).RequestIntakeWorkspacePolished;
   function render(){cursor=0;return Component(props);}
   try{render();for(const effect of effects)effect();for(const timer of timers)timer();mounted=true;}finally{globalThis.window=priorWindow;globalThis.document=priorDocument;}
   return {render,saved:()=>saved,pushed:()=>pushed};

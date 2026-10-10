@@ -10,6 +10,7 @@ import type {RequestBoardRow,RequestWorkflowMeta,RequestStageDefinition,RequestW
 import {getDemoRequest,subscribeDemoRequests,type DemoRequestRecord} from "@/lib/commercial/demo-workspace-client";
 import Link from "next/link";
 import {SalesHistoryChanges} from "@/components/sales/SalesHistoryChanges";
+import {RequestContactSection} from "@/components/RequestContactSection";
 import {RequestSectionEditor} from "@/components/RequestSectionEditor";
 import {SalesEditProvider} from "@/components/sales/SalesEditSection";
 import type { ReactNode } from "react";
@@ -162,8 +163,8 @@ function tone(status: string) {
 }
 
 
-type Props={id:string;tab:string;staticDemo:boolean;demo:boolean;canEdit:boolean;canCreateCalculation:boolean;canCreateProposal:boolean;seed:CommercialRequestDetail|null;seedIntake:RequestIntake;calculations:Awaited<ReturnType<typeof listCommercialCalculations>>;coverage:Awaited<ReturnType<typeof getRequestCalculationCoverage>>;proposals:Awaited<ReturnType<typeof listRequestProposals>>;external:Awaited<ReturnType<typeof getRequestExternalState>>;seedWorkflow:RequestWorkflowMeta;stages:RequestStageDefinition[];workspaceOptions:RequestWorkspaceOptions;seedBoard?:RequestBoardRow};
-export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreateCalculation,canCreateProposal,seed,seedIntake,calculations,coverage,proposals,external,seedWorkflow,stages,workspaceOptions,seedBoard}:Props){
+type Props={contactScope:string;id:string;tab:string;staticDemo:boolean;demo:boolean;canEdit:boolean;canCreateCalculation:boolean;canCreateProposal:boolean;seed:CommercialRequestDetail|null;seedIntake:RequestIntake;calculations:Awaited<ReturnType<typeof listCommercialCalculations>>;coverage:Awaited<ReturnType<typeof getRequestCalculationCoverage>>;proposals:Awaited<ReturnType<typeof listRequestProposals>>;external:Awaited<ReturnType<typeof getRequestExternalState>>;seedWorkflow:RequestWorkflowMeta;stages:RequestStageDefinition[];workspaceOptions:RequestWorkspaceOptions;seedBoard?:RequestBoardRow};
+export function RequestEntityWorkspace({contactScope,id,tab,staticDemo,demo,canEdit,canCreateCalculation,canCreateProposal,seed,seedIntake,calculations,coverage,proposals,external,seedWorkflow,stages,workspaceOptions,seedBoard}:Props){
  const [local,setLocal]=useState<DemoRequestRecord|null>(null);const [loaded,setLoaded]=useState(!demo);
  useEffect(()=>{if(!demo)return;const sync=()=>{setLocal(getDemoRequest(id));setLoaded(true)};const timer=setTimeout(sync,0);const unsubscribe=subscribeDemoRequests(sync);return()=>{clearTimeout(timer);unsubscribe()}},[demo,id]);
  const payload=local?.payload;
@@ -287,6 +288,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
             </div>
           </RequestSectionEditor>
 
+          <RequestContactSection request={request} intake={intake} demo={demo} scope={contactScope} options={workspaceOptions} workflow={workflow} board={boardRow} canEdit={editProps.canEdit}/>
           <RequestSectionEditor {...editProps} section="schedule" title="График и часы"><div className="request-entity-side-body"><KeyValue label="График" value={intake.schedule.pattern==="custom"?intake.schedule.customPattern||"Уточняется":scheduleLabel(intake.schedule.pattern)}/><KeyValue label="Оплачиваемых часов" value={intake.schedule.paidHours??"Уточняется"}/><KeyValue label="Обед" value={intake.schedule.lunchPaid?"Оплачивается":"Не оплачивается"}/></div></RequestSectionEditor>
           <RequestSectionEditor {...editProps} section="commercial" title="Коммерческие условия и ответственность"><div className="request-entity-side-body"><KeyValue label="Лимит заказчика" value={intake.commercial.clientLimit==null?"Не указан":rub(intake.commercial.clientLimit)}/><KeyValue label="Ответственный" value={workflow.owner??"Не назначен"}/><KeyValue label="Комментарий" value={request.comments||"Не указан"}/></div>{calculations.length>0&&<p className="muted sales-section-note">При изменении численности, графика или ставок пересмотрите расчёт. Сохранённые расчёты и КП сохраняют свои условия.</p>}</RequestSectionEditor>
           <div className="request-entity-overview-grid">
@@ -344,13 +346,13 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
               <div><strong>{role.specialty}</strong><span>{role.count} чел. · {Object.keys(role.schedule ?? {}).length ? "свой график" : "общий график"}</span></div>
               <Status tone={acceptedRoleIds.has(role.id) ? "good" : "warn"}>{acceptedRoleIds.has(role.id) ? "расчёт согласован" : "нужен расчёт"}</Status>
             </div>
-            <div className="request-position-details">
+            <details className="request-position-more"><summary>Подробности позиции</summary><div className="request-position-details">
               <span>Опыт: {experience}{requirements.experienceMin ? ` · ${String(requirements.experienceMin)}` : ""}</span>
               {Boolean(requirements.grade) && <span>Квалификация: {String(requirements.grade)}</span>}
               {Boolean(requirements.certificates) && <span>Допуски: {String(requirements.certificates)}</span>}
               {Boolean(requirements.description) && <span>{String(requirements.description)}</span>}
             </div>
-            {stat && stat.stats.sampleCount > 0 && <small className="request-rate-inline">История: {rub(stat.stats.clientRateMin ?? 0)}–{rub(stat.stats.clientRateMax ?? 0)} / ч · {stat.stats.sampleCount} расчётов</small>}
+            {stat && stat.stats.sampleCount > 0 && <small className="request-rate-inline">История: {rub(stat.stats.clientRateMin ?? 0)}–{rub(stat.stats.clientRateMax ?? 0)} / ч · {stat.stats.sampleCount} расчётов</small>}</details>
           </article>;
         })}</div>
       </RequestSectionEditor>

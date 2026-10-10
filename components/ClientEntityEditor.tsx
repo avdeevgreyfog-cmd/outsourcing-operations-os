@@ -1,10 +1,12 @@
 "use client";
 
-import {useState,useId,type FormEvent,type ReactNode} from "react";
+import {useState,useId,useRef,type FormEvent,type ReactNode} from "react";
 import {useRouter} from "next/navigation";
-import {Pencil,Plus,Trash2} from "lucide-react";
-import {SalesEditSection,useUnsavedChanges} from "@/components/sales/SalesEditSection";
+import {Pencil,Plus} from "lucide-react";
+import {SalesEditSection,useUnsavedChanges,useSalesEditSession} from "@/components/sales/SalesEditSection";
 import {loadDemoClientSnapshot,saveDemoClientSnapshot} from "@/components/sales/DemoClientPreview";
+import {ContactFields} from "@/components/sales/ContactFields";
+import {SalesInlineForm} from "@/components/sales/SalesInlineForm";
 import {SalesDrawer} from "@/components/sales/SalesUI";
 import type {ClientContactRow,ClientEditOptions,ClientRow} from "@/lib/data/service";
 
@@ -14,14 +16,7 @@ const statusOptions=[
   ["blocked","Заблокирован"],
   ["archived","Архив"],
 ] as const;
-const channelOptions=[
-  ["","Не выбран"],
-  ["phone","Телефон"],
-  ["email","Эл. почта"],
-  ["telegram","Telegram"],
-  ["whatsapp","WhatsApp"],
-  ["max","MAX"],
-] as const;
+
 
 export function ClientEditButton({client,options}:{client:ClientRow;options:ClientEditOptions}){
   const [open,setOpen]=useState(false);
@@ -66,7 +61,7 @@ export function ClientDataSection({title,children,client,options,section,demoSco
   return <SalesEditSection title={title} canEdit={canEdit} editor={(done,cancel)=><ClientEditDrawer client={client} options={options} section={section} inline demoScope={demoScope} onClose={cancel} onSaved={done}/>}>{children}</SalesEditSection>;
 }
 export function ClientContactEditButton({clientId,contact,demoClient,demoScope,contacts=[]}:{clientId:string;contact?:ClientContactRow;demoClient?:ClientRow;demoScope?:string;contacts?:ClientContactRow[]}){
-  const router=useRouter();
+  const editorBusy=Boolean(useSalesEditSession()?.active);const router=useRouter();const anchor=useRef<HTMLButtonElement>(null);const formId=useId();
   const [open,setOpen]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
@@ -91,7 +86,7 @@ export function ClientContactEditButton({clientId,contact,demoClient,demoScope,c
     };
     setBusy(true);setError("");
     try{
-      if(demoScope&&demoClient){const updated:ClientContactRow={...(contact??{...demoClient,id:crypto.randomUUID(),clientId,objectAssignments:[]}),...payload};saveDemoContacts(editing?contacts.map(x=>x.id===contact!.id?updated:x):[...contacts,updated]);setDirty(false);setOpen(false);return;}
+      if(demoScope&&demoClient){if(!editing&&contacts.some(c=>c.fullName.toLowerCase()===payload.fullName.toLowerCase()&&((payload.phone&&c.phone?.replace(/\D/g,'')===payload.phone.replace(/\D/g,''))||(payload.email&&c.email?.toLowerCase()===payload.email.toLowerCase()))))throw new Error('Такой контакт уже есть у клиента. Откройте его для редактирования.');const updated:ClientContactRow={...(contact??{...demoClient,id:crypto.randomUUID(),clientId,objectAssignments:[]}),...payload};saveDemoContacts(editing?contacts.map(x=>x.id===contact!.id?updated:x):[...contacts,updated]);setDirty(false);setOpen(false);return;}
       const response=await fetch(editing?`/api/clients/${clientId}/contacts/${contact!.id}`:`/api/clients/${clientId}/contacts`,{
         method:editing?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload),
       });
@@ -116,25 +111,15 @@ export function ClientContactEditButton({clientId,contact,demoClient,demoScope,c
   }
 
   return <>
-    {editing?<button className="icon-button client-contact-edit-trigger" type="button" aria-label={`Редактировать контакт: ${contact!.fullName}`} onClick={()=>{setDirty(false);setError("");setOpen(true)}}><Pencil size={15}/></button>
-      :<button className="button" type="button" onClick={()=>{setDirty(false);setError("");setOpen(true)}}><Plus size={15}/> Добавить контакт</button>}
-    {open&&<SalesDrawer title={editing?"Редактировать контакт":"Добавить контакт"} subtitle="Контакт хранится в карточке клиента и может использоваться в заявках и на объектах." overline="Контакты клиента" onClose={()=>!busy&&setOpen(false)}
-      footer={<><button className="button" type="button" disabled={busy} onClick={cancel}>Отмена</button>{editing&&<button className="button client-danger-button" type="button" disabled={busy} onClick={remove}><Trash2 size={14}/> Удалить</button>}<button className="button primary" type="submit" form="client-contact-form" disabled={busy}>{busy?"Сохраняю…":"Сохранить"}</button></>}>
-      <form id="client-contact-form" className="client-create-form client-create-form-unified client-contact-edit-form" onSubmit={submit} onChange={()=>setDirty(true)}>
-        <section className="client-form-section">
-          <div className="client-form-section-head"><strong>Контактные данные</strong><span>Назначение контакта на объекты меняется в карточке объекта.</span></div>
-          <label><span>ФИО <b>*</b></span><input name="fullName" aria-label="ФИО *" required minLength={2} maxLength={180} defaultValue={contact?.fullName??""}/></label>
-          <label><span>Должность</span><input name="position" maxLength={180} defaultValue={contact?.position??""}/></label>
-          <label><span>Телефон</span><input name="phone" type="tel" maxLength={80} defaultValue={contact?.phone??""}/></label>
-          <label><span>Эл. почта</span><input name="email" type="email" maxLength={240} defaultValue={contact?.email??""}/></label>
-          <label><span>Telegram</span><input name="telegram" maxLength={120} defaultValue={contact?.telegram??""}/></label>
-          <label><span>WhatsApp</span><input name="whatsapp" maxLength={120} defaultValue={contact?.whatsapp??""}/></label>
-          <label><span>MAX</span><input name="maxContact" maxLength={120} defaultValue={contact?.maxContact??""}/></label>
-          <label><span>Предпочтительный канал</span><select name="preferredChannel" defaultValue={contact?.preferredChannel??""}>{channelOptions.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></label>
-        </section>
-        {contact?.objectAssignments.length?<p className="client-demo-note">Контакт связан с объектами: {contact.objectAssignments.map(item=>item.object).join(", ")}. Удаление будет недоступно, пока связи активны.</p>:null}
-        {error&&<div className="form-error client-create-error" role="alert">{error}</div>}
-      </form>
-    </SalesDrawer>}
+    {editing?<button disabled={editorBusy} ref={anchor} className="icon-button client-contact-edit-trigger" type="button" aria-label={`Редактировать контакт: ${contact!.fullName}`} onClick={()=>{setDirty(false);setError("");setOpen(true)}}><Pencil size={15}/></button>
+      :<button disabled={editorBusy} ref={anchor} className="button" type="button" onClick={()=>{setDirty(false);setError("");setOpen(true)}}><Plus size={15}/> Добавить контакт</button>}
+    {open&&<SalesInlineForm anchor={anchor} title={editing?"Редактировать контакт":"Добавить контакт"}>
+      <form id={formId} onSubmit={submit} onChange={()=>setDirty(true)}><fieldset className="sales-edit-fieldset" disabled={busy}>
+        <ContactFields defaultValue={{fullName:contact?.fullName??"",position:contact?.position??"",phone:contact?.phone??"",email:contact?.email??"",telegram:contact?.telegram??"",whatsapp:contact?.whatsapp??"",maxContact:contact?.maxContact??"",preferredChannel:contact?.preferredChannel??""}}/>
+        {contact?.objectAssignments.length?<p className="muted">Связан с объектами: {contact.objectAssignments.map(item=>item.object).join(", ")}.</p>:null}
+        {error&&<div className="form-error" role="alert">{error}</div>}
+        <div className="sales-edit-footer"><button className="button" type="button" disabled={busy} onClick={cancel}>Отмена</button>{editing&&<button className="button client-danger-button" type="button" disabled={busy} onClick={remove}>Удалить контакт</button>}<button className="button primary" type="submit" disabled={busy}>{busy?"Сохраняю…":"Сохранить"}</button></div>
+      </fieldset></form>
+    </SalesInlineForm>}
   </>;
 }

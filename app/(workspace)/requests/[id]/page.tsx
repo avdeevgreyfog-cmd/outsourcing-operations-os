@@ -46,5 +46,5 @@ export default async function RequestPage({
 
 
   const boardRow = board.find((item) => item.id === id);
-  return <RequestEntityWorkspace id={id} tab={tab} staticDemo={staticDemo} demo={actor.demo} canEdit={canEdit} canCreateCalculation={hasCapability(actor.access,"calculation.scenario.create")} canCreateProposal={hasCapability(actor.access,"sales.proposal.create")} seed={request} seedIntake={intake} calculations={calculations} coverage={coverage} proposals={proposals} external={external} seedWorkflow={workflow} stages={stages} workspaceOptions={workspaceOptions} seedBoard={boardRow}/>;
+  return <RequestEntityWorkspace contactScope={`${actor.organizationId}:${actor.userId}:${actor.roleCode}:demo`} id={id} tab={tab} staticDemo={staticDemo} demo={actor.demo} canEdit={canEdit} canCreateCalculation={hasCapability(actor.access,"calculation.scenario.create")} canCreateProposal={hasCapability(actor.access,"sales.proposal.create")} seed={request} seedIntake={intake} calculations={calculations} coverage={coverage} proposals={proposals} external={external} seedWorkflow={workflow} stages={stages} workspaceOptions={workspaceOptions} seedBoard={boardRow}/>;
 }
