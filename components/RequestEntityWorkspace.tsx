@@ -1,0 +1,397 @@
+"use client";
+import {useEffect,useState} from "react";
+import {Empty} from "@/components/UI";
+import type {CommercialRequestDetail,listRequestProposals} from "@/lib/commercial/service";
+import type {listCommercialCalculations} from "@/lib/commercial/calculation-list";
+import type {getRequestCalculationCoverage} from "@/lib/commercial/calculations";
+import type {getRequestExternalState} from "@/lib/commercial/request-intake-server";
+import {normalizeRequestIntake,normalizeRequestStartDate,type RequestIntake} from "@/lib/commercial/request-intake";
+import type {RequestBoardRow,RequestWorkflowMeta,RequestStageDefinition,RequestWorkspaceOptions} from "@/lib/commercial/request-workflow";
+import {getDemoRequest,subscribeDemoRequests,type DemoRequestRecord} from "@/lib/commercial/demo-workspace-client";
+import Link from "next/link";
+import {SalesHistoryChanges} from "@/components/sales/SalesHistoryChanges";
+import {RequestContactSection} from "@/components/RequestContactSection";
+import {RequestSectionEditor} from "@/components/RequestSectionEditor";
+import {SalesEditProvider} from "@/components/sales/SalesEditSection";
+import type { ReactNode } from "react";
+import { calculateRequestCompleteness } from "@/lib/commercial/request-intake";
+import { stageByCode } from "@/lib/commercial/request-workflow";
+import { RequestExternalWorkflow } from "@/components/RequestExternalWorkflow";
+import { RequestShareHeaderButton } from "@/components/RequestShareHeaderButton";
+import { RequestStageSelect } from "@/components/RequestStageSelect";
+import { CreateProposalButton } from "@/components/CommercialWorkflowActions";
+import { EntityTabs, KeyValue, PageHeader, Section, Status, SummaryStrip } from "@/components/UI";
+import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
+import { rub, pct } from "@/lib/ui/format";
+
+const tabLabels: Record<string, string> = {
+  overview: "Обзор",
+  positions: "Позиции",
+  calculations: "Расчёты",
+  proposals: "КП",
+  approval: "Согласование",
+  history: "История",
+};
+
+const workerCategoryLabels: Record<string, string> = {
+  rf: "РФ",
+  eaeu: "ЕАЭС",
+  foreign_with_docs: "Иностранные граждане с разрешительными документами",
+  client_rules: "По требованиям заказчика",
+};
+
+const documentCheckLabels: Record<string, string> = {
+  security: "Служба безопасности",
+  document_check: "Проверка документов",
+  qualification: "Проверка квалификации",
+  medical: "Медосмотр",
+  medbook: "Медицинская книжка",
+  labor_safety: "Охрана труда",
+  industrial_safety: "Промышленная безопасность",
+  certificates: "Удостоверения / допуски",
+  pass_docs: "Документы для проходной",
+};
+
+const experienceLabels: Record<string, string> = {
+  not_required: "не требуется",
+  preferred: "желателен",
+  required: "обязателен",
+};
+
+const statusLabels: Record<string, string> = {
+  draft: "Черновик",
+  pending: "На согласовании",
+  approved: "Согласовано",
+  accepted: "Принято",
+  rejected: "Отклонено",
+  launched: "Запущено",
+  active: "Активно",
+  sent: "Отправлено",
+  agreed: "Согласовано",
+  not_agreed: "Не согласовано",
+  archived: "Архив",
+};
+
+const lossLabels: Record<string, string> = {
+  price: "Не устроила цена",
+  competitor: "Выбран другой подрядчик",
+  cancelled: "Потребность отменена",
+  timing: "Не подошли сроки",
+  conditions: "Не устроили условия",
+  no_response: "Заказчик перестал отвечать",
+  staffing: "Не смогли обеспечить персонал",
+  other: "Другое",
+};
+
+function providerLabel(value: string) {
+  if (value === "client") return "Заказчик";
+  if (value === "not_required") return "Не требуется";
+  if (value === "unknown") return "Не указано";
+  return "Мы";
+}
+
+function billingLabel(value: string) {
+  return ({
+    hour: "Человеко-час",
+    shift: "Смена",
+    worker_month: "Сотрудник / месяц",
+    unit: "Единица",
+    volume: "За объём",
+    fixed: "Фиксированная сумма за проект",
+    mixed: "Смешанная схема",
+    unknown: "Не определено",
+  } as Record<string, string>)[value] ?? "Не определено";
+}
+
+function scheduleLabel(value: string) {
+  const known = ({ rotation: "Вахта", on_demand: "По заявке", custom: "Другой" } as Record<string, string>)[value];
+  return known || (/[A-Za-z_]/.test(value) ? "Уточняется" : value) || "Уточняется";
+}
+
+function statusLabel(value: string) {
+  return statusLabels[value] ?? (/[A-Za-z_]/.test(value) ? "В работе" : value);
+}
+
+function lossLabel(value: string | null | undefined) {
+  if (!value) return "";
+  return lossLabels[value] ?? (/[A-Za-z_]/.test(value) ? "Другая причина" : value);
+}
+
+function timelineText(value: string) {
+  const replacements: Record<string, string> = {
+    new: "Новая",
+    clarification: "Уточнение условий",
+    ready_calc: "Готова к расчёту",
+    calculation: "Расчёт",
+    proposal_prep: "Подготовка КП",
+    proposal_client: "КП у заказчика",
+    negotiation: "Переговоры / доработка",
+    agreed: "Согласовано",
+    not_agreed: "Не согласовано",
+    draft: "Черновик",
+    pending: "На согласовании",
+    accepted: "Принято",
+    rejected: "Отклонено",
+    sent: "Отправлено",
+    approved: "Согласовано",
+  };
+  let result = value;
+  for (const [code, label] of Object.entries(replacements)) result = result.replaceAll(code, label);
+  return result.replace(/\bv(\d+)\b/g, "№$1");
+}
+
+function fmtDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", timeZone:"Europe/Moscow", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDay(value: string | null | undefined) {
+  value=normalizeRequestStartDate(value);
+  if (!value) return "Старт уточняется";
+  const date = new Date(`${value}T00:00:00+03:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric", timeZone:"Europe/Moscow" });
+}
+
+function tone(status: string) {
+  if (["accepted", "agreed", "launched", "approved"].includes(status)) return "good" as const;
+  if (["rejected", "not_agreed", "archived"].includes(status)) return "bad" as const;
+  return "warn" as const;
+}
+
+
+type Props={contactScope:string;id:string;tab:string;staticDemo:boolean;demo:boolean;canEdit:boolean;canCreateCalculation:boolean;canCreateProposal:boolean;seed:CommercialRequestDetail|null;seedIntake:RequestIntake;calculations:Awaited<ReturnType<typeof listCommercialCalculations>>;coverage:Awaited<ReturnType<typeof getRequestCalculationCoverage>>;proposals:Awaited<ReturnType<typeof listRequestProposals>>;external:Awaited<ReturnType<typeof getRequestExternalState>>;seedWorkflow:RequestWorkflowMeta;stages:RequestStageDefinition[];workspaceOptions:RequestWorkspaceOptions;seedBoard?:RequestBoardRow};
+export function RequestEntityWorkspace({contactScope,id,tab,staticDemo,demo,canEdit,canCreateCalculation,canCreateProposal,seed,seedIntake,calculations,coverage,proposals,external,seedWorkflow,stages,workspaceOptions,seedBoard}:Props){
+ const [local,setLocal]=useState<DemoRequestRecord|null>(null);const [loaded,setLoaded]=useState(!demo);
+ useEffect(()=>{if(!demo)return;const sync=()=>{setLocal(getDemoRequest(id));setLoaded(true)};const timer=setTimeout(sync,0);const unsubscribe=subscribeDemoRequests(sync);return()=>{clearTimeout(timer);unsubscribe()}},[demo,id]);
+ const payload=local?.payload;
+ const request:CommercialRequestDetail|null=local&&payload?{...(seed??{id,organizationId:local.board.organizationId,contactId:null,region:null,housingRule:null,travelRule:null,shuttleRule:null,ppeRule:null,medicalRule:null,citizenshipRule:null,toolsRule:null,teamId:null,createdByUserId:local.board.createdByUserId,archivedAt:null}),...payload,client:local.board.client,status:local.board.status,region:local.board.region,roles:payload.roles.map((role,index)=>({id:role.id??seed?.roles[index]?.id??`${id}:role:${index}`,specialtyId:role.specialtyId??"",specialty:role.specialtyName,count:role.count,schedule:role.schedule,requirements:role.requirements,targetClientRate:role.targetClientRate}))}:seed;
+ if(!request)return loaded?<Empty title="Заявка недоступна" text="Запись не найдена в этом браузере."/>:<p role="status">Загружаю карточку…</p>;
+ const intake=payload&&Object.keys(payload.intake??{}).length?normalizeRequestIntake(payload.intake):seedIntake;
+ const boardRow=local?.board??seedBoard;
+ const workflow=local?{...seedWorkflow,owner:local.board.owner,observers:workspaceOptions.members.filter(item=>payload?.observerUserIds.includes(item.id))}:seedWorkflow;
+  const stageCode = boardRow?.workflowStageCode ?? "new";
+  const stage = stageByCode(stages, stageCode);
+  const completeness = calculateRequestCompleteness(request, intake);
+  const acceptedRoleIds = new Set(coverage.map((item) => item.requestRoleId));
+  const archived = Boolean(request.archivedAt);
+  const locked = !demo&&["accepted", "launched"].includes(request.status);
+  const readyForProposal = !archived && !locked && request.roles.length > 0 && request.roles.every((role) => acceptedRoleIds.has(role.id));
+  const total = request.roles.reduce((sum, role) => sum + role.count, 0);
+  const yandex = request.location ? `https://yandex.ru/maps/?text=${encodeURIComponent(request.location)}` : "";
+  const lastActivity = workflow.timeline.length ? workflow.timeline[workflow.timeline.length - 1] : null;
+
+  const visibleTabKeys = Object.keys(tabLabels).filter((key) => key !== "approval" || canEdit);
+  const tabs = visibleTabKeys.map((key) => ({
+      label: tabLabels[key],
+      href: `/requests/${id}?tab=${key}`,
+      count:
+        key === "positions" ? request.roles.length
+        : key === "calculations" ? calculations.length
+        : key === "proposals" ? proposals.length
+        : key === "approval" ? external.submissions.length
+        : key === "history" ? workflow.timeline.length
+        : undefined,
+    }));
+  const panel=(key:string,content:ReactNode)=>{
+    if(!visibleTabKeys.includes(key)||(!staticDemo&&tab!==key))return null;
+    return <div data-demo-tab-panel={key} style={{display:staticDemo&&key!=="overview"?"none":"contents"}}>{content}</div>;
+  };
+
+  const editProps={request,intake,options:workspaceOptions,workflowMeta:workflow,demo,demoRequestId:demo?id:undefined,demoRequestBase:boardRow,canEdit:canEdit&&!archived&&!locked};
+  const actions = <>
+    {canEdit && !archived && !locked && <Link className="button" href={seed?`/requests/${id}/edit`:`/requests/new?draft=${encodeURIComponent(id)}`}>Все поля заявки</Link>}
+    {canEdit && !demo && !archived && !locked && <RequestShareHeaderButton requestId={id}/>}
+    {canCreateCalculation && !archived && !locked && <Link href={`/calculations?request=${id}`} className="button primary">Открыть расчёт</Link>}
+  </>;
+
+  const provisionKeys = ["housing", "travel", "shuttle", "meals", "workwear", "ppe", "tools", "consumables"] as const;
+  const provisionLabels = {housing:"Проживание",travel:"Билеты / проезд",shuttle:"Развозка",meals:"Питание",workwear:"Спецодежда",ppe:"СИЗ",tools:"Инструмент",consumables:"Расходные материалы"};
+  const knownProvision = provisionKeys.filter(key => intake.provision[key].provider !== "unknown" || intake.provision[key].comment);
+  const unknownProvision = provisionKeys.filter(key => intake.provision[key].provider === "unknown" && !intake.provision[key].comment);
+
+  const stagePanel = <Section title="Этап и ответственность">
+    <div className="request-entity-side-body">
+      {canEdit && !archived
+        ? <RequestStageSelect requestId={id} value={stageCode} stages={stages} disabled={locked||demo}/>
+        : <Status tone={tone(stageCode)}>{stage.label}</Status>}
+      <KeyValue label="Ответственный" value={workflow.owner ?? "Не назначен"}/>
+      <KeyValue label="Наблюдатели" value={workflow.observers.length ? workflow.observers.map((item) => item.name).join(", ") : "Нет"}/>
+      {boardRow?.lossReason && <KeyValue label="Причина" value={lossLabel(boardRow.lossReason)}/>}
+    </div>
+  </Section>;
+
+  const workspace=<SalesEditProvider>
+    <PageHeader
+      eyebrow="Заявка"
+      title={request.title}
+      subtitle={`${intake.companyName || request.client || "Клиент не привязан"} · ${request.location || intake.object.city || "локация уточняется"}`}
+      breadcrumbs={[{ label: "Коммерция" }, { label: "Заявки", href: "/requests" }, { label: request.title }]}
+      actions={actions}
+    />
+
+    <EntityTabs items={tabs} active={tabLabels[tab]}/>
+
+    {panel("overview",<>
+      <SummaryStrip>
+        <span>Старт <strong>{fmtDay(request.startDate)}</strong></span>
+        <span>Потребность <strong>{total} чел.</strong></span>
+        <span>Позиции <strong>{request.roles.length}</strong></span>
+        <span>Данные для расчёта <strong>{completeness.ready ? "Собраны" : "Есть уточнения"}</strong></span>
+        <span>КП <strong>{boardRow?.proposalVersion ? `№${boardRow.proposalVersion}` : "—"}</strong></span>
+      </SummaryStrip>
+
+      {!completeness.ready && !archived && !locked && <div className="request-warning request-entity-warning" role="status">
+        <div><strong>Что уточнить для расчёта</strong><p>{completeness.missing.join(" · ")}</p><p>Предварительный расчёт доступен. Уточните эти условия перед согласованием.</p></div>
+        {canEdit && <Link className="button" href={seed?`/requests/${id}/edit`:`/requests/new?draft=${encodeURIComponent(id)}`}>Уточнить условия</Link>}
+      </div>}
+
+      <div className="request-entity-overview">
+        <div className="request-entity-main">
+          <RequestSectionEditor {...editProps} section="general" title="Ключевые условия">
+            <div className="request-entity-facts">
+              <article>
+                <span>Заказчик</span>
+                <strong>{intake.companyName || request.client || "—"}</strong>
+                <small>{intake.contact.name || "Контакт не указан"}</small>
+                <small>{[intake.contact.phone, intake.contact.email, ...intake.contact.messengers.map((item) => item.value)].filter(Boolean).join(" · ") || "Контакты не указаны"}</small>
+              </article>
+              <article>
+                <span>Объект</span>
+                <strong>{intake.object.siteName || intake.object.city || request.location || "—"}</strong>
+                <small>{request.region ?? "Регион не определён"}</small>
+                {yandex && <a target="_blank" rel="noreferrer" href={yandex}>Открыть на Яндекс Картах</a>}
+              </article>
+              <article>
+                <span>Старт и срок</span>
+                <strong>{fmtDay(request.startDate)}</strong>
+                <small>{request.durationText || "Срок не указан"}</small>
+              </article>
+              <article>
+                <span>График</span>
+                <strong>{intake.schedule.pattern === "custom" ? intake.schedule.customPattern : scheduleLabel(intake.schedule.pattern)}</strong>
+                <small>{intake.schedule.paidHours ? `${intake.schedule.paidHours} оплачиваемых часов` : "Оплачиваемые часы не указаны"}</small>
+              </article>
+              <article>
+                <span>Доступность</span>
+                <strong>{({ easy: "Удобно", public_walk: "Транспорт + пешком", difficult: "Сложный маршрут", car_only: "Только автомобиль", shuttle: "Нужна развозка", unknown: "Уточняется" } as Record<string, string>)[intake.object.accessType] ?? "Уточняется"}</strong>
+                <small>{intake.object.accessComment || "Комментарий не указан"}</small>
+              </article>
+              <article>
+                <span>Коммерческий ориентир</span>
+                <strong>{intake.commercial.clientLimit ? `${rub(intake.commercial.clientLimit)} ${intake.commercial.clientLimitVatMode === "with_vat" ? "с НДС" : "без НДС"}` : "Лимит не указан"}</strong>
+                <small>{billingLabel(intake.commercial.billingUnit)}</small>
+              </article>
+            </div>
+          </RequestSectionEditor>
+
+          <RequestContactSection request={request} intake={intake} demo={demo} scope={contactScope} options={workspaceOptions} workflow={workflow} board={boardRow} canEdit={editProps.canEdit}/>
+          <RequestSectionEditor {...editProps} section="schedule" title="График и часы"><div className="request-entity-side-body"><KeyValue label="График" value={intake.schedule.pattern==="custom"?intake.schedule.customPattern||"Уточняется":scheduleLabel(intake.schedule.pattern)}/><KeyValue label="Оплачиваемых часов" value={intake.schedule.paidHours??"Уточняется"}/><KeyValue label="Обед" value={intake.schedule.lunchPaid?"Оплачивается":"Не оплачивается"}/></div></RequestSectionEditor>
+          <RequestSectionEditor {...editProps} section="commercial" title="Коммерческие условия и ответственность"><div className="request-entity-side-body"><KeyValue label="Лимит заказчика" value={intake.commercial.clientLimit==null?"Не указан":rub(intake.commercial.clientLimit)}/><KeyValue label="Ответственный" value={workflow.owner??"Не назначен"}/><KeyValue label="Комментарий" value={request.comments||"Не указан"}/></div>{calculations.length>0&&<p className="muted sales-section-note">При изменении численности, графика или ставок пересмотрите расчёт. Сохранённые расчёты и КП сохраняют свои условия.</p>}</RequestSectionEditor>
+          <div className="request-entity-overview-grid">
+            <RequestSectionEditor {...editProps} section="provision" title="Обеспечение и логистика">
+              <div className="request-entity-condition-list">
+                {knownProvision.map((key) => <div key={key}>
+                  <span>{provisionLabels[key]}</span>
+                  <strong>{providerLabel(intake.provision[key].provider)}</strong>
+                  {intake.provision[key].comment && <small>{intake.provision[key].comment}</small>}
+                </div>)}
+                {unknownProvision.length > 0 && <details className="sales-missing-provision"><summary>Не уточнено условий: {unknownProvision.length}</summary><ul>{unknownProvision.map(key => <li key={key}>{provisionLabels[key]}</li>)}</ul></details>}
+                <div><span>Бригадир</span><strong>{providerLabel(intake.logistics.brigadierProvider)}</strong></div>
+              </div>
+            </RequestSectionEditor>
+
+            <RequestSectionEditor {...editProps} section="compliance" title="Требования к работникам">
+              <div className="request-entity-condition-list request-entity-condition-list-wide">
+                <div>
+                  <span>Категории работников</span>
+                  <strong>{intake.compliance.workerCategories.length ? intake.compliance.workerCategories.map((value) => workerCategoryLabels[value] ?? "Другая категория").join(" · ") : "Уточняется"}</strong>
+                </div>
+                <div>
+                  <span>Проверки / документы</span>
+                  <strong>{intake.compliance.documentChecks.length ? `${intake.compliance.documentChecks.length} требований` : "Не отмечены"}</strong>
+                  <small>{intake.compliance.documentChecks.map((value) => documentCheckLabels[value] ?? "Другое требование").join(" · ")}</small>
+                </div>
+                {intake.compliance.comment && <div><span>Комментарий</span><strong>{intake.compliance.comment}</strong></div>}
+              </div>
+            </RequestSectionEditor>
+          </div>
+        </div>
+
+        <aside className="request-entity-side">
+          {stagePanel}
+          <Section title="Коммерческий контур">
+            <div className="request-entity-side-body">
+              <KeyValue label="Расчёты" value={<Link href={`/requests/${id}?tab=calculations`}>{calculations.length}</Link>}/>
+              <KeyValue label="Коммерческие предложения" value={<Link href={`/requests/${id}?tab=proposals`}>{proposals.length}</Link>}/>
+              {canEdit && <KeyValue label="Согласование" value={<Link href={`/requests/${id}?tab=approval`}>{external.submissions.length}</Link>}/>}
+              <KeyValue label="Последнее изменение" value={lastActivity ? fmtDate(lastActivity.at) : "Нет событий"}/>
+            </div>
+          </Section>
+        </aside>
+      </div>
+    </>)}
+
+    {panel("positions",<div className="request-entity-tab-content">
+      <RequestSectionEditor {...editProps} section="need" title="Позиции" note={`Потребность: ${total} чел. · Позиции: ${request.roles.length}`}>
+        <div className="request-position-list request-position-list-tab">{request.roles.map((role) => {
+          const requirements = role.requirements ?? {};
+          const stat = workspaceOptions.specialties.find((item) => item.id === role.specialtyId);
+          const experience = experienceLabels[String(requirements.experienceMode ?? "")] ?? "не указан";
+          return <article key={role.id}>
+            <div className="request-position-main">
+              <div><strong>{role.specialty}</strong><span>{role.count} чел. · {Object.keys(role.schedule ?? {}).length ? "свой график" : "общий график"}</span></div>
+              <Status tone={acceptedRoleIds.has(role.id) ? "good" : "warn"}>{acceptedRoleIds.has(role.id) ? "расчёт согласован" : "нужен расчёт"}</Status>
+            </div>
+            <details className="request-position-more"><summary>Подробности позиции</summary><div className="request-position-details">
+              <span>Опыт: {experience}{requirements.experienceMin ? ` · ${String(requirements.experienceMin)}` : ""}</span>
+              {Boolean(requirements.grade) && <span>Квалификация: {String(requirements.grade)}</span>}
+              {Boolean(requirements.certificates) && <span>Допуски: {String(requirements.certificates)}</span>}
+              {Boolean(requirements.description) && <span>{String(requirements.description)}</span>}
+            </div>
+            {stat && stat.stats.sampleCount > 0 && <small className="request-rate-inline">История: {rub(stat.stats.clientRateMin ?? 0)}–{rub(stat.stats.clientRateMax ?? 0)} / ч · {stat.stats.sampleCount} расчётов</small>}</details>
+          </article>;
+        })}</div>
+      </RequestSectionEditor>
+    </div>)}
+
+    {panel("calculations",<div className="request-entity-tab-content">
+      <Section title="Расчёты" note="Согласованные сценарии не перезаписываются при изменении условий заявки.">
+        <div className="stack-list request-entity-stack">{calculations.length ? calculations.map((item) => <Link className="stack-item" href={`/calculations?request=${id}#scenario-${item.id}`} key={item.id}>
+          <div><strong>{item.name}</strong><small>{item.role} · {rub(item.clientRate)} без НДС · маржа {pct(item.marginPct)}</small></div>
+          <Status tone={tone(item.status)}>{statusLabel(item.status)}</Status>
+        </Link>) : <div className="empty-inline">Расчётов пока нет</div>}</div>
+        {canCreateCalculation && !archived && !locked && <div className="request-entity-section-actions"><Link href={`/calculations?request=${id}`} className="button primary">Создать расчёт</Link></div>}
+      </Section>
+    </div>)}
+
+    {panel("proposals",<div className="request-entity-tab-content">
+      <Section title="Коммерческие предложения" note={boardRow?.proposalSentCount ? `Отправлено версий: ${boardRow.proposalSentCount}` : "Отправленные версии фиксируются и не перезаписываются."}>
+        <div className="stack-list request-entity-stack">{proposals.length ? proposals.map((item) => <Link className="stack-item" href={`/proposals/${item.id}`} key={item.id}>
+          <div><strong>КП №{item.version}</strong><small>{item.createdAt} · {item.createdBy}</small></div>
+          <Status tone={tone(item.status)}>{statusLabel(item.status)}</Status>
+        </Link>) : <div className="empty-inline">Версий КП пока нет</div>}</div>
+        {readyForProposal && canCreateProposal && <div className="request-entity-section-actions"><CreateProposalButton requestId={id}/></div>}
+      </Section>
+    </div>)}
+
+    {canEdit&&panel("approval",<div className="request-entity-tab-content request-entity-approval">
+      <Section title="Согласование и уточнения" note="Заказчик видит только внешнюю форму без внутренних ставок, истории расчётов и маржи.">
+        <div className="request-entity-external"><RequestExternalWorkflow requestId={id} state={external} canEdit={!demo && !archived && !locked}/></div>
+      </Section>
+    </div>)}
+
+    {panel("history",<div className="request-entity-tab-content">
+      <Section title="История заявки" note={`Событий: ${workflow.timeline.length}`}>
+        <div className="request-timeline request-entity-timeline">{workflow.timeline.length ? workflow.timeline.slice().reverse().map((item) => <article key={item.id}>
+          <i/>
+          <div><header><strong>{timelineText(item.title)}</strong><span>{fmtDate(item.at)}</span></header><p>{timelineText(item.detail)}</p><small>{item.actor}</small><SalesHistoryChanges changes={item.changes}/></div>
+        </article>) : <div className="empty-inline">История пока пуста</div>}</div>
+      </Section>
+    </div>)}
+  </SalesEditProvider>;
+  return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
+}

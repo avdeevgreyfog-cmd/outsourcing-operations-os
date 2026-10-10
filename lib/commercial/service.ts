@@ -43,6 +43,7 @@ export type CommercialRequestDetail = {
   createdByUserId: string;
   teamId: string | null;
   archivedAt: string | null;
+  updatedAt?: string;
   roles: RequestRoleDetail[];
 };
 
@@ -167,7 +168,7 @@ export async function getCommercialRequest(actor: Actor, id: string): Promise<Co
         r.vat_mode "vatMode",r.housing_rule "housingRule",r.travel_rule "travelRule",r.shuttle_rule "shuttleRule",
         r.ppe_rule "ppeRule",r.medical_rule "medicalRule",r.citizenship_rule "citizenshipRule",r.tools_rule "toolsRule",
         r.comments,r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",
-        r.archived_at::text "archivedAt",
+        r.archived_at::text "archivedAt",r.updated_at::text "updatedAt",
         COALESCE(jsonb_agg(jsonb_build_object(
           'id',rr.id,'specialtyId',rr.specialty_id,'specialty',s.name,'count',rr.count_required,'schedule',rr.schedule_json,
           'requirements',rr.requirements_json,'targetClientRate',rr.target_client_rate

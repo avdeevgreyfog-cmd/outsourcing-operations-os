@@ -45,6 +45,9 @@ export function SalesEmpty({ title = "Ничего не найдено", text = 
 export function SalesDrawer({ title, subtitle, children, footer, onClose, overline = "Быстрый просмотр" }: { title: string; subtitle?: string; children: ReactNode; footer?: ReactNode; onClose: () => void; overline?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const edited=useRef(false);
+  function close(){if(ref.current?.querySelector("fieldset[disabled]"))return;if(!edited.current||window.confirm("Есть несохранённые изменения. Выйти без сохранения?"))onClose();}
+
   useEffect(() => {
     const dialog = ref.current;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -53,7 +56,7 @@ export function SalesDrawer({ title, subtitle, children, footer, onClose, overli
     document.body.style.overflow = "hidden";
     return () => { dialog?.close(); document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
-  return <dialog ref={ref} className="sales-drawer" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); onClose(); }} onClick={event => { if (event.target === event.currentTarget) { const box = event.currentTarget.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) onClose(); } }}>
-    <div className="sales-drawer-content"><header><div><span className="sales-overline">{overline}</span><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button autoFocus type="button" className="icon-button" onClick={onClose} aria-label="Закрыть просмотр"><X size={18}/></button></header><div className="sales-drawer-body">{children}</div>{footer && <footer>{footer}</footer>}</div>
+  return <dialog ref={ref} className="sales-drawer" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) { const box = event.currentTarget.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) close(); } }}>
+    <div className="sales-drawer-content" onChangeCapture={()=>{edited.current=true;}}><header><div><span className="sales-overline">{overline}</span><h2 id={titleId}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button autoFocus type="button" className="icon-button" onClick={close} aria-label="Закрыть просмотр"><X size={18}/></button></header><div className="sales-drawer-body">{children}</div>{footer && <footer>{footer}</footer>}</div>
   </dialog>;
 }

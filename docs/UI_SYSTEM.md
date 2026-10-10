@@ -10,6 +10,10 @@
 - **Surfaces:** 7 px controls, 9 px panels, borders before shadows, cards only for bounded working surfaces.
 - **Motion:** short state transitions only; reduced-motion respected.
 
+## Sales editing
+
+Requests, tenders and clients use read-only preview drawers, filled quick editors and the existing full cards with one editable block at a time. Save/cancel, retained unrelated data and version conflicts follow `docs/SALES_EDITING_CONTRACT.md`. Creation stays separate from editing.
+
 ## Navigation
 
 The target information architecture is declared once in `lib/core/navigation.mjs`. Every item has a canonical section, group and route. Modules marked `foundation` have a real baseline workspace describing their purpose, process, core fields, relations and next implementation scope. They are visible in demo and platform-administration contexts, remain capability-safe in the production context and contain no fake operations or demo records.
@@ -250,3 +254,9 @@ approval of every visual change. The 4 October scope is recorded in standard v1.
   and capabilities. They do not synchronize devices or substitute server records.
 - `main` remains production; `beta` and feature Preview are review environments.
   QA counts above describe dated iterations, not a guarantee about a newer release.
+
+## Sales record interactions — 2026-10-10
+
+Requests, clients and tenders share `SalesRecordTitle` (quick preview) and `SalesRecordActions` (Eye → preview, ArrowUpRight → full record). The action column is 88 px. Editing is explicit, prefilled and retains identity; creation remains separate. Compact editors use SalesDrawer; requests retain their detailed form. Browser-only demo copies are labeled and do not send business mutations. Missing demo records cannot be saved as empty replacements.
+
+Full sales records retain the existing entity layouts and canonical /requests/[id], /clients/[id], /tenders/[id] URLs. Browser demo overrides merge into these same layouts without replacing tabs, related records or detailed content with summary-only pages. Creation and explicit prefilled editing remain distinct.

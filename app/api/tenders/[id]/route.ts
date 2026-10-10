@@ -7,22 +7,28 @@ import {tenderStageLabel} from "@/lib/tenders/model";
 import {withTenant} from "@/lib/db/client";
 import {calculateTenderBidEconomics} from "@/lib/tenders/trading.mjs";
 
+import {assertEditVersion,EditConflictError} from "@/lib/commercial/edit-conflict";
+
+import {editChanges,tenderEditLabels} from "@/lib/commercial/edit-history";
+
 const nullableText=(max:number)=>z.string().trim().max(max).nullable().optional();
 const coreSchema=z.object({action:z.literal("core"),title:z.string().trim().min(3).max(300),customerName:nullableText(300),clientId:z.string().uuid().nullable().optional(),platform:nullableText(160),procedureNumber:nullableText(180),sourceUrl:z.string().url().max(2000).nullable().optional(),sourceName:nullableText(180),publicationDate:z.string().date().nullable().optional(),submissionDeadline:z.string().datetime({offset:true}).nullable().optional(),initialPrice:z.number().nonnegative().nullable().optional(),billingUnit:z.enum(["unknown","hour","shift","worker_month","unit","piecework","project","mixed"]),priority:z.enum(["low","normal","high"]),potential:z.enum(["low","medium","high"]),regionId:z.string().uuid().nullable().optional(),legalEntityId:z.string().uuid().nullable().optional(),nextActionText:nullableText(1000),nextActionAt:z.string().datetime({offset:true}).nullable().optional()});
 const analysisSchema=z.object({action:z.literal("analysis"),analysisSummary:nullableText(12000),conditions:z.record(z.string(),z.json())});
 const stageSchema=z.object({action:z.literal("stage"),stage:z.enum(["new","analysis","clarification","calculation","approval","preparation","submitted","awaiting_result","completed"]),decision:z.enum(["undecided","participate","needs_clarification","no_bid"]).optional(),result:z.enum(["won","lost","no_bid","cancelled","failed"]).nullable().optional(),noBidReasonCode:nullableText(80),noBidComment:nullableText(4000),resultReasonCode:nullableText(80),closeReason:nullableText(4000)});
 const submissionSchema=z.object({action:z.literal("submission"),finalBidValue:z.number().nonnegative().nullable().optional(),priceVatMode:z.enum(["unknown","with_vat","without_vat","not_applicable"]).optional(),bidReference:nullableText(500),submissionNote:nullableText(5000),checklist:z.array(z.object({id:z.string().max(100),label:z.string().trim().min(1).max(300),done:z.boolean()})).max(40),markSubmitted:z.boolean().optional()});
 const schema=z.discriminatedUnion("action",[coreSchema,analysisSchema,stageSchema,submissionSchema]);
-type ScopeRow={organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;stage:string;result:string|null;submittedAt:string|null;finalBidValue:number|string|null};
+type ScopeRow={saved?:Record<string,unknown>;updatedAt:string;organizationId:string;ownerUserId:string|null;createdByUserId:string;teamId:string|null;regionId:string|null;clientId:string|null;stage:string;result:string|null;submittedAt:string|null;finalBidValue:number|string|null};
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"sales.tender.edit");if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
-    const {id}=await params;const body=schema.parse(await request.json());
+    const {id}=await params;const raw=await request.json();const body=schema.parse(raw);const expectedUpdatedAt=z.string().optional().parse(raw.expectedUpdatedAt);
     const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
-      const [scope]=await tx<Array<ScopeRow>>`SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,result,submitted_at::text "submittedAt",final_bid_value "finalBidValue" FROM tenders WHERE id=${id}::uuid FOR UPDATE`;
+      const [scope]=await tx<Array<ScopeRow>>`SELECT updated_at::text "updatedAt",to_jsonb(tenders) saved,organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,result,submitted_at::text "submittedAt",final_bid_value "finalBidValue" FROM tenders WHERE id=${id}::uuid FOR UPDATE`;
       if(!scope)throw new Error("Тендер не найден");if(!canReadRow(actor.access,"sales.tender.edit",scope,actor))throw new AccessDeniedError("sales.tender.edit");
+      assertEditVersion(expectedUpdatedAt,scope.updatedAt);
+      const saved=scope.saved??{};const before:Record<string,unknown>={};const columns:Record<string,string>={customerName:"customer_name",procedureNumber:"procedure_number",sourceUrl:"source_url",sourceName:"source_name",publicationDate:"publication_date",submissionDeadline:"submission_deadline",initialPrice:"initial_price",billingUnit:"billing_unit",regionId:"region_id",legalEntityId:"legal_entity_id",nextActionText:"next_action_text",nextActionAt:"next_action_at",analysisSummary:"analysis_summary",conditions:"conditions_json"};for(const key of Object.keys(tenderEditLabels))before[key]=saved[columns[key]??key];const after:Record<string,unknown>={...before,...body};if(body.action==="analysis")after.conditions={...((before.conditions??{}) as Record<string,unknown>),...body.conditions};const changes=editChanges(before,after,tenderEditLabels);
       let summary="Тендер обновлён";
       if(body.action==="core"){
         await tx`UPDATE tenders SET title=${body.title},customer_name=${body.customerName??null},client_company_id=${body.clientId??null}::uuid,platform=${body.platform??null},procedure_number=${body.procedureNumber??null},source_url=${body.sourceUrl??null},source_name=${body.sourceName??null},publication_date=${body.publicationDate??null}::date,submission_deadline=${body.submissionDeadline??null}::timestamptz,initial_price=${body.initialPrice??null},billing_unit=${body.billingUnit},priority=${body.priority},potential=${body.potential},region_id=${body.regionId??null}::uuid,legal_entity_id=${body.legalEntityId??null}::uuid,next_action_text=${body.nextActionText??null},next_action_at=${body.nextActionAt??null}::timestamptz,updated_at=now() WHERE id=${id}::uuid`;summary="Обновлены основные данные тендера";
@@ -98,10 +104,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         }
         summary=body.markSubmitted?(shouldCreateInitialRound?"Тендер отмечен как поданный; начальная цена зафиксирована в истории торгов":"Тендер отмечен как поданный"):"Обновлена подготовка к подаче";
       }
-      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${id}::uuid,'updated',${summary})`;
+      await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${id}::uuid,'updated',${summary},${tx.json(JSON.parse(JSON.stringify({changes})))})`;
       return {id,action:body.action};
     });return NextResponse.json(result);
   }catch(error){
+    if(error instanceof EditConflictError)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные тендера",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});

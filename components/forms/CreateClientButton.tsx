@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, UserPlus } from "lucide-react";
+import {ContactFields} from "@/components/sales/ContactFields";
 import { SalesDrawer } from "@/components/sales/SalesUI";
 
 export type DemoClientDraft={
@@ -39,7 +40,7 @@ export function CreateClientButton({demo=false,onDemoCreate}:{demo?:boolean;onDe
     try{
       if(demo){
         onDemoCreate?.({name,legalName,inn,contactName,contactPhone,contactEmail});
-        close();
+        setOpen(false);setContactOpen(false);setError("");
         return;
       }
       const response=await fetch("/api/clients",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
@@ -77,13 +78,11 @@ export function CreateClientButton({demo=false,onDemoCreate}:{demo?:boolean;onDe
             {!contactOpen&&<button className="button" type="button" onClick={()=>setContactOpen(true)}><UserPlus size={14}/> Добавить контакт</button>}
           </div>
           {contactOpen&&<div className="client-contact-fields">
-            <label><span>Контактное лицо <b>*</b></span><input name="contactName" aria-label="Контактное лицо *" required placeholder="Имя и фамилия"/></label>
-            <label><span>Телефон</span><input name="contactPhone" type="tel" placeholder="+7 999 000-00-00"/></label>
-            <label><span>Эл. почта</span><input name="contactEmail" type="email" placeholder="name@company.ru"/></label>
+            <ContactFields showPosition={false} availableChannels={["phone","email"]} names={{fullName:"contactName",phone:"contactPhone",email:"contactEmail"}}/>
             <button className="client-contact-remove" type="button" onClick={()=>setContactOpen(false)}>Убрать контакт</button>
           </div>}
         </section>
-        {demo&&<p className="client-demo-note">Демонстрационный клиент появится только в текущем реестре и исчезнет после перезагрузки.</p>}
+        {demo&&<p className="client-demo-note">Демонстрационный клиент сохраняется только в этой вкладке браузера до её закрытия и не записывается в рабочую базу.</p>}
         {error&&<div className="form-error client-create-error" role="alert">{error}</div>}
       </form>
     </SalesDrawer>}
