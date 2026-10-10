@@ -23,11 +23,11 @@ export default async function RequestPage({
   const requestedTab = rawTab && ["overview","positions","calculations","proposals","approval","history"].includes(rawTab) ? rawTab : "overview";
   const actor = await requireActor();
   const editCapability = hasCapability(actor.access, "sales.request.edit");
-  const tab = requestedTab === "approval" && !editCapability ? "overview" : requestedTab;
 
   const request=await getCommercialRequest(actor,id);
   if(!request&&!actor.demo)notFound();
   const canEdit=Boolean(editCapability&&(!request||canReadRow(actor.access,"sales.request.edit",request,actor)));
+  const tab=requestedTab==="approval"&&!canEdit?"overview":requestedTab;
   const [intake, calculations, coverage, proposals, external, workflow, stages, workspaceOptions, board] = await Promise.all([
     request?getRequestIntake(actor, id):Promise.resolve(normalizeRequestIntake({})),
     hasCapability(actor.access, "calculation.scenario.read")
