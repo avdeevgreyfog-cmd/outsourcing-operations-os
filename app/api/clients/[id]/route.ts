@@ -46,7 +46,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       const nextRegion=assignmentAllowed?(body.regionId??null):current.regionId;
       const nextTeam=assignmentAllowed?(body.teamId??null):current.teamId;
 
-      if(assignmentAllowed&&nextOwner){
+      if(assignmentAllowed&&nextOwner&&nextOwner!==current.ownerUserId){
         const [member]=await tx<Array<{id:string}>>`SELECT user_id id FROM organization_memberships WHERE user_id=${nextOwner}::uuid AND status='active'`;
         if(!member)throw new Error("Ответственный не состоит в текущей организации");
       }

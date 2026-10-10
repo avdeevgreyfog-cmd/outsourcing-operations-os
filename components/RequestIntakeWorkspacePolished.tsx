@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { emptyRequestIntake, provisionKeys, type ProvisionKey, type RequestIntake } from "@/lib/commercial/request-intake";
-import type { RequestWorkflowMeta, RequestWorkspaceOptions, WorkspaceSpecialty } from "@/lib/commercial/request-workflow";
+import { emptyRequestIntake, normalizeRequestIntake, provisionKeys, type ProvisionKey, type RequestIntake } from "@/lib/commercial/request-intake";
+import type { RequestBoardRow, RequestWorkflowMeta, RequestWorkspaceOptions, WorkspaceSpecialty } from "@/lib/commercial/request-workflow";
 import { getDemoRequest, saveDemoRequest, type DemoRequestPayload } from "@/lib/commercial/demo-workspace-client";
 
 type ExistingRequest = {
@@ -14,7 +14,7 @@ type ExistingRequest = {
 };
 type RoleDraft = { id?:string; specialtyId:string; specialtyName:string; count:number; scheduleOverride:boolean; schedule:Record<string,unknown>; requirements:Record<string,unknown>; targetClientRate:number|null };
 type ImportPreview = { row:number; specialtyName:string; specialtyId:string; count:number; schedule:Record<string,unknown>; requirements:Record<string,unknown>; targetClientRate:number|null; errors:string[] };
-type Props = { options:RequestWorkspaceOptions; intake?:RequestIntake; request?:ExistingRequest; workflowMeta?:RequestWorkflowMeta; demo?:boolean; demoRequestId?:string };
+type Props = { options:RequestWorkspaceOptions; intake?:RequestIntake; request?:ExistingRequest; workflowMeta?:RequestWorkflowMeta; demo?:boolean; demoRequestId?:string; demoRequestBase?:RequestBoardRow };
 type SimpleProvider = "client"|"us"|"not_required"|"unknown";
 
 const sectionLabels = [
@@ -35,7 +35,8 @@ function formatRub(value:number|null){return value===null?"—":`${new Intl.Numb
 function normalizeProvider(value:string):SimpleProvider{return value==="client"?"client":value==="not_required"?"not_required":value==="unknown"?"unknown":"us";}
 function providerText(value:string){const provider=normalizeProvider(value);return provider==="client"?"Заказчик":provider==="us"?"Мы":provider==="not_required"?"Не требуется":"Не указано";}
 function legacyRule(intake:RequestIntake,key:ProvisionKey){return providerText(intake.provision[key].provider);}
-function normalizeLegacyIntake(value:RequestIntake):RequestIntake{
+function normalizeLegacyIntake(input:unknown):RequestIntake{
+  const value=normalizeRequestIntake(input);
   const provision={...value.provision};
   for(const key of provisionKeys)provision[key]={...provision[key],provider:normalizeProvider(provision[key].provider)};
   return {...value,provision,logistics:{...value.logistics,brigadierProvider:normalizeProvider(value.logistics.brigadierProvider)}};
@@ -55,7 +56,7 @@ function inferCity(address:string){
 }
 function emptyRole():RoleDraft{return {specialtyId:"",specialtyName:"",count:1,scheduleOverride:false,schedule:{},requirements:{experienceMode:"not_required",experienceMin:""},targetClientRate:null};}
 
-export function RequestIntakeWorkspacePolished({options,intake:initialIntake,request,workflowMeta,demo=false,demoRequestId}:Props){
+export function RequestIntakeWorkspacePolished({options,intake:initialIntake,request,workflowMeta,demo=false,demoRequestId,demoRequestBase}:Props){
   const router=useRouter();
   const fileRef=useRef<HTMLInputElement>(null);
   const [active,setActive]=useState<(typeof sectionLabels)[number][0]|"quick">("quick");
@@ -79,6 +80,8 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [loaded,setLoaded]=useState(!demo||!demoRequestId);
+  const [loadError,setLoadError]=useState("");
+  const editing=Boolean(request||demoRequestId);
   const [dirty,setDirty]=useState(false);
   const savedSnapshot=useRef<string|null>(null);
   const dirtyRef=useRef(false);
@@ -107,18 +110,30 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   useEffect(() => {
     if (!demo || !demoRequestId) return;
     const record = getDemoRequest(demoRequestId);
-    if (!record) { const timer=window.setTimeout(()=>setLoaded(true),0); return ()=>window.clearTimeout(timer); }
+    if (!record) {
+      const timer=window.setTimeout(()=>{
+        if(request?.id===demoRequestId)setLoaded(true);
+        else setLoadError("Не удалось загрузить заявку. Она отсутствует в демонстрационных данных этого браузера. Вернитесь в реестр и выберите существующую заявку.");
+      },0);
+      return ()=>window.clearTimeout(timer);
+    }
     const draft = record.payload;
+    if(!Array.isArray(draft.roles)||typeof draft.title!=="string"){
+      const timer=window.setTimeout(()=>setLoadError("Сохранённые данные заявки повреждены. Редактирование недоступно."),0);
+      return ()=>window.clearTimeout(timer);
+    }
     const timer = window.setTimeout(() => {
       setTitle(draft.title); setClientId(draft.clientId ?? ""); setSource(draft.source === "manual" ? "" : draft.source);
       setLocation(draft.location); setRegionId(draft.regionId ?? ""); setStartDate(draft.startDate ?? ""); setDurationText(draft.durationText ?? "");
       setVatMode(draft.vatMode ?? "with_vat"); setComments(draft.comments ?? ""); setOwnerUserId(draft.ownerUserId ?? options.currentUserId); setObserverUserIds(draft.observerUserIds ?? []);
-      setIntake(normalizeLegacyIntake(draft.intake as RequestIntake));
-      setRoles(draft.roles.map((role) => ({ id:role.id, specialtyId:role.specialtyId ?? "", specialtyName:role.specialtyName, count:role.count, scheduleOverride:Object.keys(role.schedule ?? {}).length > 0, schedule:role.schedule ?? {}, requirements:role.requirements ?? {}, targetClientRate:role.targetClientRate })));
+      setIntake(normalizeLegacyIntake(Object.keys(draft.intake??{}).length?draft.intake:initialIntake));
+      const draftIntake=normalizeRequestIntake(Object.keys(draft.intake??{}).length?draft.intake:initialIntake);
+      setAdvancedVolume(Boolean(draftIntake.volume.guaranteedHours||draftIntake.volume.guaranteedShifts||draftIntake.volume.startHeadcount));
+      setRoles(draft.roles.map((role,index) => ({ id:role.id??(request?.roles[index]?.specialty===role.specialtyName?request.roles[index].id:undefined), specialtyId:role.specialtyId ?? (request?.roles[index]?.specialty===role.specialtyName?request.roles[index].specialtyId:"") , specialtyName:role.specialtyName, count:role.count, scheduleOverride:Object.keys(role.schedule ?? {}).length > 0, schedule:role.schedule ?? {}, requirements:role.requirements ?? {}, targetClientRate:role.targetClientRate })));
       setLoaded(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [demo, demoRequestId, options.currentUserId]);
+  }, [demo, demoRequestId, options.currentUserId, request, initialIntake]);
 
   const totalHeadcount=useMemo(()=>roles.filter((role)=>role.specialtyName.trim()).reduce((sum,role)=>sum+(Number.isFinite(role.count)?role.count:0),0),[roles]);
   const region=options.regions.find((item)=>item.id===regionId);
@@ -137,6 +152,7 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   function setProvisionProvider(key:ProvisionKey,provider:SimpleProvider){updateIntake("provision",{...intake.provision,[key]:{...intake.provision[key],provider,cost:null,unit:""}});}
 
   async function save(){
+    if(!loaded||loadError||busy)return;
     setBusy(true);setError("");
     try{
       const resolvedPattern=intake.schedule.pattern==="custom"?intake.schedule.customPattern:intake.schedule.pattern;
@@ -149,9 +165,11 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
       };
       if(!payload.title||payload.title.length<3)throw new Error("Укажите название заявки");
       if (demo) {
-        const clientName = options.clients.find((item) => item.id === payload.clientId)?.name;
+        const clientName = payload.clientId?options.clients.find((item) => item.id === payload.clientId)?.name:"Без клиента";
         const ownerName = options.members.find((item) => item.id === payload.ownerUserId)?.name;
-        const saved = saveDemoRequest(payload as DemoRequestPayload, { id:demoRequestId ?? request?.id, clientName, ownerName, actorId:options.currentUserId });
+        const currentBase=getDemoRequest(demoRequestId??request?.id??"")?.board??demoRequestBase;
+        const base=currentBase?{...currentBase,region:options.regions.find((item)=>item.id===payload.regionId)?.name??null}:undefined;
+        const saved = saveDemoRequest(payload as DemoRequestPayload, { id:demoRequestId ?? request?.id, base, clientName, ownerName, actorId:options.currentUserId });
         dirtyRef.current=false;savedSnapshot.current=snapshot;router.push(`/requests?demo=${encodeURIComponent(saved.id)}`); router.refresh(); return;
       }
       const response=await fetch(request?`/api/requests/${request.id}/v2`:"/api/requests/v2",{method:request?"PATCH":"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
@@ -164,8 +182,10 @@ export function RequestIntakeWorkspacePolished({options,intake:initialIntake,req
   function applyImport(){const valid=importPreview.filter((row)=>row.errors.length===0);if(!valid.length)return;setRoles((current)=>[...current.filter((role)=>role.specialtyName.trim()),...valid.map((row)=>({specialtyId:row.specialtyId,specialtyName:row.specialtyName,count:row.count,scheduleOverride:Object.keys(row.schedule).length>0,schedule:row.schedule,requirements:row.requirements,targetClientRate:row.targetClientRate}))]);setImportOpen(false);setImportPreview([]);}
   function downloadTemplate(){const xml=excelTemplate();const blob=new Blob([xml],{type:"application/vnd.ms-excel;charset=utf-8"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="Шаблон_позиций_заявки.xls";link.click();URL.revokeObjectURL(url);}
 
+  if(!loaded)return <div className="request-v2-layout request-intake-unified-layout"><main className="request-v2-main"><section className="request-v2-section"><h2>{editing?"Редактирование заявки":"Новая заявка"}</h2>{loadError?<p role="alert">{loadError}</p>:<p role="status">Загружаю сохранённые данные заявки…</p>}<Link href="/requests" className="button">К реестру заявок</Link></section></main></div>;
+
   return <div className="request-v2-layout request-intake-unified-layout">
-    <aside className="request-v2-nav"><div className="request-v2-nav-summary"><strong>{request?"Редактирование заявки":"Новая заявка"}</strong><span>{totalHeadcount} чел. · {roles.filter((role)=>role.specialtyName.trim()).length} позиций</span></div><button type="button" aria-pressed={active==="quick"} className={active==="quick"?"active":""} onClick={()=>setActive("quick")}><span>↳</span>Быстрое заполнение</button>{sectionLabels.map(([code,label],index)=><button type="button" key={code} aria-pressed={active===code} className={active===code?"active":""} onClick={()=>setActive(code)}><span>{index+1}</span>{label}</button>)}</aside>
+    <aside className="request-v2-nav"><div className="request-v2-nav-summary"><strong>{editing?"Редактирование заявки":"Новая заявка"}</strong><span>{totalHeadcount} чел. · {roles.filter((role)=>role.specialtyName.trim()).length} позиций</span></div><button type="button" aria-pressed={active==="quick"} className={active==="quick"?"active":""} onClick={()=>setActive("quick")}><span>↳</span>Быстрое заполнение</button>{sectionLabels.map(([code,label],index)=><button type="button" key={code} aria-pressed={active===code} className={active===code?"active":""} onClick={()=>setActive(code)}><span>{index+1}</span>{label}</button>)}</aside>
     <main className="request-v2-main"><fieldset className="request-intake-fieldset" disabled={busy}>
       {error&&<div className="request-warning" role="alert"><strong>Проверьте данные.</strong> {error}</div>}
 

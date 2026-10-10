@@ -250,3 +250,7 @@ approval of every visual change. The 4 October scope is recorded in standard v1.
   and capabilities. They do not synchronize devices or substitute server records.
 - `main` remains production; `beta` and feature Preview are review environments.
   QA counts above describe dated iterations, not a guarantee about a newer release.
+
+## Sales record interactions — 2026-10-10
+
+Requests, clients and tenders share `SalesRecordTitle` (quick preview) and `SalesRecordActions` (Eye → preview, ArrowUpRight → full record). The action column is 88 px. Editing is explicit, prefilled and retains identity; creation remains separate. Compact editors use SalesDrawer; requests retain their detailed form. Browser-only demo copies are labeled and do not send business mutations. Missing demo records cannot be saved as empty replacements.

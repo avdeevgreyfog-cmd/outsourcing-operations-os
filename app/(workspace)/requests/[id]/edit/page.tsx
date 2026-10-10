@@ -1,10 +1,10 @@
 import { githubPagesStaticParams } from "@/lib/demo/static-params";
 import { notFound, redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
-import { hasCapability } from "@/lib/core/access.mjs";
+import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { getCommercialRequest } from "@/lib/commercial/service";
 import { getRequestIntake } from "@/lib/commercial/request-intake-server";
-import { getRequestWorkflowMeta, getRequestWorkspaceOptions } from "@/lib/commercial/request-workflow-server";
+import { getRequestWorkflowMeta, getRequestWorkspaceOptions, listRequestBoard } from "@/lib/commercial/request-workflow-server";
 import { getRateMemorySpecialtyStats, mergeRateStats } from "@/lib/commercial/rate-references";
 import { RequestIntakeFinalShell } from "@/components/RequestIntakeFinalShell";
 import { PageHeader } from "@/components/UI";
@@ -21,6 +21,8 @@ export default async function EditRequestPage({ params }: { params: Promise<{ id
     getCommercialRequest(actor,id), getRequestWorkspaceOptions(actor), getRequestIntake(actor,id), getRequestWorkflowMeta(actor,id),
   ]);
   if (!request) notFound();
+  if (!canReadRow(actor.access,"sales.request.edit",request,actor) || (!actor.demo && (request.archivedAt || ["accepted","launched"].includes(request.status)))) redirect(`/requests/${id}`);
+  const demoRequestBase=actor.demo?(await listRequestBoard(actor)).find((row)=>row.id===id):undefined;
   let options=baseOptions;
   if (!actor.demo && hasCapability(actor.access,"calculation.rate_reference.read")) {
     const memory=await getRateMemorySpecialtyStats(actor);
@@ -28,6 +30,6 @@ export default async function EditRequestPage({ params }: { params: Promise<{ id
   }
   return <>
     <PageHeader eyebrow="Коммерция → Заявки" title={`Редактирование · ${request.title}`} subtitle="Общие условия задаются один раз; исключения и требования уточняются внутри конкретных позиций." breadcrumbs={[{ label:"Коммерция"},{label:"Заявки",href:"/requests"},{label:request.title,href:`/requests/${id}`},{label:"Редактирование"}]}/>
-    <RequestIntakeFinalShell request={request} options={options} intake={intake} workflowMeta={workflowMeta} demo={actor.demo} demoRequestId={actor.demo ? id : undefined}/>
+    <RequestIntakeFinalShell request={request} options={options} intake={intake} workflowMeta={workflowMeta} demo={actor.demo} demoRequestId={actor.demo ? id : undefined} demoRequestBase={demoRequestBase}/>
   </>;
 }

@@ -16,6 +16,7 @@ type Props = {
   canCreate: boolean;
   canConfigure: boolean;
   canEdit: boolean;
+  editableIds?: string[];
   now: number;
   demo?: boolean;
   preferenceScope?: string;

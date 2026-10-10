@@ -22,8 +22,15 @@ const channelOptions=[
 ] as const;
 
 export function ClientEditButton({client,options}:{client:ClientRow;options:ClientEditOptions}){
-  const router=useRouter();
   const [open,setOpen]=useState(false);
+  return <>
+    <button className="button" type="button" onClick={()=>setOpen(true)}><Pencil size={15}/> Редактировать</button>
+    {open&&<ClientEditDrawer client={client} options={options} onClose={()=>setOpen(false)}/>}
+  </>;
+}
+
+export function ClientEditDrawer({client,options,onClose}:{client:ClientRow;options:ClientEditOptions;onClose:()=>void}){
+  const router=useRouter();
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -52,15 +59,13 @@ export function ClientEditButton({client,options}:{client:ClientRow;options:Clie
       });
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось сохранить клиента");
-      setOpen(false);router.refresh();
+      onClose();router.refresh();
     }catch(cause){setError(cause instanceof Error?cause.message:"Не удалось сохранить клиента")}
     finally{setBusy(false)}
   }
 
-  return <>
-    <button className="button" type="button" onClick={()=>{setError("");setOpen(true)}}><Pencil size={15}/> Редактировать</button>
-    {open&&<SalesDrawer title="Редактировать клиента" subtitle="Реквизиты и ответственность клиента. Связанные заявки, КП и объекты не переписываются." overline="Клиенты" onClose={()=>!busy&&setOpen(false)}
-      footer={<><button className="button" type="button" disabled={busy} onClick={()=>setOpen(false)}>Отмена</button><button className="button primary" type="submit" form="client-edit-form" disabled={busy}>{busy?"Сохраняю…":"Сохранить"}</button></>}>
+  return <SalesDrawer title="Редактировать клиента" subtitle="Реквизиты и ответственность клиента. Связанные заявки, КП и объекты не переписываются." overline="Клиенты" onClose={()=>!busy&&onClose()}
+      footer={<><button className="button" type="button" disabled={busy} onClick={onClose}>Отмена</button><button className="button primary" type="submit" form="client-edit-form" disabled={busy}>{busy?"Сохраняю…":"Сохранить"}</button></>}>
       <form id="client-edit-form" className="client-create-form client-create-form-unified client-edit-form" onSubmit={submit}>
         <section className="client-form-section">
           <div className="client-form-section-head"><strong>Основные данные</strong><span>Рабочие реквизиты карточки клиента.</span></div>
@@ -72,14 +77,13 @@ export function ClientEditButton({client,options}:{client:ClientRow;options:Clie
         </section>
         {options.canAssign&&<section className="client-form-section">
           <div className="client-form-section-head"><strong>Ответственность</strong><span>Изменение владельца и организационной привязки доступно только с расширенными правами.</span></div>
-          <label><span>Ответственный</span><select name="ownerUserId" defaultValue={client.ownerUserId??""}><option value="">Не назначен</option>{options.members.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label><span>Регион</span><select name="regionId" defaultValue={client.regionId??""}><option value="">Не указан</option>{options.regions.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-          <label><span>Команда</span><select name="teamId" defaultValue={client.teamId??""}><option value="">Не назначена</option>{options.teams.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+          <label><span>Ответственный</span><select name="ownerUserId" defaultValue={client.ownerUserId??""}><option value="">Не назначен</option>{client.ownerUserId&&!options.members.some(item=>item.id===client.ownerUserId)&&<option value={client.ownerUserId}>{client.ownerName??"Текущий ответственный"}</option>}{options.members.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+          <label><span>Регион</span><select name="regionId" defaultValue={client.regionId??""}><option value="">Не указан</option>{client.regionId&&!options.regions.some(item=>item.id===client.regionId)&&<option value={client.regionId}>{client.region??"Текущий регион"}</option>}{options.regions.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+          <label><span>Команда</span><select name="teamId" defaultValue={client.teamId??""}><option value="">Не назначена</option>{client.teamId&&!options.teams.some(item=>item.id===client.teamId)&&<option value={client.teamId}>{client.teamName??"Текущая команда"}</option>}{options.teams.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
         </section>}
         {error&&<div className="form-error client-create-error" role="alert">{error}</div>}
       </form>
-    </SalesDrawer>}
-  </>;
+    </SalesDrawer>;
 }
 
 export function ClientContactEditButton({clientId,contact}:{clientId:string;contact?:ClientContactRow}){

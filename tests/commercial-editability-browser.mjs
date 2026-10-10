@@ -102,17 +102,18 @@ try{
       await page.getByLabel("Количество",{exact:true}).fill("12");
       await page.getByRole("button",{name:"Сохранить черновик",exact:true}).click();
       await page.waitForURL(/\/requests\?demo=/);
-      await page.getByRole("link",{name:"QA Заявка",exact:true}).waitFor();
+      await page.getByRole("button",{name:"QA Заявка",exact:true}).waitFor();
       await page.reload({waitUntil:"networkidle"});
-      await page.getByRole("link",{name:"QA Заявка",exact:true}).click();
+      await page.getByRole("button",{name:"QA Заявка",exact:true}).click();
+      await page.getByRole("dialog").getByRole("link",{name:"Редактировать",exact:true}).click();
       await page.getByLabel("Количество",{exact:true}).waitFor();
       await page.getByLabel("Название заявки",{exact:true}).fill("QA Заявка изменена");
       await page.getByLabel("Количество",{exact:true}).fill("14");
       await screenshot(page,"request-edit-1440-light");
       await page.getByRole("button",{name:"Сохранить изменения",exact:true}).click();
       await page.waitForURL(/\/requests\?demo=/);
-      await page.getByRole("link",{name:"QA Заявка изменена",exact:true}).waitFor();
-      const row=page.locator(".sales-request-table tbody tr").filter({has:page.getByRole("link",{name:"QA Заявка изменена",exact:true})});
+      await page.getByRole("button",{name:"QA Заявка изменена",exact:true}).waitFor();
+      const row=page.locator(".sales-request-table tbody tr").filter({has:page.getByRole("button",{name:"QA Заявка изменена",exact:true})});
       await row.getByText("Комплектовщик · 14",{exact:true}).waitFor();
     }finally{await context.close();}
   }

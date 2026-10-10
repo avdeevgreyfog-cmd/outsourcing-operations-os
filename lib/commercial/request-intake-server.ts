@@ -14,32 +14,48 @@ import {
   type RequestIntake,
 } from "@/lib/commercial/request-intake";
 
-function demoIntake(request: NonNullable<Awaited<ReturnType<typeof getCommercialRequest>>>): RequestIntake {
-  const schedule = request.schedule ?? {};
-  const pattern = typeof schedule.pattern === "string"
-    ? schedule.pattern
-    : typeof schedule.label === "string"
-      ? schedule.label
-      : "";
+type IntakeSourceRequest = Pick<NonNullable<Awaited<ReturnType<typeof getCommercialRequest>>>,
+  "client"|"location"|"schedule"|"lunchPaid"|"housingRule"|"travelRule"|"shuttleRule"|"ppeRule"|"medicalRule"|"citizenshipRule"|"toolsRule">;
+
+function record(value:unknown):Record<string,unknown>{return value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+function legacyProvision(value:string|null){
+  const label=value?.trim()??"";
+  const providers:Record<string,string>={client:"client",us:"us",not_required:"not_required",unknown:"unknown","заказчик":"client","мы":"us","не требуется":"not_required","уточняется":"unknown","не указано":"unknown"};
+  const provider=providers[label.toLowerCase()];
+  return {provider:provider??"unknown",comment:provider?"":label};
+}
+
+// Legacy conditions remain a fallback only. Explicit stored values, including false,
+// null and empty strings, take precedence over the older request columns.
+export function normalizeStoredRequestIntake(value:unknown,request:IntakeSourceRequest):RequestIntake{
+  const stored=record(value);
+  const schedule=request.schedule??{};
+  const legacyPattern=typeof schedule.pattern==="string"?schedule.pattern:typeof schedule.label==="string"?schedule.label:"";
+  const knownPattern=["","5/2","6/1","7/0","2/2","3/3","rotation","on_demand","custom"].includes(legacyPattern);
+  const ppe=(request.ppeRule??"").split(" / ");
+  const medical=(request.medicalRule??"").split(" / ");
+  const fallbackProvision={housing:legacyProvision(request.housingRule),travel:legacyProvision(request.travelRule),shuttle:legacyProvision(request.shuttleRule),workwear:legacyProvision(ppe[0]??null),ppe:legacyProvision(ppe[1]??ppe[0]??null),medical:legacyProvision(medical[0]??null),medbook:legacyProvision(medical[1]??medical[0]??null),tools:legacyProvision(request.toolsRule)};
+  const suppliedProvision=record(stored.provision);
+  const provision:Record<string,unknown>={...suppliedProvision};
+  for(const [key,fallback] of Object.entries(fallbackProvision))provision[key]={...fallback,...record(suppliedProvision[key])};
+  const citizenship=(request.citizenshipRule??"").split(/[,;]\s*/).filter(Boolean);
+  const knownCategories=citizenship.every((item)=>["rf","eaeu","foreign_with_docs","client_rules"].includes(item));
   return normalizeRequestIntake({
-    companyName: request.client,
-    object: { siteName: request.location, city: request.location },
-    schedule: {
-      pattern,
-      presenceHours: typeof schedule.presenceHours === "number" ? schedule.presenceHours : null,
-      paidHours: typeof schedule.paidHours === "number" ? schedule.paidHours : null,
-      lunchPaid: request.lunchPaid ?? false,
-    },
+    companyName:request.client,...stored,
+    object:{siteName:request.location,...record(stored.object)},
+    schedule:{...schedule,pattern:knownPattern?legacyPattern:"custom",customPattern:knownPattern?"":legacyPattern,lunchPaid:request.lunchPaid??false,...record(stored.schedule)},
+    provision,
+    compliance:{workerCategories:knownCategories?citizenship:[],comment:knownCategories?"":request.citizenshipRule??"",...record(stored.compliance)},
   });
 }
 
 export async function getRequestIntake(actor: Actor, requestId: string): Promise<RequestIntake> {
   const request = await getCommercialRequest(actor, requestId);
   if (!request) throw new Error("Заявка не найдена");
-  if (actor.demo) return demoIntake(request);
+  if (actor.demo) return normalizeStoredRequestIntake({},request);
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [row] = await sql<Array<{ intake: unknown }>>`SELECT intake_json intake FROM requests WHERE id=${requestId}::uuid`;
-    return normalizeRequestIntake(row?.intake);
+    return normalizeStoredRequestIntake(row?.intake,request);
   });
 }
 

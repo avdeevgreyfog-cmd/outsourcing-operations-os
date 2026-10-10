@@ -39,7 +39,7 @@ export function CreateClientButton({demo=false,onDemoCreate}:{demo?:boolean;onDe
     try{
       if(demo){
         onDemoCreate?.({name,legalName,inn,contactName,contactPhone,contactEmail});
-        close();
+        setOpen(false);setContactOpen(false);setError("");
         return;
       }
       const response=await fetch("/api/clients",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
@@ -83,7 +83,7 @@ export function CreateClientButton({demo=false,onDemoCreate}:{demo?:boolean;onDe
             <button className="client-contact-remove" type="button" onClick={()=>setContactOpen(false)}>Убрать контакт</button>
           </div>}
         </section>
-        {demo&&<p className="client-demo-note">Демонстрационный клиент появится только в текущем реестре и исчезнет после перезагрузки.</p>}
+        {demo&&<p className="client-demo-note">Демонстрационный клиент сохраняется только в этой вкладке браузера до её закрытия и не записывается в рабочую базу.</p>}
         {error&&<div className="form-error client-create-error" role="alert">{error}</div>}
       </form>
     </SalesDrawer>}

@@ -4,11 +4,14 @@ import Link from "next/link";
 import {Fragment,useEffect,useMemo,useRef,useState,type FormEvent,type ReactNode} from "react";
 import {useRouter} from "next/navigation";
 import {CalendarClock,ChartNoAxesCombined,Columns3,Download,LayoutList,Pencil,Plus,X,ChevronRight,ArrowDownUp,ArrowUpRight,ExternalLink,RotateCcw} from "lucide-react";
+import {DEMO_TENDER_PREVIEW_PREFIX,loadDemoTenderSnapshot,saveDemoTenderSnapshot} from "@/components/sales/DemoTenderPreview";
+import {SalesRecordActions,SalesRecordTitle} from "@/components/sales/SalesRecordActions";
 import {SalesDrawer,SalesEmpty,SalesSegments} from "@/components/sales/SalesUI";
 import {TenderRegistryControls,useTenderRegistryPreferences} from "@/components/sales/TenderRegistryControls";
 import {HorizontalScrollDock} from "@/components/registry/HorizontalScrollDock";
 import {orderedRegistryColumns,registryPinnedOffset,registryWidth} from "@/lib/ui/registry-layout";
 import {tenderColumns,tenderCustomerKey,type TenderColumnId,type TenderGroupId} from "@/lib/tenders/registry";
+import {tenderDateTimeInput,tenderDateTimeIso} from "@/lib/tenders/datetime";
 import type {TenderOptions,TenderRow} from "@/lib/tenders/service";
 import type {TenderAnalyticsData} from "@/lib/tenders/analytics";
 import type {TenderAnalyticsMetricPreference} from "@/lib/tenders/analytics-metric-registry";
@@ -23,7 +26,7 @@ type View="list"|"board"|"analytics";
 function formatDate(value:string|null){
   if(!value)return "—";
   const date=new Date(value);
-  return Number.isNaN(date.getTime())?value:date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  return Number.isNaN(date.getTime())?value:date.toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Moscow"});
 }
 function deadlineClass(key:string){return key==="overdue"||key==="today"?"danger":key==="urgent"?"warn":"neutral";}
 function isClientDemoRow(row:TenderRow){return row.id.startsWith("sample-user-")||row.id.startsWith("demo-local-");}
@@ -103,14 +106,12 @@ function TenderStatus({row}:{row:TenderRow}) {
   return <span className={`tender-status tender-status-${tone}`}><i aria-hidden="true"/>{row.stage==="completed"?(row.result?tenderResultLabels[row.result]??"Результат уточняется":"Завершён"):tenderStages.find(stage=>stage.code===row.stage)?.label??"Этап уточняется"}</span>;
 }
 function sourceHref(value:string|null){try {const url=new URL(value??"");return ["http:","https:"].includes(url.protocol)?url.href:null;}catch{return null;}}
-function TenderTitle({row}:{row:TenderRow}) {
-  return isClientDemoRow(row)?<strong className="cell-title" title={row.title}>{row.title}</strong>:<Link href={`/tenders/${row.id}`} className="cell-title" title={row.title}>{row.title}</Link>;
-}
 const numeric=(value:unknown)=>value===null||value===undefined||value===""?null:Number.isFinite(Number(value))?Number(value):null;
 const dateNumber=(value:string|null)=>value&&Number.isFinite(Date.parse(value))?Date.parse(value):null;
-function inputDateTime(value:string|null){if(!value)return "";const date=new Date(value);if(Number.isNaN(date.getTime()))return "";const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,16);}
+function inputDateTime(value:string|null){return tenderDateTimeInput(value);}
 function inputDate(value:string|null){if(!value)return "";const date=new Date(value);return Number.isNaN(date.getTime())?"":date.toISOString().slice(0,10);}
-function isoDateTime(value:string){if(!value)return null;const date=new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString();}
+function isoDateTime(value:string,original?:string|null){return tenderDateTimeIso(value,original);}
+
 
 export function TendersWorkspace({rows,options,analytics,metricPreferences,canConfigureAnalytics,demo,canCreate,canImport,canEdit,canSubmit=false,editableIds=[],preferenceScope,now,initialView="list"}: {
   rows:TenderRow[];options:TenderOptions;analytics:TenderAnalyticsData;metricPreferences:TenderAnalyticsMetricPreference[];canConfigureAnalytics:boolean;
@@ -125,6 +126,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
   const [busyId,setBusyId]=useState<string|null>(null);
   const [error,setError]=useState("");
   const [selectedId,setSelectedId]=useState<string|null>(null);
+  const snapshotScope=preferenceScope.split(":").slice(0,3).join(":");
   const [demoEditing,setDemoEditing]=useState<TenderRow|null>(null);
   const [collapsedGroups,setCollapsedGroups]=useState<string[]>([]);
   const tableRef=useRef<HTMLDivElement>(null),boardRef=useRef<HTMLDivElement>(null);
@@ -132,29 +134,46 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
   useEffect(()=>{let cancelled=false;queueMicrotask(()=>{if(!cancelled)setView(initialView);});return()=>{cancelled=true;};},[initialView]);
   useEffect(()=>{
     if(!demo)return;
-    const raw=window.sessionStorage.getItem(DEMO_TENDER_STORAGE_KEY);
+    let raw:string|null=null;
+    try{raw=window.sessionStorage.getItem(DEMO_TENDER_STORAGE_KEY);}catch{return;}
     if(!raw)return;
-    window.sessionStorage.removeItem(DEMO_TENDER_STORAGE_KEY);
     let cancelled=false;
     queueMicrotask(()=>{
       if(cancelled)return;
       try{
-        const draft=JSON.parse(raw) as TenderCreateDraft;
-        const candidate=toDemoCreatedRow(draft,options);
+        const draft=JSON.parse(raw!) as TenderCreateDraft;
+        if(window.sessionStorage.getItem(DEMO_TENDER_STORAGE_KEY)===raw)window.sessionStorage.removeItem(DEMO_TENDER_STORAGE_KEY);
+        const candidate=toDemoCreatedRow(draft,options);if(!saveDemoTenderSnapshot(snapshotScope,candidate))setError("Не удалось сохранить демонстрационную карточку в браузере.");
         setLocalRows(current=>current.some(row=>uniqueKey(row)===uniqueKey(candidate))?current:[candidate,...current]);
       }catch{
         setError("Не удалось восстановить демонстрационный тендер после создания.");
       }
     });
     return()=>{cancelled=true;};
-  },[demo,options]);
+  },[demo,options,snapshotScope]);
+  useEffect(()=>{
+    if(!demo)return;
+    const params=new URLSearchParams(window.location.search);
+    const editId=params.get("demoEdit");
+    const stored:TenderRow[]=[];
+    try{const prefix=`${DEMO_TENDER_PREVIEW_PREFIX}${snapshotScope}:`;for(let i=0;i<sessionStorage.length;i++){const key=sessionStorage.key(i);if(key?.startsWith(prefix)){const row=loadDemoTenderSnapshot(snapshotScope,key.slice(prefix.length));if(row)stored.push(row);}}}catch{/* Storage is optional in demo mode. */}
+    const editRow=editId?loadDemoTenderSnapshot(snapshotScope,editId):null;
+    const timer=window.setTimeout(()=>{
+      setLocalRows(current=>[...current,...stored.filter(row=>!current.some(item=>item.id===row.id))]);
+      if(editRow&&canEdit){setLocalRows(current=>[editRow,...current.filter(row=>row.id!==editRow.id)]);setDemoEditing(editRow);}
+      if(editId){params.delete("demoEdit");window.history.replaceState(null,"",`/tenders${params.size?`?${params}`:""}`);}
+    },0);
+    return()=>window.clearTimeout(timer);
+  },[demo,rows,snapshotScope,canEdit]);
+  function tenderHref(row:TenderRow){return demo&&(isClientDemoRow(row)||localRows.some(item=>item.id===row.id))?`/tenders/new?preview=${encodeURIComponent(row.id)}`:`/tenders/${row.id}`;}
+  function snapshot(row:TenderRow){if(demo&&!saveDemoTenderSnapshot(snapshotScope,row))setError("Браузер не разрешает сохранить демонстрационную карточку для перехода. Быстрый просмотр остаётся доступен.");}
   const items=useMemo(()=>{if(!demo)return rows;const overrides=new Set(localRows.map(row=>row.id));return [...localRows,...rows.filter(row=>!overrides.has(row.id))]},[demo,localRows,rows]);
   const editable=new Set(editableIds);
   const selected=items.find(row=>row.id===selectedId);
   const currentDate=useMemo(()=>new Date(now),[now]);
   function addDemoRows(imported:TenderImportRow[]):TenderImportResult {
     const keys=new Set(items.map(uniqueKey));const created:TenderRow[]=[];let skipped=0;
-    for(const item of imported){const candidate=toDemoRow(item);const key=uniqueKey(candidate);if(keys.has(key)){skipped++;continue;}keys.add(key);created.push(candidate);}
+    for(const item of imported){const candidate=toDemoRow(item);const key=uniqueKey(candidate);if(keys.has(key)){skipped++;continue;}keys.add(key);snapshot(candidate);created.push(candidate);}
     setLocalRows(current=>[...created,...current]);return {imported:created.length,skipped};
   }
   function saveDemoEdit(event:FormEvent<HTMLFormElement>){
@@ -168,7 +187,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       sourceUrl:String(fd.get("sourceUrl")??"").trim()||null,
       sourceName:String(fd.get("sourceName")??"").trim()||null,
       publicationDate:String(fd.get("publicationDate")??"").trim()||null,
-      submissionDeadline:isoDateTime(String(fd.get("submissionDeadline")??"")),
+      submissionDeadline:isoDateTime(String(fd.get("submissionDeadline")??""),demoEditing.submissionDeadline),
       initialPrice:initialPriceRaw?Number(initialPriceRaw):null,
       stage:String(fd.get("stage")??demoEditing.stage) as TenderRow["stage"],
       decision:String(fd.get("decision")??demoEditing.decision) as TenderRow["decision"],
@@ -178,7 +197,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       analysisSummary:String(fd.get("analysisSummary")??"").trim()||null,
       updatedAt:new Date().toISOString(),
     };
-    setLocalRows(current=>[next,...current.filter(row=>row.id!==next.id)]);setDemoEditing(null);setSelectedId(next.id);
+    snapshot(next);setLocalRows(current=>[next,...current.filter(row=>row.id!==next.id)]);setDemoEditing(null);setSelectedId(next.id);
   }
   const filtered=useMemo(()=>{
     const result=items.filter(row=>{
@@ -233,7 +252,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
   function renderCell(row:TenderRow,column:TenderColumnId):ReactNode {
     const deadline=tenderDeadlineState(row.submissionDeadline,currentDate);
     switch(column){
-      case "identity":return <><TenderTitle row={row}/><span className="cell-sub">{[row.platform,row.procedureNumber].filter(Boolean).join(" · ")||"Площадка не указана"}</span></>;
+      case "identity":return <><SalesRecordTitle title={row.title} onPreview={()=>setSelectedId(row.id)}/><span className="cell-sub">{[row.platform,row.procedureNumber].filter(Boolean).join(" · ")||"Площадка не указана"}</span></>;
       case "customer":return <><span title={row.customer}>{row.customer}</span><span className="cell-sub">{row.sourceName??"Источник не указан"}</span></>;
       case "commerce":return <><strong>{numeric(row.initialPrice)===null?"Цена не указана":rub(row.initialPrice!)}</strong><span className="cell-sub">{tenderBillingLabels[row.billingUnit]??"Формат уточняется"} · {tenderPotentialLabels[row.potential]??"Потенциал уточняется"}</span></>;
       case "deadline":return <><strong>{formatDate(row.submissionDeadline)}</strong><span className="cell-sub">{row.roleCount?`Позиции: ${row.roleCount}`:"Позиции не разобраны"}{row.calculationCount?` · расчётов: ${row.calculationCount}`:""}</span></>;
@@ -249,7 +268,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
   }
   function renderRows(groupRows:TenderRow[],level=0,path:string[]=[]):ReactNode {
     const field:TenderGroupId=level===0?settings.group:level===1?settings.subgroup:"none";
-    if(field==="none")return groupRows.map(row=><tr key={row.id}>{columns.map(column=><td key={column.id} style={pinnedStyle(column.id)} className={settings.pinned.includes(column.id)?"registry-pinned-cell":""}><div className="requests-cell-content">{renderCell(row,column.id)}</div></td>)}<td><button type="button" className="icon-button sales-preview-button" aria-label={`Просмотр: ${row.title}`} onClick={()=>setSelectedId(row.id)}><ArrowUpRight size={16}/></button></td></tr>);
+    if(field==="none")return groupRows.map(row=><tr key={row.id}>{columns.map(column=><td key={column.id} style={pinnedStyle(column.id)} className={settings.pinned.includes(column.id)?"registry-pinned-cell":""}><div className="requests-cell-content">{renderCell(row,column.id)}</div></td>)}<td><SalesRecordActions title={row.title} onPreview={()=>setSelectedId(row.id)} href={tenderHref(row)} onOpen={()=>snapshot(row)}/></td></tr>);
     const groups=new Map<string,{label:string;rows:TenderRow[]}>();
     for(const row of groupRows){const key=field==="owner"?row.ownerUserId??"unassigned":field==="customer"?tenderCustomerKey(row):field==="platform"?row.platform??"none":field==="decision"?row.decision:row.stage;
       const label=field==="owner"?row.owner??"Не назначен":field==="customer"?row.customer:field==="platform"?row.platform??"Площадка не указана":field==="decision"?tenderDecisionLabels[row.decision]??"Уточняется":tenderStages.find(stage=>stage.code===row.stage)?.label??"Этап уточняется";
@@ -262,25 +281,25 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
       <SalesSegments<View> label="Вид тендеров" value={view} variant="navigation" onChange={value=>{setView(value);router.replace(value==="list"?"/tenders":`/tenders?view=${value}`,{scroll:false});}} items={[{value:"list",label:"Таблица",icon:<LayoutList size={15}/>},{value:"board",label:"Доска",icon:<Columns3 size={15}/>},{value:"analytics",label:"Аналитика",icon:<ChartNoAxesCombined size={15}/>}]}/>
       <div className="sales-toolbar-actions"><button className="button" type="button" onClick={()=>void exportExcel()}><Download size={14}/> Выгрузить Excel</button>{canImport&&<TenderImportPanel canImport={canImport} demo={demo} onDemoImport={addDemoRows}/>}{canCreate&&<Link className="button primary" href="/tenders/new"><Plus size={14}/> Добавить тендер</Link>}</div>
     </div>
-    {demo&&<p className="tender-demo-notice" role="note">Демонстрационные данные. Добавление, импорт и редактирование доступны для проверки интерфейса; изменения исчезнут после перезагрузки. В аналитике локальные изменения не учитываются.</p>}
+    {demo&&<p className="tender-demo-notice" role="note">Демонстрационные данные. Добавление, импорт и редактирование доступны для проверки интерфейса; локальные изменения не записываются в рабочую базу. В аналитике локальные изменения не учитываются.</p>}
     {error&&<div className="inline-message danger" role="alert">{error}<button className="icon-button" aria-label="Скрыть ошибку" onClick={()=>setError("")}><X size={15}/></button></div>}
     {view!=="analytics"&&<>
       <TenderRegistryControls {...preferences} rows={items} options={options} query={query} onQuery={setQuery} onExpandGroups={()=>setCollapsedGroups([])} board={view==="board"}/>
       <div className="sales-results" aria-live="polite">Показано {filtered.length}{hasFilters&&<button className="button" onClick={resetFilters}><RotateCcw size={13}/> Сбросить фильтры</button>}</div>
-      {!filtered.length?<SalesEmpty title="Тендеры не найдены" text={hasFilters?"Измените условия поиска или сбросьте фильтры.":"В выбранном виде пока нет тендеров."} onReset={hasFilters?resetFilters:undefined}/>:view==="list"?<div key="tender-table" ref={tableRef} className="sales-table-wrap"><table className="data-table sales-request-table tender-table" style={{width:52+columns.reduce((sum,column)=>sum+columnWidth(column.id),0)}}><colgroup>{columns.map(column=><col key={column.id} style={{width:columnWidth(column.id)}}/>)}<col style={{width:52}}/></colgroup><thead><tr>{columns.map(column=><th key={column.id} scope="col" aria-label={column.label} style={pinnedStyle(column.id)} className={settings.pinned.includes(column.id)?"registry-pinned-cell":""} aria-sort={settings.sort===column.id?settings.direction==="asc"?"ascending":"descending":"none"}><button className="requests-column-sort" type="button" onClick={()=>update({sort:column.id,direction:settings.sort===column.id&&settings.direction==="asc"?"desc":"asc"})}><span>{column.label}</span><ArrowDownUp size={12}/></button><span className="requests-column-resize" role="separator" aria-label={`Ширина: ${column.label}`} aria-orientation="vertical" aria-valuemin={110} aria-valuemax={480} aria-valuenow={columnWidth(column.id)} tabIndex={0} onPointerDown={event=>{event.preventDefault();resizing.current={id:column.id,x:event.clientX,width:columnWidth(column.id)};event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{const drag=resizing.current;if(drag?.id===column.id)update({widths:{...settings.widths,[column.id]:registryWidth(drag.width+event.clientX-drag.x)}});}} onPointerUp={()=>{resizing.current=null;}} onPointerCancel={()=>{resizing.current=null;}} onLostPointerCapture={()=>{resizing.current=null;}} onKeyDown={event=>{if(["ArrowLeft","ArrowRight"].includes(event.key)){event.preventDefault();update({widths:{...settings.widths,[column.id]:registryWidth(columnWidth(column.id)+(event.key==="ArrowLeft"?-10:10))}});}}}/></th>)}<th scope="col"><span className="sales-sr-only">Просмотр</span></th></tr></thead><tbody>{renderRows(filtered)}</tbody></table></div>:<div key="tender-board" ref={boardRef} className="sales-board requests-board tender-board" aria-label="Доска тендеров">{stages.map(stage=>{
+      {!filtered.length?<SalesEmpty title="Тендеры не найдены" text={hasFilters?"Измените условия поиска или сбросьте фильтры.":"В выбранном виде пока нет тендеров."} onReset={hasFilters?resetFilters:undefined}/>:view==="list"?<div key="tender-table" ref={tableRef} className="sales-table-wrap"><table className="data-table sales-request-table tender-table" style={{width:88+columns.reduce((sum,column)=>sum+columnWidth(column.id),0)}}><colgroup>{columns.map(column=><col key={column.id} style={{width:columnWidth(column.id)}}/>)}<col style={{width:88}}/></colgroup><thead><tr>{columns.map(column=><th key={column.id} scope="col" aria-label={column.label} style={pinnedStyle(column.id)} className={settings.pinned.includes(column.id)?"registry-pinned-cell":""} aria-sort={settings.sort===column.id?settings.direction==="asc"?"ascending":"descending":"none"}><button className="requests-column-sort" type="button" onClick={()=>update({sort:column.id,direction:settings.sort===column.id&&settings.direction==="asc"?"desc":"asc"})}><span>{column.label}</span><ArrowDownUp size={12}/></button><span className="requests-column-resize" role="separator" aria-label={`Ширина: ${column.label}`} aria-orientation="vertical" aria-valuemin={110} aria-valuemax={480} aria-valuenow={columnWidth(column.id)} tabIndex={0} onPointerDown={event=>{event.preventDefault();resizing.current={id:column.id,x:event.clientX,width:columnWidth(column.id)};event.currentTarget.setPointerCapture(event.pointerId);}} onPointerMove={event=>{const drag=resizing.current;if(drag?.id===column.id)update({widths:{...settings.widths,[column.id]:registryWidth(drag.width+event.clientX-drag.x)}});}} onPointerUp={()=>{resizing.current=null;}} onPointerCancel={()=>{resizing.current=null;}} onLostPointerCapture={()=>{resizing.current=null;}} onKeyDown={event=>{if(["ArrowLeft","ArrowRight"].includes(event.key)){event.preventDefault();update({widths:{...settings.widths,[column.id]:registryWidth(columnWidth(column.id)+(event.key==="ArrowLeft"?-10:10))}});}}}/></th>)}<th scope="col"><span className="sales-sr-only">Действия</span></th></tr></thead><tbody>{renderRows(filtered)}</tbody></table></div>:<div key="tender-board" ref={boardRef} className="sales-board requests-board tender-board" aria-label="Доска тендеров">{stages.map(stage=>{
         const stageRows=filtered.filter(row=>row.stage===stage.code),dropAllowed=!demo&&canEdit&&!busyId&&stage.code!=="completed"&&(stage.code!=="submitted"||canSubmit);
         return <section className="sales-board-column" key={stage.code} onDragOver={event=>{if(dropAllowed)event.preventDefault();}} onDrop={event=>{if(!dropAllowed)return;event.preventDefault();const row=items.find(item=>item.id===event.dataTransfer.getData("text/tender-id"));if(row)void move(row,stage.code);}}><header><TenderStageBadge stage={stage}/><b>{stageRows.length}</b></header><div className="sales-board-cards">{stageRows.map(row=>{const deadline=tenderDeadlineState(row.submissionDeadline,currentDate);return <article key={row.id} className="sales-board-card tender-board-card" aria-busy={busyId===row.id} draggable={mayEdit(row)&&!busyId} onDragStart={event=>event.dataTransfer.setData("text/tender-id",row.id)}>
-          <div className="sales-card-heading"><TenderTitle row={row}/><button className="icon-button" aria-label={`Просмотр: ${row.title}`} onClick={()=>setSelectedId(row.id)}><ArrowUpRight size={15}/></button></div><p>{row.customer}</p><div className="tender-card-finance"><span>{numeric(row.initialPrice)===null?"Цена не указана":rub(row.initialPrice!)}</span></div><span className="tender-card-decision">{tenderDecisionLabels[row.decision]??"Решение уточняется"}</span><div className="sales-card-facts"><span className={`tender-deadline ${deadlineClass(deadline.key)}`}><CalendarClock size={13}/>{deadline.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<p className="tender-card-action">{row.nextActionText}</p>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<small className="tender-blocker-count">{row.blockerCount} блок.</small>}</footer>
+          <div className="sales-card-heading"><SalesRecordTitle title={row.title} onPreview={()=>setSelectedId(row.id)}/><SalesRecordActions title={row.title} onPreview={()=>setSelectedId(row.id)} href={tenderHref(row)} onOpen={()=>snapshot(row)}/></div><p>{row.customer}</p><div className="tender-card-finance"><span>{numeric(row.initialPrice)===null?"Цена не указана":rub(row.initialPrice!)}</span></div><span className="tender-card-decision">{tenderDecisionLabels[row.decision]??"Решение уточняется"}</span><div className="sales-card-facts"><span className={`tender-deadline ${deadlineClass(deadline.key)}`}><CalendarClock size={13}/>{deadline.label}</span><span>{formatDate(row.submissionDeadline)}</span></div>{row.nextActionText&&<p className="tender-card-action">{row.nextActionText}</p>}<footer><span>{row.owner??"Не назначен"}</span>{row.blockerCount>0&&<small className="tender-blocker-count">{row.blockerCount} блок.</small>}</footer>
         </article>;})}{!stageRows.length&&<div className="sales-board-empty">Нет тендеров</div>}</div></section>;})}</div>}
-      <HorizontalScrollDock scrollRef={view==="list"?tableRef:boardRef} disabled={Boolean(selected)||!filtered.length} revision={`${view}:${settings.columns.join(",")}:${settings.group}:${settings.subgroup}:${filtered.map(row=>row.id).join(",")}`} label={view==="list"?"Горизонтальная прокрутка тендеров":"Горизонтальная прокрутка доски тендеров"}/>
+      <HorizontalScrollDock scrollRef={view==="list"?tableRef:boardRef} disabled={Boolean(selected||demoEditing)||!filtered.length} revision={`${view}:${settings.columns.join(",")}:${settings.group}:${settings.subgroup}:${filtered.map(row=>row.id).join(",")}`} label={view==="list"?"Горизонтальная прокрутка тендеров":"Горизонтальная прокрутка доски тендеров"}/>
     </>}
     {view==="analytics"&&<TenderAnalytics data={analytics} options={options} metricPreferences={metricPreferences} canConfigure={canConfigureAnalytics} demo={demo}/>}
-    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<>{demo&&<button className="button" type="button" onClick={()=>{setDemoEditing(selected);setSelectedId(null)}}><Pencil size={14}/> Редактировать</button>}{!isClientDemoRow(selected)&&<Link className="button primary" href={`/tenders/${selected.id}`} onClick={()=>setSelectedId(null)}>Открыть карточку<ArrowUpRight size={15}/></Link>}{sourceHref(selected.sourceUrl)&&<a className="button" href={sourceHref(selected.sourceUrl)!} target="_blank" rel="noreferrer">Закупка на площадке<ExternalLink size={14}/></a>}</>}>
+    {selected&&<SalesDrawer title={selected.title} subtitle={selected.customer} onClose={()=>setSelectedId(null)} footer={<><button className="button" type="button" onClick={()=>setSelectedId(null)}>Закрыть</button>{mayEdit(selected)&&<Link className="button" href={`/tenders/${selected.id}?edit=1`} onClick={()=>setSelectedId(null)}><Pencil size={14}/> Редактировать</Link>}{demo&&canEdit&&<button className="button" type="button" onClick={()=>{setDemoEditing(selected);setSelectedId(null)}}><Pencil size={14}/> Редактировать</button>}{<Link className="button primary" href={tenderHref(selected)} onClick={()=>{snapshot(selected);setSelectedId(null)}}>Открыть карточку<ArrowUpRight size={15}/></Link>}</>}>
       <section className="tender-preview-section"><h3>Состояние и подача</h3><TenderStatus row={selected}/><dl className="tender-preview-facts"><div><dt>Решение</dt><dd>{tenderDecisionLabels[selected.decision]??"Уточняется"}</dd></div><div><dt>Подача до</dt><dd>{formatDate(selected.submissionDeadline)}</dd></div><div><dt>Срок</dt><dd>{tenderDeadlineState(selected.submissionDeadline,currentDate).label}</dd></div><div><dt>Ответственный</dt><dd>{selected.owner??"Не назначен"}</dd></div><div><dt>Следующее действие</dt><dd>{selected.nextActionText??"—"}</dd></div><div><dt>Дата действия</dt><dd>{formatDate(selected.nextActionAt)}</dd></div></dl></section>
-      <section className="tender-preview-section"><h3>Условия закупки</h3><dl className="tender-preview-facts"><div><dt>Начальная цена</dt><dd>{numeric(selected.initialPrice)===null?"—":rub(selected.initialPrice!)}</dd></div><div><dt>Тарификация</dt><dd>{tenderBillingLabels[selected.billingUnit]??"Уточняется"}</dd></div><div><dt>Потенциал</dt><dd>{tenderPotentialLabels[selected.potential]??"Уточняется"}</dd></div><div><dt>Площадка</dt><dd>{selected.platform??"—"}</dd></div><div><dt>Номер торга</dt><dd>{selected.procedureNumber??"—"}</dd></div><div><dt>Источник</dt><dd>{selected.sourceName??"—"}</dd></div></dl></section>
+      <section className="tender-preview-section"><h3>Условия закупки</h3><dl className="tender-preview-facts"><div><dt>Начальная цена</dt><dd>{numeric(selected.initialPrice)===null?"—":rub(selected.initialPrice!)}</dd></div><div><dt>Тарификация</dt><dd>{tenderBillingLabels[selected.billingUnit]??"Уточняется"}</dd></div><div><dt>Потенциал</dt><dd>{tenderPotentialLabels[selected.potential]??"Уточняется"}</dd></div><div><dt>Площадка</dt><dd>{selected.platform??"—"}</dd></div><div><dt>Номер торга</dt><dd>{selected.procedureNumber??"—"}</dd></div><div><dt>Источник</dt><dd>{selected.sourceName??"—"}</dd></div></dl>{sourceHref(selected.sourceUrl)&&<a className="button" href={sourceHref(selected.sourceUrl)!} target="_blank" rel="noreferrer">Закупка на площадке<ExternalLink size={14}/></a>}</section>
       <section className="tender-preview-section"><h3>Готовность</h3><dl className="tender-preview-facts"><div><dt>Позиции / расчёты</dt><dd>{selected.roleCount} / {selected.calculationCount}</dd></div><div><dt>Документы готовы</dt><dd>{selected.requirementCount?`${selected.readyRequirementCount} из ${selected.requirementCount}`:"Требования не заданы"}</dd></div><div><dt>Блокеры</dt><dd>{selected.blockerCount}</dd></div></dl>{selected.analysisSummary&&<p>{selected.analysisSummary}</p>}{selected.closeReason&&<p>{selected.closeReason}</p>}</section>
     </SalesDrawer>}
-    {demoEditing&&<SalesDrawer title="Редактировать тендер" subtitle="Демо-изменения действуют только до перезагрузки страницы." overline="Демонстрационный режим" onClose={()=>setDemoEditing(null)}
+    {demoEditing&&<SalesDrawer title="Редактировать тендер" subtitle="Демонстрационная копия сохраняется в этой вкладке браузера." overline="Демонстрационный режим" onClose={()=>setDemoEditing(null)}
       footer={<><button className="button" type="button" onClick={()=>setDemoEditing(null)}>Отмена</button><button className="button primary" type="submit" form="demo-tender-edit-form">Сохранить изменения</button></>}>
       <form id="demo-tender-edit-form" className="client-create-form client-create-form-unified tender-demo-edit-form" onSubmit={saveDemoEdit}>
         <section className="client-form-section"><div className="client-form-section-head"><strong>Закупка</strong><span>Основные данные реестра и карточки.</span></div>
@@ -291,7 +310,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
           <label><span>Ссылка на закупку</span><input name="sourceUrl" type="url" maxLength={2000} defaultValue={demoEditing.sourceUrl??""}/></label>
           <label><span>Источник</span><input name="sourceName" maxLength={180} defaultValue={demoEditing.sourceName??""}/></label>
           <label><span>Дата публикации</span><input name="publicationDate" type="date" defaultValue={inputDate(demoEditing.publicationDate)}/></label>
-          <label><span>Подача до</span><input name="submissionDeadline" type="datetime-local" defaultValue={inputDateTime(demoEditing.submissionDeadline)}/></label>
+          <label><span>Подача до (МСК)</span><input name="submissionDeadline" type="datetime-local" defaultValue={inputDateTime(demoEditing.submissionDeadline)}/></label>
           <label><span>НМЦК / начальная цена, ₽</span><input name="initialPrice" type="number" min="0" step="any" defaultValue={demoEditing.initialPrice??""}/></label>
         </section>
         <section className="client-form-section"><div className="client-form-section-head"><strong>Рабочее состояние</strong><span>Для проверки воронки можно менять этап и решение.</span></div>
@@ -302,7 +321,7 @@ export function TendersWorkspace({rows,options,analytics,metricPreferences,canCo
           <label><span>Следующее действие</span><input name="nextActionText" maxLength={1000} defaultValue={demoEditing.nextActionText??""}/></label>
           <label><span>Аналитическая заметка</span><textarea name="analysisSummary" maxLength={12000} defaultValue={demoEditing.analysisSummary??""}/></label>
         </section>
-        <p className="client-demo-note">В рабочем контуре изменения сохраняются через API и права доступа. Здесь данные меняются только локально для проверки интерфейса.</p>
+        <p className="client-demo-note">В рабочем контуре изменения сохраняются через API и права доступа. Здесь изменения сохраняются в текущей вкладке браузера для проверки интерфейса.</p>
       </form>
     </SalesDrawer>}
   </div>;
