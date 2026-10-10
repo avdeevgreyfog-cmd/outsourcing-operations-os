@@ -111,11 +111,11 @@ export function ClientEntityWorkspace(props:Props){
           </div>
         </Section>
 
-        {canReadObjects&&<Section title="Операционный портфель" note={activeObjects+" действующих объектов"}>
+        {canReadObjects&&<Section title="Операционный портфель" note={"Действующих объектов: "+activeObjects}>
           <div className="stack-list request-entity-stack">{clientObjects.length?clientObjects.map(item=><Link className="stack-item" href={"/objects/"+item.id} key={item.id}><div><strong>{item.name}</strong><small>{item.region} · укомплектованность {item.coverage}%</small></div><Status tone={item.risk==="critical"?"bad":item.risk==="high"?"warn":tone(item.status)}>{statusLabel(item.status)}</Status></Link>):<Empty title="Объектов пока нет" text="Объекты появятся после передачи согласованного заказа в запуск."/>}</div>
         </Section>}
 
-        <Section title="Ключевые контакты" note={contacts.length+" контактов"} actions={(canEdit||demoCanEdit)?<ClientContactEditButton {...contactProps}/>:undefined}>
+        <Section title="Ключевые контакты" note={"Контактов: "+contacts.length} actions={(canEdit||demoCanEdit)?<ClientContactEditButton {...contactProps}/>:undefined}>
           {contacts.length?<div className="client-contact-summary">{contacts.slice(0,4).map(item=><div key={item.id}><div><strong>{item.fullName}</strong><small>{item.position??"Должность не указана"}</small></div><span>{contactPrimary(item)}</span></div>)}</div>:<Empty title="Контактов пока нет" text="Добавьте контакт клиента, когда появится подтверждённое контактное лицо."/>}
         </Section>
         <ClientDataSection {...editProps} section="notes" title="Внутренние заметки"><p className="client-overview-note">{client.notes||"Заметок пока нет"}</p></ClientDataSection>
@@ -142,7 +142,7 @@ export function ClientEntityWorkspace(props:Props){
       </aside>
     </div>)}
 
-    {panel("contacts",<div className="request-entity-tab-content"><Section title="Контакты клиента" note={contacts.length+" контактов"} actions={(canEdit||demoCanEdit)?<ClientContactEditButton {...contactProps}/>:undefined}>
+    {panel("contacts",<div className="request-entity-tab-content"><Section title="Контакты клиента" note={"Контактов: "+contacts.length} actions={(canEdit||demoCanEdit)?<ClientContactEditButton {...contactProps}/>:undefined}>
       {contacts.length?<div className="request-table-wrap"><table className="data-table request-registry-table client-entity-table client-contact-table"><thead><tr><th>Контакт</th><th>Связь</th><th>Объекты / роль</th>{(canEdit||demoCanEdit)&&<th aria-label="Действия"/>}</tr></thead><tbody>{contacts.map(item=><tr key={item.id}><td><strong className="cell-title">{item.fullName}</strong><span className="cell-sub">{item.position??"Должность не указана"}</span></td><td><strong>{contactPrimary(item)}</strong><span className="cell-sub">{contactSecondary(item)}</span></td><td>{item.objectAssignments.length?item.objectAssignments.map(link=><div key={link.objectId}><Link href={"/objects/"+link.objectId+"?tab=contacts"}>{link.object}</Link><span className="cell-sub">{link.roles.map(role=>contactRoleLabels[role]??role).join(" · ")}</span></div>):"Не привязан к объектам"}</td>{(canEdit||demoCanEdit)&&<td className="client-contact-action-cell"><ClientContactEditButton {...contactProps} contact={item}/></td>}</tr>)}</tbody></table></div>:<Empty title="Контактов пока нет" text="Контакты можно добавить из этой вкладки или при создании клиента."/>}
     </Section></div>)}
 

@@ -334,7 +334,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
     </>)}
 
     {panel("positions",<div className="request-entity-tab-content">
-      <RequestSectionEditor {...editProps} section="need" title="Позиции" note={`${total} человек · ${request.roles.length} позиций`}>
+      <RequestSectionEditor {...editProps} section="need" title="Позиции" note={`Потребность: ${total} чел. · Позиции: ${request.roles.length}`}>
         <div className="request-position-list request-position-list-tab">{request.roles.map((role) => {
           const requirements = role.requirements ?? {};
           const stat = workspaceOptions.specialties.find((item) => item.id === role.specialtyId);
@@ -383,7 +383,7 @@ export function RequestEntityWorkspace({id,tab,staticDemo,demo,canEdit,canCreate
     </div>)}
 
     {panel("history",<div className="request-entity-tab-content">
-      <Section title="История заявки" note={`${workflow.timeline.length} событий`}>
+      <Section title="История заявки" note={`Событий: ${workflow.timeline.length}`}>
         <div className="request-timeline request-entity-timeline">{workflow.timeline.length ? workflow.timeline.slice().reverse().map((item) => <article key={item.id}>
           <i/>
           <div><header><strong>{timelineText(item.title)}</strong><span>{fmtDate(item.at)}</span></header><p>{timelineText(item.detail)}</p><small>{item.actor}</small><SalesHistoryChanges changes={item.changes}/></div>
