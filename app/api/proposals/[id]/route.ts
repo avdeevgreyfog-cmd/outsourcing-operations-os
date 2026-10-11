@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
@@ -44,24 +45,27 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     const {id}=await params;const body=schema.parse(await request.json());
     const capability=body.action==="edit"?"sales.proposal.edit":"sales.proposal.client_decision";
     requireCapability(actor,capability);
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
+      const [source]=await tx<Array<{requestId:string}>>`SELECT request_id "requestId" FROM proposals WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid`;
+      if(!source)throw new CommercialRequestConflict("КП не найдено или недоступно");
+      await assertRequestCommercialEditable(tx,actor,source.requestId);
       const [row]=await tx<Array<ProposalRow>>`
         SELECT p.id,p.request_id "requestId",p.status,p.content_snapshot content,r.organization_id "organizationId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",
           r.assigned_team_id "teamId",r.region_id "regionId",r.client_company_id "clientId"
-        FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${id}::uuid FOR UPDATE
+        FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${id}::uuid AND p.organization_id=${actor.organizationId}::uuid AND r.organization_id=${actor.organizationId}::uuid FOR UPDATE OF p
       `;
-      if(!row)throw new Error("КП не найдено");
+      if(!row)throw new CommercialRequestConflict("КП не найдено");
       if(!canReadRow(actor.access,capability,row,actor))throw new AccessDeniedError(capability);
 
       if(body.action==="edit"){
-        if(row.status!=="draft")throw new Error("Редактировать клиентские условия можно только в черновике КП. После отправки на согласование создайте новую версию");
+        if(row.status!=="draft")throw new CommercialRequestConflict("Редактировать клиентские условия можно только в черновике КП. После отправки на согласование создайте новую версию");
         let template=(row.content.template??null) as TemplateSnapshot|null;
         let basePresentation=normalizeTemplateConfig(row.content.presentation);
         if(body.templateId){
           const [selected]=await tx<Array<TemplateRow>>`
             SELECT id,name,kind,version,config_json config FROM proposal_templates WHERE id=${body.templateId}::uuid AND status='active'
           `;
-          if(!selected)throw new Error("Выбранный шаблон КП не найден");
+          if(!selected)throw new CommercialRequestConflict("Выбранный шаблон КП не найден");
           template={id:selected.id,name:selected.name,kind:selected.kind,version:selected.version};
           basePresentation=normalizeTemplateConfig(selected.config);
         }
@@ -76,39 +80,40 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           additionalConditions:body.additionalConditions??null,comment:body.comment??null,template,presentation,
           manager:{name:body.managerName,phone:body.managerPhone??null,email:body.managerEmail??null,telegram:body.managerTelegram??null},
         };
-        await tx`UPDATE proposals SET content_snapshot=${sql.json(JSON.parse(JSON.stringify(content)))} WHERE id=${id}::uuid`;
+        await tx`UPDATE proposals SET content_snapshot=${tx.json(JSON.parse(JSON.stringify(content)))} WHERE id=${id}::uuid`;
         return {id,action:body.action,requestId:row.requestId,status:row.status};
       }
 
       if(body.action==="send"){
-        if(row.status!=="approved")throw new Error("Отправить клиенту можно только внутренне согласованное КП");
+        if(row.status!=="approved")throw new CommercialRequestConflict("Отправить клиенту можно только внутренне согласованное КП");
         await tx`UPDATE proposals SET status='sent',sent_at=now() WHERE id=${id}::uuid`;
         await tx`UPDATE requests SET status='proposal_sent',updated_at=now() WHERE id=${row.requestId}::uuid`;
       }else if(body.action==="negotiate"){
-        if(!["approved","sent","negotiation"].includes(row.status))throw new Error("Переговоры доступны после согласования КП");
+        if(!["approved","sent","negotiation"].includes(row.status))throw new CommercialRequestConflict("Переговоры доступны после согласования КП");
         await tx`UPDATE proposals SET status='negotiation',client_decision_note=${body.note??null} WHERE id=${id}::uuid`;
         await tx`UPDATE requests SET status='negotiation',updated_at=now() WHERE id=${row.requestId}::uuid`;
       }else if(body.action==="accept"){
-        if(!["sent","negotiation"].includes(row.status))throw new Error("Принятие фиксируется только для отправленного КП или переговоров");
+        if(!["sent","negotiation"].includes(row.status))throw new CommercialRequestConflict("Принятие фиксируется только для отправленного КП или переговоров");
         const [alreadyAccepted]=await tx<Array<{id:string}>>`SELECT id FROM proposals WHERE request_id=${row.requestId}::uuid AND status='accepted' AND id<>${id}::uuid LIMIT 1`;
-        if(alreadyAccepted)throw new Error("По заявке уже зафиксирована другая принятая версия КП");
+        if(alreadyAccepted)throw new CommercialRequestConflict("По заявке уже зафиксирована другая принятая версия КП");
         await tx`UPDATE proposals SET status='accepted',accepted_at=now(),client_decision_note=${body.note??null} WHERE id=${id}::uuid`;
-        await tx`UPDATE requests SET status='accepted',won_at=now(),lost_at=NULL,updated_at=now() WHERE id=${row.requestId}::uuid`;
+        await tx`UPDATE requests SET status='accepted',workflow_stage_code='agreed',won_at=now(),closed_at=COALESCE(closed_at,now()),lost_at=NULL,updated_at=now() WHERE id=${row.requestId}::uuid AND organization_id=${actor.organizationId}::uuid`;
       }else if(body.action==="revise"){
-        if(!["sent","negotiation"].includes(row.status))throw new Error("Возврат на пересчёт доступен после отправки КП");
+        if(!["sent","negotiation"].includes(row.status))throw new CommercialRequestConflict("Возврат на пересчёт доступен после отправки КП");
         await tx`UPDATE proposals SET status='revision_requested',client_decision_note=${body.note??null} WHERE id=${id}::uuid`;
         await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${row.requestId}::uuid`;
       }else{
-        if(!["sent","negotiation"].includes(row.status))throw new Error("Отказ клиента фиксируется после отправки КП");
+        if(!["sent","negotiation"].includes(row.status))throw new CommercialRequestConflict("Отказ клиента фиксируется после отправки КП");
         await tx`UPDATE proposals SET status='client_rejected',rejected_at=now(),client_decision_note=${body.note??null} WHERE id=${id}::uuid`;
         await tx`UPDATE requests SET status='lost',lost_at=now(),updated_at=now() WHERE id=${row.requestId}::uuid`;
       }
       return {id,action:body.action,requestId:row.requestId};
-    }));
+    });
     return NextResponse.json(result);
   }catch(error){
+    if(error instanceof CommercialRequestConflict)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Некорректные данные КП",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
+    console.error(error);return NextResponse.json({error:"Не удалось выполнить действие. Повторите попытку"},{status:500});
   }
 }

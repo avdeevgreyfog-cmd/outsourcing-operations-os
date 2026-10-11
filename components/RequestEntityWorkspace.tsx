@@ -1,4 +1,6 @@
 "use client";
+
+import {isRequestCommercialLocked} from "@/lib/commercial/request-lock-state";
 import {useEffect,useState} from "react";
 import {Empty} from "@/components/UI";
 import type {CommercialRequestDetail,listRequestProposals} from "@/lib/commercial/service";
@@ -64,6 +66,8 @@ const statusLabels: Record<string, string> = {
   approved: "Согласовано",
   accepted: "Принято",
   rejected: "Отклонено",
+  prelaunch: "Подготовка объекта",
+  launch_ready: "Готов к запуску",
   launched: "Запущено",
   active: "Активно",
   sent: "Отправлено",
@@ -178,7 +182,7 @@ export function RequestEntityWorkspace({contactScope,id,tab,staticDemo,demo,canE
   const completeness = calculateRequestCompleteness(request, intake);
   const acceptedRoleIds = new Set(coverage.map((item) => item.requestRoleId));
   const archived = Boolean(request.archivedAt);
-  const locked = !demo&&["accepted", "launched"].includes(request.status);
+  const locked = isRequestCommercialLocked(request);
   const readyForProposal = !archived && !locked && request.roles.length > 0 && request.roles.every((role) => acceptedRoleIds.has(role.id));
   const total = request.roles.reduce((sum, role) => sum + role.count, 0);
   const yandex = request.location ? `https://yandex.ru/maps/?text=${encodeURIComponent(request.location)}` : "";
@@ -244,6 +248,7 @@ export function RequestEntityWorkspace({contactScope,id,tab,staticDemo,demo,canE
         <span>КП <strong>{boardRow?.proposalVersion ? `№${boardRow.proposalVersion}` : "—"}</strong></span>
       </SummaryStrip>
 
+      {locked&&<div className="request-warning request-entity-warning" role="status">Коммерческие условия приняты и зафиксированы. Подготовка и запуск объекта не открывают их для редактирования. Изменение требует отдельного согласования новой версии.</div>}
       {!completeness.ready && !archived && !locked && <div className="request-warning request-entity-warning" role="status">
         <div><strong>Что уточнить для расчёта</strong><p>{completeness.missing.join(" · ")}</p><p>Предварительный расчёт доступен. Уточните эти условия перед согласованием.</p></div>
         {canEdit && <Link className="button" href={seed?`/requests/${id}/edit`:`/requests/new?draft=${encodeURIComponent(id)}`}>Уточнить условия</Link>}

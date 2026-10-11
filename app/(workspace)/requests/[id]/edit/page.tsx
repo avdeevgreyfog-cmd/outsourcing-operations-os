@@ -1,3 +1,5 @@
+
+import {isRequestCommercialLocked} from "@/lib/commercial/request-lock-state";
 import { githubPagesStaticParams } from "@/lib/demo/static-params";
 import { notFound, redirect } from "next/navigation";
 import { requireActor } from "@/lib/auth/server";
@@ -21,7 +23,7 @@ export default async function EditRequestPage({ params }: { params: Promise<{ id
     getCommercialRequest(actor,id), getRequestWorkspaceOptions(actor), getRequestIntake(actor,id), getRequestWorkflowMeta(actor,id),
   ]);
   if (!request) notFound();
-  if (!canReadRow(actor.access,"sales.request.edit",request,actor) || (!actor.demo && (request.archivedAt || ["accepted","launched"].includes(request.status)))) redirect(`/requests/${id}`);
+  if (!canReadRow(actor.access,"sales.request.edit",request,actor) || (!actor.demo && (request.archivedAt || isRequestCommercialLocked(request)))) redirect(`/requests/${id}`);
   const demoRequestBase=actor.demo?(await listRequestBoard(actor)).find((row)=>row.id===id):undefined;
   let options=baseOptions;
   if (!actor.demo && hasCapability(actor.access,"calculation.rate_reference.read")) {

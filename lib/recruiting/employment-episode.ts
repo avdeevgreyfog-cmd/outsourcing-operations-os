@@ -5,7 +5,7 @@ export class EmploymentEpisodeConflict extends Error {}
 
 // Called inside the conversion transaction after locking the candidate and worker.
 // A declared type records an episode; it does not assert that a contract is signed.
-export async function ensureEmploymentEpisode(tx:Sql,actor:{organizationId:string;userId:string},workerId:string,actualStartAt:string,choice:EmploymentRelationChoice){
+export async function ensureEmploymentEpisode(tx:Sql,actor:{organizationId:string;userId:string},workerId:string,actualStartAt:string,choice:EmploymentRelationChoice,source:"candidate_first_shift"|"worker_import"="candidate_first_shift"){
   if(choice==="unspecified")return null;
   const rows=await tx<Array<{id:string;relationType:string;coversStart:boolean}>>`
     SELECT id,relation_type "relationType",
@@ -23,7 +23,7 @@ export async function ensureEmploymentEpisode(tx:Sql,actor:{organizationId:strin
   const [relation]=await tx<Array<{id:string}>>`
     INSERT INTO employment_relations(organization_id,worker_id,relation_type,effective_from,metadata,created_by_user_id)
     VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${choice},(${actualStartAt}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,
-      ${tx.json({source:"candidate_first_shift"})},${actor.userId}::uuid)
+      ${tx.json({source})},${actor.userId}::uuid)
     RETURNING id
   `;
   return relation.id;

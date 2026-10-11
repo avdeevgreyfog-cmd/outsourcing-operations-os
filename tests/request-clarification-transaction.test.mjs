@@ -10,7 +10,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('exports', 'require', compiled)(exports, name => name in dependencies ? dependencies[name] : nativeRequire(name));
+  new Function('exports', 'require', compiled)(exports, name => name === '@/lib/commercial/request-lock' ? load('lib/commercial/request-lock.ts') : name === './request-lock-state' || name === '@/lib/commercial/request-lock-state' ? load('lib/commercial/request-lock-state.ts') : name in dependencies ? dependencies[name] : nativeRequire(name));
   return exports;
 }
 const intake = load('lib/commercial/request-intake.ts');
@@ -29,6 +29,8 @@ function fixture({ denied = false, rowDenied = false, status = 'pending', linked
   };
   const tx = async (strings, ...values) => {
     const query = strings.join('?').trim();
+    if(query.includes('FROM requests')&&query.includes('FOR UPDATE')){assert.deepEqual(values,[requestId,actor.organizationId]);return [{status:'draft',archivedAt:null,updatedAt:'v1'}];}
+    if(query.includes('FROM proposals')&&query.includes('accepted_at IS NOT NULL')){assert.deepEqual(values,[requestId,actor.organizationId]);return [];}
     if (query.startsWith('SELECT status,payload')) return [{ status, payload }];
     if (query.startsWith('SELECT id FROM specialties')) return [{ id: role.specialtyId }];
     if (query.startsWith('SELECT DISTINCT request_role_id')) return linked ? [{ id: 'role' }] : [];

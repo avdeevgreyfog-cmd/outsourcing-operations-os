@@ -40,6 +40,7 @@ export type RequestBoardRow = {
   title: string;
   client: string;
   clientId: string | null;
+  commercialLocked?:boolean;
   status: string;
   workflowStageCode: string;
   location: string;

@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
@@ -68,17 +69,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return { id, status: current.status, archived: false };
       }
 
-      if (current.archivedAt) throw new Error("Сначала восстановите заявку из архива");
-      if (["accepted","launched"].includes(current.status)) throw new Error("Принятая клиентом или переданная в запуск заявка зафиксирована. Для изменения коммерческих условий создайте новый цикл/версию до принятия КП");
+      await assertRequestCommercialEditable(tx,actor,id);
+      if (current.archivedAt) throw new CommercialRequestConflict("Сначала восстановите заявку из архива");
+      if (["accepted","launched"].includes(current.status)) throw new CommercialRequestConflict("Принятая клиентом или переданная в запуск заявка зафиксирована. Для изменения коммерческих условий создайте новый цикл/версию до принятия КП");
 
       const nextClientId = body.clientId === undefined ? current.clientId : body.clientId;
       if (nextClientId) {
         const [client] = await tx<Array<{ id: string }>>`SELECT id FROM client_companies WHERE id=${nextClientId}::uuid`;
-        if (!client) throw new Error("Клиент не найден в текущей организации");
+        if (!client) throw new CommercialRequestConflict("Клиент не найден в текущей организации");
       }
       if (body.regionId) {
         const [region] = await tx<Array<{ id: string }>>`SELECT id FROM regions WHERE id=${body.regionId}::uuid`;
-        if (!region) throw new Error("Регион не найден в текущей организации");
+        if (!region) throw new CommercialRequestConflict("Регион не найден в текущей организации");
       }
 
       await tx`
@@ -108,7 +110,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           if (role.id) {
             const oldRole=current.roles.find((item)=>item.id===role.id);
             if(oldRole&&linkedIds.some((item)=>item.id===role.id)&&oldRole.specialtyId!==role.specialtyId){
-              throw new Error("Нельзя менять профессию позиции после создания расчёта. Добавьте новую позицию, чтобы сохранить историю");
+              throw new CommercialRequestConflict("Нельзя менять профессию позиции после создания расчёта. Добавьте новую позицию, чтобы сохранить историю");
             }
             await tx`
               UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${tx.json(role.schedule)},
@@ -125,7 +127,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         for (const oldRole of current.roles) {
           if (supplied.has(oldRole.id)) continue;
           if (linkedIds.some((item) => item.id === oldRole.id)) {
-            throw new Error("Нельзя удалить позицию заявки, по которой уже существует расчёт");
+            throw new CommercialRequestConflict("Нельзя удалить позицию заявки, по которой уже существует расчёт");
           }
           await tx`DELETE FROM request_roles WHERE id=${oldRole.id}::uuid AND request_id=${id}::uuid`;
         }
@@ -134,9 +136,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     });
     return NextResponse.json(result);
   } catch (error) {
+    if(error instanceof CommercialRequestConflict)return NextResponse.json({error:error.message},{status:409});
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Проверьте заполнение полей", issues: error.issues }, { status: 400 });
     if (error instanceof AccessDeniedError) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     console.error(error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Не удалось выполнить действие. Повторите попытку" }, { status: 500 });
   }
 }

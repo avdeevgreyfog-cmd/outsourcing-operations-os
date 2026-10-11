@@ -21,8 +21,8 @@ export default async function ProposalPage({params,searchParams}:{params:Promise
   const staticDemo=isGithubPagesDemo();
   const {id}=await params;const {tab:rawTab}=staticDemo?{}:await searchParams;const tab=rawTab&&tabLabels[rawTab]?rawTab:"overview";
   const actor=await requireActor();const proposal=await getCommercialProposalDetail(actor,id);if(!proposal)notFound();
-  const canEdit=proposal.status==="draft"&&hasCapability(actor.access,"sales.proposal.edit");
-  const canSubmit=hasCapability(actor.access,"sales.proposal.submit");const canClientDecision=hasCapability(actor.access,"sales.proposal.client_decision");const canLaunch=hasCapability(actor.access,"sales.proposal.launch");
+  const canEdit=!proposal.commercialLocked&&proposal.status==="draft"&&hasCapability(actor.access,"sales.proposal.edit");
+  const canSubmit=!proposal.commercialLocked&&hasCapability(actor.access,"sales.proposal.submit");const canClientDecision=!proposal.commercialLocked&&hasCapability(actor.access,"sales.proposal.client_decision");const canLaunch=hasCapability(actor.access,"sales.proposal.launch");
   const templates=canEdit?await listProposalTemplates(actor):[];
   const legalEntities=canLaunch?await getLegalEntityOptions(actor,"sales.proposal.launch"):[];
   const templateOptions=templates.map(({id,name,kind,version,config})=>({id,name,kind,version,config}));

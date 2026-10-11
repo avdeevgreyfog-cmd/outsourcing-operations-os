@@ -10,7 +10,7 @@ function load(path, dependencies = {}) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('exports', 'require', compiled)(exports, name => name in dependencies ? dependencies[name] : nativeRequire(name));
+  new Function('exports', 'require', compiled)(exports, name => name === '@/lib/commercial/request-lock' ? load('lib/commercial/request-lock.ts') : name === './request-lock-state' || name === '@/lib/commercial/request-lock-state' ? load('lib/commercial/request-lock-state.ts') : name in dependencies ? dependencies[name] : nativeRequire(name));
   return exports;
 }
 const validation = load('lib/commercial/public-intake-validation.ts');
@@ -46,8 +46,10 @@ test('a usable callback is required; malformed optional contacts are also reject
 function workflowFixture({ validLink = true, validRegion = true, validSpecialty = true, validOwner = true } = {}) {
   const link = { id: 'link', organizationId: 'org', createdByUserId: 'owner' };
   const writes = [];
+  const queries = [];
   const tx = async (strings, ...values) => {
     const query = strings.join('?');
+    queries.push({query,values});
     if (query.startsWith('SELECT id,expires_at')) return validLink ? [{ id: link.id, expiresAt: null }] : [];
     if (query.startsWith('SELECT id FROM request_intake_links')) {
       assert.ok(query.includes("m.status='active'"), 'Link owner is rechecked inside the tenant transaction');
@@ -119,13 +121,17 @@ test('revocation and invalid tenant references stop public submission before wri
   }
 });
 
-function internalRouteFixture({ deny = false } = {}) {
+function internalRouteFixture({ deny = false, requestStatus = 'draft', acceptedProposal = false } = {}) {
   const ownerId = '10000000-0000-4000-8000-000000000001';
   const requestId = '73000000-0000-4000-8000-000000000001';
   const actor = { userId: ownerId, organizationId: 'org', roleCode: 'manager', teamIds: [], access: {}, demo: false };
   const writes = [];
+  const queries = [];
   const tx = async (strings, ...values) => {
     const query = strings.join('?');
+    queries.push({query,values});
+    if(query.includes('FROM requests')&&query.includes('FOR UPDATE')){assert.ok(values.includes(actor.organizationId));assert.ok(values.includes(requestId));return [{updatedAt:'v1',status:requestStatus,archivedAt:null}];}
+    if(query.includes('FROM proposals')&&query.includes('accepted_at IS NOT NULL')){assert.ok(values.includes(actor.organizationId));assert.ok(values.includes(requestId));return acceptedProposal?[{id:'accepted-proposal'}]:[];}
     if(query.startsWith('SELECT updated_at'))return [{updatedAt:'v1',status:'draft',archivedAt:null}];
     if(query.startsWith('INSERT INTO activity_events')){writes.push({query,values});return [];}
     if (query.includes('FROM organization_memberships')) return [{ id: ownerId }];
@@ -148,7 +154,7 @@ function internalRouteFixture({ deny = false } = {}) {
     '@/lib/commercial/edit-conflict':load('lib/commercial/edit-conflict.ts'),'@/lib/commercial/request-section':load('lib/commercial/request-section.ts',{'@/lib/commercial/request-intake':intakeModule}),'@/lib/commercial/request-intake-server':{getRequestIntake:async()=>intakeModule.emptyRequestIntake()},'@/lib/commercial/request-workflow-server':{getRequestWorkflowMeta:async()=>({observers:[]})},
     '@/lib/commercial/request-intake': intakeModule,
     '@/lib/commercial/service': { getCommercialRequest: async () => ({
-      id: requestId, ownerUserId: ownerId, status: 'draft', archivedAt: null, roles: [],
+      id: requestId, ownerUserId: ownerId, status: requestStatus, archivedAt: null, roles: [],
     }) },
   };
   const payload = {
@@ -159,7 +165,7 @@ function internalRouteFixture({ deny = false } = {}) {
   const request = () => new Request('https://test.local/api/requests/v2', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
   });
-  return { dependencies, writes, request, requestId };
+  return { dependencies, writes, queries, request, requestId };
 }
 
 test('internal create and edit allow incomplete drafts using one tenant transaction', async () => {
@@ -220,4 +226,13 @@ test('pipeline settings use one transaction and remain restricted to administrat
     assert.equal(response.status, allowed ? 200 : 403);
     assert.equal(writes.length, allowed ? stages.length : 0);
   }
+});
+
+for(const requestStatus of ['prelaunch','launch_ready','draft'])test(`request v2 rejects accepted proposal after status is ${requestStatus}, before any writes`,async()=>{
+  const f=internalRouteFixture({requestStatus,acceptedProposal:true});
+  const route=load('app/api/requests/[id]/v2/route.ts',f.dependencies);
+  const response=await route.PATCH(f.request(),{params:Promise.resolve({id:f.requestId})});
+  assert.equal(response.status,409);assert.match(response.body.error,/приняты.*зафиксированы/i);assert.deepEqual(f.writes,[]);
+  assert.equal(f.queries.length,2);assert.match(f.queries[0].query,/FROM requests/);assert.match(f.queries[0].query,/FOR UPDATE/);assert.match(f.queries[1].query,/FROM proposals/);assert.match(f.queries[1].query,/accepted_at IS NOT NULL/);
+  for(const q of f.queries)assert.deepEqual(q.values,[f.requestId,'org']);
 });

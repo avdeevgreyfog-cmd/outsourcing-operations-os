@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { NextResponse } from "next/server";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -21,7 +22,7 @@ export async function POST(_request:Request,{params}:{params:Promise<{id:string}
     requireCapability(actor,"calculation.scenario.create");
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [current]=await tx<CalculationContext[]>`
         SELECT c.id,c.organization_id "organizationId",c.request_id "requestId",c.tender_id "tenderId",c.status,c.version,
           c.economics_date::text "economicsDate",c.allocation_mode "allocationMode",c.project_costs_json "projectCosts",
@@ -31,10 +32,11 @@ export async function POST(_request:Request,{params}:{params:Promise<{id:string}
         FROM calculations c LEFT JOIN requests r ON r.id=c.request_id LEFT JOIN tenders t ON t.id=c.tender_id
         WHERE c.id=${id}::uuid
       `;
-      if(!current)throw new Error("Расчёт не найден");
+      if(!current)throw new CommercialRequestConflict("Расчёт не найден");
       if(!canReadRow(actor.access,"calculation.scenario.create",current,actor))throw new AccessDeniedError("calculation.scenario.create");
-      if(current.requestId&&["accepted","launched","lost"].includes(current.sourceStatus??""))throw new Error("Коммерческий цикл заявки закрыт");
-      if(current.tenderId&&current.sourceStatus==="completed")throw new Error("Тендер завершён");
+      if(current.requestId)await assertRequestCommercialEditable(tx,actor,current.requestId);
+      if(current.requestId&&["accepted","launched","lost"].includes(current.sourceStatus??""))throw new CommercialRequestConflict("Коммерческий цикл заявки закрыт");
+      if(current.tenderId&&current.sourceStatus==="completed")throw new CommercialRequestConflict("Тендер завершён");
 
       const [latest]=current.requestId
         ? await tx<Array<{version:number}>>`SELECT COALESCE(max(version),0)::int version FROM calculations WHERE request_id=${current.requestId}::uuid`
@@ -43,7 +45,7 @@ export async function POST(_request:Request,{params}:{params:Promise<{id:string}
       const [created]=await tx<Array<{id:string}>>`
         INSERT INTO calculations(organization_id,request_id,tender_id,status,owner_user_id,created_by_user_id,version,supersedes_calculation_id,economics_date,allocation_mode,project_costs_json)
         VALUES(${actor.organizationId}::uuid,${current.requestId}::uuid,${current.tenderId}::uuid,'draft',${actor.userId}::uuid,${actor.userId}::uuid,
-          ${nextVersion},${current.id}::uuid,${current.economicsDate}::date,${current.allocationMode},${sql.json(current.projectCosts as never)})
+          ${nextVersion},${current.id}::uuid,${current.economicsDate}::date,${current.allocationMode},${tx.json(current.projectCosts as never)})
         RETURNING id
       `;
 
@@ -60,18 +62,19 @@ export async function POST(_request:Request,{params}:{params:Promise<{id:string}
         await tx`
           INSERT INTO calculation_scenarios(organization_id,calculation_id,request_role_id,tender_role_id,model_id,rule_version_id,name,status,version,supersedes_scenario_id,inputs_snapshot,cost_snapshot,result_snapshot,rate_reference_snapshot,created_by_user_id)
           VALUES(${actor.organizationId}::uuid,${created.id}::uuid,${template.requestRoleId}::uuid,${template.tenderRoleId}::uuid,${template.modelId}::uuid,${template.ruleVersionId}::uuid,
-            ${template.name},'draft',1,${template.id}::uuid,${sql.json(inputs as never)},${sql.json(template.costs as never)},${sql.json(template.result as never)},${template.rateReference?sql.json(template.rateReference as never):null},${actor.userId}::uuid)
+            ${template.name},'draft',1,${template.id}::uuid,${tx.json(inputs as never)},${tx.json(template.costs as never)},${tx.json(template.result as never)},${template.rateReference?tx.json(template.rateReference as never):null},${actor.userId}::uuid)
         `;
       }
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'calculation',${created.id}::uuid,'version_created',${`Создана версия расчёта v${nextVersion}`},${sql.json({supersedesCalculationId:current.id,sourceId:current.requestId??current.tenderId})})
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'calculation',${created.id}::uuid,'version_created',${`Создана версия расчёта v${nextVersion}`},${tx.json({supersedesCalculationId:current.id,sourceId:current.requestId??current.tenderId})})
       `;
       return {id:created.id,version:nextVersion,clonedScenarios:templates.length};
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
+    if(error instanceof CommercialRequestConflict)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
+    console.error(error);return NextResponse.json({error:"Не удалось выполнить действие. Повторите попытку"},{status:500});
   }
 }

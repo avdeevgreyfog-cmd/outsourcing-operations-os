@@ -8,7 +8,7 @@ const nativeRequire=createRequire(import.meta.url);
 function load(path,dependencies={}){
   const code=ts.transpileModule(fs.readFileSync(new URL('../'+path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
   const result={};
-  new Function('exports','require',code)(result,name=>name in dependencies?dependencies[name]:nativeRequire(name));
+  new Function('exports','require',code)(result,name => name === '@/lib/commercial/request-lock' ? load('lib/commercial/request-lock.ts') : name === './request-lock-state' || name === '@/lib/commercial/request-lock-state' ? load('lib/commercial/request-lock-state.ts') : name in dependencies?dependencies[name]:nativeRequire(name));
   return result;
 }
 const intake=load('lib/commercial/request-intake.ts');

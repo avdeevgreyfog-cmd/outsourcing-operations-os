@@ -1,5 +1,7 @@
 "use client";
 
+import {isRequestCommercialLocked} from "@/lib/commercial/request-lock-state";
+
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -262,7 +264,7 @@ function RequestEditor({ options, request, initialIntake, canArchive = false }: 
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const completeness = useMemo(() => liveCompleteness(base, intake, roles), [base, intake, roles]);
-  const locked = request ? request.archivedAt != null || ["accepted", "launched"].includes(request.status) : false;
+  const locked = request ? request.archivedAt != null || isRequestCommercialLocked(request) : false;
 
   function patchBase(patch: Partial<BaseDraft>) { setBase((current) => ({ ...current, ...patch })); }
   function patchIntake<K extends keyof RequestIntake>(key: K, value: RequestIntake[K]) { setIntake((current) => ({ ...current, [key]: value })); }

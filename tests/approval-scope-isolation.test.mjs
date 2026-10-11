@@ -26,7 +26,7 @@ function makeActor({capabilities=['approval.read','approval.decide'],readScope='
 function compile(sourcePath,deps){
   const source=fs.readFileSync(path.join(root,sourcePath),'utf8');
   const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-  const compiledModule={};new Function('exports','require',compiled)(compiledModule,name=>deps[name]??require(name));return compiledModule;
+  const compiledModule={};new Function('exports','require',compiled)(compiledModule,name => name === '@/lib/commercial/request-lock' ? compile('lib/commercial/request-lock.ts',{}) : name === './request-lock-state' || name === '@/lib/commercial/request-lock-state' ? compile('lib/commercial/request-lock-state.ts',{}) : deps[name]??require(name));return compiledModule;
 }
 
 function loadList(actor){
@@ -49,10 +49,13 @@ function loadList(actor){
   return {list:()=>mod.listAllApprovals(actor),queries};
 }
 
-function loadDecision(actor,{approverUserId=other,rowFound=true}={}){
+function loadDecision(actor,{approverUserId=other,rowFound=true,linkedRequest=false,acceptedProposal=false,requestStatus='draft'}={}){
   const queries=[];
   const tx=async(parts,...values)=>{
     const text=parts.join('?');queries.push({text,values});
+    if(text.includes('SELECT CASE WHEN'))return [{requestId:linkedRequest?approval:null}];
+    if(text.includes('FROM requests')&&text.includes('FOR UPDATE')){assert.deepEqual(values,[approval,org]);return [{status:requestStatus,archivedAt:null,updatedAt:'v1'}];}
+    if(text.includes('FROM proposals')&&text.includes('accepted_at IS NOT NULL')){assert.deepEqual(values,[approval,org]);return acceptedProposal?[{id:'accepted-proposal'}]:[];}
     if(text.includes('FROM approval_instances ai'))return rowFound?[{id:approval,subjectType:'contract',subjectId:approval,processCode:'commercial_contract',status:'pending',approverUserId}]:[];
     if(text.includes('FROM contracts WHERE'))return [{requestId:null}];
     return [];
@@ -115,4 +118,11 @@ test('decision rejects missing approval.decide capability before querying or wri
   const {PATCH,queries}=loadDecision(makeActor({capabilities:['approval.read'],decideScope:'all_org'}));
   const response=await PATCH(decisionRequest(),params);
   assert.equal(response.status,403);assert.equal(queries.length,0);noWrites(queries);
+});
+
+test('stale approval decision cannot change accepted request commerce after request status resets',async()=>{
+  const {PATCH,queries}=loadDecision(makeActor({decideScope:'assigned_to_me'}),{approverUserId:user,linkedRequest:true,acceptedProposal:true,requestStatus:'draft'});
+  const response=await PATCH(decisionRequest(),params);assert.equal(response.status,409);assert.match((await response.json()).error,/приняты.*зафиксированы/i);noWrites(queries);
+  assert.equal(queries.length,3);assert.match(queries[0].text,/SELECT CASE WHEN/);assert.match(queries[1].text,/FROM requests/);assert.match(queries[1].text,/FOR UPDATE/);assert.match(queries[2].text,/FROM proposals/);assert.match(queries[2].text,/accepted_at IS NOT NULL/);
+  assert.equal(queries.some(q=>q.text.includes('JOIN approval_steps')),false,'request lock guard runs before locking stale approval rows');
 });
