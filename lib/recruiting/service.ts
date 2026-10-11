@@ -108,7 +108,7 @@ export type RecruitingApplicationRow = {
   rejectionReason: string | null;
   rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
-  recentCommunications?: Array<{id:string;channel:string;summary:string;happenedAt:string;author:string}>;
+  recentCommunications?: Array<{id:string;applicationId?:string|null;channel:string;summary:string;happenedAt:string;author:string}>;
   documentSummary?: {
     required:number; received:number; missing:string[];
     employmentRequired:number; employmentReady:number; employmentMissing:string[];
@@ -481,9 +481,9 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",ca.planned_shift_kind "plannedShiftKind",
         ca.planned_arrival_at::text "plannedArrivalAt",ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
         COALESCE((
-          SELECT jsonb_agg(jsonb_build_object('id',x.id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)
+          SELECT jsonb_agg(jsonb_build_object('id',x.id,'applicationId',x.application_id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)
           FROM (
-            SELECT cc.id,cc.channel,cc.summary,to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') happened_at,u.display_name author,cc.happened_at sort_at
+            SELECT cc.id,cc.application_id,cc.channel,cc.summary,to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') happened_at,u.display_name author,cc.happened_at sort_at
             FROM candidate_communications cc JOIN app_users u ON u.id=cc.created_by_user_id
             WHERE cc.candidate_id=c.id AND (cc.application_id=ca.id OR cc.application_id IS NULL)
             ORDER BY cc.happened_at DESC LIMIT 5
@@ -733,16 +733,21 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
       LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       LEFT JOIN app_users original_recruiter ON original_recruiter.id=c.original_recruiter_user_id
       LEFT JOIN app_users current_recruiter ON current_recruiter.id=c.current_recruiter_user_id
-      WHERE c.id=${id}::uuid
+      WHERE c.id=${id}::uuid AND c.organization_id=${actor.organizationId}::uuid
     `;
-    if (!candidate || !canReadRow(actor.access,"recruiting.candidate.read",candidate,actor)) return null;
+    if (!candidate || candidate.organizationId !== actor.organizationId) return null;
+    const canReadCandidate = canReadRow(actor.access,"recruiting.candidate.read",candidate,actor);
+    // An accessible application grants the shared person card, never other contexts.
+    if (!canReadCandidate && !applications.length) return null;
     const applicationIds = applications.map((application) => application.applicationId);
     const [communications, history, contacts, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
         SELECT cc.id,cc.application_id "applicationId",cc.channel,cc.direction,cc.summary,
           to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') "happenedAt",u.display_name author
         FROM candidate_communications cc JOIN app_users u ON u.id=cc.created_by_user_id
-        WHERE cc.candidate_id=${id}::uuid ORDER BY cc.happened_at DESC LIMIT 100
+        WHERE cc.candidate_id=${id}::uuid
+          AND (cc.application_id=ANY(${applicationIds}::uuid[]) OR (cc.application_id IS NULL AND ${canReadCandidate}))
+        ORDER BY cc.happened_at DESC LIMIT 100
       `,
       sql<CandidateStageEvent[]>`
         SELECT h.id,h.application_id "applicationId",h.from_stage "fromStage",h.to_stage "toStage",h.reason,h.reason_code "reasonCode",
@@ -766,18 +771,22 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         FROM recruiting_document_types dt
         LEFT JOIN candidate_documents cd ON cd.candidate_id=${id}::uuid AND cd.document_type_id=dt.id
         LEFT JOIN need_document_requirements ndr ON ndr.document_type_id=dt.id AND ndr.required
-          AND EXISTS(SELECT 1 FROM candidate_applications ca0 WHERE ca0.candidate_id=${id}::uuid AND ca0.need_id=ndr.need_id)
+          AND EXISTS(SELECT 1 FROM candidate_applications ca0 WHERE ca0.candidate_id=${id}::uuid AND ca0.need_id=ndr.need_id AND ca0.id=ANY(${applicationIds}::uuid[]))
         LEFT JOIN needs n ON n.id=ndr.need_id
         LEFT JOIN specialties s ON s.id=n.specialty_id
         LEFT JOIN objects o ON o.id=n.object_id
-        LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id
+        LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id AND ca.id=ANY(${applicationIds}::uuid[])
         LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
         WHERE dt.active AND (dt.default_required OR cd.id IS NOT NULL OR ndr.need_id IS NOT NULL)
         ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,n.created_at DESC NULLS LAST
       `,
     ]);
     const {organizationId,ownerUserId,createdByUserId,assigneeUserIds,...safeCandidate}=candidate;void organizationId;void ownerUserId;void createdByUserId;void assigneeUserIds;
-    return {...safeCandidate, contacts, documents, applications, communications, history};
+    const visibleApplications = canReadCandidate ? applications : applications.map(application => ({
+      ...application,
+      recentCommunications: application.recentCommunications?.filter(item => item.applicationId === application.applicationId),
+    }));
+    return {...safeCandidate, contacts, documents, applications:visibleApplications, communications, history};
   });
 }
 
