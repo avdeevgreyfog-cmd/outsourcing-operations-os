@@ -1353,3 +1353,16 @@
 /* Keep task rows readable within their own horizontal scroll area. */
 :root[data-operis-ui="new"] .tasks-table{min-width:900px}
 :root[data-operis-ui="new"] .tasks-table th:first-child{min-width:280px}
+
+/* Worker records keep the existing compact card language. */
+:root[data-operis-ui="new"] .worker-records-table{min-width:650px}
+:root[data-operis-ui="new"] .worker-records-history{list-style:none;margin:0;padding:0 16px}
+:root[data-operis-ui="new"] .worker-records-history li{display:grid;grid-template-columns:100px minmax(0,1fr);gap:16px;padding:14px 0;border-bottom:1px solid var(--border)}
+:root[data-operis-ui="new"] .worker-records-history li:last-child{border-bottom:0}
+:root[data-operis-ui="new"] .worker-records-history time{font-size:12px;color:var(--muted);padding-top:2px}
+:root[data-operis-ui="new"] .worker-records-history strong{font-size:13px;font-weight:600}
+:root[data-operis-ui="new"] .worker-records-history span,
+:root[data-operis-ui="new"] .worker-records-history small{display:block;font-size:12px;color:var(--muted);margin-top:4px;overflow-wrap:anywhere}
+@media(max-width:600px){
+  :root[data-operis-ui="new"] .worker-records-history li{grid-template-columns:1fr;gap:6px}
+}
