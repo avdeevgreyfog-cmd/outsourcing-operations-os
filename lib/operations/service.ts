@@ -946,7 +946,11 @@ export type WorkerOffboardingContext={
 
 export async function getWorkerOffboardingContext(actor:Actor,workerId:string):Promise<WorkerOffboardingContext>{
   requireCapability(actor,"worker.read");
-  if(actor.demo)return {relationType:"employment",relationFrom:"01.09.2026",relationTo:null,outstandingAssets:[],housing:[],exits:[]};
+  if(actor.demo){
+    const worker=demo.workers.find(row=>row.id===workerId);
+    const visible=worker&&canReadRow(actor.access,"worker.read",worker,actor);
+    return {relationType:visible?worker.employment??null:null,relationFrom:visible?worker.startDate??null:null,relationTo:null,outstandingAssets:[],housing:[],exits:[]};
+  }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [scope]=await sql<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
       SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
@@ -959,7 +963,9 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
     if(!scope||!canReadRow(actor.access,"worker.read",{...scope,objectId:scope.objectId??undefined,ownerUserId:scope.ownerUserId??undefined,regionId:scope.regionId??undefined},actor))return {relationType:null,relationFrom:null,relationTo:null,outstandingAssets:[],housing:[],exits:[]};
     const [relation]=await sql<Array<{relationType:string;relationFrom:string;relationTo:string|null}>>`
       SELECT relation_type "relationType",to_char(effective_from,'DD.MM.YYYY') "relationFrom",to_char(effective_to,'DD.MM.YYYY') "relationTo"
-      FROM employment_relations WHERE worker_id=${workerId}::uuid ORDER BY effective_from DESC LIMIT 1
+      FROM employment_relations WHERE worker_id=${workerId}::uuid AND organization_id=${actor.organizationId}::uuid
+        AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
+      ORDER BY effective_from DESC LIMIT 1
     `;
     const assets=hasCapability(actor.access,"assets.read")?await sql<Array<WorkerOutstandingAsset & {quantity:number|string}>>`
       SELECT i.id "itemId",i.name item,m.variant,

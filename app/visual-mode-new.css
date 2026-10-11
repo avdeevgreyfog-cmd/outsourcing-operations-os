@@ -1,6 +1,12 @@
 /* OPERIS current visual baseline.
    The application shell always enables html[data-operis-ui="new"]; this is the only supported interface mode. */
 
+:root[data-operis-ui="new"] .first-shift-confirmation-fields label{min-width:0;font-size:12px;line-height:1.4}
+:root[data-operis-ui="new"] .first-shift-confirmation-fields :is(input,select){width:100%;min-width:0;max-width:100%;min-height:34px;font-size:12px}
+:root[data-operis-ui="new"] .first-shift-confirmation-fields small{font-size:11px;color:var(--muted);line-height:1.45;overflow-wrap:anywhere}
+:root[data-operis-ui="new"] .staffing-funnel-board{min-width:0;max-width:100%}
+:root[data-operis-ui="new"] .staffing-plan-workspace{grid-template-columns:minmax(0,1fr)}
+
 :root[data-operis-ui="new"]{
   --sidebar-w:248px;
   --topbar-h:54px;

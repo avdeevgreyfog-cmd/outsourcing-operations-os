@@ -1,5 +1,7 @@
 import { recruitingStages, type RecruitingStage } from "./model";
 
+export type EmploymentRelationChoice="employment"|"gph"|"npd"|"custom"|"unspecified";
+
 export type WorkflowDetails = {
   // Structured action/result. Free text is only for an exceptional comment.
   actionCode?: string;
@@ -31,6 +33,7 @@ export type WorkflowDetails = {
 
   // First shift result.
   firstShiftOutcome?: "pending"|"worked"|"no_show"|"not_admitted";
+  employmentRelationType?: EmploymentRelationChoice;
 
   // Old document aggregate fields are read only for backward compatibility.
   documentsReceived?: number;
@@ -80,6 +83,13 @@ export function validateStageChange(row: WorkflowRow, change: StageChange, now =
   const planned=change.plannedStartDate === undefined ? row.plannedStartDate : change.plannedStartDate;
   const arrival=change.plannedArrivalAt === undefined ? row.plannedArrivalAt : change.plannedArrivalAt;
   const actualStart=change.actualStartAt === undefined ? row.actualStartAt : change.actualStartAt;
+
+  if(row.actualStartAt&&change.actualStartAt!==undefined&&(!actualStart||Date.parse(actualStart)!==Date.parse(row.actualStartAt)))return "Фактический выход уже подтверждён. Его дату нельзя изменить этим действием.";
+  if(row.actualStartAt&&change.workflow?.employmentRelationType!==undefined&&change.workflow.employmentRelationType!==row.workflow?.employmentRelationType)return "Оформление подтверждённого выхода нельзя изменить этим действием. Проверьте историю сотрудника.";
+  if(!row.actualStartAt&&actualStart){
+    if(change.stage!=="first_shift"||details.firstShiftOutcome!=="worked")return "Фактическая дата сохраняется только при подтверждении первого выхода.";
+    if(!change.workflow?.employmentRelationType)return "Выберите тип оформления или укажите, что оформление пока не указано.";
+  }
 
   if(["first_shift","retention_7","retention_30"].includes(row.stage) && recruitingStages.indexOf(change.stage as typeof recruitingStages[number]) < recruitingStages.indexOf(row.stage as typeof recruitingStages[number])) {
     return "После фактического выхода этап нельзя вернуть назад. Для выбытия используйте завершение заявки.";

@@ -7,6 +7,7 @@ import { Status } from "@/components/UI";
 import type { TaskRow, WorkerRow } from "@/lib/data/service";
 import type { StaffingForecastRow } from "@/lib/operations/service";
 import type { RecruitingApplicationRow } from "@/lib/recruiting/service";
+import { FirstShiftConfirmationFields, type EmploymentRelationTypeChoice } from "@/components/FirstShiftConfirmationFields";
 
 type StaffingView="objects"|"funnel"|"forecast"|"specialties"|"needs";
 type FunnelMode="staffing"|"working"|"replacements";
@@ -46,6 +47,7 @@ const objectStatusLabels:Record<string,string>={
 };
 
 function todayIso(){return new Date().toISOString().slice(0,10)}
+function localDateTime(value:string){const date=new Date(value);return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,16)}
 function addDays(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 function formatDate(value:string|null|undefined){
   if(!value)return "—";
@@ -118,6 +120,7 @@ export function StaffingPlanWorkspace({
   const [query,setQuery]=useState("");
   const [busy,setBusy]=useState("");
   const [message,setMessage]=useState("");
+  const [workedConfirmation,setWorkedConfirmation]=useState<{applicationId:string;actualStartAt:string;employmentRelationType:EmploymentRelationTypeChoice|""}|null>(null);
   const [planDrafts,setPlanDrafts]=useState<Record<string,string>>(()=>Object.fromEntries(rows.map(row=>[row.objectId+":"+row.specialtyId,String(row.required)])));
   const [dates,setDates]=useState<Record<string,string>>(()=>Object.fromEntries(applications.map(row=>[row.applicationId,row.plannedStartDate??addDays(today,1)])));
   const [shifts,setShifts]=useState<Record<string,ShiftKind>>(()=>Object.fromEntries(applications.map(row=>[row.applicationId,(row.plannedShiftKind??"day") as ShiftKind])));
@@ -254,7 +257,9 @@ export function StaffingPlanWorkspace({
     finally{setBusy("");}
   }
 
-  async function candidateAction(row:RecruitingApplicationRow,action:"schedule"|"worked"|"no_show"|"no_contact"|"reschedule"){
+  async function candidateAction(row:RecruitingApplicationRow,action:"schedule"|"worked"|"no_show"|"no_contact"|"reschedule",confirmation?:{actualStartAt:string;employmentRelationType:EmploymentRelationTypeChoice|""}){
+    if(action==="worked"&&!confirmation){setWorkedConfirmation({applicationId:row.applicationId,actualStartAt:localDateTime(new Date().toISOString()),employmentRelationType:""});return;}
+    if(action==="worked"&&(!confirmation?.actualStartAt||!confirmation.employmentRelationType)){setMessage("Укажите фактическое время выхода и формат оформления.");return;}
     if(!row.objectId||!editableObjectIds.includes(row.objectId))return;
     const key="candidate:"+row.applicationId;setBusy(key);setMessage("");
     const plannedStartDate=dates[row.applicationId]||addDays(today,1);
@@ -262,7 +267,7 @@ export function StaffingPlanWorkspace({
     const workflow={...(row.workflow??{}),actionCode:`staffing_plan_${action}`,plannedShift:shiftLabels[plannedShiftKind]};
     let payload:Record<string,unknown>={applicationId:row.applicationId,sourceContext:"object_feedback",stage:row.stage,plannedStartDate,plannedShiftKind,workflow};
     if(action==="schedule"||action==="reschedule")payload={...payload,stage:"first_shift",reason:action==="reschedule"?"Повторный выход согласован менеджером":undefined,workflow:{...workflow,firstShiftOutcome:"pending",additionalComment:action==="reschedule"?"Менеджер согласовал новую дату выхода":"Менеджер согласовал первый выход"}};
-    if(action==="worked")payload={...payload,stage:"first_shift",actualStartAt:new Date().toISOString(),workflow:{...workflow,firstShiftOutcome:"worked",additionalComment:"Менеджер подтвердил первый выход"}};
+    if(action==="worked")payload={...payload,stage:"first_shift",actualStartAt:new Date(confirmation!.actualStartAt).toISOString(),workflow:{...workflow,firstShiftOutcome:"worked",employmentRelationType:confirmation!.employmentRelationType,additionalComment:"Менеджер подтвердил первый выход"}};
     if(action==="no_show"||action==="no_contact")payload={...payload,stage:"no_show",reasonCode:action==="no_contact"?"no_contact":"no_show",reason:action==="no_contact"?"Кандидат не выходит на связь":"Не вышел в согласованную дату",workflow:{...workflow,firstShiftOutcome:"no_show",additionalComment:action==="no_contact"?"Менеджер: кандидат не выходит на связь":"Менеджер подтвердил невыход"}};
     try{
       if(!demo){
@@ -270,12 +275,14 @@ export function StaffingPlanWorkspace({
         const json=await response.json().catch(()=>({}));
         if(!response.ok)throw new Error(json.error??"Не удалось сохранить обратную связь");
       }
+      const actualStartAt=action==="worked"?new Date(confirmation!.actualStartAt).toISOString():undefined;
       setLocalApplications(current=>current.map(item=>item.applicationId!==row.applicationId?item:{
         ...item,stage:payload.stage as RecruitingApplicationRow["stage"],
         stageLabel:payload.stage==="first_shift"?"Первый выход":payload.stage==="no_show"?"Невыход":item.stageLabel,
-        plannedStartDate,plannedShiftKind,actualStartAt:action==="worked"?new Date().toISOString():item.actualStartAt,
+        plannedStartDate,plannedShiftKind,actualStartAt:actualStartAt??item.actualStartAt,
         workflow:payload.workflow as RecruitingApplicationRow["workflow"],
       }));
+      setWorkedConfirmation(null);
       setMessage(action==="worked"?`${row.fullName}: первый выход подтверждён`:action==="no_show"||action==="no_contact"?`${row.fullName}: обратная связь передана в подбор`:`${row.fullName}: выход запланирован на ${formatDate(plannedStartDate)}`);
     }catch(error){setMessage(error instanceof Error?error.message:"Не удалось сохранить обратную связь");}
     finally{setBusy("");}
@@ -400,7 +407,7 @@ export function StaffingPlanWorkspace({
       {funnelMode==="staffing"&&<div className="staffing-funnel-board">
         {(Object.keys(laneLabels) as FunnelLane[]).map(lane=><section className="staffing-funnel-lane" key={lane}>
           <header><span>{laneLabels[lane]}</span><b>{lanes[lane].length}</b></header>
-          <div>{lanes[lane].map(candidate=><StaffingCandidateCard key={candidate.applicationId} row={candidate} date={dates[candidate.applicationId]||addDays(today,1)} shift={shifts[candidate.applicationId]??"day"} task={taskFor("candidate_application",candidate.applicationId)} editable={Boolean(candidate.objectId&&editableObjectIds.includes(candidate.objectId))} busy={busy==="candidate:"+candidate.applicationId} onDate={value=>setDates(current=>({...current,[candidate.applicationId]:value}))} onShift={value=>setShifts(current=>({...current,[candidate.applicationId]:value}))} onAction={action=>void candidateAction(candidate,action)}/>)}
+          <div>{lanes[lane].map(candidate=><StaffingCandidateCard key={candidate.applicationId} row={candidate} date={dates[candidate.applicationId]||addDays(today,1)} shift={shifts[candidate.applicationId]??"day"} task={taskFor("candidate_application",candidate.applicationId)} editable={Boolean(candidate.objectId&&editableObjectIds.includes(candidate.objectId))} busy={busy==="candidate:"+candidate.applicationId} confirmation={workedConfirmation?.applicationId===candidate.applicationId?workedConfirmation:null} onConfirmationDate={value=>setWorkedConfirmation(current=>current?.applicationId===candidate.applicationId?{...current,actualStartAt:value}:current)} onConfirmationType={value=>setWorkedConfirmation(current=>current?.applicationId===candidate.applicationId?{...current,employmentRelationType:value}:current)} onCancelConfirmation={()=>setWorkedConfirmation(null)} onConfirmWorked={value=>void candidateAction(candidate,"worked",value)} onDate={value=>setDates(current=>({...current,[candidate.applicationId]:value}))} onShift={value=>setShifts(current=>({...current,[candidate.applicationId]:value}))} onAction={action=>void candidateAction(candidate,action)}/>)}
           {!lanes[lane].length&&<div className="staffing-funnel-empty">Нет людей</div>}</div>
         </section>)}
       </div>}
@@ -428,8 +435,11 @@ export function StaffingPlanWorkspace({
   </div>;
 }
 
-function StaffingCandidateCard({row,date,shift,task,editable,busy,onDate,onShift,onAction}:{
+function StaffingCandidateCard({row,date,shift,task,editable,busy,confirmation,onConfirmationDate,onConfirmationType,onCancelConfirmation,onConfirmWorked,onDate,onShift,onAction}:{
   row:RecruitingApplicationRow;date:string;shift:ShiftKind;task:TaskRow|null;editable:boolean;busy:boolean;
+  confirmation:{applicationId:string;actualStartAt:string;employmentRelationType:EmploymentRelationTypeChoice|""}|null;
+  onConfirmationDate:(value:string)=>void;onConfirmationType:(value:EmploymentRelationTypeChoice|"")=>void;onCancelConfirmation:()=>void;
+  onConfirmWorked:(value:{actualStartAt:string;employmentRelationType:EmploymentRelationTypeChoice|""})=>void;
   onDate:(value:string)=>void;onShift:(value:ShiftKind)=>void;onAction:(action:"schedule"|"worked"|"no_show"|"no_contact"|"reschedule")=>void;
 }){
   const problem=row.stage==="no_show"||row.workflow?.firstShiftOutcome==="no_show";
@@ -446,7 +456,8 @@ function StaffingCandidateCard({row,date,shift,task,editable,busy,onDate,onShift
     {editable&&(preparation||agreed||problem)&&<div className="staffing-funnel-controls">
       <div><input type="date" value={date} onChange={event=>onDate(event.target.value)}/><select value={shift} onChange={event=>onShift(event.target.value as ShiftKind)}><option value="day">День</option><option value="night">Ночь</option><option value="mixed">День / ночь</option></select></div>
       {preparation&&<button className="button primary" disabled={busy||!date} onClick={()=>onAction("schedule")}>Согласовать выход</button>}
-      {agreed&&<div className="staffing-funnel-actions"><button className="button primary" disabled={busy} onClick={()=>onAction("worked")}>Вышел</button><button className="button" disabled={busy} onClick={()=>onAction("no_show")}>Не вышел</button><button className="button" disabled={busy} onClick={()=>onAction("no_contact")}>Нет связи</button>{date!==row.plannedStartDate&&<button className="button" disabled={busy||!date} onClick={()=>onAction("reschedule")}>Перенести</button>}</div>}
+      {agreed&&!confirmation&&<div className="staffing-funnel-actions"><button className="button primary" disabled={busy} onClick={()=>onAction("worked")}>Вышел</button><button className="button" disabled={busy} onClick={()=>onAction("no_show")}>Не вышел</button><button className="button" disabled={busy} onClick={()=>onAction("no_contact")}>Нет связи</button>{date!==row.plannedStartDate&&<button className="button" disabled={busy||!date} onClick={()=>onAction("reschedule")}>Перенести</button>}</div>}
+      {confirmation&&<div style={{display:"grid",gap:7}}><FirstShiftConfirmationFields actualStartAt={confirmation.actualStartAt} employmentRelationType={confirmation.employmentRelationType} onActualStartAtChange={onConfirmationDate} onEmploymentRelationTypeChange={onConfirmationType}/><div className="staffing-funnel-actions"><button className="button primary" disabled={busy||!confirmation.actualStartAt||!confirmation.employmentRelationType} onClick={()=>onConfirmWorked(confirmation)}>Сохранить подтверждение</button><button className="button" disabled={busy} onClick={onCancelConfirmation}>Отмена</button></div></div>}
       {problem&&<button className="button primary" disabled={busy||!date} onClick={()=>onAction("reschedule")}>Назначить новую дату</button>}
     </div>}
   </article>;

@@ -63,7 +63,7 @@ export function WorkerEmploymentWorkspace({workerId,workerStatus,context,canOffb
     <div className="workspace-grid">
       <Section title="Оформление и статус">
         <div className="worker-employment-facts">
-          <KeyValue label="Формат оформления" value={employmentTypeLabel(context.relationType)}/>
+          <KeyValue label="Формат оформления" value={context.relationType?employmentTypeLabel(context.relationType):"Оформление не указано"}/>
           <KeyValue label="Действует с" value={context.relationFrom??"—"}/>
           <KeyValue label="Действует по" value={context.relationTo??"—"}/>
           <KeyValue label="Статус сотрудника" value={<Status tone={workerStatus==="active"?"good":"neutral"}>{workerStatusLabel(workerStatus)}</Status>}/>

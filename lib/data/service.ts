@@ -428,7 +428,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
           WHERE sa.worker_id=w.id AND sh.object_id=woa.object_id AND sh.shift_date>=current_date AND sa.confirmation_status<>'cancelled'
           ORDER BY sh.shift_date,sh.starts_at LIMIT 90) dates
       ) upcoming_shifts ON true
-      LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
+      LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND x.organization_id=w.organization_id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
       LEFT JOIN app_users rec ON rec.id=w.original_recruiter_user_id
       LEFT JOIN LATERAL (
         SELECT absence_type,status,planned_from,planned_to FROM worker_absence_plans x
