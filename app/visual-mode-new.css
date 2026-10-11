@@ -271,13 +271,28 @@
   line-height:1.35;
 }
 :root[data-operis-ui="new"] .status{
-  min-height:22px;
+  min-height:0;
   height:auto;
-  padding:3px 7px;
-  border-radius:5px;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:var(--muted);
   font-size:12px;
-  line-height:1.25;
+  font-weight:500;
+  line-height:18px;
+  gap:6px;
 }
+:root[data-operis-ui="new"] .status i{
+  width:6px;
+  height:6px;
+  flex:0 0 6px;
+  background:var(--muted);
+}
+:root[data-operis-ui="new"] .status-good i{background:var(--good)}
+:root[data-operis-ui="new"] .status-warn i{background:var(--warn)}
+:root[data-operis-ui="new"] .status-bad i{background:var(--bad)}
+:root[data-operis-ui="new"] .status-info i{background:var(--info)}
 :root[data-operis-ui="new"] .stack-item{
   min-height:50px;
   padding:8px 12px;
@@ -1324,3 +1339,17 @@
     border-bottom-color:var(--accent)!important
   }
 }
+
+/* The legacy shell forced a desktop canvas even around scrollable tables. */
+@media(max-width:760px){
+  :root[data-operis-ui="new"] body{min-width:0}
+  :root[data-operis-ui="new"] .topbar{padding-inline:12px}
+  :root[data-operis-ui="new"] .topbar-context{display:none}
+  :root[data-operis-ui="new"] .topbar-actions{min-width:0;flex:1;justify-content:flex-end;margin-left:8px}
+  :root[data-operis-ui="new"] .demo-role{min-width:0;flex:1;justify-content:flex-end}
+  :root[data-operis-ui="new"] .demo-role select{width:100%;min-width:0;max-width:128px}
+}
+
+/* Keep task rows readable within their own horizontal scroll area. */
+:root[data-operis-ui="new"] .tasks-table{min-width:900px}
+:root[data-operis-ui="new"] .tasks-table th:first-child{min-width:280px}
