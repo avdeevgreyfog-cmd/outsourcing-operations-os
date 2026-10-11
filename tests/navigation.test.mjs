@@ -91,3 +91,13 @@ test("operations supply and staffing workspaces are active", () => {
   assert.equal(internalRequests.groupId,"my-work");
   assert.equal(internalRequests.label,"Внутренние заявки");
 });
+
+
+test("runtime keeps implemented document templates available while future modules are hidden", async () => {
+  const {navigationManifest:runtime}=await import("../lib/core/navigation-runtime.mjs");
+  const permitted=visibleItems(filterNavigation(runtime,access(["admin.modules.manage"])));
+  assert.equal(permitted.find(item=>item.href==="/admin/document-templates")?.status,undefined);
+  assert.ok(permitted.some(item=>item.href==="/admin/document-templates"));
+  assert.equal(permitted.some(item=>item.href==="/admin/integrations"),false);
+  assert.equal(visibleItems(filterNavigation(runtime,access([]))).some(item=>item.href==="/admin/document-templates"),false);
+});

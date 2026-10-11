@@ -6,9 +6,11 @@ import { hasCapability } from "@/lib/core/access.mjs";
 import { findFoundationModule } from "@/lib/core/modules.mjs";
 import { ModuleFoundationWorkspace, type FoundationModule } from "@/components/ModuleFoundationWorkspace";
 
-export function generateStaticParams(){
-  return isGithubPagesDemo() ? githubPagesStaticParams.foundation.map((module)=>({module})) : [];
-}
+// Static params belong only to the offline export. An empty server list
+// opts these authenticated pages into runtime static generation.
+export const generateStaticParams = isGithubPagesDemo()
+  ? () => githubPagesStaticParams.foundation.map((module)=>({module}))
+  : undefined;
 
 export default async function FoundationPage({ params }: { params: Promise<{ module: string[] }> }) {
   const actor = await requireActor();
