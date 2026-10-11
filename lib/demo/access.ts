@@ -71,6 +71,11 @@ DEMO_ACTORS.recruiter_staff_3 = {
 
 export function getDemoActor(code = "director") {
   const actor = structuredClone(DEMO_ACTORS[code] ?? DEMO_ACTORS.director);
+  // Organization membership is a unit scope, not an object assignment.
+  // Declare it explicitly so the demo does not depend on the old scope leak.
+  if(actor.access.scopes["organization.read"]?.some(scope=>scope.type==="assigned_to_me")){
+    actor.access.scopes["organization.read"]=[{type:"org_unit",ids:[...actor.orgUnitIds]}];
+  }
   // Tender fixtures follow the same commercial read scope as request fixtures.
   // This only supplies demo permissions; live access is loaded from the database.
   const requestScopes = actor.access.scopes["sales.request.read"];

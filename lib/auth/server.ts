@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db, hasDatabase, withTenant } from "@/lib/db/client";
-import { loadEffectiveAccess, loadPreviewAccess } from "@/lib/access/server";
+import { loadEffectiveAccess, loadPreviewAccess, loadMembershipAccessContext } from "@/lib/access/server";
 import type { AccessPreviewTargetType, Actor, WorkspaceContext, WorkspaceOption } from "@/lib/access/types";
 import { getDemoActor } from "@/lib/demo/access";
 import { isDemoMode } from "@/lib/demo/mode";
@@ -83,32 +83,8 @@ export async function getCurrentActor(options: ActorOptions = {}): Promise<Actor
     const teams = await tx<{ team_id: string }[]>`
       SELECT team_id FROM membership_teams WHERE membership_id=${row.membership_id}::uuid
     `;
-    const regions = await tx<{ region_id: string }[]>`
-      SELECT region_id FROM membership_regions WHERE membership_id=${row.membership_id}::uuid
-    `;
-    const assignedSeats = await tx<{ job_profile_id: string; organization_unit_id: string; region_id: string | null }[]>`
-      SELECT DISTINCT sp.job_profile_id,sp.organization_unit_id,COALESCE(sp.region_id,ou.region_id) region_id
-      FROM position_assignments pa
-      JOIN staff_positions sp ON sp.id=pa.staff_position_id
-      JOIN organization_units ou ON ou.id=sp.organization_unit_id
-      WHERE pa.membership_id=${row.membership_id}::uuid
-        AND pa.status<>'ended'
-        AND pa.effective_from<=current_date
-        AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-        AND sp.effective_from<=current_date
-        AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
-    `;
-    const assignedUnits = await tx<{ organization_unit_id: string }[]>`
-      SELECT organization_unit_id FROM membership_organization_units
-      WHERE membership_id=${row.membership_id}::uuid
-        AND effective_from<=current_date
-        AND (effective_to IS NULL OR effective_to>=current_date)
-    `;
-
     const teamIds = [...new Set([row.primary_team_id,...teams.map((item) => item.team_id)].filter(Boolean) as string[])];
-    const regionIds = [...new Set([...regions.map((item) => item.region_id),...assignedSeats.map((item) => item.region_id)].filter(Boolean) as string[])];
-    const orgUnitIds = [...new Set([row.primary_org_unit_id,...assignedUnits.map((item) => item.organization_unit_id),...assignedSeats.map((item) => item.organization_unit_id)].filter(Boolean) as string[])];
-    const positionIds = [...new Set([row.position_id,...assignedSeats.map((item) => item.job_profile_id)].filter(Boolean) as string[])];
+    const {positionIds,regionIds,orgUnitIds}=await loadMembershipAccessContext(tx,row.membership_id,row.position_id,row.primary_org_unit_id);
 
     const actualAccess = await loadEffectiveAccess(tx,row.membership_id,row.role_template_id,positionIds,regionIds,orgUnitIds);
     const canAccessPreview = hasCapability(actualAccess,"admin.permissions.manage") || hasCapability(actualAccess,"organization.access.manage");

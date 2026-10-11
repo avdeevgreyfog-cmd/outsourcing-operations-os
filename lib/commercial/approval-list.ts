@@ -12,7 +12,7 @@ export async function listAllApprovals(actor:Actor):Promise<ApprovalListRow[]>{
   requireCapability(actor,"approval.read");
   if(actor.demo)return [];
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const allOrg=actor.access.allOrg||actor.access.scopes["approval.read"]?.some(scope=>scope.type==="all_org");
+    const allOrg=actor.access.scopes["approval.read"]?.some(scope=>scope.type==="all_org")??false;
     return sql<ApprovalListRow[]>`
       SELECT ai.id,ai.subject_type "subjectType",ai.subject_id "subjectId",
         CASE ai.subject_type

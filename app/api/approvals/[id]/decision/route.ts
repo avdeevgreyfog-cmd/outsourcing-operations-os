@@ -21,7 +21,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       `;
       if(!approval)throw new Error("Согласование не найдено");
       if(approval.status!=="pending")throw new Error("Согласование уже завершено");
-      const allOrg=actor.access.allOrg||actor.access.scopes["approval.decide"]?.some(scope=>scope.type==="all_org");
+      const allOrg=actor.access.scopes["approval.decide"]?.some(scope=>scope.type==="all_org")??false;
       if(!allOrg&&approval.approverUserId!==actor.userId)throw new AccessDeniedError("approval.decide");
       const nextStatus=body.decision==="approve"?"approved":"rejected";
       await tx`UPDATE approval_steps SET status=${nextStatus},decided_by_user_id=${actor.userId}::uuid,decision_comment=${body.comment??null},decided_at=now() WHERE approval_id=${id}::uuid AND step_order=1`;
