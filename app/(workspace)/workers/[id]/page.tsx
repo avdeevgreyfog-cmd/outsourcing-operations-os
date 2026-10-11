@@ -7,6 +7,8 @@ import { listShifts, listWorkers } from "@/lib/data/service";
 import { hasCapability } from "@/lib/core/access.mjs";
 import { getOperationsReferenceData, getWorkerOffboardingContext, getWorkerOperationsDetails } from "@/lib/operations/service";
 import { WorkerAbsencesWorkspace, WorkerAssignmentsWorkspace } from "@/components/WorkerOperationsWorkspace";
+import { WorkerDataEditor } from "@/components/WorkerDataEditor";
+import { getWorkerEditorContext } from "@/lib/operations/worker-editor";
 import { WorkerProfileTabs } from "@/components/WorkerProfileTabs";
 import { getWorkerRecords } from "@/lib/operations/worker-records";
 import { WorkerEmploymentWorkspace } from "@/components/WorkerEmploymentWorkspace";
@@ -14,7 +16,7 @@ import {WorkerConfirmationManager} from "@/components/WorkerConfirmationManager"
 import { Empty, KeyValue, Metric, PageHeader, Section, Status } from "@/components/UI";
 import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
 import { rub } from "@/lib/ui/format";
-import { employmentTypeLabel } from "@/lib/ui/labels";
+import { employmentTypeLabel, shiftKindLabel } from "@/lib/ui/labels";
 
 const labels:Record<string,string>={
   overview:"Обзор",
@@ -49,12 +51,13 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
   const sensitive=hasCapability(actor.access,"worker.compensation.read");
   const payments=hasCapability(actor.access,"finance.payments.read");
   const tab=(requestedTab==="assets"&&!canViewAssets)||(requestedTab==="housing"&&!canViewHousing)?"overview":requestedTab;
-  const [details,offboarding,options,shifts,records]=await Promise.all([
+  const [details,offboarding,options,shifts,records,editor]=await Promise.all([
     getWorkerOperationsDetails(actor,id),
     getWorkerOffboardingContext(actor,id),
     getOperationsReferenceData(actor),
     hasCapability(actor.access,"operations.shift.read")?listShifts(actor).then(rows=>rows.filter(row=>row.objectId===worker.objectId)):Promise.resolve([]),
     staticDemo||["documents","incidents","history"].includes(tab)?getWorkerRecords(actor,worker):Promise.resolve({documents:[],incidents:[],history:[]}),
+    staticDemo||["overview","employment","history"].includes(tab)?getWorkerEditorContext(actor,id):Promise.resolve(null),
   ]);
   const visibleTabKeys=Object.keys(labels).filter((key)=>{
     if(key==="assets")return canViewAssets;
@@ -72,6 +75,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     <WorkerProfileTabs items={tabs} active={labels[tab]}/>
 
     {panel("overview",<>
+      {editor&&<WorkerDataEditor context={editor} demo={actor.demo} block="profile"/>}
       <div className="metrics-grid">
         <Metric label="Статус" value={worker.status==="active"?"Работает":worker.status==="dismissed"?"Работа завершена":worker.status} tone="good"/>
         <Metric label="Часов в периоде" value={(worker as typeof worker&{monthHours?:number}).monthHours??"—"}/>
@@ -93,16 +97,16 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
           {sensitive&&<KeyValue label="Действующая ставка" value={workerRateLabel(worker)} sensitive/>}
         </div></Section>
         <Section title="Ближайшие смены">
-          <div className="stack-list">{shifts.slice(0,4).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.kind}</strong><small>{row.object} · {row.time}</small></div><Status tone={row.deficit?"warn":"good"}>{row.status}</Status></div>)}</div>
+          <div className="stack-list">{shifts.slice(0,4).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {shiftKindLabel(row.kind)}</strong><small>{row.object} · {row.time}</small></div><Status tone={row.deficit?"warn":"good"}>{row.status}</Status></div>)}</div>
           {!shifts.length&&<Empty title="Смен нет" text="В доступном периоде смены не найдены."/>}
         </Section>
       </div>
     </>)}
 
-    {panel("employment",<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} canAccessAssets={canViewAssets} demo={actor.demo}/>)}
+    {panel("employment",<>{editor&&<WorkerDataEditor context={editor} demo={actor.demo} block="employment"/>}<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} canAccessAssets={canViewAssets} demo={actor.demo}/></>)}
     {panel("assignments",<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} demo={actor.demo} employmentDocumentsStatus={worker.employmentDocumentsStatus}/>)}
     {panel("schedule",<>
-      <Section title="Ближайшие смены"><div className="stack-list">{shifts.map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.time}</strong><small>{row.specialty} · {row.object}</small></div><Status tone="info">{row.kind}</Status></div>)}</div>{!shifts.length&&<Empty title="Смен нет" text="Для текущего назначения смены не найдены."/>}</Section>
+      <Section title="Ближайшие смены"><div className="stack-list">{shifts.map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.time}</strong><small>{row.specialty} · {row.object}</small></div><Status tone="info">{shiftKindLabel(row.kind)}</Status></div>)}</div>{!shifts.length&&<Empty title="Смен нет" text="Для текущего назначения смены не найдены."/>}</Section>
       <div style={{marginTop:16}}><WorkerAbsencesWorkspace workerId={id} details={details} canEdit={canEdit} demo={actor.demo}/></div>
     </>)}
     {panel("accruals",<Section title="Начисления"><div style={{padding:16,maxWidth:560}}><KeyValue label="Начислено за доступный период" value={worker.accrued==null?"—":rub(worker.accrued)} sensitive/><KeyValue label="Ставка" value={worker.rate==null?"—":rub(worker.rate)} sensitive/></div></Section>)}
@@ -116,9 +120,9 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     {panel("incidents",<Section title="Инциденты" note="Записи, связанные с этим сотрудником на доступных объектах.">
       {records.incidents.length?<div className="grid-scroll"><table className="data-table worker-records-table"><thead><tr><th>Событие</th><th>Объект</th><th>Дата</th><th>Статус</th></tr></thead><tbody>{records.incidents.map(row=><tr key={row.id}><td className="cell-title">{row.title}</td><td>{row.object}</td><td>{recordDate(row.occurredAt)}</td><td><Status tone={row.status==="resolved"?"good":"info"}>{({open:"Открыт",in_progress:"В работе",resolved:"Закрыт",cancelled:"Отменён"} as Record<string,string>)[row.status]??"Требует уточнения"}</Status></td></tr>)}</tbody></table></div>:<Empty title="Инцидентов не найдено" text="С этим сотрудником нет связанных инцидентов в доступных объектах."/>}
     </Section>)}
-    {panel("history",<Section title="История сотрудника" note="Назначения на объекты и периоды оформления. Предыдущие записи сохраняются.">
+    {panel("history",<><Section title="История сотрудника" note="Назначения на объекты и периоды оформления. Предыдущие записи сохраняются.">
       {records.history.length?<ol className="worker-records-history">{records.history.map(row=><li key={row.id}><time dateTime={row.date}>{recordDate(row.date)}</time><div><strong>{row.title}</strong>{row.object&&<span>{row.object}</span>}{row.detail&&<small>{row.detail}</small>}</div></li>)}</ol>:<Empty title="История пока не записана" text="Доступных назначений и периодов оформления не найдено."/>}
-    </Section>)}
+    </Section>{Boolean(editor?.events.length)&&<Section title="Изменения данных и оформления"><ol className="worker-records-history">{editor!.events.map(event=><li key={event.id}><time dateTime={event.date}>{recordDate(event.date)}</time><div><strong>{event.summary}</strong><span>{event.actor??"Пользователь"}</span>{event.reason&&<small>{event.reason}</small>}{event.detail&&<small>{event.detail}</small>}</div></li>)}</ol></Section>}</>)}
   </>;
   return staticDemo?<StaticDemoQueryTabsController enabled defaultTab="overview">{workspace}</StaticDemoQueryTabsController>:workspace;
 }
