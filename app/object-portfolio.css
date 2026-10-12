@@ -520,3 +520,26 @@
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-plan-explanation{padding:0 14px;margin:0 0 10px;font-size:12px;line-height:1.5;color:var(--muted)}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-guidance{display:block;padding:10px 14px}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-guidance>.object-shift-paint{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:6px;width:100%;max-width:none}
+
+/* Secondary object views must remain readable alongside the shared workspace. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-overview-timeline,.object-overview-contact,.object-linked-documents) strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-shifts td:first-child strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>a,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-document-attention button strong{font-size:13px;line-height:1.4}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-overview-contours,.object-overview-timeline,.object-overview-contact,.object-linked-documents,.object-document-attention) span,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contours strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contact a,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-overview-timeline,.object-overview-contact) small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metric small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-analytics-attention-list small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>span,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-candidate-lane-head,.object-candidate-lane-empty,.object-staffing-replacement){font-size:12px;line-height:1.45}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-controls .button{height:auto;min-height:38px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-controls>div:first-child{grid-template-columns:minmax(0,1fr) 112px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contact :is(span,a){overflow-wrap:anywhere}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contours strong{min-width:0;overflow-wrap:anywhere}
+/* Calendar columns keep their width; short weekday labels do not need micro type. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-matrix th span,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-two-line th.day span{font-size:11px;line-height:1.3}

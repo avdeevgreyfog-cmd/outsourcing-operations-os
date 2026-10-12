@@ -298,3 +298,30 @@ Unknown demand renders as a dash; a recorded zero renders as zero and says no
 exits are required. Coverage above a recorded target is shown explicitly. Weekly
 context states how many dates have demand records, so a partial demand sum cannot
 be mistaken for a complete weekly target. `planningCoverage` owns the daily label.
+
+### Verification harness boundary
+
+The isolated employee HTTP harness uses the real Next.js app and session login,
+postgres.js over a local PGlite socket, and ephemeral seeded data. Its socket
+multiplexer serializes PostgreSQL execution; it is not evidence for native
+multi-connection PostgreSQL locking. No customer DATABASE_URL is reused.
+
+Run `npm run build` before `npm run test:employee-http`. The harness needs Chromium
+(`npx playwright install chromium`) and OpenSSL for its temporary local HTTPS
+proxy; it preserves the application's Secure-cookie policy. The passing scenario
+covers real login, manager planning, a 390px employee cabinet, persisted hours,
+reconciliation protection, pause/resume, token rotation, manager offboarding
+permission denial, and director completion revoking employee read/write access.
+Planning dismissal leaves access active until completion. All fixtures are
+disposable; application authorization is exercised without injected actors.
+
+### Object secondary typography — 12 October 2026
+
+The object overview timeline, contour links and customer contact, staffing candidate
+cards, linked documents, document attention and metric notes follow the saved
+object's 13px identity / 12px secondary hierarchy. Candidate action buttons keep
+38px height even when labels wrap. Calendar weekday labels use 11px within the
+existing column widths; timesheet cell geometry and workflows remain unchanged.
+Validation: production build (including TypeScript), clean diff, and 108 browser
+combinations across 13 object tabs, nested views, 1440/390px and light/dark themes.
+Overview, staffing and documents screenshots were inspected. No database changes.
