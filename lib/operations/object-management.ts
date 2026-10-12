@@ -2,6 +2,7 @@ import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import {listEligibleObjectManagers} from "./object-manager-options";
 import * as demo from "@/lib/demo/data";
 import * as demoOrg from "@/lib/demo/organization";
 
@@ -57,27 +58,7 @@ export async function getObjectManagementOptions(actor:Actor,options:{includeCre
         FROM legal_entities WHERE active ORDER BY is_primary DESC,name
       `,
       includeCreation?sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`:Promise.resolve([]),
-      includeAssignments?sql<ObjectPersonOption[]>`
-        SELECT DISTINCT m.user_id id,u.display_name name
-        FROM organization_memberships m
-        JOIN app_users u ON u.id=m.user_id
-        LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-        WHERE m.status='active'
-          AND (
-            rt.code='object_manager'
-            OR EXISTS (
-              SELECT 1
-              FROM position_assignments pa
-              JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN positions p ON p.id=sp.job_profile_id
-              WHERE pa.membership_id=m.id
-                AND pa.status<>'ended'
-                AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND p.code IN ('object-manager','object_manager')
-            )
-          )
-        ORDER BY name
-      `:Promise.resolve([]),
+      includeAssignments?listEligibleObjectManagers(sql,actor.organizationId):Promise.resolve([]),
       includeAssignments?sql<ObjectPersonOption[]>`
         SELECT DISTINCT m.user_id id,u.display_name name
         FROM organization_memberships m

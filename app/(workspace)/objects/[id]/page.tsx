@@ -86,7 +86,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canHousing=hasCapability(actor.access,"supply.housing.read");
   const canProcurement=hasCapability(actor.access,"procurement.read");
   const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
-  const canAssignObject=hasCapability(actor.access,"operations.object.assign");
+  const canAssignObject=canReadRow(actor.access,"operations.object.assign",object,actor);
   const objectManagementOptions=canEditObject
     ?await safeObjectLoad(id,"object-management",()=>getObjectManagementOptions(actor,{includeAssignments:canAssignObject}),null)
     :null;
@@ -348,8 +348,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {panel("finance",<Section title="Финансы объекта" note="Операционный контроль начислений, выплат, ежедневной схемы и сверки с финансовым контуром."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} objectDefaultDailyPaymentShifts={object.defaultDailyPaymentShifts??0} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canReconcilePayments={canFinanceAdjust} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>)}
 
     {panel("documents",<Section title="Документы объекта" note="Рабочие документы объекта и ссылки на исходные коммерческие и договорные сущности без дублирования файлов."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} linked={linkedObjectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
-    {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
-        {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
+    {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace key={object.editVersion??object.id} object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
+        {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span>{objectSettingsHistoryDetail(item.metadata)&&<p>{objectSettingsHistoryDetail(item.metadata)}</p>}</div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
   </>;
   return staticDemo
     ?<StaticDemoQueryTabsController enabled defaultTab="overview" className={workspaceClass}>{workspaceContent}</StaticDemoQueryTabsController>
@@ -411,4 +411,14 @@ function objectHistoryLabel(verb:string,summary:string){
     manager_handover:"Передан основному менеджеру",
     settings_updated:"Обновлены настройки объекта",
   } as Record<string,string>)[verb]??"Изменён объект";
+}
+
+function objectSettingsHistoryDetail(metadata:Record<string,unknown>){
+  const before=metadata.before;
+  if(!before||typeof before!=="object"||Array.isArray(before))return "";
+  const labels:Record<string,string>={name:"Название",address:"Адрес",targetStartDate:"Плановый старт",actualStartDate:"Начало работы",actualEndDate:"Завершение работы",status:"Статус",recruitingMode:"Подбор",defaultTransitionDays:"Адаптация, дней",defaultDailyPaymentShifts:"Ежедневные выплаты, смен",defaultScheduleWorkDays:"Рабочие дни",defaultScheduleRestDays:"Выходные дни",defaultShiftKind:"Смена",ppeTaskEnabled:"Напоминание по СИЗ",ppeTaskDueDays:"Срок СИЗ, дней"};
+  const values:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь",company_rules:"По правилам компании",object_team:"Команда объекта",...objectStatusLabels};
+  const display=(value:unknown)=>value==null||value===""?"Не указано":typeof value==="boolean"?value?"Да":"Нет":values[String(value)]??String(value);
+  const source=before as Record<string,unknown>;
+  return Object.entries(labels).filter(([key])=>key in source&&key in metadata&&source[key]!==metadata[key]).map(([key,label])=>`${label}: ${display(source[key])} → ${display(metadata[key])}`).join("; ");
 }

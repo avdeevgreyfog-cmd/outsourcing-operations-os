@@ -396,3 +396,21 @@
   color:var(--muted);
   font-weight:560;
 }
+
+/* Settings blocks keep their own edit boundary and stay within the object canvas. */
+.object-settings-form{margin:0;border:0;min-width:0}
+.object-settings-form:disabled input,.object-settings-form:disabled select{color:var(--text);opacity:1}
+.object-settings-layout .section-head{gap:12px;flex-wrap:wrap}
+.object-settings-actions{flex-wrap:wrap}
+.object-settings-actions :is(.form-error,.object-settings-success){flex:1 1 240px;line-height:1.45}
+.sales-workspace.operations-workspace .object-workspace-pilot,
+.sales-workspace.operations-workspace .object-pilot-header,
+.sales-workspace.operations-workspace .object-primary-nav{min-width:0;max-width:100%}
+.sales-workspace.operations-workspace .object-primary-nav .entity-tabs{min-width:0;max-width:100%;overflow-x:auto}
+@media(max-width:760px){
+  .sales-workspace.operations-workspace .object-pilot-header{grid-template-columns:minmax(0,1fr)}
+  .sales-workspace.operations-workspace .object-pilot-title :is(h1,p){white-space:normal;overflow-wrap:anywhere}
+  .object-settings-form>label{min-width:0}
+  .object-settings-form :is(input,select){min-width:0;max-width:100%}
+  .object-settings-actions .button{flex:1 1 120px}
+}
