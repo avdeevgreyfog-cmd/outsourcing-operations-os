@@ -1,8 +1,8 @@
 "use client";
 
-import {createPortal} from "react-dom";
+import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import {useMemo,useState} from "react";
-import {Plus,Trash2,X} from "lucide-react";
+import {Plus,Trash2} from "lucide-react";
 import type {ClientContactOption,ObjectContactRow} from "@/lib/operations/service";
 import {Empty} from "@/components/UI";
 
@@ -102,7 +102,7 @@ export function ObjectContactsWorkspace({
   return <>
     <section className="section section-flush">
       <div className="section-head"><div><h2>Контакты объекта</h2><p>Контакты заказчика и их зона ответственности именно на этом объекте.</p></div>{canEdit&&<button className="button primary" onClick={open}><Plus size={14}/> Добавить контакт</button>}</div>
-      {error&&!show&&<div className="recruiting-error">{error}</div>}
+      {error&&!show&&<div role="alert" className="recruiting-error">{error}</div>}
       {rows.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Контакт</th><th>Роль на объекте</th><th>Связь</th><th>Комментарий</th>{canEdit&&<th aria-label="Действия"></th>}</tr></thead><tbody>{rows.map(row=><tr key={row.assignmentId}>
         <td><strong className="cell-title">{row.fullName}</strong><span className="cell-sub">{row.position??"Должность не указана"}</span></td>
         <td>{row.roles.map(role=>roleLabels[role]??role).join(" · ")}</td>
@@ -112,10 +112,7 @@ export function ObjectContactsWorkspace({
       </tr>)}</tbody></table></div>:<Empty title="Контакты не назначены" text="Добавьте контакт заказчика и укажите, за какие вопросы он отвечает на объекте."/>}
     </section>
 
-    {show&&<Portal><div className="object-contact-drawer-overlay" onMouseDown={event=>{if(event.currentTarget===event.target)setShow(false)}}>
-      <aside className="object-contact-drawer" role="dialog" aria-modal="true" aria-label="Контакт объекта">
-        <header className="object-contact-drawer-head"><div><h2>Контакт объекта</h2><p>Контакт клиента хранится один раз; здесь задаётся только его роль на объекте.</p></div><button className="icon-button" type="button" onClick={()=>setShow(false)}><X size={17}/></button></header>
-        <div className="object-contact-drawer-body">
+    {show&&<RegistryDrawer className="object-form-drawer object-contact-form" title="Контакт объекта" subtitle="Контакт клиента хранится один раз; здесь задаётся только его роль на объекте." onClose={()=>{if(!busy)setShow(false)}} footer={<><button className="button" type="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||!roles.length||(mode==="existing"?!contactId:!fullName.trim()||!filledMethods.length)} onClick={()=>void save()}>{busy?"Сохраняю…":"Добавить контакт"}</button></>}><div className="object-contact-form-body">
           <div className="object-action-choice object-contact-mode"><button type="button" className={mode==="existing"?"active":""} onClick={()=>switchMode("existing")} disabled={!available.length}>Выбрать существующий</button><button type="button" className={mode==="new"?"active":""} onClick={()=>switchMode("new")}>Создать новый</button></div>
 
           {mode==="existing"?<section className="object-contact-form-section">
@@ -136,11 +133,8 @@ export function ObjectContactsWorkspace({
 
           <section className="object-contact-form-section"><div className="object-contact-section-title"><strong>Зона ответственности на объекте</strong><span>Можно выбрать несколько направлений.</span></div><div className="object-contact-role-grid">{roleOptions.map(([value,label])=><label className={roles.includes(value)?"active":""} key={value}><input type="checkbox" checked={roles.includes(value)} onChange={()=>toggleRole(value)}/><span>{label}</span></label>)}</div></section>
           <section className="object-contact-form-section"><label>Комментарий<textarea value={note} onChange={event=>setNote(event.target.value)} placeholder="Например: табель присылает до 10:00, по пропускам писать в Telegram"/></label></section>
-          {error&&<div className="recruiting-error">{error}</div>}
-        </div>
-        <footer className="object-contact-drawer-footer"><button className="button" type="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||!roles.length||(mode==="existing"?!contactId:!fullName.trim()||!filledMethods.length)} onClick={()=>void save()}>{busy?"Сохраняю…":"Добавить контакт"}</button></footer>
-      </aside>
-    </div></Portal>}
+          {error&&<div role="alert" className="recruiting-error">{error}</div>}
+        </div></RegistryDrawer>}
   </>;
 }
 
@@ -158,4 +152,3 @@ function secondaryContact(row:ObjectContactRow){
   const values=[row.phone,row.telegram,row.whatsapp,row.email,row.maxContact].filter(Boolean).filter(value=>!primaryContact(row).includes(String(value)));
   return values.slice(0,2).join(" · ");
 }
-function Portal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body)}

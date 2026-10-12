@@ -328,3 +328,20 @@ Overview, staffing and documents screenshots were inspected. No database changes
 At widths up to 560px, overview attention actions sit below the full-width event
 text. The final adjustment passed a rebuild and four additional overview browser
 combinations (both widths and themes); its mobile screenshot was inspected.
+
+### Object forms and employee link actions — 13 October 2026
+
+Contacts, object documents, incidents and link confirmations reuse RegistryDrawer:
+labelled dialog, focus containment, Escape, return focus and shared footer. Object
+forms use 18px panel headings, 13px controls and 12px labels. Contacts retain their
+490px role width; document/incident forms use the existing 560px drawer and a
+single column on narrow screens. The shared drawer's default behavior is unchanged.
+Link labels distinguish blocking/unblocking from replacement and permanent token
+revocation. Replacement/revocation and hours reconciliation explain consequences
+in a contextual panel before running the existing action. Document save prevents
+duplicate submission and handles network rejection without discarding input.
+Validation: build including TypeScript, targeted lint, 398 existing tests and 20
+browser fixture checks across two themes/widths for focus, Escape, cancel, demo
+save and link consequence panels. Screenshots of desktop documents/contacts and
+mobile incidents were inspected. Fixture checks do not issue real links or write
+customer data; backend lifecycle validation is documented in the earlier block.

@@ -547,3 +547,19 @@
   :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-attention .stack-item{display:flex;flex-direction:column;align-items:stretch;gap:10px}
   :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-attention .stack-item .button{align-self:flex-start}
 }
+
+/* Object forms reuse the accessible registry drawer, including portalled panels. */
+.operis-registry-drawer.object-form-drawer{font-size:13px}
+.operis-registry-drawer.object-form-drawer>header h2{font-size:18px;line-height:1.4}
+.operis-registry-drawer.object-form-drawer :is(label,.object-contact-section-title span){font-size:12px;line-height:1.5}
+.operis-registry-drawer.object-form-drawer .object-form-explanation{margin:0;font-size:13px;line-height:1.6}
+.operis-registry-drawer.object-form-drawer .object-form-message{font-size:12px;line-height:1.5;color:var(--muted)}
+.operis-registry-drawer.object-form-drawer>footer{justify-content:flex-end;flex-wrap:wrap}
+.operis-registry-drawer.object-form-drawer input:is([type="checkbox"],[type="radio"]){width:16px;height:16px;min-height:16px;padding:0;flex:none}
+.operis-registry-drawer.object-form-drawer .object-contact-form-body{display:grid;align-content:start;gap:20px}
+.operis-registry-drawer.object-contact-form{width:490px}
+@media(max-width:560px){.operis-registry-drawer.object-form-drawer .form-grid.two{grid-template-columns:minmax(0,1fr)}.operis-registry-drawer.object-form-drawer .form-grid.two .span-2{grid-column:auto}}
+.operis-registry-drawer.object-form-drawer .form-grid.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.operis-registry-drawer.object-form-drawer .form-grid.two>label{display:grid;align-content:start;gap:6px;min-width:0;color:var(--muted);font-weight:500}
+.operis-registry-drawer.object-form-drawer .form-grid.two .span-2{grid-column:1/-1}
+@media(max-width:560px){.operis-registry-drawer.object-form-drawer .form-grid.two{grid-template-columns:minmax(0,1fr)}}
