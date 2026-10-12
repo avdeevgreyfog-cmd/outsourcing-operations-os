@@ -224,7 +224,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const {id}=await params;
     const body=schema.parse(await request.json());
     if(actor.demo)return NextResponse.json({ok:true,demo:true});
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const scope=await getScope(tx,id);
       if(!scope||!canReadRow(actor.access,"operations.shift.edit",scope,actor))throw new AccessDeniedError("operations.shift.edit");
 
@@ -282,7 +282,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,'shift_plan_generated',
           'Сформирован план смен из графиков сотрудников',${tx.json({startDate:body.startDate,endDate:body.endDate,workerIds:body.workerIds??null,updated,skipped,skippedFact,skippedLocked,skippedAbsence,skippedExisting})})`;
       return {ok:true,updated,skipped,skippedFact,skippedLocked,skippedAbsence,skippedExisting};
-    }));
+    });
     return NextResponse.json(result);
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры плана",issues:error.issues},{status:400});
