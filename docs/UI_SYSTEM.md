@@ -260,3 +260,22 @@ approval of every visual change. The 4 October scope is recorded in standard v1.
 Requests, clients and tenders share `SalesRecordTitle` (quick preview) and `SalesRecordActions` (Eye → preview, ArrowUpRight → full record). The action column is 88 px. Editing is explicit, prefilled and retains identity; creation remains separate. Compact editors use SalesDrawer; requests retain their detailed form. Browser-only demo copies are labeled and do not send business mutations. Missing demo records cannot be saved as empty replacements.
 
 Full sales records retain the existing entity layouts and canonical /requests/[id], /clients/[id], /tenders/[id] URLs. Browser demo overrides merge into these same layouts without replacing tabs, related records or detailed content with summary-only pages. Creation and explicit prefilled editing remain distinct.
+
+## Saved object surfaces (12 October 2026)
+
+The object card shares one scoped working-surface contract in
+`app/object-portfolio.css`: section headings 14 px / 650, body and controls 13 px,
+secondary text 12 px, controls 38 px / radius 7 px, panels radius 8 px, and local
+views as text tabs with an orange underline. Colors use the existing theme tokens.
+Main entity navigation and domain workflows stay in place. Planning and timesheet
+calendars retain their specialized cell geometry; ordinary tables use the shared
+42 px header and consistent cell padding. Analytics retains its analytical metrics.
+Supply and incidents begin with their section heading before operational metrics.
+Employee access management groups its settings below the employee register rather
+than presenting unstructured form rows. Payment actions wrap separately from input
+fields to respect the available object width, including the global sidebar.
+
+`tests/object-card-browser.mjs` checks all 13 top-level object views in light/dark
+at desktop/phone widths, rejects page overflow, checks section heading sizes, and
+opens confirmation/link/update views plus expanded link settings. It blocks API
+writes; this visual check does not establish live database workflow correctness.

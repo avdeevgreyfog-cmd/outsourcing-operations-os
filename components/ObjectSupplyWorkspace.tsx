@@ -32,19 +32,19 @@ export function ObjectSupplyWorkspace({
   const openRequests=requests.filter(row=>!["closed","rejected"].includes(row.status));
 
   return <div className="object-supply-workspace">
-    <div className="metrics-grid object-supply-metrics">
-      <Metric label="Нужно дообеспечить" value={missingWorkers.length} tone={missingWorkers.length?"warn":"good"}/>
-      <Metric label="Ниже минимума" value={lowStock.length} tone={lowStock.length?"warn":"good"}/>
-      <Metric label="Расходники на объекте" value={consumables.length}/>
-      <Metric label="Открытые заявки" value={openRequests.length} tone={openRequests.length?"warn":undefined}/>
-    </div>
-
     <div className="object-supply-actions">
       <div><strong>Обеспечение объекта</strong><span>Здесь — нормы, выдача и фактический запас этого объекта. Полные движения и управление складами остаются в общем контуре имущества.</span></div>
       <div className="page-actions">
         {canAssets&&<Link className="button" href={`/assets?object=${objectId}`}>Открыть полный склад</Link>}
         {canProcurement&&<Link className="button primary" href={`/procurement?object=${objectId}&create=1`}>Создать заявку</Link>}
       </div>
+    </div>
+
+    <div className="metrics-grid object-supply-metrics">
+      <Metric label="Нужно дообеспечить" value={missingWorkers.length} tone={missingWorkers.length?"warn":"good"}/>
+      <Metric label="Ниже минимума" value={lowStock.length} tone={lowStock.length?"warn":"good"}/>
+      <Metric label="Расходники на объекте" value={consumables.length}/>
+      <Metric label="Открытые заявки" value={openRequests.length} tone={openRequests.length?"warn":undefined}/>
     </div>
 
     {canAssets&&<Section title="Требует выдачи сотрудникам" note="Показываются индивидуально учитываемые позиции по комплекту специальности. Расходники с периодической выдачей планируются через тот же комплект.">

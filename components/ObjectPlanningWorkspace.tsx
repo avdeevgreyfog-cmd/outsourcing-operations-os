@@ -6,7 +6,7 @@ import {WorkerConfirmationManager} from "@/components/WorkerConfirmationManager"
 export function ObjectPlanningWorkspace({objectId,rows,workers,today,canEdit,canReconcile,canPlanAbsence,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;canReconcile:boolean;canPlanAbsence:boolean;demo:boolean}){
  const [tab,setTab]=useState<"planning"|"confirmations">("planning");
  return <div>
-  <div className="worker-confirmation-tabs" role="tablist" aria-label="Планирование выходов">
+  <div className="object-local-tabs object-planning-tabs" role="tablist" aria-label="Планирование выходов">
    <button role="tab" aria-selected={tab==="planning"} className={tab==="planning"?"active":""} onClick={()=>setTab("planning")}>График сотрудников</button>
    <button role="tab" aria-selected={tab==="confirmations"} className={tab==="confirmations"?"active":""} onClick={()=>setTab("confirmations")}>Подтверждения и ссылки</button>
   </div>

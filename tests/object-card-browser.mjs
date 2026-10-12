@@ -16,8 +16,11 @@ try{
    if(tab==='staffing')assert.equal(await page.locator('.object-staffing-metrics').count(),0,'duplicate staffing KPI row removed');
    if(tab==='overview')assert.equal(await page.locator('.object-overview-metrics').count(),0,'duplicate KPI row removed');
    const sizing=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
-   console.log(width,theme,tab,sizing.scroll>sizing.width?'OVERFLOW':'fits');
+   assert.ok(sizing.scroll<=sizing.width+1,`${tab} page overflow at ${width}`);
+   const headings=await page.locator('.object-workspace-pilot .section-head h2,.object-workspace-pilot .object-module-head h2').evaluateAll(nodes=>nodes.map(n=>getComputedStyle(n).fontSize));assert.ok(headings.every(size=>size==='14px'),`${tab}: heading sizes ${headings}`);
+   console.log(width,theme,tab,'fits / unified headings');
    await page.screenshot({path:`/tmp/object-card-${tab}-${width}-${theme}.png`,fullPage:true});checks++;
+   if(tab==='shifts'){await page.getByRole('tab',{name:'Подтверждения и ссылки'}).click();for(const name of ['Подтверждения','Персональные ссылки','Изменения сотрудников']){await page.getByRole('button',{name,exact:true}).click();await page.screenshot({path:`/tmp/object-nested-${name==='Подтверждения'?'answers':name==='Персональные ссылки'?'links':'updates'}-${width}-${theme}.png`,fullPage:true});const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);assert.ok(overflow<=1);checks++;}await page.getByRole('button',{name:'Персональные ссылки',exact:true}).click();for(const summary of ['Индивидуальные исключения из режима объекта','Настроить график сотрудника'])await page.getByText(summary,{exact:true}).click();await page.screenshot({path:`/tmp/object-link-settings-${width}-${theme}.png`,fullPage:true});checks++;}
   }await context.close();
  }assert.deepEqual(errors,[]);console.log('Checked',checks,'tab/theme/width combinations');
 }finally{await browser?.close();server.kill();}
