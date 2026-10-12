@@ -502,3 +502,21 @@
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs a{text-decoration:none}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-analytics-period{font-size:12px;flex-wrap:wrap}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-analytics-period .segmented{max-width:100%;overflow-x:auto}
+/* A single object view at a time: navigation -> tools -> context -> data. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot [hidden]{display:none!important}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-workspace{display:block}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-actions{border:0;border-bottom:1px solid var(--border);border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-context-line{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-size:12px;line-height:1.5}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-context-line b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-content>.section{margin:0;border:0;border-bottom:1px solid var(--border);border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-stock-grid{display:block;margin:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-stock-grid>.section{margin:0;border:0;border-bottom:1px solid var(--border);border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-settings-layout{display:block;padding:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-settings-actions:empty{display:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch{display:flex;align-items:center;gap:4px;padding:10px 14px;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--panel-2)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch button{flex:none;min-height:32px;border:1px solid transparent;border-radius:5px;padding:5px 10px;background:transparent;color:var(--muted);font-size:13px;cursor:pointer}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch button.active{border-color:var(--border);background:var(--panel);color:var(--text);font-weight:600}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch button span{margin-left:5px;font-size:12px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-plan-explanation{padding:0 14px;margin:0 0 10px;font-size:12px;line-height:1.5;color:var(--muted)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-guidance{display:block;padding:10px 14px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-guidance>.object-shift-paint{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:6px;width:100%;max-width:none}

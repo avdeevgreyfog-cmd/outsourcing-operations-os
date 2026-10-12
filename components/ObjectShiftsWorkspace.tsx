@@ -211,7 +211,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     finally{setBusy("")}
   }
   return <div className={`object-shift-planner object-shift-workbench ${pilot?"object-shift-pilot":"object-shift-classic"}`}>
-    {pilot&&<div className="object-local-tabs object-shift-local-tabs" role="tablist" aria-label="Представления смен"><button type="button" className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>План по сотрудникам <span>{workers.length}</span></button><button type="button" className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям <span>{specialties.length}</span></button><button type="button" className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания <span>{attentionCount}</span></button></div>}
+    {pilot&&<div className="object-view-switch" role="group" aria-label="Представления смен"><button type="button" className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>План по сотрудникам <span>{workers.length}</span></button><button type="button" className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям <span>{specialties.length}</span></button><button type="button" className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания <span>{attentionCount}</span></button></div>}
     <div className="object-shift-planner-toolbar">
       <div className="page-actions">
         <button className="button" onClick={()=>{const next=addDays(start,-7);setStart(next);setFocusDate(next)}}>← Неделя</button>
@@ -225,15 +225,10 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       </div>
     </div>
 
-    <div className="object-shift-week-summary">
-      <div><span>Потребность</span><strong>{weekSummary.required}</strong><small>человеко-выходов</small></div>
-      <div><span>План / факт</span><strong>{weekSummary.plan}</strong><small>{weekSummary.suggested?`ещё ${weekSummary.suggested} рассчитано`:"закрыто планом или фактом"}</small></div>
-      <div className={weekSummary.deficit?"is-attention":""}><span>Дефицит</span><strong>{weekSummary.deficit}</strong><small>{weekSummary.deficit?"нужно закрыть":"план закрыт"}</small></div>
-      <div><span>Резерв</span><strong>{weekSummary.reserve}</strong><small>не передаётся в табель как план</small></div>
-    </div>
+    <div className="object-context-line"><span>Потребность: <b>{weekSummary.required||"—"}</b></span><span>План / факт: <b>{weekSummary.plan}</b></span><span>Дефицит: <b>{weekSummary.required?weekSummary.deficit:"—"}</b></span><span>Резерв: <b>{weekSummary.reserve}</b></span>{weekSummary.suggested>0&&<span>По графикам: <b>+{weekSummary.suggested}</b>, ещё не утверждено</span>}</div>
 
     <div className="object-shift-guidance">
-      <div><strong>План → факт</strong><span>Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику; «Сформировать с сегодня» фиксирует их как план.</span></div>
+
       {canEdit&&!selected.size&&<div className="object-shift-paint"><span>Клик по ячейке:</span>{(["day","night","off","reserve_day","reserve_night","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{paintCode(kind)}</b>{paintLabels[kind]}</button>)}</div>}
     </div>
 
@@ -256,11 +251,11 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       <div className="page-actions"><button className="button" type="button" onClick={()=>setAbsenceOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="absence"} onClick={()=>void planAbsence()}>{busy==="absence"?"Сохраняем…":"Запланировать"}</button></div>
     </div>}
 
-    {pilot?<details className="object-shift-legend object-shift-legend-collapsible"><summary>Обозначения и логика плана</summary><div><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div></details>:<div className="object-shift-legend"><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div>}
+    {pilot?<details className="object-shift-legend object-shift-legend-collapsible"><summary>Обозначения и логика плана</summary><p className="object-plan-explanation">Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику. «Сформировать с сегодня» фиксирует их как план; резерв не передаётся в табель как рабочий выход.</p><div><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div></details>:<div className="object-shift-legend"><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div>}
     {message&&<div className="object-staffing-message">{message}</div>}
 
     <div className="object-shift-coverage">
-      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{required||"—"}</strong><small>{past?(deficit?`Не хватило: ${deficit}`:"Факт закрыт"):(deficit?`Дефицит: ${deficit}`:"План закрыт")}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
+      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{required||"—"}</strong><small>{!required?"Потребность не задана":deficit?`${past?"Не хватило":"Дефицит"}: ${deficit}`:coverage>required?`Сверх потребности: +${coverage-required}`:past?"Факт закрыт":"План закрыт"}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
     </div>
 
     <div className="object-shift-deficit-panel">

@@ -13,6 +13,7 @@ const statusOptions=[
 
 export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:ObjectRow;options:ObjectManagementOptions;demo:boolean;canAssign:boolean}){
   const router=useRouter();
+  const [view,setView]=useState<"general"|"team"|"recruiting"|"personnel">("general");
   const [editing,setEditing]=useState<"general"|"team"|"recruiting"|"personnel"|null>(null);
   const [version,setVersion]=useState(object.editVersion??"");
   const [name,setName]=useState(object.name);
@@ -109,7 +110,11 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
     finally{setBusy(false);}
   }
 
-  return <div className="object-settings-layout">
+  return <div className="object-module-shell object-settings-workspace">
+    <div className="object-module-head"><div><h2>Настройки объекта</h2><p>Параметры, ответственность, подбор и условия работы сотрудников.</p></div></div>
+    <div className="object-local-tabs" aria-label="Разделы настроек">{([["general","Параметры и основание"],["team","Команда объекта"],["recruiting","Подбор"],["personnel","Условия работы"]] as const).map(([key,label])=><button key={key} type="button" aria-pressed={view===key} disabled={editing!==null||busy} className={view===key?"active":""} onClick={()=>setView(key)}>{label}</button>)}</div>
+    <div className="object-settings-layout">
+    <div hidden={view!=="general"} className="object-view-content">
     <Section title="Параметры объекта" actions={<button className="button" disabled={busy||editing!==null} onClick={()=>{setError("");setSaved("");setEditing("general");}}>Редактировать</button>}>
       <fieldset disabled={busy||editing!=="general"} className="object-settings-form">
         <label>Название объекта<input value={name} onChange={e=>setName(e.target.value)}/></label>
@@ -134,6 +139,8 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
       </div>
     </Section>
 
+    </div>
+    <div hidden={view!=="team"} className="object-view-content">
     <Section title="Команда объекта" actions={canAssign&&<button className="button" disabled={busy||editing!==null} onClick={()=>{setError("");setSaved("");setEditing("team");}}>Редактировать</button>}>
       {canAssign?<fieldset disabled={busy||editing!=="team"} className="object-settings-form">
         <label>Основной менеджер<select value={ownerUserId} onChange={e=>{setOwnerUserId(e.target.value);setAdditionalManagers(current=>current.filter(id=>id!==e.target.value))}}><option value="">Выберите менеджера</option>{object.ownerUserId&&!options.managers.some(item=>item.id===object.ownerUserId)&&<option value={object.ownerUserId}>{object.ownerName??"Текущий менеджер"}</option>}{options.managers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
@@ -142,6 +149,8 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
       </fieldset>:<div className="object-settings-readonly"><div><span>Основной менеджер</span><strong>{object.ownerName??"Не назначен"}</strong></div><div><span>Дополнительные менеджеры</span><strong>{object.additionalManagers?.map(item=>item.name).join(", ")||"Нет"}</strong></div><small>Изменение команды доступно руководителю с правом назначения ответственных объекта.</small></div>}
     </Section>
 
+    </div>
+    <div hidden={view!=="recruiting"} className="object-view-content">
     <Section title="Маршрутизация подбора" actions={canAssign&&<button className="button" disabled={busy||editing!==null} onClick={()=>{setError("");setSaved("");setEditing("recruiting");}}>Редактировать</button>}>
       {canAssign?<fieldset disabled={busy||editing!=="recruiting"} className="object-settings-form">
         <label className="wide">Новые потребности<select value={recruitingMode} onChange={e=>setRecruitingMode(e.target.value as "company_rules"|"object_team")}><option value="company_rules">По правилам компании</option><option value="object_team">Закреплённая команда объекта</option></select></label>
@@ -151,6 +160,8 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
       </fieldset>:<div className="object-settings-readonly"><div><span>Маршрут</span><strong>{object.recruitingMode==="object_team"?"Закреплённая команда объекта":"По правилам компании"}</strong></div>{object.recruitingMode==="object_team"&&<div><span>Команда подбора</span><strong>{object.recruitingTeam?.map(item=>item.name).join(", ")||"Не назначена"}</strong></div>}<small>Маршрутизация новых потребностей изменяется руководителем объекта или направления.</small></div>}
     </Section>
 
+    </div>
+    <div hidden={view!=="personnel"} className="object-view-content">
     <Section title="Работа с персоналом" actions={<button className="button" disabled={busy||editing!==null} onClick={()=>{setError("");setSaved("");setEditing("personnel");}}>Редактировать</button>}>
       <fieldset disabled={busy||editing!=="personnel"} className="object-settings-form">
         <label>Период адаптации, дней<input type="number" min="0" max="90" value={transitionDays} onChange={e=>setTransitionDays(e.target.value)}/><small>По умолчанию 7 дней после первого подтверждённого выхода.</small></label>
@@ -164,8 +175,9 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
       </fieldset>
     </Section>
 
+    </div>
     <div className="object-settings-actions">{editing&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy?"Сохраняю…":"Сохранить настройки"}</button><button className="button" disabled={busy} onClick={cancel}>Отменить изменения</button></>}{error&&<span role="alert" className="form-error">{error}</span>}{conflict&&<button className="button" disabled={busy} onClick={()=>{if(window.confirm("Загрузить актуальные настройки? Несохранённые изменения будут потеряны."))window.location.reload();}}>Загрузить актуальные данные</button>}{saved&&<span role="status" className="object-settings-success">{saved}</span>}</div>
-  </div>;
+  </div></div>;
 }
 
 function todayIso(){return new Date().toISOString().slice(0,10)}

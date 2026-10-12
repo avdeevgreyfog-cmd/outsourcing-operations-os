@@ -1,5 +1,7 @@
+"use client";
+import {useState} from "react";
 import Link from "next/link";
-import {Metric,Section,Status} from "@/components/UI";
+import {Section,Status} from "@/components/UI";
 import {ObjectPpeTemplatesWorkspace} from "@/components/ObjectPpeTemplatesWorkspace";
 import type {WorkerRow} from "@/lib/data/service";
 import type {HousingSiteRow,InventoryBalanceRow,InventoryItemRow,ObjectPpeTemplateRow,SupplyRequestRow} from "@/lib/operations/service";
@@ -25,28 +27,27 @@ export function ObjectSupplyWorkspace({
   canManageAssets:boolean;
   demo:boolean;
 }){
+  const [view,setView]=useState<"issue"|"stock"|"norms"|"requests"|"housing">(canAssets?"issue":canProcurement?"requests":"housing");
   const missingWorkers=workers.filter(worker=>(worker.ppeMissingNames?.length??0)>0);
   const lowStock=balances.filter(row=>row.minQuantity>0&&row.usableQuantity<=row.minQuantity);
   const consumables=balances.filter(row=>row.category==="consumable");
   const individualStock=balances.filter(row=>row.category!=="consumable");
   const openRequests=requests.filter(row=>!["closed","rejected"].includes(row.status));
 
-  return <div className="object-supply-workspace">
-    <div className="object-supply-actions">
-      <div><strong>Обеспечение объекта</strong><span>Здесь — нормы, выдача и фактический запас этого объекта. Полные движения и управление складами остаются в общем контуре имущества.</span></div>
+  return <div className="object-module-shell object-supply-workspace">
+    <div className="object-supply-actions object-module-head">
+      <div><h2>Обеспечение объекта</h2><p>Здесь — нормы, выдача и фактический запас этого объекта. Полные движения и управление складами остаются в общем контуре имущества.</p></div>
       <div className="page-actions">
         {canAssets&&<Link className="button" href={`/assets?object=${objectId}`}>Открыть полный склад</Link>}
         {canProcurement&&<Link className="button primary" href={`/procurement?object=${objectId}&create=1`}>Создать заявку</Link>}
       </div>
     </div>
 
-    <div className="metrics-grid object-supply-metrics">
-      <Metric label="Нужно дообеспечить" value={missingWorkers.length} tone={missingWorkers.length?"warn":"good"}/>
-      <Metric label="Ниже минимума" value={lowStock.length} tone={lowStock.length?"warn":"good"}/>
-      <Metric label="Расходники на объекте" value={consumables.length}/>
-      <Metric label="Открытые заявки" value={openRequests.length} tone={openRequests.length?"warn":undefined}/>
+    <div className="object-local-tabs" aria-label="Разделы обеспечения">
+      {([["issue","Выдача сотрудникам",canAssets],["stock","Запасы",canAssets],["norms","Комплекты и нормы",canAssets],["requests","Заявки",canProcurement],["housing","Жильё",canHousing]] as const).filter(([, ,allowed])=>allowed).map(([key,label])=><button key={key} type="button" aria-pressed={view===key} className={view===key?"active":""} onClick={()=>setView(key)}>{label}</button>)}
     </div>
-
+    <div className="object-context-line"><span>Дообеспечить сотрудников: <b>{missingWorkers.length}</b></span><span>Ниже минимума: <b>{lowStock.length}</b></span><span>Открытые заявки: <b>{openRequests.length}</b></span></div>
+    <div hidden={view!=="issue"} className="object-view-content">
     {canAssets&&<Section title="Требует выдачи сотрудникам" note="Показываются индивидуально учитываемые позиции по комплекту специальности. Расходники с периодической выдачей планируются через тот же комплект.">
       <div className="request-table-wrap"><table className="data-table object-supply-workers">
         <thead><tr><th>Сотрудник</th><th>Специальность</th><th>Размеры</th><th>Выдано</th><th>Не хватает</th><th></th></tr></thead>
@@ -61,6 +62,8 @@ export function ObjectSupplyWorkspace({
       </table>{!missingWorkers.length&&<div className="empty-inline">По текущим нормам все сотрудники обеспечены.</div>}</div>
     </Section>}
 
+    </div>
+    <div hidden={view!=="stock"} className="object-view-content">
     {canAssets&&<div className="workspace-grid object-supply-stock-grid">
       <Section title="Запас объекта" note="Размеры и варианты показываются отдельными строками.">
         <div className="request-table-wrap"><table className="data-table">
@@ -86,10 +89,14 @@ export function ObjectSupplyWorkspace({
       </Section>
     </div>}
 
+    </div>
+    <div hidden={view!=="norms"} className="object-view-content">
     {canAssets&&<Section title="Комплекты и нормы по специальностям объекта" note="Базовый комплект приходит из общего контура обеспечения; здесь можно создать локальное переопределение состава и периодов выдачи.">
       <ObjectPpeTemplatesWorkspace objectId={objectId} templates={templates} inventoryItems={inventoryItems} specialties={specialties} canManage={canManageAssets} demo={demo}/>
     </Section>}
 
+    </div>
+    <div hidden={view!=="requests"} className="object-view-content">
     {canProcurement&&<Section title="Заявки на обеспечение" note="Здесь только заявки этого объекта; обработка и согласование идут в общей очереди.">
       <div className="request-table-wrap"><table className="data-table">
         <thead><tr><th>Заявка</th><th>Тип</th><th>Количество</th><th>Сумма</th><th>Статус</th></tr></thead>
@@ -104,10 +111,13 @@ export function ObjectSupplyWorkspace({
       <div className="section-actions"><Link className="button primary" href={`/procurement?object=${objectId}&create=1`}>Новая заявка</Link><Link className="button" href={`/procurement?object=${objectId}`}>Открыть общую очередь</Link></div>
     </Section>}
 
+    </div>
+    <div hidden={view!=="housing"} className="object-view-content">
     {canHousing&&<Section title="Связанный контур · жильё" note="Жильё остаётся отдельным рабочим контуром обеспечения.">
       <div className="stack-list">{housing.map(row=><div className="stack-item" key={row.id}><div><strong>{row.name}</strong><small>{row.occupied} занято · {row.available} свободно · {rub(row.monthlyForecast)}/мес</small></div><Status tone={row.available>0?"good":"warn"}>{row.capacity} мест</Status></div>)}</div>
       {!housing.length&&<div className="empty-inline">Жильё к объекту не привязано.</div>}
       <div className="section-actions"><Link className="button" href={`/supply/housing?object=${objectId}`}>Открыть жильё</Link></div>
     </Section>}
+    </div>
   </div>;
 }

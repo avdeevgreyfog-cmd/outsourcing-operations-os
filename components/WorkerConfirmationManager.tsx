@@ -15,12 +15,13 @@ type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Sett
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
 function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
-export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcile=false,demo=false}:{objectId?:string;workerId?:string;canEdit:boolean;canReconcile?:boolean;demo?:boolean}){
+export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcile=false,demo=false,view,hideTabs=false}:{objectId?:string;workerId?:string;canEdit:boolean;canReconcile?:boolean;demo?:boolean;view?:"answers"|"links"|"updates";hideTabs?:boolean}){
  const [data,setData]=useState<Payload>(empty);
  const [loaded,setLoaded]=useState(false);
  const [error,setError]=useState("");
  const [info,setInfo]=useState("");
- const [mode,setMode]=useState<"answers"|"links"|"updates">("answers");
+ const [localMode,setMode]=useState<"answers"|"links"|"updates">("answers");
+ const mode=view??localMode;
  const [search,setSearch]=useState("");
  const [contactNumber,setContactNumber]=useState("");
  const [patternWorker,setPatternWorker]=useState("");
@@ -88,12 +89,13 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
   return <span className="worker-confirmation-status good">{r.shiftKind==="night"?"Выйдет ночью":"Выйдет днём"}</span>;
  }
  return <section className="worker-confirmation-manager">
-  <div className="worker-confirmation-tabs object-local-tabs">
+  {!hideTabs&&<div className="worker-confirmation-tabs object-local-tabs">
    <button type="button" aria-pressed={mode==="answers"} className={mode==="answers"?"active":""} onClick={()=>setMode("answers")}>Подтверждения</button>
    <button type="button" aria-pressed={mode==="links"} className={mode==="links"?"active":""} onClick={()=>setMode("links")}>Персональные ссылки</button>
     <button type="button" aria-pressed={mode==="updates"} className={mode==="updates"?"active":""} onClick={()=>setMode("updates")}>Изменения сотрудников</button>
    {demo&&<span className="cell-sub">Демонстрационный режим</span>}
-  </div>
+  </div>}
+  {hideTabs&&demo&&<div className="object-context-line">Демонстрационный режим</div>}
   <div className="worker-confirmation-toolbar">
    {!objectId&&<select aria-label="Фильтр по объекту" value={filterObject} onChange={e=>setFilterObject(e.target.value)}><option value="all">Все объекты</option>{options.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>}
    <input aria-label="Поиск сотрудника" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск по сотруднику"/>

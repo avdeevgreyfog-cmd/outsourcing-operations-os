@@ -279,3 +279,15 @@ fields to respect the available object width, including the global sidebar.
 at desktop/phone widths, rejects page overflow, checks section heading sizes, and
 opens confirmation/link/update views plus expanded link settings. It blocks API
 writes; this visual check does not establish live database workflow correctness.
+
+### Object composition amendment (12 October 2026)
+
+Planning exposes Schedule, Confirmations, Personal links and Employee changes in
+one local navigation row. Calendar representation is a subordinate view switch;
+weekly context is one compact line and detailed guidance is expandable. Supply
+uses permission-filtered views for employee issue, stock, norms, requests and
+housing inside one module shell. Settings uses parameter/basis, team, recruiting
+and personnel views; switching is disabled while a section is being edited.
+Hidden working views remain mounted so switching does not discard local edits.
+The field, history and permission contracts are preserved. Daily planning labels
+no longer call unknown demand a closed plan and explicitly show excess coverage.
