@@ -1,9 +1,9 @@
 "use client";
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number;workDays?:number|null;restDays?:number|null;shiftKind?:"day"|"night"|"mixed"|null};
-type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null};
+type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null;needsReconfirmation?:boolean};
 type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 type Setting={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;managerPhone?:string|null;planningHorizonDays?:number;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
@@ -14,7 +14,8 @@ type Authority={workerId:string;objectId:string;scheduleOwner:"manager"|"worker"
 type DocumentUpdate={workerId:string;objectId:string;code:string;employeeReported:boolean;managerVerified:boolean};
 type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[];timeChanges?:TimeUpdate[];documents?:DocumentUpdate[];planningChanges?:PlanningChange[];workerAuthorities?:Authority[];patternChanges?:PatternChange[]};
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
-function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+function localDate(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return localDate(d)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
 export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcile=false,demo=false,view,hideTabs=false}:{objectId?:string;workerId?:string;canEdit:boolean;canReconcile?:boolean;demo?:boolean;view?:"answers"|"links"|"updates";hideTabs?:boolean}){
  const [data,setData]=useState<Payload>(empty);
@@ -30,7 +31,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [patternCode,setPatternCode]=useState("5/2");
  const [patternShift,setPatternShift]=useState<"day"|"night">("day");
  const [patternFloating,setPatternFloating]=useState(false);
- const [patternFrom,setPatternFrom]=useState(new Date().toISOString().slice(0,10));
+ const [patternFrom,setPatternFrom]=useState(localDate());
  const [specialWorker,setSpecialWorker]=useState("");
  const [specialOwner,setSpecialOwner]=useState<"inherit"|"manager"|"worker">("inherit");
 
@@ -40,15 +41,16 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [onlyAttention,setOnlyAttention]=useState(false);
  const [filterObject,setFilterObject]=useState(objectId??"all");
  const [busy,setBusy]=useState("");
- const [day,setDay]=useState(tomorrow());
- const [fromDate,setFromDate]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10)});
- const [toDate,setToDate]=useState(()=>new Date().toISOString().slice(0,10));
+ const initialDates=useRef(false);
+ const [day,setDay]=useState(()=>new Date(Date.now()+86400000).toISOString().slice(0,10));
+ const [fromDate,setFromDate]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return localDate(d)});
+ const [toDate,setToDate]=useState(()=>localDate());
  const load=useCallback(async()=>{
   try{
    const q=new URLSearchParams();if(objectId)q.set("objectId",objectId);if(workerId)q.set("workerId",workerId);
    const r=await fetch("/api/operations/worker-confirmations?"+q.toString(),{cache:"no-store"});
    const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось получить данные");
-   setData(j);setError("");
+   setData(j);setError("");if(!initialDates.current){setDay(tomorrow());initialDates.current=true;}
   }catch(e){setError(e instanceof Error?e.message:"Ошибка получения данных")}finally{setLoaded(true)}
  },[objectId,workerId]);
  useEffect(()=>{void Promise.resolve().then(()=>load())},[load]);
@@ -58,9 +60,9 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const plans=useMemo(()=>new Map((data.plans??[]).map(x=>[x.workerId+":"+x.objectId+":"+x.date,x])),[data.plans]);
  const options=useMemo(()=>[...new Map(data.workers.filter(x=>x.objectId).map(x=>[x.objectId!,x.object??"Объект"])).entries()].sort((a,b)=>a[1].localeCompare(b[1],"ru")),[data.workers]);
  const scoped=data.workers.filter(w=>(filterObject==="all"||w.objectId===filterObject)&&(!search||((w.name+" "+w.object+" "+w.specialty).toLowerCase().includes(search.toLowerCase()))));
- const visible=scoped.filter(w=>!onlyAttention||(!reports.get(w.id+":"+w.objectId+":"+day)&&["PLANNED","WORK","WORK_PENDING"].includes(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode??"")));
+ const visible=scoped.filter(w=>!onlyAttention||((!reports.get(w.id+":"+w.objectId+":"+day)||reports.get(w.id+":"+w.objectId+":"+day)?.needsReconfirmation)&&["PLANNED","WORK","WORK_PENDING"].includes(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode??"")));
  const expected=scoped.filter(w=>{const p=plans.get(w.id+":"+w.objectId+":"+day);return p&&["PLANNED","WORK","WORK_PENDING"].includes(p.timeCode)});
- const replies=expected.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
+ const replies=expected.filter(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return r&&!r.needsReconfirmation}).length;
  const missing=expected.length-replies;
  const activeLinks=data.links.filter(l=>l.status==="active").length;
  async function action(body:Record<string,string|number|boolean|null>){
@@ -86,6 +88,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  function reply(w:Worker){
   const r=reports.get(w.id+":"+w.objectId+":"+day);
   if(!r){if(!plans.has(w.id+":"+w.objectId+":"+day))return <span className="worker-confirmation-status">Выход не запланирован</span>;if(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode==="DAY_OFF")return <span className="worker-confirmation-status">Выходной по графику</span>;return <span className="worker-confirmation-status warn">Нет ответа</span>;}
+  if(r.needsReconfirmation){const p=plans.get(w.id+":"+w.objectId+":"+day);return <span className="worker-confirmation-status warn">{p?.timeCode==="DAY_OFF"?"Выходной по новому плану":!p?"Нет назначенной смены":"План изменён · нужен новый ответ"}</span>;}
   if(r.response==="cannot_work")return <span className="worker-confirmation-status bad">Не выйдет</span>;
   if(r.response==="day_off")return <span className="worker-confirmation-status">Выходной</span>;
   return <span className="worker-confirmation-status good">{r.shiftKind==="night"?"Выйдет ночью":"Выйдет днём"}</span>;

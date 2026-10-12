@@ -3,7 +3,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,ChevronRight,Phone,FileText,Shirt,Settings2,LockKeyhole,Moon,Sun,AlertTriangle,MoreHorizontal,ArrowLeft,Info} from "lucide-react";
 
 type Kind="day"|"night"|"off";
-type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null};
+type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null;needsReconfirmation?:boolean};
 type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
@@ -66,8 +66,8 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
   const end=move(p.date,p.endsNextDay?1:0)+"T"+(p.endTime??(p.kind==="night"?"08:00":"20:00"));
   return checkedAt>=end;
  };
- const completed=useMemo(()=>[0,-1,-2,-3].map(i=>schedule(move(today,i))).find(p=>p&&canFinish(p))??null,[today,records,checkedAt]);
- const next=schedule(tomorrow),nextAnswer=answers.get(tomorrow),completedAnswer=completed?answers.get(completed.date):null;
+ const completed=[0,-1,-2,-3].map(i=>schedule(move(today,i))).find(p=>p&&canFinish(p))??null;
+ const next=schedule(tomorrow),previousNextAnswer=answers.get(tomorrow),nextAnswer=previousNextAnswer?.needsReconfirmation?undefined:previousNextAnswer,completedAnswer=completed?answers.get(completed.date):null;
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
  const nextMonday=move(today,((8-new Date(today+"T00:00:00Z").getUTCDay())%7)||7);
  const fullWeek=Array.from({length:7},(_,i)=>move(nextMonday,i));
@@ -78,13 +78,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const adjacentMonth=(offset:number)=>new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5))-1+offset,1)).toISOString().slice(0,7);
  const currentEnd=currentMonth===today.slice(0,7)?Number(today.slice(8)):new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5)),0)).getUTCDate();
  const dateRows=Array.from({length:currentEnd},(_,i)=>currentMonth+"-"+String(i+1).padStart(2,"0")).reverse();
- const counted=useMemo(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
+ const counted=(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
    for(const date of new Set([...dayEntries.keys(),...answers.keys()])){
     if(!date.startsWith(currentMonth)||date>today||distinct.has(date))continue;
     const entry=dayEntries.get(date),reply=answers.get(date);
     const worked=reply?.reconciledAt?entry?.hours??reply?.hours:reply?.hours??entry?.hours;
     if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
-   }return{total,shifts}},[today,currentMonth,data?.plans,answers]);
+   }return{total,shifts}})();
  
  const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
  async function save(payload:Record<string,unknown>,message:string){
@@ -118,7 +118,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  }
  async function confirmExit(){const kind=next?.kind;if(!kind||kind==="off")return;const ok=await save({date:tomorrow,response:"working",kind},"Выход подтверждён");if(ok)setShowReason(false)}
  async function confirmHours(){if(!completed)return;
-   if(completedAnswer?.response!=="working"){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
+   if(completedAnswer?.response!=="working"||completedAnswer.needsReconfirmation){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
    const ok=await save({date:completed.date,hours:hourEdit?Number(hours):data?.paidHours??11},"Часы переданы для сверки");if(ok)setHourEdit(false);
  }
  async function planDay(date:string,kind:Kind){if(busy)return;const direct=data?.planning.owner==="worker"&&data?.planning.floatingDaysOff;const ok=await save({action:"plan_day",date,kind},direct?"График обновлён":"Предложение передано менеджеру");if(ok)setEditingDay(null)}
@@ -158,6 +158,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         {!next?.kind?<><p className="worker-self-muted">На завтра пока нет установленной смены. Укажите рабочий день или выходной.</p><button className="worker-self-main-button" onClick={()=>setEditingDay(tomorrow)}>Запланировать день</button></>:
         next.kind==="off"?<><p className="worker-self-muted">Выходной уже стоит в вашем графике. Подтверждать его не нужно.</p><button className="worker-self-light-button full" onClick={()=>setEditingDay(tomorrow)}>{data.planning.owner==="manager"?"Запросить рабочий день":"Изменить на рабочий день"}</button></>:
         <>
+         {previousNextAnswer?.needsReconfirmation&&<p className="worker-self-warning">Менеджер изменил план. Подтвердите актуальную смену ещё раз.</p>}
          {nextAnswer?.response==="working"?<div className="worker-self-done"><CheckCircle2 size={17}/> Вы подтвердили выход на эту смену.</div>:nextAnswer?.response==="cannot_work"?<p className="worker-self-warning">Вы сообщили о невыходе. Причина: {nextAnswer.reason??"не указана"}.</p>:<p className="worker-self-question">Вы выйдете на смену?</p>}
          {nextAnswer?.response!=="working"&&<button className="worker-self-main-button" disabled={busy} onClick={()=>void confirmExit()}><Check size={17}/> Подтвердить выход</button>}
          <button className="worker-self-light-button full" disabled={busy} onClick={()=>setShowReason(x=>!x)}>{nextAnswer?.response==="working"?"Изменились планы":"Не смогу выйти"}</button>

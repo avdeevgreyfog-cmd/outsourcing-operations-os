@@ -117,7 +117,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         return {status:"planned",exitId,replacementNeedId};
       }
 
-      const [dateCheck]=await tx<Array<{future:boolean}>>`SELECT ${body.effectiveDate}::date>current_date future`;
+      const [dateCheck]=await tx<Array<{future:boolean}>>`SELECT ${body.effectiveDate}::date>(now() AT TIME ZONE COALESCE((SELECT timezone FROM object_shift_reporting_settings WHERE object_id=${worker.objectId??null}::uuid),'Europe/Moscow'))::date future`;
       if(dateCheck?.future)throw new Error("Будущую дату сначала сохраните как план завершения работы");
 
       const periods=await tx<Array<{id:string;relationType:string;effectiveFrom:string;effectiveTo:string|null;contractReference:string|null}>>`

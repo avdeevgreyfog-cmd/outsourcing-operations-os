@@ -12,7 +12,7 @@ const tokenHash=(token:string)=>createHash("sha256").update(token).digest("hex")
 function tokenCipherKey(){const secret=process.env.SESSION_SECRET;if(!secret)throw new Error("SESSION_SECRET не задан");return createHash("sha256").update(secret).digest()}
 function encryptToken(raw:string){const iv=randomBytes(12),cipher=createCipheriv("aes-256-gcm",tokenCipherKey(),iv);const encrypted=Buffer.concat([cipher.update(raw,"utf8"),cipher.final()]);return [iv,cipher.getAuthTag(),encrypted].map(x=>x.toString("base64url")).join(".")}
 function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".").map(x=>Buffer.from(x,"base64url"));const cipher=createDecipheriv("aes-256-gcm",tokenCipherKey(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(blob),cipher.final()]).toString("utf8")}
-export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null};
+export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null;needsReconfirmation?:boolean};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number;showEmployeeDocuments:boolean;showEmployeeWorkwear:boolean};
@@ -26,7 +26,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
   const ids=visible.map(w=>w.id);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
     const [reports,links,settings,plans]=await Promise.all([
-      sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt",hours_reconciled_at::text "reconciledAt"
+      sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt",hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation"
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
       sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
         FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
@@ -151,8 +151,8 @@ export async function employeePortal(token:string,selectedMonth?:string){
      const rangeFrom=monthFrom;
      const rangeTo=monthTo;
      const [reports,plans]=await Promise.all([
-      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null}>>`
-        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,hours_reconciled_at::text "reconciledAt"
+      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null;needsReconfirmation:boolean}>>`
+        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation"
         FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
           AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31))) ORDER BY work_date`,
       sql<Array<{date:string;kind:string;timeCode:string;hours:number;source:string}>>`
@@ -227,8 +227,9 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     }
     const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${payload.date}::date AND period_end>=${payload.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new EmployeePortalError("Табель за эту дату уже зафиксирован");
-    const [old]=await sql<Array<{response:string;shiftKind:string|null}>>`SELECT response,shift_kind "shiftKind" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
+    const [old]=await sql<Array<{response:string;shiftKind:string|null;needsReconfirmation:boolean}>>`SELECT response,shift_kind "shiftKind",(confirmed_at IS NULL) "needsReconfirmation" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
     if(payload.hours!==undefined||(payload.response!==undefined&&payload.date<=link.localToday)){const [verified]=await sql<Array<{id:string}>>`SELECT worker_id id FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND hours_reconciled_at IS NOT NULL LIMIT 1`;if(verified)throw new EmployeePortalError("Смена уже согласована. Для исправления обратитесь к менеджеру.")}
+    if(payload.hours!==undefined&&old?.needsReconfirmation)throw new EmployeePortalError("План смены изменён. Сначала подтвердите актуальную смену менеджера");
     if(link.owner==='manager'&&payload.hours!==undefined&&old?.response==='working'){
       const [planned]=await sql<Array<{kind:string;reserve:boolean}>>`SELECT sh.shift_kind kind,sa.is_reserve reserve
         FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
@@ -249,6 +250,9 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     }else{
       await sql`UPDATE worker_shift_reports SET reported_hours=${payload.hours},hours_submitted_at=now(),updated_at=now() WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date`;
     }
+    if(payload.response)await sql`UPDATE shift_assignments sa SET confirmation_status=${payload.response==='working'?'confirmed':'declined'}
+      FROM shifts sh WHERE sh.id=sa.shift_id AND sh.object_id=${link.objectId}::uuid AND sh.shift_date=${payload.date}::date
+        AND sa.worker_id=${link.workerId}::uuid AND sa.confirmation_status<>'cancelled' AND sh.status<>'cancelled' AND NOT sa.is_reserve`;
     // Mirror only provisional planning and self-reported hours into the existing
     // time_entries model. Never overwrite a manager-entered fact or a locked period.
     const [next]=await sql<Array<{response:string;shiftKind:string|null;hours:number|null}>>`SELECT response,shift_kind "shiftKind",reported_hours::float8 hours FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;

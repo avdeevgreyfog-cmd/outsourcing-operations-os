@@ -345,3 +345,20 @@ browser fixture checks across two themes/widths for focus, Escape, cancel, demo
 save and link consequence panels. Screenshots of desktop documents/contacts and
 mobile incidents were inspected. Fixture checks do not issue real links or write
 customer data; backend lifecycle validation is documented in the earlier block.
+
+### Object acceptance and planning integrity — 13 October 2026
+
+The completion criteria/results are in `docs/OBJECT_COMPLETION_PLAN.md`. New shifts
+use the reporting timezone explicitly; completion date checks use the object's
+local date. Changing an unreported plan invalidates confirmed_at without deleting
+the employee report. Manager and employee UI request a fresh reply; stale replies
+are excluded from replied coverage and cannot submit hours. Reapplying the same
+plan preserves the reply and assignment status. Employee replies update active
+non-reserve assignments; declined assignments are highlighted and excluded from
+planned coverage. Calendar-only document dates use UTC formatting to avoid a day
+shift/hydration error. Manager date initialization uses local browser dates after
+hydration; fixture QA includes Europe/Moscow across the UTC date boundary.
+Acceptance: build/TypeScript, targeted lint with no findings, 398 tests, temporary
+SQL/RLS/rollback suite, HTTP/Secure-session/mobile chain, 108 tab/theme/width checks,
+24 form/confirmation checks. Native PostgreSQL concurrent/full-card SSR acceptance
+remains outside the disposable socket harness; no customer DB or production change.

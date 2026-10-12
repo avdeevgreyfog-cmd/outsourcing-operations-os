@@ -110,10 +110,16 @@ async function assignCell(tx:Sql,actor:{organizationId:string;userId:string},obj
   const absence=await confirmedAbsence(tx,row.workerId,date);
   if(absence&&["day","night","reserve_day","reserve_night"].includes(kind))return skipProtected?"absence":Promise.reject(new Error("На выбранную дату у сотрудника подтверждено плановое отсутствие."));
 
-  const affected=await tx<Array<{id:string}>>`
-    SELECT DISTINCT sh.id FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+  const affected=await tx<Array<{id:string;kind:string;reserve:boolean;status:string}>>`
+    SELECT DISTINCT sh.id,sh.shift_kind kind,sa.is_reserve reserve,sa.confirmation_status status FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
     WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date
       AND sa.worker_id=${row.workerId}::uuid AND sa.confirmation_status<>'cancelled'`;
+  const requestedKind=kind==="night"||kind==="reserve_night"?"night":"day";
+  const requestedReserve=kind==="reserve_day"||kind==="reserve_night";
+  const planChanged=kind==="clear"||kind==="off"||!affected.some(a=>a.kind===requestedKind&&a.reserve===requestedReserve);
+  if(planChanged)await tx`UPDATE worker_shift_reports SET confirmed_at=NULL,updated_at=now()
+    WHERE worker_id=${row.workerId}::uuid AND object_id=${objectId}::uuid AND work_date=${date}::date
+      AND reported_hours IS NULL AND hours_reconciled_at IS NULL`;
   if(affected.length)await tx`UPDATE shift_assignments sa SET confirmation_status='cancelled'
     FROM shifts sh WHERE sh.id=sa.shift_id AND sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date
       AND sa.worker_id=${row.workerId}::uuid AND sa.confirmation_status<>'cancelled'`;
@@ -138,19 +144,20 @@ async function assignCell(tx:Sql,actor:{organizationId:string;userId:string},obj
       AND shift_kind=${shiftKind} AND status<>'cancelled'
     ORDER BY created_at LIMIT 1`;
   if(!shift){
+    const [clock]=await tx<Array<{timezone:string}>>`SELECT COALESCE((SELECT timezone FROM object_shift_reporting_settings WHERE object_id=${objectId}::uuid),'Europe/Moscow') timezone`;
     [shift]=await tx<Array<{id:string}>>`
       INSERT INTO shifts(
         organization_id,object_id,specialty_id,shift_date,starts_at,ends_at,shift_kind,demand_count,assigned_count,reserve_count,planned_cost,status,created_by_user_id
       ) VALUES(
         ${actor.organizationId}::uuid,${objectId}::uuid,${row.specialtyId}::uuid,${date}::date,
-        (${date}::date+${start}::time)::timestamptz,
-        (${date}::date+${end}::time+CASE WHEN ${end}::time<=${start}::time THEN interval '1 day' ELSE interval '0 day' END)::timestamptz,
+        (${date}::date+${start}::time) AT TIME ZONE ${clock.timezone},
+        (${date}::date+${end}::time+CASE WHEN ${end}::time<=${start}::time THEN interval '1 day' ELSE interval '0 day' END) AT TIME ZONE ${clock.timezone},
         ${shiftKind},1,0,0,0,'open',${actor.userId}::uuid
       ) RETURNING id`;
   }
   await tx`INSERT INTO shift_assignments(organization_id,shift_id,worker_id,confirmation_status,is_reserve,assigned_by_user_id)
-    VALUES(${actor.organizationId}::uuid,${shift.id}::uuid,${row.workerId}::uuid,'pending',${reserve},${actor.userId}::uuid)
-    ON CONFLICT(shift_id,worker_id) DO UPDATE SET confirmation_status='pending',is_reserve=EXCLUDED.is_reserve,assigned_by_user_id=EXCLUDED.assigned_by_user_id`;
+    VALUES(${actor.organizationId}::uuid,${shift.id}::uuid,${row.workerId}::uuid,${planChanged?'pending':affected[0]?.status??'pending'},${reserve},${actor.userId}::uuid)
+    ON CONFLICT(shift_id,worker_id) DO UPDATE SET confirmation_status=EXCLUDED.confirmation_status,is_reserve=EXCLUDED.is_reserve,assigned_by_user_id=EXCLUDED.assigned_by_user_id`;
   if(reserve)await clearPlanEntry(tx,objectId,row.workerId,date);
   else await upsertPlanEntry(tx,actor,objectId,row.workerId,date,shiftKind);
   await syncCounts(tx,[...affected.map(item=>item.id),shift.id]);

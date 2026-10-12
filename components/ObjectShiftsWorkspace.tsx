@@ -73,6 +73,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return out;
   },[planner,rows]);
   const entryMap=useMemo(()=>{const out=new Map<string,PlannerEntry>();for(const row of planner?.entries??[])out.set(`${row.workerId}:${row.date}`,row);return out},[planner]);
+  const declined=new Set((planner?.assignments??[]).filter(a=>a.status==="declined").map(a=>`${a.workerId}:${a.date}`));
   const demandRows=planner?.demand??[];
 
   function absenceFor(worker:WorkerRow,date:string):PlannerAbsence|null{
@@ -127,6 +128,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       const key=`${worker.id}:${date}`,entry=entryMap.get(key),value=planned(worker,date);
       const scheduleEntryPlan=Boolean(entry&&!isFactual(entry)&&entry.timeCode==="PLANNED"&&entry.plannedShiftKind);
       if(entry&&isFactual(entry)&&(Number(entry.factHours)>0||entry.timeCode==="WORK_PENDING"))fact++;
+      if(declined.has(key)&&overrides[key]===undefined)continue;
       if(map.has(key)||scheduleEntryPlan)plan++;else if(reserveMap.has(key))reserve++;else if(date>=today&&(value==="day"||value==="night"))suggested++;
     }
     return {plan,reserve,suggested,fact};
@@ -142,6 +144,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       const mismatch=Boolean(plan&&["day","night"].includes(plan)&&factKind&&plan!==factKind);const attention=["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode)||mismatch;
       return {kind:factKind as Kind,label,source:"fact",editable:false,attention,factWithoutPlan:!plan,title:`Факт из табеля: ${label}. План: ${plan?shortKind(plan):"не было"}`};
     }
+    if(declined.has(key)&&overrides[key]===undefined)return {kind:plan??"",label:"Отказ",source:"plan",editable:canEdit&&!dateLocked(date),attention:true,factWithoutPlan:false,title:"Сотрудник сообщил о невыходе. Требуется замена или новое подтверждение."};
     if(absence){const kind:Kind=absence.type==="intershift"?"intershift":absence.type==="vacation"?"vacation":"off";return {kind,label:shortKind(kind),source:"absence",editable:false,attention:Boolean(plan),factWithoutPlan:false,title:absence.type==="intershift"?"Межвахта":absence.type==="vacation"?"Отпуск":"Согласованный выходной"};}
     if(plan){const attention=date<today;return {kind:plan,label:shortKind(plan),source:"plan",editable:canEdit&&!dateLocked(date),attention,factWithoutPlan:false,title:attention?"План за прошедшую дату не закрыт в табеле":plan.startsWith("reserve")?"Резерв":"Зафиксированный план"};}
     const suggested=date>=today?scheduleKind(worker,date):"";
