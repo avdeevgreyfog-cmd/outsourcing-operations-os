@@ -18,7 +18,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"worker.offboarding.manage");if(actor.demo)return NextResponse.json({error:"В демо-режиме завершение работы не сохраняется"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [worker]=await tx<Array<{id:string;fullName:string;phone:string|null;email:string|null;city:string|null;source:string|null;originCandidateId:string|null;originalRecruiterUserId:string|null;objectId:string|null;specialtyId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
         SELECT w.id,w.full_name "fullName",w.phone,w.email,w.city,w.source,w.origin_candidate_id "originCandidateId",w.original_recruiter_user_id "originalRecruiterUserId",
           a.object_id "objectId",a.specialty_id "specialtyId",o.owner_user_id "ownerUserId",o.region_id "regionId",
@@ -26,7 +26,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM worker_profiles w
         LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_to IS NULL ORDER BY x.effective_from DESC LIMIT 1) a ON true
         LEFT JOIN objects o ON o.id=a.object_id
-        WHERE w.id=${id}::uuid FOR UPDATE OF w
+        WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${id}::uuid FOR UPDATE OF w
       `;
       if(!worker)throw new Error("Сотрудник не найден");
       const scope={organizationId:actor.organizationId,objectId:worker.objectId??undefined,ownerUserId:worker.ownerUserId??undefined,regionId:worker.regionId??undefined,assigneeUserIds:worker.assigneeUserIds};
@@ -203,7 +203,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         `;
       }
 
-      await tx`UPDATE worker_profiles SET status='dismissed',updated_at=now() WHERE id=${id}::uuid`;
+      await tx`UPDATE worker_timesheet_links SET status='revoked',revoked_at=now()
+        WHERE organization_id=${actor.organizationId}::uuid AND worker_id=${id}::uuid AND status IN ('active','paused')`;
+      await tx`UPDATE worker_profiles SET status='dismissed' ,updated_at=now() WHERE id=${id}::uuid`;
 
       let recruitingCandidateId=worker.originCandidateId;
       if(body.returnToRecruiting){
@@ -273,7 +275,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'offboarded',${"Работа сотрудника завершена: "+worker.fullName},${tx.json({exitId,effectiveDate:body.effectiveDate,reasonCode:body.reasonCode,objectId:worker.objectId})})`;
       return {status:"completed",exitId};
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные завершения работы",issues:error.issues},{status:400});

@@ -433,3 +433,11 @@
 .sales-workspace.operations-workspace .object-workspace-pilot :is(input,select,textarea){font-family:inherit}
 .sales-workspace.operations-workspace .object-workspace-pilot table td{font-size:13px;line-height:1.4}
 .sales-workspace.operations-workspace .object-workspace-pilot table th{font-size:12px;line-height:1.4}
+/* Manager portal controls follow the object workspace controls. */
+.sales-workspace.operations-workspace .worker-confirmation-tabs button,
+.sales-workspace.operations-workspace .worker-confirmation-actions .button{min-height:38px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.sales-workspace.operations-workspace .worker-confirmation-toolbar :is(input,select){min-height:38px;font:inherit;min-width:0;max-width:100%}
+.sales-workspace.operations-workspace .worker-confirmation-note{font-size:12px;line-height:1.5}
+@media(max-width:760px){.sales-workspace.operations-workspace .worker-confirmation-toolbar>input{flex:1 1 160px;width:100%}.worker-confirmation-tabs{min-width:0}.worker-confirmation-tabs button{flex:1 1 120px}}
+.sales-workspace.operations-workspace .worker-confirmation-toolbar label{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px}
+.sales-workspace.operations-workspace .worker-confirmation-toolbar input[type="checkbox"]{width:14px;height:14px;min-height:0;padding:0;flex:none}

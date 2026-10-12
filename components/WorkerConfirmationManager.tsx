@@ -2,7 +2,7 @@
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number;workDays?:number|null;restDays?:number|null;shiftKind?:"day"|"night"|"mixed"|null};
-type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
+type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null};
 type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 type Setting={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;managerPhone?:string|null;planningHorizonDays?:number;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
@@ -55,12 +55,13 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const plans=useMemo(()=>new Map((data.plans??[]).map(x=>[x.workerId+":"+x.objectId+":"+x.date,x])),[data.plans]);
  const options=useMemo(()=>[...new Map(data.workers.filter(x=>x.objectId).map(x=>[x.objectId!,x.object??"Объект"])).entries()].sort((a,b)=>a[1].localeCompare(b[1],"ru")),[data.workers]);
  const scoped=data.workers.filter(w=>(filterObject==="all"||w.objectId===filterObject)&&(!search||((w.name+" "+w.object+" "+w.specialty).toLowerCase().includes(search.toLowerCase()))));
- const visible=scoped.filter(w=>!onlyAttention||(!reports.get(w.id+":"+w.objectId+":"+day)&&plans.get(w.id+":"+w.objectId+":"+day)?.timeCode!=="DAY_OFF"));
- const expected=scoped.filter(w=>plans.get(w.id+":"+w.objectId+":"+day)?.timeCode!=="DAY_OFF");
+ const visible=scoped.filter(w=>!onlyAttention||(!reports.get(w.id+":"+w.objectId+":"+day)&&["PLANNED","WORK","WORK_PENDING"].includes(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode??"")));
+ const expected=scoped.filter(w=>{const p=plans.get(w.id+":"+w.objectId+":"+day);return p&&["PLANNED","WORK","WORK_PENDING"].includes(p.timeCode)});
  const replies=expected.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
  const missing=expected.length-replies;
  const activeLinks=data.links.filter(l=>l.status==="active").length;
  async function action(body:Record<string,string|number|boolean|null>){
+  if(busy)return;
   const key=String(body.action)+":"+String(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
   if(demo){
    if(body.action==="create"||body.action==="rotate"||body.action==="copy"||body.action==="copy_mobile"||body.action==="copy_desktop"){
@@ -81,7 +82,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  }
  function reply(w:Worker){
   const r=reports.get(w.id+":"+w.objectId+":"+day);
-  if(!r){if(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode==="DAY_OFF")return <span className="worker-confirmation-status">Выходной по графику</span>;return <span className="worker-confirmation-status warn">Нет ответа</span>;}
+  if(!r){if(!plans.has(w.id+":"+w.objectId+":"+day))return <span className="worker-confirmation-status">Выход не запланирован</span>;if(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode==="DAY_OFF")return <span className="worker-confirmation-status">Выходной по графику</span>;return <span className="worker-confirmation-status warn">Нет ответа</span>;}
   if(r.response==="cannot_work")return <span className="worker-confirmation-status bad">Не выйдет</span>;
   if(r.response==="day_off")return <span className="worker-confirmation-status">Выходной</span>;
   return <span className="worker-confirmation-status good">{r.shiftKind==="night"?"Выйдет ночью":"Выйдет днём"}</span>;
@@ -106,8 +107,8 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
     <div className="worker-confirmation-summary"><span>На {dateLabel(day)}</span><span>Ответили: <b>{replies}</b></span><span>Нет ответа: <b>{missing}</b></span></div>
     <div className="worker-confirmation-note">Сведения сотрудников используются для оперативного планирования. Неответивший сотрудник не считается неявившимся.</div>
     {canReconcile&&(objectId||filterObject!=="all")&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Промежуточная сверка с заказчиком:</span><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} aria-label="Сверить с"/><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} aria-label="Сверить по"/><button type="button" className="button" disabled={!!busy||toDate<fromDate} onClick={()=>{if(window.confirm("Вы сверили часы за этот период с заказчиком?"))void action({action:"reconcile",objectId:objectId??filterObject,fromDate,toDate})}}>Отметить период сверенным</button></div>}
-    <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>Подтверждение</th><th>Часы</th><th>Последний ответ</th></tr></thead><tbody>
-     {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}</td><td>{r?.updatedAt?new Date(r.updatedAt).toLocaleString("ru-RU"):"—"}</td></tr>})}
+    <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>План менеджера</th><th>Подтверждение</th><th>Часы сотрудника</th><th>Последний ответ</th></tr></thead><tbody>
+     {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{(()=>{const p=plans.get(w.id+":"+w.objectId+":"+day);return !p?"Не запланировано":p.timeCode==="DAY_OFF"?"Выходной":p.kind==="night"?"Ночь":p.kind==="day"?"День":"Смена"})()}</td><td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}{r?.hours!=null&&<span className="cell-sub">{r.reconciledAt?"Сверено менеджером":"Ожидает сверки"}</span>}</td><td>{r?.updatedAt?new Date(r.updatedAt).toLocaleString("ru-RU"):"—"}</td></tr>})}
     </tbody></table>{!visible.length&&<div className="empty-inline">Нет сотрудников по выбранным условиям</div>}</div>
    </>:mode==="updates"?<>
     <div className="worker-confirmation-summary"><span>Изменения от сотрудников</span><span>Ожидают решения: <b>{(data.timeChanges??[]).filter(x=>x.status==="proposed").length+(data.planningChanges??[]).filter(x=>x.status==="proposed").length+(data.patternChanges??[]).filter(x=>x.status==="proposed").length}</b></span></div>
@@ -119,7 +120,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
     </tbody></table>{!data.timeChanges?.length&&!data.documents?.length&&!data.planningChanges?.length&&!data.patternChanges?.length&&<div className="empty-inline">Изменений пока нет</div>}</div>
    </>:<>
     <div className="worker-confirmation-summary"><span>Управление доступом к персональным табелям</span><span>Активных: <b>{activeLinks}</b></span></div>
-    <div className="worker-confirmation-note">Ссылка действует постоянно, пока не приостановлена или аннулирована. Копирование не является подтверждением отправки через мессенджер.</div>
+    <div className="worker-confirmation-note">Приостановка временно закрывает кабинет. Отзыв и перевыпуск окончательно закрывают старую ссылку. После завершения работы доступ отзывается автоматически. Копирование не является подтверждением отправки через мессенджер.</div>
     {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><label>График составляет: <select value={settings.get(objectId)?.scheduleOwner??"manager"} onChange={e=>void action({action:"settings",objectId,scheduleOwner:e.target.value})} disabled={!!busy}><option value="manager">Менеджер составляет график</option><option value="worker">Сотрудник составляет график</option></select></label></div>}
     <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>Ссылка</th><th>Последнее открытие</th><th>Действия</th></tr></thead><tbody>
      {visible.map(w=>{const l=links.get(w.id+":"+w.objectId),key=w.id+":"+w.objectId,params={objectId:w.objectId??"",workerId:w.id};return <tr key={key}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td><span className={"worker-confirmation-status "+(l?.status==="active"?"good":l?.status==="paused"?"warn":"")}>{!l?"Не создана":l.status==="active"?"Активна":l.status==="paused"?"Приостановлена":"Аннулирована"}</span></td><td>{l?.lastOpenedAt?new Date(l.lastOpenedAt).toLocaleString("ru-RU"):"—"}</td><td><div className="worker-confirmation-actions">{canEdit&&(!l||l.status==="revoked")&&<button type="button" className="button" disabled={!!busy} onClick={()=>void action({action:"create",...params})}><Link2 size={13}/> Создать</button>}{canEdit&&l?.status==="active"&&<><button className="button" disabled={!!busy} onClick={()=>void action({action:"copy_mobile",...params})}><Copy size={13}/> Для телефона</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"copy_desktop",...params})}><Copy size={13}/> Для компьютера</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"pause",...params})}>Приостановить</button></>}{canEdit&&l?.status==="paused"&&<button className="button" disabled={!!busy} onClick={()=>void action({action:"resume",...params})}>Возобновить</button>}{canEdit&&l&&l.status!=="revoked"&&<><button className="button" disabled={!!busy} onClick={()=>{if(window.confirm("Старая ссылка перестанет действовать. Выпустить новую?"))void action({action:"rotate",...params})}}><RefreshCw size={13}/> Обновить</button><button className="button" disabled={!!busy} onClick={()=>{if(window.confirm("Аннулировать персональный доступ?"))void action({action:"revoke",...params})}}><ShieldOff size={13}/> Отозвать</button></>}{!l&&!canEdit&&"—"}</div></td></tr>})}

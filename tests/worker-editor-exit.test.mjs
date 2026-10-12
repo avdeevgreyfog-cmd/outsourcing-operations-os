@@ -63,3 +63,5 @@ test('exit truncates open and later-ending periods with before/after event, pres
   assert.match(update.text,/effective_to IS NULL OR effective_to>/);
   assert.equal(h.writes.some(q=>q.text.includes('DELETE FROM employment_relations')),false);
 });
+
+test('completion permanently revokes active and paused employee links in the same transaction',async()=>{const h=harness([]);assert.equal((await h.complete()).status,201);const revoke=h.writes.findIndex(q=>q.text.includes('UPDATE worker_timesheet_links'));const dismiss=h.writes.findIndex(q=>q.text.includes("status='dismissed'"));assert.ok(revoke>=0&&dismiss>revoke);assert.match(h.writes[revoke].text,/status IN \('active','paused'\)/);assert.ok(h.writes[revoke].values.includes(org));assert.ok(h.writes[revoke].values.includes(workerId));});

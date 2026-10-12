@@ -52,7 +52,7 @@ async function dateLocked(tx:Sql,objectId:string,date:string){
   const [locked]=await tx<Array<{id:string}>>`
     SELECT id FROM timesheet_snapshots
     WHERE object_id=${objectId}::uuid AND period_start<=${date}::date AND period_end>=${date}::date
-      AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+      AND status IN ('fixed','internal_submitted','internal_checked','client_sent','client_approved','closed')
     ORDER BY created_at DESC LIMIT 1`;
   return Boolean(locked);
 }
@@ -206,7 +206,7 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         SELECT period_start::text "from",period_end::text "to",status
         FROM timesheet_snapshots
         WHERE object_id=${id}::uuid AND period_end>=${start}::date AND period_start<=${end}::date
-          AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+          AND status IN ('fixed','internal_submitted','internal_checked','client_sent','client_approved','closed')
         ORDER BY period_start`;
       return {assignments,entries,absences,demand,lockedRanges,patterns};
     });

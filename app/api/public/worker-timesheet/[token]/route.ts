@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
-import {employeePortal,submitEmployeeReply} from "@/lib/operations/worker-timesheet-portal";
+import {employeePortal,submitEmployeeReply,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
 import {employeePortalDetails,updateEmployeePortalDetails} from "@/lib/operations/employee-self-service";
 import {employeePlanning,submitEmployeePlan,submitEmployeeWeek,submitEmployeePattern} from "@/lib/operations/employee-planning";
 const responseSchema=z.object({
@@ -22,7 +22,7 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
  try{
   const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
   return data?NextResponse.json({...data,...await (async()=>{const [details,planning]=await Promise.all([employeePortalDetails(token),employeePlanning(token)]);return {details,planning}})()},{headers:noStore}):NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
- }catch(error){console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
+ }catch(error){if(error instanceof EmployeePortalError)return NextResponse.json({error:"Ссылка недействительна или заблокирована"},{status:404,headers:noStore});console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
 }
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
@@ -39,6 +39,6 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   return NextResponse.json(result,{headers:noStore});
  }catch(error){
   if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте ввод"},{status:400,headers:noStore});
-  return NextResponse.json({error:error instanceof Error?error.message:"Не удалось сохранить ответ"},{status:400,headers:noStore});
+  return NextResponse.json({error:error instanceof EmployeePortalError?error.message:"Не удалось сохранить ответ. Попробуйте позже"},{status:error instanceof EmployeePortalAccessError?403:error instanceof EmployeePortalError?400:500,headers:noStore});
  }
 }

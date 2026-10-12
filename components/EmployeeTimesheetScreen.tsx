@@ -4,7 +4,7 @@ import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,Chevro
 
 type Kind="day"|"night"|"off";
 type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null};
-type PlanDay={date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
+type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
 type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;visibility?:{documents:boolean;workwear:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
@@ -50,7 +50,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  
  const reload=useCallback(async()=>{
   const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token)+(monthOverride?"?month="+encodeURIComponent(monthOverride):""),{cache:"no-store"});
-  const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось загрузить кабинет");
+  const j=await r.json();if(!r.ok){if(r.status===403||r.status===404)setData(null);throw new Error(j.error??"Не удалось загрузить кабинет");}
   setData(j as Portal);return j as Portal;
  },[token,monthOverride]);
  useEffect(()=>{if(isDemo)return;let alive=true;void Promise.resolve().then(()=>reload()).catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
@@ -88,7 +88,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  
  const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
  async function save(payload:Record<string,unknown>,message:string){
-  if(!data)return false;setError("");setNotice("");setBusy(true);
+  if(!data||busy)return false;setError("");setNotice("");setBusy(true);
   try{
    if(isDemo){
     const date=String(payload.date??"");
@@ -110,7 +110,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     }else if(payload.action==="shift_time"){setNotice("Изменение графика передано менеджеру (демонстрация)");}
    }else{
     const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-    const j=await r.json();if(!r.ok)throw new Error(j.error??"Ошибка сохранения");await reload();
+    const j=await r.json();if(!r.ok){if(r.status===403||r.status===404)setData(null);throw new Error(j.error??"Ошибка сохранения");}await reload();
    }
    setNotice(message);return true;
   }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить");return false}
@@ -153,7 +153,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        <section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
         <h2>{format(tomorrow)}</h2>
-        <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
+        <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{next?.reserveKind?"Резерв · "+kindShort(next.reserveKind):kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
         {next?.proposalStatus==="proposed"&&<p className="worker-self-hint">Запрошено изменение: {kindShort(next.proposal)}. Ожидается решение менеджера.</p>}
         {!next?.kind?<><p className="worker-self-muted">На завтра пока нет установленной смены. Укажите рабочий день или выходной.</p><button className="worker-self-main-button" onClick={()=>setEditingDay(tomorrow)}>Запланировать день</button></>:
         next.kind==="off"?<><p className="worker-self-muted">Выходной уже стоит в вашем графике. Подтверждать его не нужно.</p><button className="worker-self-light-button full" onClick={()=>setEditingDay(tomorrow)}>{data.planning.owner==="manager"?"Запросить рабочий день":"Изменить на рабочий день"}</button></>:
@@ -185,7 +185,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          <button className="worker-self-date-row" aria-expanded={editingDay===p.date}
            onClick={()=>{setEditingDay(x=>x===p.date?null:p.date);setKindChoice(p.kind??data.planning.defaultKind??"day")}}>
           <span className="worker-self-date-info"><strong>{format(p.date)}</strong><small>{p.kind==="off"?"Выходной":p.kind?"Смена "+(p.kind==="night"?"ночная":"дневная"):"Не запланировано"}</small></span>
-          <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{kindShort(p.kind)}</span><ChevronRight size={17}/></span>
+          <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{p.reserveKind?"Резерв · "+kindShort(p.reserveKind):kindShort(p.kind)}</span><ChevronRight size={17}/></span>
          </button>
          {editingDay===p.date&&<div className="worker-self-edit worker-self-inline-edit">
           <p>Изменить на:</p>
