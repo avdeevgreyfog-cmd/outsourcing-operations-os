@@ -325,3 +325,6 @@ existing column widths; timesheet cell geometry and workflows remain unchanged.
 Validation: production build (including TypeScript), clean diff, and 108 browser
 combinations across 13 object tabs, nested views, 1440/390px and light/dark themes.
 Overview, staffing and documents screenshots were inspected. No database changes.
+At widths up to 560px, overview attention actions sit below the full-width event
+text. The final adjustment passed a rebuild and four additional overview browser
+combinations (both widths and themes); its mobile screenshot was inspected.
