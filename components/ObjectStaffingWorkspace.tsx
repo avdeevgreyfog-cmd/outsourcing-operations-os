@@ -67,12 +67,7 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
   }
 
   return <>
-    <div className="metrics-grid object-staffing-metrics">
-      <div className="metric"><span>План</span><strong>{needRows.reduce((sum,row)=>sum+row.required,0)}</strong></div>
-      <div className="metric"><span>На объекте</span><strong>{needRows.reduce((sum,row)=>sum+row.working,0)}</strong></div>
-      <div className="metric"><span>Кандидатов в работе</span><strong>{active.length}</strong></div>
-      <div className="metric"><span>Нужно действие менеджера</span><strong>{actionCount}</strong></div>
-    </div>
+
 
     <section className="section section-flush object-recruiting-brief">
       <div className="section-head"><div><h2>Условия объекта для подбора</h2><p>Подтверждённые на объекте данные. Они обновляются из чек-листа выезда и доступны всем, кто работает с этим объектом.</p></div></div>
@@ -86,7 +81,7 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
     </section>
 
     <section className="section section-flush object-candidate-section">
-      <div className="section-head"><div><h2>Кандидаты объекта</h2><p>{actionCount?`По ${actionCount} кандидатам требуется действие со стороны объекта.`:"Текущий подбор по объекту без дублирования полной карточки кандидата."}</p></div><Link className="button" href={`/recruiting?object=${objectId}`}>Полный подбор</Link></div>
+      <div className="section-head"><div><h2>Кандидаты объекта</h2><p>В работе: {active.length} кандидатов. {actionCount?`По ${actionCount} кандидатам требуется действие со стороны объекта.`:"Текущий подбор по объекту без дублирования полной карточки кандидата."}</p></div><Link className="button" href={`/recruiting?object=${objectId}`}>Полный подбор</Link></div>
       {message&&<div className="object-staffing-message">{message}</div>}
       <div className="object-candidate-board">{(["new","work","preparation","first_shift","problem"] as Lane[]).map(lane=><div className="object-candidate-lane" key={lane}><div className="object-candidate-lane-head"><span>{laneLabels[lane]}</span><b>{lanes[lane].length}</b></div><div className="object-candidate-cards">{lanes[lane].map(row=><CandidateCard key={row.applicationId} row={row} date={dates[row.applicationId]||addDays(today,1)} shift={shifts[row.applicationId]??"day"} canFeedback={canFeedback} busy={busy===`candidate:${row.applicationId}`} confirmation={workedConfirmation?.applicationId===row.applicationId?workedConfirmation:null} onConfirmationDate={value=>setWorkedConfirmation(current=>current?.applicationId===row.applicationId?{...current,actualStartAt:value}:current)} onConfirmationType={value=>setWorkedConfirmation(current=>current?.applicationId===row.applicationId?{...current,employmentRelationType:value}:current)} onCancelConfirmation={()=>setWorkedConfirmation(null)} onConfirmWorked={value=>void candidateAction(row,"worked",value)} onDate={value=>setDates(current=>({...current,[row.applicationId]:value}))} onShift={value=>setShifts(current=>({...current,[row.applicationId]:value}))} onAction={action=>void candidateAction(row,action)}/>) }{!lanes[lane].length&&<div className="object-candidate-lane-empty">Нет кандидатов</div>}</div></div>)}</div>
     </section>

@@ -36,3 +36,28 @@ export async function assertEligibleObjectManagers(tx:Sql,organizationId:string,
   const ids=[...new Set(userIds)],eligible=await listEligibleObjectManagers(tx,organizationId,ids);
   if(ids.some(id=>!eligible.some(row=>row.id===id)))throw new ObjectSettingsConflict('Один из выбранных менеджеров недоступен для назначения на объект. Проверьте выбранных сотрудников.');
 }
+
+export async function listEligibleObjectRecruiters(tx:Sql,organizationId:string,userIds?:string[]):Promise<ObjectManagerOption[]>{
+  if(userIds?.length===0)return [];
+  return tx<ObjectManagerOption[]>`
+    SELECT DISTINCT m.user_id id,u.display_name name
+    FROM organization_memberships m JOIN app_users u ON u.id=m.user_id
+    LEFT JOIN role_templates rt ON rt.id=m.role_template_id AND rt.organization_id=m.organization_id
+    WHERE m.organization_id=${organizationId}::uuid AND m.status='active'
+      AND (${userIds===undefined} OR m.user_id=ANY(${userIds??[]}::uuid[]))
+      AND (rt.code IN ('recruiter','recruiting_manager','recruitment_head')
+        OR EXISTS(SELECT 1 FROM permission_grants pg WHERE pg.organization_id=m.organization_id AND pg.role_template_id=m.role_template_id
+          AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign') AND pg.effect='allow')
+        OR EXISTS(SELECT 1 FROM position_assignments pa
+          JOIN staff_positions sp ON sp.id=pa.staff_position_id AND sp.organization_id=m.organization_id
+          JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id AND ppg.organization_id=m.organization_id
+          WHERE pa.organization_id=m.organization_id AND pa.membership_id=m.id AND pa.status<>'ended'
+            AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+            AND ppg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign') AND ppg.effect='allow'))
+    ORDER BY name
+  `;
+}
+export async function assertEligibleObjectRecruiters(tx:Sql,organizationId:string,userIds:string[]){
+  const ids=[...new Set(userIds)],eligible=await listEligibleObjectRecruiters(tx,organizationId,ids);
+  if(ids.some(id=>!eligible.some(row=>row.id===id)))throw new ObjectSettingsConflict('Один из выбранных сотрудников недоступен для назначения в команду подбора');
+}

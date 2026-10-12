@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
-import { assertEligibleObjectManagers,ObjectSettingsConflict } from "@/lib/operations/object-manager-options";
+import { assertEligibleObjectManagers,assertEligibleObjectRecruiters,ObjectSettingsConflict } from "@/lib/operations/object-manager-options";
 import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 
 const schema=z.object({
@@ -44,24 +44,7 @@ export async function POST(request:Request){
 
       const managerIds=[...new Set([body.ownerUserId,...body.additionalManagerUserIds])];
       await assertEligibleObjectManagers(tx,actor.organizationId,managerIds);
-      if(body.recruiterUserIds.length){
-        const validRecruiters=await tx<Array<{id:string}>>`
-          SELECT DISTINCT m.user_id id
-          FROM organization_memberships m
-          LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-          WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active' AND m.user_id=ANY(${body.recruiterUserIds}::uuid[])
-            AND (
-              rt.code IN ('recruiter','recruiting_manager','recruitment_head')
-              OR EXISTS (
-                SELECT 1 FROM permission_grants pg
-                WHERE pg.role_template_id=m.role_template_id
-                  AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign')
-                  AND pg.effect='allow'
-              )
-            )
-        `;
-        if(validRecruiters.length!==new Set(body.recruiterUserIds).size)throw new Error("Один из выбранных сотрудников не имеет доступа к подбору");
-      }
+      if(body.recruiterUserIds.length)await assertEligibleObjectRecruiters(tx,actor.organizationId,body.recruiterUserIds);
 
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`

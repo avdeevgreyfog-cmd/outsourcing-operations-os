@@ -414,3 +414,22 @@
   .object-settings-form :is(input,select){min-width:0;max-width:100%}
   .object-settings-actions .button{flex:1 1 120px}
 }
+
+/* Object card uses the existing 13px work text and 12px secondary text. */
+.sales-workspace.operations-workspace .object-workspace-pilot{font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif;font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .section-head h2{font-size:14px;line-height:1.4}
+.sales-workspace.operations-workspace .object-workspace-pilot .section-head p,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-form>label,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-form small,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-history-list :is(time,span){font-size:12px;line-height:1.45}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-form :is(input,select):not([type="checkbox"]){font:inherit;min-height:38px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-layout .button{min-height:38px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;text-align:center}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-history-list p{font-size:13px;line-height:1.5;overflow-wrap:anywhere;margin:5px 0 0}
+.sales-workspace.operations-workspace .object-pilot-meta strong{white-space:normal;overflow-wrap:anywhere}
+.sales-workspace.operations-workspace .object-workspace-pilot small,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-readonly :is(span,small),
+.sales-workspace.operations-workspace .object-workspace-pilot .object-agenda-list :is(time,small),
+.sales-workspace.operations-workspace .object-workspace-pilot .key-value{font-size:12px;line-height:1.45}
+.sales-workspace.operations-workspace .object-workspace-pilot :is(input,select,textarea){font-family:inherit}
+.sales-workspace.operations-workspace .object-workspace-pilot table td{font-size:13px;line-height:1.4}
+.sales-workspace.operations-workspace .object-workspace-pilot table th{font-size:12px;line-height:1.4}

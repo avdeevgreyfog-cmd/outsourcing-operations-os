@@ -5,7 +5,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
-import {assertEligibleObjectManagers,objectEditVersion,ObjectSettingsConflict} from "@/lib/operations/object-manager-options";
+import {assertEligibleObjectManagers,assertEligibleObjectRecruiters,objectEditVersion,ObjectSettingsConflict} from "@/lib/operations/object-manager-options";
 
 const schema=z.object({
   expectedVersion:z.string().length(64),
@@ -88,6 +88,20 @@ async function syncAssignments(tx:Sql,organizationId:string,objectId:string,type
   }
 }
 
+async function responsibilitySnapshot(tx:Sql,organizationId:string,objectId:string){
+  return tx<Array<{userId:string;name:string;role:string}>>`
+    SELECT o.owner_user_id "userId",u.display_name name,'primary_manager' role
+    FROM objects o JOIN app_users u ON u.id=o.owner_user_id
+    WHERE o.organization_id=${organizationId}::uuid AND o.id=${objectId}::uuid
+    UNION ALL
+    SELECT a.user_id "userId",u.display_name name,a.responsibility_type role
+    FROM object_assignments a JOIN app_users u ON u.id=a.user_id
+    WHERE a.organization_id=${organizationId}::uuid AND a.object_id=${objectId}::uuid
+      AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+      AND a.responsibility_type IN ('additional_manager','recruiter')
+  `;
+}
+
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -101,6 +115,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       if(body.expectedVersion!==objectEditVersion(current.updatedAt))throw new ObjectSettingsConflict("Настройки объекта изменились после открытия формы. Ваш ввод сохранён. Загрузите актуальные данные и повторите правку.");
       const assignmentChange=body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined;
       if(assignmentChange&&!canReadRow(actor.access,"operations.object.assign",current,actor))throw new AccessDeniedError("operations.object.assign");
+
+      const responsibilitiesBefore=assignmentChange?await responsibilitySnapshot(tx,actor.organizationId,id):null;
 
       if(body.legalEntityId){
         const [legalEntity]=await tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`;
@@ -143,16 +159,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       `).map(row=>row.userId):[]);
       const nextRecruiters=nextRecruitingMode==='object_team'?[...new Set(requestedRecruiters)]:[];
       if(syncRecruiters&&nextRecruitingMode==='object_team'&&!nextRecruiters.length)throw new ObjectSettingsConflict('Для закреплённой команды подбора выберите хотя бы одного сотрудника');
-      if(syncRecruiters&&nextRecruiters.length){
-        const validRecruiters=await tx<Array<{id:string}>>`
-          SELECT DISTINCT m.user_id id FROM organization_memberships m LEFT JOIN role_templates rt ON rt.id=m.role_template_id AND rt.organization_id=m.organization_id
-          WHERE m.organization_id=${actor.organizationId}::uuid AND m.status='active' AND m.user_id=ANY(${nextRecruiters}::uuid[])
-            AND (rt.code IN ('recruiter','recruiting_manager','recruitment_head') OR EXISTS (
-              SELECT 1 FROM permission_grants pg WHERE pg.organization_id=m.organization_id AND pg.role_template_id=m.role_template_id
-                AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign') AND pg.effect='allow'))
-        `;
-        if(validRecruiters.length!==nextRecruiters.length)throw new ObjectSettingsConflict('Один из выбранных сотрудников не имеет доступа к подбору');
-      }
+      if(syncRecruiters&&nextRecruiters.length)await assertEligibleObjectRecruiters(tx,actor.organizationId,nextRecruiters);
 
       let [updated]=await tx<Array<{updatedAt:string}>>`
         UPDATE objects SET
@@ -183,6 +190,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       if(syncAdditional)await syncAssignments(tx,actor.organizationId,id,"additional_manager",nextAdditional,actor.userId);
       if(syncRecruiters)await syncAssignments(tx,actor.organizationId,id,"recruiter",nextRecruiters,actor.userId);
 
+      const responsibilitiesAfter=assignmentChange?await responsibilitySnapshot(tx,actor.organizationId,id):null;
       const statusChanged=nextStatus!==current.status;
       const before={name:current.name,address:current.address,targetStartDate:current.targetStartDate,
         legalEntityId:current.legalEntityId,ownerUserId:current.ownerUserId,status:current.status,
@@ -192,6 +200,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         defaultShiftKind:current.defaultShiftKind,ppeTaskEnabled:current.ppeTaskEnabled,ppeTaskDueDays:current.ppeTaskDueDays};
       const changes={
         before,
+        ...(assignmentChange?{responsibilitiesBefore,responsibilitiesAfter}:{}),
         name:body.name??current.name,address:body.address===undefined?current.address:body.address,
         targetStartDate:body.targetStartDate===undefined?current.targetStartDate:body.targetStartDate,
         ownerChanged,statusChanged,previousStatus:current.status,
@@ -215,7 +224,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         VALUES(
           ${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,
           ${ownerChanged?"manager_handover":statusChanged?"status_changed":"settings_updated"},
-          ${ownerChanged?"Изменён основной менеджер объекта":statusChanged?`Статус объекта изменён: ${current.status} → ${nextStatus}`:"Обновлены настройки объекта"},
+          ${ownerChanged?"Изменён основной менеджер объекта":statusChanged?"Изменён статус объекта":"Обновлены настройки объекта"},
           ${tx.json(changes)}
         )
       `;
