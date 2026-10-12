@@ -48,3 +48,11 @@ test('malformed public token never reaches the database',async()=>{const h=harne
 test('self-reported night hours populate a provisional plan entry while preserving a manual manager fact',async()=>{process.env.SESSION_SECRET='isolated-test-key';const date=new Date(Date.now()-86400000).toISOString().slice(0,10);for(const source of ['schedule','manual']){const h=harness({entry:{id:id(30),source,factHours:source==='manual'?8:0,timeCode:source==='manual'?'WORK':'PLANNED'}});const path=(await h.run('create')).path;await h.service.submitEmployeeReply(path.split('/').at(-1),{date,hours:7});const ledger=h.queries.filter(q=>q.includes('UPDATE time_entries SET planned=true'));assert.equal(ledger.length,source==='schedule'?1:0);}});
 
 test('manager-assigned shift kind and reserve cannot be bypassed by employee confirmation',async()=>{process.env.SESSION_SECRET='isolated-test-key';for(const assigned of [{kind:'night',reserve:false},{kind:'day',reserve:true}]){const h=harness({assigned}),token=(await h.run('create')).path.split('/').at(-1);await assert.rejects(h.service.submitEmployeeReply(token,{date:new Date().toISOString().slice(0,10),response:'working',kind:'day'}),h.service.EmployeePortalError);assert.equal(h.queries.some(q=>q.includes('INSERT INTO worker_shift_reports')),false);}});
+test('hours-only submission rejects a changed manager shift or reserve assignment',async()=>{
+ process.env.SESSION_SECRET='isolated-test-key';const date=new Date(Date.now()-2*86400000).toISOString().slice(0,10);
+ for(const assigned of [{kind:'day',reserve:false},{kind:'night',reserve:true}]){
+  const h=harness({assigned});const {path}=await h.run('create');const token=path.split('/').at(-1);
+  await assert.rejects(()=>h.service.submitEmployeeReply(token,{date,hours:10}),/План смены изменён|Вы в резерве/);
+  assert.ok(!h.queries.some(q=>q.includes('UPDATE worker_shift_reports SET reported_hours=')));
+ }
+});

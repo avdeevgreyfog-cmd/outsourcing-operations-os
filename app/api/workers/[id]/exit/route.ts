@@ -266,8 +266,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
               SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
               WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
                 AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
-            )>=n.count_required THEN COALESCE(n.closed_at,now()) ELSE NULL END,
-            updated_at=now()
+            )>=n.count_required THEN COALESCE(n.closed_at,now()) ELSE NULL END
           WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.status NOT IN ('cancelled','archived')
         `;
       }

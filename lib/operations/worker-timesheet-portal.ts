@@ -206,7 +206,7 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
           (sh.ends_at AT TIME ZONE ${link.timezone})::date::text "endDate"
         FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
         WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid
-          AND sh.shift_date=${payload.date}::date AND sa.confirmation_status<>'cancelled' AND NOT sa.is_reserve
+          AND sh.shift_date=${payload.date}::date AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled' AND NOT sa.is_reserve
         ORDER BY sh.starts_at LIMIT 1`;
       const [customTime]=await sql<Array<{endClock:string;nextDay:boolean}>>`
         SELECT to_char(end_time,'HH24:MI') "endClock",ends_next_day "nextDay"
@@ -229,6 +229,15 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     if(locked)throw new EmployeePortalError("Табель за эту дату уже зафиксирован");
     const [old]=await sql<Array<{response:string;shiftKind:string|null}>>`SELECT response,shift_kind "shiftKind" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
     if(payload.hours!==undefined||(payload.response!==undefined&&payload.date<=link.localToday)){const [verified]=await sql<Array<{id:string}>>`SELECT worker_id id FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND hours_reconciled_at IS NOT NULL LIMIT 1`;if(verified)throw new EmployeePortalError("Смена уже согласована. Для исправления обратитесь к менеджеру.")}
+    if(link.owner==='manager'&&payload.hours!==undefined&&old?.response==='working'){
+      const [planned]=await sql<Array<{kind:string;reserve:boolean}>>`SELECT sh.shift_kind kind,sa.is_reserve reserve
+        FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+        WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid AND sh.shift_date=${payload.date}::date
+          AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+        ORDER BY sa.is_reserve,sh.starts_at LIMIT 1`;
+      if(planned?.reserve)throw new EmployeePortalError("Вы в резерве. Для выхода требуется назначение менеджера");
+      if(planned&&old.shiftKind!==planned.kind)throw new EmployeePortalError("План смены изменён. Сначала подтвердите актуальную смену менеджера");
+    }
      if(payload.hours!==undefined&&!old)throw new EmployeePortalError("Сначала подтвердите выход");
     if(payload.hours!==undefined&&old?.response!=="working")throw new EmployeePortalError("Часы указываются только за отработанную смену");
     if(payload.hours===undefined&&!payload.response)throw new EmployeePortalError("Не указан ответ");

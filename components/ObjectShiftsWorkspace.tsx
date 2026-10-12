@@ -1,4 +1,5 @@
 "use client";
+import {planningCoverage} from "@/lib/operations/planning-coverage";
 
 import Link from "next/link";
 import {useEffect,useMemo,useState} from "react";
@@ -109,6 +110,10 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return scheduleKind(worker,date);
   }
 
+  function demandKnown(date:string,specialty?:string){
+    return planner?demandRows.some(row=>row.date===date&&(!specialty||row.specialty===specialty))
+      :rows.some(row=>row.dateIso===date&&row.demand!=null&&(!specialty||row.specialty===specialty));
+  }
   function demandTotal(date:string,specialty?:string){
     if(planner)return demandRows.filter(row=>row.date===date&&(!specialty||row.specialty===specialty)).reduce((sum,row)=>sum+Number(row.required),0);
     const filtered=rows.filter(row=>row.dateIso===date&&(!specialty||row.specialty===specialty));const bySpecialty=new Map<string,number>();
@@ -177,8 +182,9 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   const specialties=[...new Set([...workers.map(worker=>worker.specialty??"Без специальности"),...demandRows.map(row=>row.specialty)])].sort((a,b)=>a.localeCompare(b,"ru"));
   const visibleWorkers=mode==="attention"?workers.filter(workerNeedsAttention):workers;
   const attentionCount=workers.filter(workerNeedsAttention).length;
+  const knownDemandDays=dates.filter(date=>demandKnown(date)).length;
   const weekSummary=dates.reduce((acc,date)=>{const required=demandTotal(date),counts=countsFor(date),coverage=date<today?counts.fact:counts.plan;acc.required+=required;acc.plan+=coverage;acc.reserve+=counts.reserve;acc.suggested+=date>=today?counts.suggested:0;acc.deficit+=Math.max(required-coverage,0);return acc},{required:0,plan:0,reserve:0,suggested:0,deficit:0});
-  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name),coverage=focusDate<today?counts.fact:counts.plan;return {name,required,plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.required>0||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
+  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name),coverage=focusDate<today?counts.fact:counts.plan;return {name,required,known:demandKnown(focusDate,name),plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.known||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
 
   function toggleWorker(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
   function toggleAll(){setSelected(current=>current.size===visibleWorkers.length?new Set():new Set(visibleWorkers.map(worker=>worker.id)))}
@@ -225,7 +231,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       </div>
     </div>
 
-    <div className="object-context-line"><span>Потребность: <b>{weekSummary.required||"—"}</b></span><span>План / факт: <b>{weekSummary.plan}</b></span><span>Дефицит: <b>{weekSummary.required?weekSummary.deficit:"—"}</b></span><span>Резерв: <b>{weekSummary.reserve}</b></span>{weekSummary.suggested>0&&<span>По графикам: <b>+{weekSummary.suggested}</b>, ещё не утверждено</span>}</div>
+    <div className="object-context-line"><span>Потребность ({knownDemandDays}/{dates.length} дней): <b>{knownDemandDays?weekSummary.required:"—"}</b></span><span>План / факт: <b>{weekSummary.plan}</b></span><span>Дефицит: <b>{knownDemandDays?weekSummary.deficit:"—"}</b></span><span>Резерв: <b>{weekSummary.reserve}</b></span>{weekSummary.suggested>0&&<span>По графикам: <b>+{weekSummary.suggested}</b>, ещё не утверждено</span>}</div>
 
     <div className="object-shift-guidance">
 
@@ -255,12 +261,12 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     {message&&<div className="object-staffing-message">{message}</div>}
 
     <div className="object-shift-coverage">
-      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{required||"—"}</strong><small>{!required?"Потребность не задана":deficit?`${past?"Не хватило":"Дефицит"}: ${deficit}`:coverage>required?`Сверх потребности: +${coverage-required}`:past?"Факт закрыт":"План закрыт"}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
+      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0),known=demandKnown(date);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{known?required:"—"}</strong><small>{planningCoverage(known?required:null,coverage,past).label}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
     </div>
 
     <div className="object-shift-deficit-panel">
       <div><strong>{weekday(focusDate)} · {shortDate(focusDate)}</strong><span>Потребность и покрытие по специальностям</span></div>
-      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.required||"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
+      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.known?row.required:"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
       <div className="page-actions"><Link className="button" href={`/needs?object=${objectId}`}>Потребности</Link><Link className="button" href={`/recruiting?object=${objectId}`}>Подбор</Link></div>
     </div>
 
@@ -279,7 +285,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     </table>{mode==="attention"&&!visibleWorkers.length&&<div className="sales-empty object-shift-empty">На этой неделе нет сотрудников, требующих внимания.</div>}</div>
     :<div className="request-table-wrap"><table className="data-table object-shift-specialty">
       <thead><tr><th>Специальность</th>{dates.map(date=><th key={date} className={focusDate===date?"is-focus":""}>{shortDate(date)}</th>)}</tr></thead>
-      <tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{const required=demandTotal(date,name),counts=countsFor(date,name),coverage=date<today?counts.fact:counts.plan,gap=Math.max(required-coverage,0);return <td key={date} className={`${gap?"object-shift-deficit":""} ${focusDate===date?"is-focus":""}`}><strong>{date<today?"Факт":"План"} {coverage}/{required||"—"}</strong><span className="cell-sub">резерв {counts.reserve||"—"}{counts.suggested?` · расчёт +${counts.suggested}`:""}</span>{gap>0&&<small>−{gap}</small>}</td>})}</tr>)}</tbody>
+      <tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{const required=demandTotal(date,name),counts=countsFor(date,name),coverage=date<today?counts.fact:counts.plan,gap=Math.max(required-coverage,0);return <td key={date} className={`${gap?"object-shift-deficit":""} ${focusDate===date?"is-focus":""}`}><strong>{date<today?"Факт":"План"} {coverage}/{demandKnown(date,name)?required:"—"}</strong><span className="cell-sub">резерв {counts.reserve||"—"}{counts.suggested?` · расчёт +${counts.suggested}`:""}</span>{gap>0&&<small>−{gap}</small>}</td>})}</tr>)}</tbody>
     </table></div>}
 
     <div className="section-actions"><Link className="button primary" href={`/objects/${objectId}?tab=timesheets`}>Перейти к факту в табеле</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный список смен</Link></div>

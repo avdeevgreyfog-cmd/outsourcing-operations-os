@@ -291,3 +291,10 @@ and personnel views; switching is disabled while a section is being edited.
 Hidden working views remain mounted so switching does not discard local edits.
 The field, history and permission contracts are preserved. Daily planning labels
 no longer call unknown demand a closed plan and explicitly show excess coverage.
+
+### Planning coverage semantics
+
+Unknown demand renders as a dash; a recorded zero renders as zero and says no
+exits are required. Coverage above a recorded target is shown explicitly. Weekly
+context states how many dates have demand records, so a partial demand sum cannot
+be mistaken for a complete weekly target. `planningCoverage` owns the daily label.
