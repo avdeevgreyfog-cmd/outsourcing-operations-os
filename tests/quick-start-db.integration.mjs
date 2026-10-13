@@ -10,6 +10,7 @@ import ts from 'typescript';
 import {createRequire} from 'node:module';
 import postgres from 'postgres';
 import * as access from '../lib/core/access.mjs';
+import * as orgScope from '../lib/organization/read-scope.mjs';
 const require=createRequire(import.meta.url),native=process.argv.includes('--native');
 // Fixed disposable local endpoint; external DATABASE_URL is deliberately ignored.
 const connection=native?postgres('postgresql://ubuntu@127.0.0.1:55439/operis_acceptance',{max:8,prepare:false,onnotice:()=>{}}):null;
@@ -18,7 +19,7 @@ const pg=native?{...nativeHandle(connection),transaction:fn=>connection.begin(tx
 const org='00000000-0000-4000-8000-000000000001',user='10000000-0000-4000-8000-000000000001',foreign='00000000-0000-4000-8000-000000000002';
 class AccessDeniedError extends Error{}
 let actor;
-const caps=['worker.edit','operations.object.create','operations.shift.edit','operations.shift.read','operations.object.edit','time.time_entry.edit','sales.client.create','sales.client.read','organization.manage','admin.permissions.manage','time.timesheet.submit'];
+const caps=['organization.read','worker.edit','operations.object.create','operations.shift.edit','operations.shift.read','operations.object.edit','time.time_entry.edit','sales.client.create','sales.client.read','organization.manage','admin.permissions.manage','time.timesheet.submit'];
 const fullActor={organizationId:org,userId:user,demo:false,teamIds:[],access:{capabilities:caps,denies:[],scopes:Object.fromEntries(caps.map(c=>[c,[{type:'all_org',ids:[]}]]))}};
 actor=fullActor;
 const fixturePhone=()=>'+7999'+String(parseInt(crypto.randomUUID().replaceAll('-','').slice(0,8),16)%10000000).padStart(7,'0');
@@ -26,7 +27,7 @@ const phone=fixturePhone(),importPhone=fixturePhone(),parallelPhone=fixturePhone
 let savepoint=0;
 function adapter(tx){const sql=tx.nativeSql?((parts,...values)=>tx.nativeSql(parts,...values)):async(parts,...values)=>(await tx.query(parts.reduce((q,part,i)=>q+(i?'$'+i:'')+part,''),values)).rows;sql.json=tx.nativeSql?tx.nativeSql.json:JSON.stringify;sql.unsafe=tx.nativeSql?tx.nativeSql.unsafe:async(q,args=[])=>(await tx.query(q,args)).rows;sql.begin=async fn=>{const name='quick_start_'+(++savepoint);await tx.exec('SAVEPOINT '+name);try{const result=await fn(sql);await tx.exec('RELEASE SAVEPOINT '+name);return result}catch(e){await tx.exec('ROLLBACK TO SAVEPOINT '+name);throw e}};return sql;}
 const withTenant=(o,u,fn)=>pg.transaction(async tx=>{await tx.exec('SET LOCAL ROLE quick_start_runtime');await tx.query("SELECT set_config('app.organization_id',$1,true),set_config('app.user_id',$2,true)",[o,u]);return fn(adapter(tx));});
-const deps={'next/server':{NextResponse:{json:(b,o)=>Response.json(b,o)}},'@/lib/auth/server':{getCurrentActor:async()=>actor},'@/lib/access/server':{AccessDeniedError,requireCapability(a,c){if(!access.hasCapability(a.access,c))throw new AccessDeniedError(c)}},'@/lib/core/access.mjs':access,'@/lib/db/client':{withTenant},'@/lib/operations/launch-checklist':{defaultPrimarySiteVisitChecklist:()=>[]}};
+const deps={'next/server':{NextResponse:{json:(b,o)=>Response.json(b,o)}},'@/lib/auth/server':{getCurrentActor:async()=>actor},'@/lib/access/server':{AccessDeniedError,requireCapability(a,c){if(!access.hasCapability(a.access,c))throw new AccessDeniedError(c)}},'@/lib/core/access.mjs':access,'@/lib/db/client':{withTenant},'@/lib/demo/organization':{},'@/lib/organization/read-scope.mjs':orgScope,'@/lib/operations/launch-checklist':{defaultPrimarySiteVisitChecklist:()=>[]}};
 function compile(path){const exports={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(exports,n=>deps[n]??require(n));return exports;}
 async function post(path,body,id){const response=await compile(path).POST(new Request('http://isolated.test/api',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),id?{params:Promise.resolve({id})}:undefined);return {status:response.status,body:await response.json()};}
 try{
@@ -51,9 +52,8 @@ try{
  deps['@/lib/data/service']={listObjects:a=>withTenant(a.organizationId,a.userId,s=>s`SELECT id,id "objectId",organization_id "organizationId",owner_user_id "ownerUserId",region_id "regionId" FROM objects`),listWorkers:a=>withTenant(a.organizationId,a.userId,s=>s`SELECT w.id,w.status,w.full_name "fullName",a.object_id "objectId",w.organization_id "organizationId",o.owner_user_id "ownerUserId" FROM worker_profiles w LEFT JOIN worker_object_assignments a ON a.worker_id=w.id AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) LEFT JOIN objects o ON o.id=a.object_id`)};
  process.env.SESSION_SECRET='disposable-quick-start-fixture';const portal=compile('lib/operations/worker-timesheet-portal.ts');await assert.rejects(()=>portal.editWorkerLink(fullActor,object,worker,'create'),/не назначен/);
  const [specialty]=await withTenant(org,user,s=>s`SELECT id FROM specialties WHERE active LIMIT 1`);assert.ok(specialty);
- let transfer=await post('app/api/workers/[id]/transfer/route.ts',{objectId:object,specialtyId:specialty.id,effectiveFrom:'2026-01-01'},worker);assert.equal(transfer.status,500);assert.match(transfer.body.error,/менеджер/);
- await withTenant(org,user,s=>s`UPDATE objects SET owner_user_id=${user}::uuid WHERE id=${object}::uuid`);
- transfer=await post('app/api/workers/[id]/transfer/route.ts',{objectId:object,specialtyId:specialty.id,effectiveFrom:'2026-01-01',workMode:null},worker);assert.equal(transfer.status,201,JSON.stringify(transfer.body));
+ const transfer=await post('app/api/workers/[id]/transfer/route.ts',{objectId:object,specialtyId:specialty.id,effectiveFrom:'2026-01-01',workMode:null},worker);assert.equal(transfer.status,201,JSON.stringify(transfer.body));
+ const [noManager]=await withTenant(org,user,s=>s`SELECT manager_user_id FROM worker_object_assignments WHERE worker_id=${worker}::uuid`);assert.equal(noManager.manager_user_id,null);
  const [assigned]=await withTenant(org,user,s=>s`SELECT w.status,a.effective_from::text start,a.work_mode FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id WHERE w.id=${worker}::uuid`);assert.equal(assigned.status,'active');assert.equal(assigned.start,'2026-01-01');assert.equal(assigned.work_mode,null);
  const link=await portal.editWorkerLink(fullActor,object,worker,'create');assert.ok(link.path,'assigned employee receives personal link');
  const created=await post('app/api/workers/route.ts',{fullName:'Имя до дубля',phone});assert.equal(created.status,201);
@@ -100,5 +100,6 @@ try{
   const contexts=await Promise.all([org,foreign].map(tenant=>withTenant(tenant,user,async s=>(await s`SELECT current_setting('app.organization_id') organization`)[0].organization)));assert.deepEqual(contexts,[org,foreign]);
   console.log('PASS native PostgreSQL concurrency: two same-preview commits serialize, one succeeds/one stale409, one worker; concurrent tenant contexts isolated');
  }
- console.log('PASS quick start isolated PostgreSQL: object/worker null preservation, no launch/assignments/hours/links, RLS invisibility, metadata tenant integrity, cross-tenant refusal, manager gate, first assignment/status, duplicate no overwrite, capability');
+ const organizationService=compile('lib/organization/service.ts');for(const name of ['listStaffPositions','listPositions','listOrganizationUnits','listProcessRoles','listPositionAssignments','listCompanyEmployees','listResponsibilityRules','listWorkerSpecialties']){const rows=await organizationService[name](fullActor);assert.ok(Array.isArray(rows),name);if(name!=='listWorkerSpecialties')assert.ok(rows.every(r=>!r.organizationId||r.organizationId===org),name+' tenant');}console.log('PASS actual organization catalog queries including GROUP BY and tenant isolation');
+ console.log('PASS quick start isolated PostgreSQL: object/worker null preservation, no launch/assignments/hours/links, RLS invisibility, metadata tenant integrity, cross-tenant refusal, unknown manager preserved, first assignment/status, duplicate no overwrite, capability');
 }finally{await pg.close()}
