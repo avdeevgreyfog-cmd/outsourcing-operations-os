@@ -44,7 +44,7 @@ const labels:Record<string,string>={
   history:"История",
 };
 const aliases:Record<string,string>={needs:"staffing",recruiting:"staffing",people:"workforce",incidents:"quality",expenses:"finance",activity:"history",stats:"analytics"};
-const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
+const objectStatusLabels:Record<string,string>={prelaunch:"Подготовка к запуску",launch:"Запуск",active:"Действующий",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 
 export default async function ObjectWorkspace({params,searchParams}:{params:Promise<{id:string}>;searchParams:Promise<{tab?:string;month?:string;analyticsView?:string;period?:string}>}) {
@@ -204,6 +204,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
         <div><Status tone={operationalRisk==="critical"?"bad":operationalRisk==="high"?"warn":object.status==="active"?"good":"info"}>{objectStatusLabels[object.status]??"В работе"}</Status><span className="object-pilot-code">{object.code}</span></div>
         <h1>{object.name}</h1>
         <p>{object.client} · {object.address??object.region}</p>
+        {Boolean(object.missingFields?.length)&&<p className="object-profile-incomplete">Профиль требует заполнения: {object.missingFields!.join(" · ")} <Link href={`/objects/${object.id}?tab=settings`}>Дополнить профиль</Link></p>}
       </div>
       <div className="object-pilot-health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>укомплектованность</span><small>{working} из {required||"—"} работают</small></div>
       <div className="object-pilot-meta">

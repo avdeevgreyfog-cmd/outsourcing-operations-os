@@ -10,7 +10,9 @@ import {assertEligibleObjectManagers,assertEligibleObjectRecruiters,objectEditVe
 const schema=z.object({
   expectedVersion:z.string().length(64),
   name:z.string().trim().min(2).max(240).optional(),
-  legalEntityId:z.string().uuid().optional(),
+  legalEntityId:z.string().uuid().nullable().optional(),
+  clientId:z.string().uuid().nullable().optional(),
+  regionId:z.string().uuid().nullable().optional(),
   address:z.string().trim().max(500).nullable().optional(),
   targetStartDate:z.string().date().nullable().optional(),
   actualStartDate:z.string().date().nullable().optional(),
@@ -34,7 +36,7 @@ const schema=z.object({
 });
 
 type ObjectScope={
-  organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string;
+  organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string|null;createdByUserId:string;
   legalEntityId:string|null;recruitingMode:"company_rules"|"object_team";name:string;status:string;assigneeUserIds:string[];
   address:string|null;targetStartDate:string|null;actualStartDate:string|null;actualEndDate:string|null;updatedAt:string;
   defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed";ppeTaskEnabled:boolean;ppeTaskDueDays:number|null;
@@ -43,7 +45,7 @@ type ObjectScope={
 async function getScope(tx:Sql,organizationId:string,id:string):Promise<ObjectScope|null>{
   const [row]=await tx<Array<ObjectScope>>`
     SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
-      o.client_company_id "clientId",o.legal_entity_id "legalEntityId",o.recruiting_routing_mode "recruitingMode",o.name,o.status,
+      o.created_by_user_id "createdByUserId",o.client_company_id "clientId",o.legal_entity_id "legalEntityId",o.recruiting_routing_mode "recruitingMode",o.name,o.status,
       o.address_text address,o.target_start_date::text "targetStartDate",o.actual_start_date::text "actualStartDate",o.actual_end_date::text "actualEndDate",o.updated_at::text "updatedAt",
       o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",
       o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
@@ -108,16 +110,24 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     requireCapability(actor,"operations.object.edit");
     if(actor.demo)return NextResponse.json({error:"Изменения демо-объекта отображаются локально"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    if(body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined)requireCapability(actor,"operations.object.assign");
+    if(body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined||body.clientId!==undefined||body.regionId!==undefined)requireCapability(actor,"operations.object.assign");
     const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const current=await getScope(tx,actor.organizationId,id);
       if(!current||!canReadRow(actor.access,"operations.object.edit",current,actor))throw new AccessDeniedError("operations.object.edit");
       if(body.expectedVersion!==objectEditVersion(current.updatedAt))throw new ObjectSettingsConflict("Настройки объекта изменились после открытия формы. Ваш ввод сохранён. Загрузите актуальные данные и повторите правку.");
-      const assignmentChange=body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined;
+      const assignmentChange=body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined||body.clientId!==undefined||body.regionId!==undefined;
       if(assignmentChange&&!canReadRow(actor.access,"operations.object.assign",current,actor))throw new AccessDeniedError("operations.object.assign");
 
       const responsibilitiesBefore=assignmentChange?await responsibilitySnapshot(tx,actor.organizationId,id):null;
 
+      if(body.clientId){
+        const [client]=await tx<Array<{id:string;organizationId:string;ownerUserId:string|null;createdByUserId:string|null;regionId:string|null;teamId:string|null}>>`SELECT id,organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",region_id "regionId",assigned_team_id "teamId" FROM client_companies WHERE id=${body.clientId}::uuid AND organization_id=${actor.organizationId}::uuid AND status<>'archived'`;
+        if(!client||!canReadRow(actor.access,"sales.client.read",{...client,clientId:client.id},actor))throw new AccessDeniedError("sales.client.read");
+      }
+      if(body.regionId){
+        const [region]=await tx`SELECT id FROM regions WHERE id=${body.regionId}::uuid AND organization_id=${actor.organizationId}::uuid`;
+        if(!region)throw new ObjectSettingsConflict("Регион недоступен");
+      }
       if(body.legalEntityId){
         const [legalEntity]=await tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`;
         if(!legalEntity)throw new Error("Юридическое лицо недоступно");
@@ -134,12 +144,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       const nextStatus=body.status??current.status;
       const nextActualStart=body.actualStartDate===undefined?current.actualStartDate:body.actualStartDate;
       const nextActualEnd=body.actualEndDate===undefined?current.actualEndDate:body.actualEndDate;
-      if(body.status!==undefined&&body.status!==current.status&&["active","paused"].includes(body.status)&&!nextActualStart)throw new Error("Укажите фактическую дату начала работы");
-      if(body.status!==undefined&&body.status!==current.status&&["completed","archived"].includes(body.status)&&(!nextActualStart||!nextActualEnd))throw new Error("Для завершения объекта укажите даты начала и завершения работы");
+
       if(nextActualStart&&nextActualEnd&&nextActualEnd<nextActualStart)throw new Error("Дата завершения не может быть раньше даты начала работы");
 
       const nextOwner=body.ownerUserId??current.ownerUserId;
-      if(!nextOwner)throw new Error("У объекта должен быть основной менеджер");
+
       const ownerChanged=nextOwner!==current.ownerUserId;
       const syncAdditional=body.additionalManagerUserIds!==undefined||ownerChanged;
       const requestedAdditional:string[]=body.additionalManagerUserIds??(syncAdditional?(await tx<Array<{userId:string}>>`
@@ -164,7 +173,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       let [updated]=await tx<Array<{updatedAt:string}>>`
         UPDATE objects SET
           name=COALESCE(${body.name??null},name),
-          legal_entity_id=COALESCE(${body.legalEntityId??null}::uuid,legal_entity_id),
+          legal_entity_id=CASE WHEN ${body.legalEntityId===undefined} THEN legal_entity_id ELSE ${body.legalEntityId??null}::uuid END,
+          client_company_id=CASE WHEN ${body.clientId===undefined} THEN client_company_id ELSE ${body.clientId??null}::uuid END,
+          region_id=CASE WHEN ${body.regionId===undefined} THEN region_id ELSE ${body.regionId??null}::uuid END,
           address_text=CASE WHEN ${body.address===undefined} THEN address_text ELSE ${body.address??null} END,
           target_start_date=CASE WHEN ${body.targetStartDate===undefined} THEN target_start_date ELSE ${body.targetStartDate??null}::date END,
           actual_start_date=CASE WHEN ${body.actualStartDate===undefined} THEN actual_start_date ELSE ${body.actualStartDate??null}::date END,
@@ -192,14 +203,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
 
       const responsibilitiesAfter=assignmentChange?await responsibilitySnapshot(tx,actor.organizationId,id):null;
       const statusChanged=nextStatus!==current.status;
-      const before={name:current.name,address:current.address,targetStartDate:current.targetStartDate,
+      const before={clientId:current.clientId,regionId:current.regionId,name:current.name,address:current.address,targetStartDate:current.targetStartDate,
         legalEntityId:current.legalEntityId,ownerUserId:current.ownerUserId,status:current.status,
         actualStartDate:current.actualStartDate,actualEndDate:current.actualEndDate,recruitingMode:current.recruitingMode,
         defaultTransitionDays:current.defaultTransitionDays,defaultDailyPaymentShifts:current.defaultDailyPaymentShifts,
         defaultScheduleWorkDays:current.defaultScheduleWorkDays,defaultScheduleRestDays:current.defaultScheduleRestDays,
         defaultShiftKind:current.defaultShiftKind,ppeTaskEnabled:current.ppeTaskEnabled,ppeTaskDueDays:current.ppeTaskDueDays};
       const changes={
-        before,
+        before,clientId:body.clientId===undefined?current.clientId:body.clientId,regionId:body.regionId===undefined?current.regionId:body.regionId,
         ...(assignmentChange?{responsibilitiesBefore,responsibilitiesAfter}:{}),
         name:body.name??current.name,address:body.address===undefined?current.address:body.address,
         targetStartDate:body.targetStartDate===undefined?current.targetStartDate:body.targetStartDate,

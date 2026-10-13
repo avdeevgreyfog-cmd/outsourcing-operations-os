@@ -7,6 +7,8 @@ import type { ObjectRow } from "@/lib/data/service";
 import type { ObjectManagementOptions } from "@/lib/operations/object-management";
 import { Section } from "@/components/UI";
 
+type RequisitesEditor={kind:"client"|"legalEntity";id:string;name:string;inn:string;kpp:string;legalName:string;version:string};
+
 const statusOptions=[
   ["prelaunch","Подготовка"],["launch","Запуск"],["active","Активен"],["paused","Приостановлен"],["completed","Завершён"],["archived","Архив"],
 ] as const;
@@ -15,9 +17,12 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   const router=useRouter();
   const [view,setView]=useState<"general"|"team"|"recruiting"|"personnel">("general");
   const [editing,setEditing]=useState<"general"|"team"|"recruiting"|"personnel"|null>(null);
+  const [requisites,setRequisites]=useState<RequisitesEditor|null>(null);
   const [version,setVersion]=useState(object.editVersion??"");
   const [name,setName]=useState(object.name);
-  const [legalEntityId,setLegalEntityId]=useState(object.legalEntityId??options.legalEntities.find(item=>item.primary)?.id??"");
+  const [legalEntityId,setLegalEntityId]=useState(object.legalEntityId??"");
+  const [clientId,setClientId]=useState(object.clientId??"");
+  const [regionId,setRegionId]=useState(object.regionId??"");
   const [address,setAddress]=useState(object.address??"");
   const [targetStartDate,setTargetStartDate]=useState(object.targetStartDate??toInputDate(object.targetStart??null));
   const [actualStartDate,setActualStartDate]=useState(object.actualStartDate??"");
@@ -47,13 +52,11 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
   function toggle(list:string[],set:(value:string[])=>void,id:string){set(list.includes(id)?list.filter(value=>value!==id):[...list,id]);}
   function changeStatus(next:string){
     setStatus(next);
-    if(["active","paused","completed","archived"].includes(next)&&!actualStartDate)setActualStartDate(todayIso());
-    if(["completed","archived"].includes(next)&&!actualEndDate)setActualEndDate(todayIso());
     if(["prelaunch","launch","active","paused"].includes(next)&&["completed","archived"].includes(status))setActualEndDate("");
   }
 
   function cancel(){
-    setName(object.name);setLegalEntityId(object.legalEntityId??"");setAddress(object.address??"");
+    setName(object.name);setClientId(object.clientId??"");setRegionId(object.regionId??"");setLegalEntityId(object.legalEntityId??"");setAddress(object.address??"");
     setTargetStartDate(object.targetStartDate??toInputDate(object.targetStart??null));
     setActualStartDate(object.actualStartDate??"");setActualEndDate(object.actualEndDate??"");setStatus(object.status);
     setOwnerUserId(object.ownerUserId??"");setAdditionalManagers((object.additionalManagers??[]).map(item=>item.userId));
@@ -63,15 +66,35 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
     setScheduleRestDays(object.defaultScheduleRestDays==null?"":String(object.defaultScheduleRestDays));
     setDefaultShiftKind(object.defaultShiftKind??"mixed");setPpeTaskEnabled(object.ppeTaskEnabled!==false);
     setPpeTaskDueDays(object.ppeTaskDueDays==null?"":String(object.ppeTaskDueDays));
-    setVersion(object.editVersion??"");setError("");setSaved("");setConflict(false);setEditing(null);
+    setVersion(object.editVersion??"");setError("");setSaved("");setConflict(false);setEditing(null);setRequisites(null);
+  }
+
+  async function openRequisites(kind:"client"|"legalEntity"){
+    const id=kind==="client"?clientId:legalEntityId;if(!id||busy)return;
+    setBusy(true);setError("");setSaved("");
+    const selectedName=kind==="client"?(options.clients.find(item=>item.id===id)?.name??object.client):(options.legalEntities.find(item=>item.id===id)?.name??object.legalEntity);
+    try{
+      if(demo){setRequisites({kind,id,name:selectedName??"Реквизиты",inn:"",kpp:"",legalName:"",version:"demo"});return;}
+      const response=await fetch(`/api/objects/options?kind=${kind}&id=${id}`);
+      const json=await response.json();if(!response.ok)throw new Error(json.error??"Не удалось загрузить реквизиты");
+      setRequisites({kind,id,name:selectedName??"Реквизиты",inn:json.inn??"",kpp:json.kpp??"",legalName:json.legalName??"",version:json.version});
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось загрузить реквизиты");}finally{setBusy(false);}
+  }
+  async function saveRequisites(){
+    if(!requisites||busy)return;setBusy(true);setError("");setSaved("");
+    try{
+      if(demo){setRequisites(null);setSaved("Реквизиты изменены только в демо; в базу не записаны.");return;}
+      const response=await fetch("/api/objects/options",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({kind:requisites.kind,id:requisites.id,version:requisites.version,inn:requisites.inn||null,...(requisites.kind==="client"?{legalName:requisites.legalName||null}:{kpp:requisites.kpp||null})})});
+      const json=await response.json();if(!response.ok)throw new Error(json.error??"Не удалось сохранить реквизиты");
+      setRequisites(null);setSaved("Реквизиты сохранены");router.refresh();
+    }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить реквизиты");}finally{setBusy(false);}
   }
 
   async function save(){
-    if(busy||!editing)return;
+    if(busy||!editing||requisites)return;
     try{
       setBusy(true);setError("");setSaved("");setConflict(false);
       if(editing==="team"&&!ownerUserId)throw new Error("Выберите основного менеджера");
-      if(editing==="general"&&canAssign&&!legalEntityId)throw new Error("Выберите юридическое лицо");
       if(editing==="recruiting"&&recruitingMode==="object_team"&&!recruiters.length)throw new Error("Выберите команду подбора");
       if(editing==="general"&&name.trim().length<2)throw new Error("Укажите название объекта — минимум 2 символа");
       if(editing==="personnel"&&((scheduleWorkDays&&!scheduleRestDays)||(!scheduleWorkDays&&scheduleRestDays)))throw new Error("Для графика укажите и рабочие, и выходные дни");
@@ -85,7 +108,7 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         ...(editing==="general"?{
           name,address:address||null,...(!launchManaged?{targetStartDate:targetStartDate||null,status}:{}),
           actualStartDate:actualStartDate||null,actualEndDate:actualEndDate||null,
-          ...(canAssign&&legalEntityId!==object.legalEntityId?{legalEntityId}:{}),
+          ...(canAssign?{legalEntityId:legalEntityId||null,clientId:clientId||null,regionId:regionId||null}:{}),
         }:{}),
         ...(editing==="personnel"?{
           defaultTransitionDays:Number(transitionDays),defaultDailyPaymentShifts:Number(dailyPaymentShifts||0),
@@ -112,13 +135,15 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
 
   return <div className="object-module-shell object-settings-workspace">
     <div className="object-module-head"><div><h2>Настройки объекта</h2><p>Параметры, ответственность, подбор и условия работы сотрудников.</p></div></div>
-    <div className="object-local-tabs" aria-label="Разделы настроек">{([["general","Параметры и основание"],["team","Команда объекта"],["recruiting","Подбор"],["personnel","Условия работы"]] as const).map(([key,label])=><button key={key} type="button" aria-pressed={view===key} disabled={editing!==null||busy} className={view===key?"active":""} onClick={()=>setView(key)}>{label}</button>)}</div>
+    <div className="object-local-tabs" aria-label="Разделы настроек">{([["general","Параметры и основание"],["team","Команда объекта"],["recruiting","Подбор"],["personnel","Условия работы"]] as const).map(([key,label])=><button key={key} type="button" aria-pressed={view===key} disabled={editing!==null||busy||requisites!==null} className={view===key?"active":""} onClick={()=>setView(key)}>{label}</button>)}</div>
     <div className="object-settings-layout">
     <div hidden={view!=="general"} className="object-view-content">
     <Section title="Параметры объекта" actions={<button className="button" disabled={busy||editing!==null} onClick={()=>{setError("");setSaved("");setEditing("general");}}>Редактировать</button>}>
       <fieldset disabled={busy||editing!=="general"} className="object-settings-form">
         <label>Название объекта<input value={name} onChange={e=>setName(e.target.value)}/></label>
-        <label>Наше юрлицо{canAssign?<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select>:<input value={object.legalEntity??"Не указано"} disabled/>}</label>
+        <label>Клиент{canAssign?<select value={clientId} onChange={e=>setClientId(e.target.value)}><option value="">Не указано</option>{options.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>:<input value={object.client??"Не указано"} disabled/>}{clientId&&options.requisitesPermissions?.client&&<button type="button" className="button" disabled={busy||requisites!==null} onClick={()=>void openRequisites("client")}>Дополнить реквизиты</button>}</label>
+        <label>Регион{canAssign?<select value={regionId} onChange={e=>setRegionId(e.target.value)}><option value="">Не указано</option>{options.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select>:<input value={object.region??"Не указано"} disabled/>}</label>
+        <label>Наше юрлицо{canAssign?<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select>:<input value={object.legalEntity??"Не указано"} disabled/>}{legalEntityId&&options.requisitesPermissions?.legalEntity&&<button type="button" className="button" disabled={busy||requisites!==null} onClick={()=>void openRequisites("legalEntity")}>Дополнить реквизиты</button>}</label>
         <label className="wide">Адрес<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Адрес объекта"/></label>
         {launchManaged
           ?<label>Плановая дата запуска<div className="object-launch-managed-field"><strong>{targetStartDate?new Intl.DateTimeFormat("ru-RU").format(new Date(targetStartDate+"T00:00:00")):"Не указана"}</strong><Link href={"/launches?object="+object.id}>Открыть план запуска</Link></div><small>На этапе подготовки дата управляется из плана запуска.</small></label>
@@ -126,10 +151,20 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
         {launchManaged
           ?<label>Статус объекта<div className="object-launch-managed-field"><strong>{statusOptions.find(([value])=>value===status)?.[1]??status}</strong><Link href={"/launches?object="+object.id}>Управлять запуском</Link></div><small>Первый фактический выход переводит объект в «Запуск», завершение стабилизации — в «Активен».</small></label>
           :<label>Статус объекта<select value={status} onChange={e=>changeStatus(e.target.value)}>{operationalStatusOptions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select><small>После завершения запуска здесь доступны операционные статусы объекта.</small></label>}
-        {["active","paused","completed","archived"].includes(status)&&<label>Фактическая дата начала работы<input type="date" value={actualStartDate} onChange={e=>setActualStartDate(e.target.value)}/><small>От этой даты считается период работы объекта.</small></label>}
+        {["active","paused","completed","archived"].includes(status)&&<label>Фактическая дата начала работы<input type="date" value={actualStartDate} onChange={e=>setActualStartDate(e.target.value)}/><small>{actualStartDate?"От этой даты считается период работы объекта.":"Дата неизвестна"}</small></label>}
         {["completed","archived"].includes(status)&&<label>Дата завершения работы<input type="date" value={actualEndDate} onChange={e=>setActualEndDate(e.target.value)}/><small>Фиксирует итоговый период работы объекта.</small></label>}
       </fieldset>
     </Section>
+
+    {requisites&&<Section title={"Реквизиты: "+requisites.name}>
+      <p className="form-hint">Сведения сохраняются в общей карточке {requisites.kind==="client"?"клиента":"нашего юрлица"} и используются всеми связанными объектами. Неизвестные значения оставьте пустыми.</p>
+      <fieldset disabled={busy} className="object-settings-form">
+        {requisites.kind==="client"&&<label className="wide">Полное юридическое название<input value={requisites.legalName} onChange={e=>setRequisites({...requisites,legalName:e.target.value})} placeholder="Не указано"/></label>}
+        <label>ИНН<input value={requisites.inn} onChange={e=>setRequisites({...requisites,inn:e.target.value})} maxLength={20} placeholder="Не указано"/></label>
+        {requisites.kind==="legalEntity"&&<label>КПП<input value={requisites.kpp} onChange={e=>setRequisites({...requisites,kpp:e.target.value})} maxLength={20} placeholder="Не указано"/></label>}
+      </fieldset>
+      <div className="object-settings-actions"><button type="button" className="button primary" disabled={busy} onClick={()=>void saveRequisites()}>Сохранить реквизиты</button><button type="button" className="button" disabled={busy} onClick={()=>setRequisites(null)}>Закрыть без сохранения</button></div>
+    </Section>}
 
     <Section title="Основание объекта">
       <div className="object-source-links">
@@ -176,10 +211,8 @@ export function ObjectSettingsWorkspace({object,options,demo,canAssign}:{object:
     </Section>
 
     </div>
-    <div className="object-settings-actions">{editing&&<><button className="button primary" disabled={busy} onClick={()=>void save()}>{busy?"Сохраняю…":"Сохранить настройки"}</button><button className="button" disabled={busy} onClick={cancel}>Отменить изменения</button></>}{error&&<span role="alert" className="form-error">{error}</span>}{conflict&&<button className="button" disabled={busy} onClick={()=>{if(window.confirm("Загрузить актуальные настройки? Несохранённые изменения будут потеряны."))window.location.reload();}}>Загрузить актуальные данные</button>}{saved&&<span role="status" className="object-settings-success">{saved}</span>}</div>
+    <div className="object-settings-actions">{editing&&<><button className="button primary" disabled={busy||requisites!==null} onClick={()=>void save()}>{busy?"Сохраняю…":"Сохранить настройки"}</button><button className="button" disabled={busy} onClick={cancel}>Отменить изменения</button></>}{error&&<span role="alert" className="form-error">{error}</span>}{conflict&&<button className="button" disabled={busy} onClick={()=>{if(window.confirm("Загрузить актуальные настройки? Несохранённые изменения будут потеряны."))window.location.reload();}}>Загрузить актуальные данные</button>}{saved&&<span role="status" className="object-settings-success">{saved}</span>}</div>
   </div></div>;
 }
 
-function todayIso(){return new Date().toISOString().slice(0,10)}
-
-function toInputDate(value:string|null){if(!value)return"";if(/^\d{4}-\d{2}-\d{2}$/.test(value))return value;const match=value.match(/^(\d{2})\.(\d{2})(?:\.(\d{4}))?$/);if(!match)return"";return `${match[3]??new Date().getFullYear()}-${match[2]}-${match[1]}`;}
+function toInputDate(value:string|null){if(!value)return"";if(/^\d{4}-\d{2}-\d{2}$/.test(value))return value;const match=value.match(/^(\d{2})\.(\d{2})(?:\.(\d{4}))?$/);if(!match||!match[3])return"";return `${match[3]}-${match[2]}-${match[1]}`;}

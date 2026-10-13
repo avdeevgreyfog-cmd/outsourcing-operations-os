@@ -1,20 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+const QuickStartImportWizard=dynamic(()=>import("@/components/QuickStartImportWizard"),{ssr:false});
 import type { ObjectRow } from "@/lib/data/service";
 import type { OperationsAnalyticsRow } from "@/lib/operations/service";
 import type { ObjectManagementOptions } from "@/lib/operations/object-management";
 
-const statusLabels:Record<string,string>={prelaunch:"Подготовка",launch:"Запуск",active:"Активен",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
+const statusLabels:Record<string,string>={prelaunch:"Подготовка",launch:"Запуск",active:"Действующий",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
 type CreateForm={name:string;code:string;clientId:string;legalEntityId:string;regionId:string;address:string;targetStartDate:string;actualStartDate:string;ownerUserId:string;additionalManagerUserIds:string[];recruitingMode:"company_rules"|"object_team";recruiterUserIds:string[];status:"prelaunch"|"active"};
 
-function initialForm(options:ObjectManagementOptions):CreateForm{
+function initialForm():CreateForm{
   return {
-    name:"",code:"",clientId:options.clients[0]?.id??"",legalEntityId:options.legalEntities.find(item=>item.primary)?.id??options.legalEntities[0]?.id??"",
-    regionId:options.regions[0]?.id??"",address:"",targetStartDate:"",actualStartDate:todayIso(),ownerUserId:options.managers[0]?.id??"",additionalManagerUserIds:[],
+    name:"",code:"",clientId:"",legalEntityId:"",
+    regionId:"",address:"",targetStartDate:"",actualStartDate:"",ownerUserId:"",additionalManagerUserIds:[],
     recruitingMode:"company_rules",recruiterUserIds:[],status:"active",
   };
 }
@@ -22,6 +25,10 @@ function initialForm(options:ObjectManagementOptions):CreateForm{
 export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo}:{objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean}){
   const router=useRouter();
   const [localRows,setLocalRows]=useState(objects);
+  const [creationOptions,setCreationOptions]=useState(options);
+  const [inlineKind,setInlineKind]=useState<"client"|"legalEntity"|"region"|null>(null);
+  const [inlineName,setInlineName]=useState("");
+  const [duplicates,setDuplicates]=useState<Array<{id:string;name:string}>>([]);
   const analyticsByObject=useMemo(()=>new Map(analytics.map(row=>[row.objectId,row])),[analytics]);
   const [query,setQuery]=useState("");
   const [status,setStatus]=useState("");
@@ -30,8 +37,9 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   const [legalEntity,setLegalEntity]=useState("");
   const [recruiter,setRecruiter]=useState("");
   const [attentionOnly,setAttentionOnly]=useState(false);
+  const [importOpen,setImportOpen]=useState(false);
   const [createOpen,setCreateOpen]=useState(false);
-  const [form,setForm]=useState<CreateForm>(()=>initialForm(options));
+  const [form,setForm]=useState<CreateForm>(()=>initialForm());
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
@@ -56,33 +64,56 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   function reset(){setQuery("");setStatus("");setRegion("");setManager("");setLegalEntity("");setRecruiter("");setAttentionOnly(false);}
   function toggle(list:string[],key:keyof Pick<CreateForm,"additionalManagerUserIds"|"recruiterUserIds">,id:string){setForm(current=>({...current,[key]:list.includes(id)?list.filter(value=>value!==id):[...list,id]}));}
 
+  function selectInline(item:{id:string;name:string}){
+    const field=inlineKind==="client"?"clientId":inlineKind==="legalEntity"?"legalEntityId":"regionId";
+    const collection=inlineKind==="client"?"clients":inlineKind==="legalEntity"?"legalEntities":"regions";
+    setCreationOptions(current=>({...current,[collection]:[...current[collection].filter(value=>value.id!==item.id),{...item,shortName:null,primary:false}]}));
+    setForm(current=>({...current,[field]:item.id}));setInlineKind(null);setDuplicates([]);setError("");
+  }
+  async function createInline(){
+    setBusy(true);setError("");
+    try{
+      if(demo){
+        const collection=inlineKind==="client"?creationOptions.clients:inlineKind==="legalEntity"?creationOptions.legalEntities:creationOptions.regions;
+        const matches=collection.filter(item=>item.name.trim().toLocaleLowerCase("ru")===inlineName.trim().toLocaleLowerCase("ru"));
+        if(matches.length){setDuplicates(matches);return;}
+        selectInline({id:crypto.randomUUID(),name:inlineName.trim()});return;
+      }
+      const response=await fetch("/api/objects/options",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({kind:inlineKind,name:inlineName})});
+      const json=await response.json();
+      if(json.error)throw new Error(json.error);
+      if(json.duplicates){setDuplicates(json.duplicates);return;}
+      if(!response.ok)throw new Error(json.error??"Не удалось создать запись");
+      selectInline(json);
+    }catch(error){setError(error instanceof Error?error.message:"Не удалось создать запись");}finally{setBusy(false)}
+  }
+
   async function createObject(){
     try{
       setBusy(true);setError("");
       if(!form.name.trim())throw new Error("Укажите название объекта");
-      if(form.status==="active"&&!form.actualStartDate)throw new Error("Укажите фактическую дату начала работы");
-      if(!form.clientId||!form.legalEntityId||!form.regionId||!form.ownerUserId)throw new Error("Заполните клиента, юрлицо, регион и основного менеджера");
+      if(form.status!=="active"&&!form.ownerUserId)throw new Error("Для подготовки запуска выберите менеджера");
       if(form.recruitingMode==="object_team"&&!form.recruiterUserIds.length)throw new Error("Выберите закреплённую команду подбора");
       if(demo){
-        const client=options.clients.find(item=>item.id===form.clientId);
-        const entity=options.legalEntities.find(item=>item.id===form.legalEntityId);
-        const regionOption=options.regions.find(item=>item.id===form.regionId);
+        const client=creationOptions.clients.find(item=>item.id===form.clientId);
+        const entity=creationOptions.legalEntities.find(item=>item.id===form.legalEntityId);
+        const regionOption=creationOptions.regions.find(item=>item.id===form.regionId);
         const owner=options.managers.find(item=>item.id===form.ownerUserId);
         const additional=options.managers.filter(item=>form.additionalManagerUserIds.includes(item.id)).map(item=>({userId:item.id,name:item.name}));
         const fixedRecruiters=options.recruiters.filter(item=>form.recruiterUserIds.includes(item.id)).map(item=>({userId:item.id,name:item.name}));
         const id=crypto.randomUUID();
         setLocalRows(current=>[{
           id,objectId:id,organizationId:"demo",name:form.name.trim(),code:form.code.trim()||`OBJ-${String(current.length+1).padStart(3,"0")}`,
-          client:client?.name??"Клиент",clientId:form.clientId,status:form.status,region:regionOption?.name??"Регион",regionId:form.regionId,address:form.address||null,
+          client:client?.name??"Не указано",clientId:form.clientId,status:form.status,region:regionOption?.name??"Не указано",regionId:form.regionId,address:form.address||null,
           legalEntityId:form.legalEntityId,legalEntity:entity?.shortName??entity?.name??null,targetStart:form.targetStartDate?formatShortDate(form.targetStartDate):null,targetStartDate:form.targetStartDate||null,
-          actualStartDate:form.status==="active"?form.actualStartDate:null,actualEndDate:null,
+          actualStartDate:form.status==="active"?(form.actualStartDate||null):null,actualEndDate:null,
           ownerUserId:form.ownerUserId,ownerName:owner?.name??null,additionalManagers:additional,recruitingMode:form.recruitingMode,recruitingTeam:fixedRecruiters,
           activeRecruiters:[],unassignedNeedCount:0,assigneeUserIds:[form.ownerUserId,...form.additionalManagerUserIds,...form.recruiterUserIds],
           coverage:0,required:0,filled:0,deficit:0,risk:"normal",riskReasons:[],attentionReasons:["План численности не задан"],
         },...current]);
-        setCreateOpen(false);setForm(initialForm(options));return;
+        setCreateOpen(false);setForm(initialForm());return;
       }
-      const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,code:form.code||null,address:form.address||null,targetStartDate:form.targetStartDate||null,actualStartDate:form.status==="active"?form.actualStartDate:null})});
+      const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,clientId:form.clientId||null,legalEntityId:form.legalEntityId||null,regionId:form.regionId||null,ownerUserId:form.ownerUserId||null,code:form.code||null,address:form.address||null,targetStartDate:form.targetStartDate||null,actualStartDate:form.status==="active"?(form.actualStartDate||null):null})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось создать объект");
       setCreateOpen(false);router.push(`/objects/${json.id}`);router.refresh();
@@ -91,6 +122,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   }
 
   return <>
+    {importOpen&&<QuickStartImportWizard demo={demo} onClose={()=>setImportOpen(false)} onDone={()=>{setImportOpen(false);router.refresh();}}/>}
     <div className="object-portfolio-toolbar-row">
       <div className="object-portfolio-toolbar">
         <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по объекту, клиенту, локации, юрлицу или ответственному"/>
@@ -100,6 +132,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         <select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Все рекрутеры</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select>
         <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
       </div>
+      {canCreate&&<button type="button" className="button" onClick={()=>setImportOpen(true)}>Импорт действующего контура</button>}
       {canCreate&&<button className="button primary object-create-button" onClick={()=>{setError("");setCreateOpen(true)}}>+ Добавить объект</button>}
     </div>
 
@@ -135,24 +168,24 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
       </table>{!filtered.length&&<div className="empty-inline">По выбранным фильтрам объектов нет</div>}</div>
     </section>
 
-    {createOpen&&<><div className="drawer-backdrop" onClick={()=>setCreateOpen(false)}/><aside className="drawer object-create-drawer"><button className="icon-button drawer-close" onClick={()=>setCreateOpen(false)}>×</button><span className="eyebrow">Операции</span><h2>Добавить объект</h2><p className="form-hint">Для уже действующего объекта или запуска вне коммерческой цепочки. Объекты из согласованного КП по-прежнему создаются через «Начать подготовку».</p>
+    {createOpen&&<RegistryDrawer title="Добавить объект" subtitle="Для действующего объекта достаточно названия. Остальные сведения можно дополнить позднее." className="object-create-drawer" onClose={()=>{if(!busy)setCreateOpen(false)}} footer={<><button className="button" disabled={busy} onClick={()=>setCreateOpen(false)}>Отмена</button><button className="button primary" disabled={busy||form.name.trim().length<2||inlineKind!==null} onClick={()=>void createObject()}>{busy?"Создаю…":"Создать объект"}</button></>}>
       <div className="object-create-form">
         <label className="wide">Название объекта<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Например, РЦ Северный"/></label>
-        <label>Клиент<select value={form.clientId} onChange={e=>setForm({...form,clientId:e.target.value})}><option value="">Выберите клиента</option>{options.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <label>Наше юрлицо<select value={form.legalEntityId} onChange={e=>setForm({...form,legalEntityId:e.target.value})}><option value="">Выберите юрлицо</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select></label>
-        <label>Регион<select value={form.regionId} onChange={e=>setForm({...form,regionId:e.target.value})}><option value="">Выберите регион</option>{options.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Клиент<select value={form.clientId} onChange={e=>setForm({...form,clientId:e.target.value})}><option value="">Выберите клиента</option>{creationOptions.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.client===false} onClick={()=>{setInlineKind("client");setInlineName("");setDuplicates([])}}>Создать клиента</button></label>
+        <label>Наше юрлицо<select value={form.legalEntityId} onChange={e=>setForm({...form,legalEntityId:e.target.value})}><option value="">Выберите юрлицо</option>{creationOptions.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.legalEntity===false} onClick={()=>{setInlineKind("legalEntity");setInlineName("");setDuplicates([])}}>Создать наше юрлицо</button></label>
+        <label>Регион<select value={form.regionId} onChange={e=>setForm({...form,regionId:e.target.value})}><option value="">Выберите регион</option>{creationOptions.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.region===false} onClick={()=>{setInlineKind("region");setInlineName("");setDuplicates([])}}>Добавить регион</button></label>
         <label>Основной менеджер<select value={form.ownerUserId} onChange={e=>setForm({...form,ownerUserId:e.target.value,additionalManagerUserIds:form.additionalManagerUserIds.filter(id=>id!==e.target.value)})}><option value="">Выберите менеджера</option>{options.managers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="wide">Адрес<input value={form.address} onChange={e=>setForm({...form,address:e.target.value})}/></label>
-        {form.status==="active"?<label>Фактическая дата начала<input type="date" value={form.actualStartDate} onChange={e=>setForm({...form,actualStartDate:e.target.value})}/></label>:<label>Плановая дата запуска<input type="date" value={form.targetStartDate} onChange={e=>setForm({...form,targetStartDate:e.target.value})}/></label>}
-        <label>Состояние<select value={form.status} onChange={e=>setForm({...form,status:e.target.value as CreateForm["status"],actualStartDate:e.target.value==="active"?(form.actualStartDate||todayIso()):form.actualStartDate})}><option value="active">Уже действует</option><option value="prelaunch">Подготовка к запуску</option></select></label>
+        {form.status==="active"?<label>Фактическая дата начала<input type="date" value={form.actualStartDate} onChange={e=>setForm({...form,actualStartDate:e.target.value})}/>{!form.actualStartDate&&<small>Дата неизвестна</small>}</label>:<label>Плановая дата запуска<input type="date" value={form.targetStartDate} onChange={e=>setForm({...form,targetStartDate:e.target.value})}/></label>}
+        <label>Состояние<select value={form.status} onChange={e=>setForm({...form,status:e.target.value as CreateForm["status"],actualStartDate:form.actualStartDate})}><option value="active">Уже действует</option><option value="prelaunch">Подготовка к запуску</option></select></label>
         <label>Код объекта<input value={form.code} onChange={e=>setForm({...form,code:e.target.value})} placeholder="Автоматически"/></label>
         <div className="wide object-assignment-picker"><span>Дополнительные менеджеры</span><div>{options.managers.filter(item=>item.id!==form.ownerUserId).map(item=><label key={item.id}><input type="checkbox" checked={form.additionalManagerUserIds.includes(item.id)} onChange={()=>toggle(form.additionalManagerUserIds,"additionalManagerUserIds",item.id)}/><span>{item.name}</span></label>)}</div></div>
         <label className="wide">Маршрутизация подбора<select value={form.recruitingMode} onChange={e=>setForm({...form,recruitingMode:e.target.value as CreateForm["recruitingMode"]})}><option value="company_rules">По правилам компании</option><option value="object_team">Закреплённая команда объекта</option></select></label>
         {form.recruitingMode==="object_team"&&<div className="wide object-assignment-picker"><span>Команда подбора</span><div>{options.recruiters.map(item=><label key={item.id}><input type="checkbox" checked={form.recruiterUserIds.includes(item.id)} onChange={()=>toggle(form.recruiterUserIds,"recruiterUserIds",item.id)}/><span>{item.name}</span></label>)}</div><small>Новые потребности будут доступны всем выбранным сотрудникам; план по людям распределяется уже внутри потребности.</small></div>}
       </div>
+      {inlineKind&&<div className="object-create-form"><label className="wide">{inlineKind==="client"?"Новый клиент":inlineKind==="legalEntity"?"Новое наше юрлицо":"Новый регион"}<input autoFocus value={inlineName} onChange={e=>{setInlineName(e.target.value);setDuplicates([])}}/></label>{duplicates.length>0&&<div className="wide" role="alert"><p>Найдено совпадение по названию. Можно выбрать существующую запись.</p>{duplicates.map(item=><button key={item.id} className="button" onClick={()=>selectInline(item)}>{item.name}</button>)}</div>}<button className="button" disabled={busy||inlineName.trim().length<2} onClick={()=>void createInline()}>Создать</button><button className="button" disabled={busy} onClick={()=>setInlineKind(null)}>Вернуться к объекту</button></div>}
       {error&&<div className="form-error">{error}</div>}
-      <div className="drawer-actions"><button className="button" onClick={()=>setCreateOpen(false)}>Отмена</button><button className="button primary" disabled={busy||!options.legalEntities.length} onClick={()=>void createObject()}>{busy?"Создаю…":"Создать объект"}</button></div>
-    </aside></>}
+    </RegistryDrawer>}
   </>;
 }
 

@@ -222,6 +222,11 @@ export async function POST(request:Request){
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const object=await loadObject(tx,body.objectId);
       if(!object||!canReadRow(actor.access,capability,object,actor))throw new AccessDeniedError(capability);
+      // Same UUID lock order as employee writes and quick-start imports.
+      await tx`SELECT w.id FROM worker_profiles w WHERE w.organization_id=${actor.organizationId}::uuid
+        AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.worker_id=w.id AND a.object_id=${body.objectId}::uuid
+          AND a.organization_id=w.organization_id) ORDER BY w.id FOR UPDATE OF w`;
+      await tx`SELECT id FROM objects WHERE id=${body.objectId}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
       const internal=await latestSnapshot(tx,body.objectId,"internal",body.periodStart,body.periodEnd);
       const client=await latestSnapshot(tx,body.objectId,"client",body.periodStart,body.periodEnd);
       const baseKey=`timesheet:${body.objectId}:${body.periodStart}:${body.periodEnd}`;

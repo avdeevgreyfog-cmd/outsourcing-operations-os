@@ -7,6 +7,7 @@ export const employmentTypeLabels:Record<string,string>={
 
 export const workerStatusLabels:Record<string,string>={
   active:"Работает",
+  requires_assignment:"Требует назначения",
   dismissed:"Работа завершена",
 };
 
