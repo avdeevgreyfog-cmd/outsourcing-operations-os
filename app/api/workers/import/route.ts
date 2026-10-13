@@ -39,6 +39,8 @@ export async function POST(request:Request){
     if(actor.demo)return NextResponse.json({error:"В демо-режиме импорт выполняется локально"},{status:409});
     const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
+      for(const phone of [...new Set(body.rows.map(row=>row.phone?.replace(/\D/g,"")??"").filter(Boolean))].sort())
+        await tx`SELECT pg_advisory_xact_lock(hashtextextended(${actor.organizationId+":worker-phone:"+phone},0))`;
       const [object]=await tx<Array<{id:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
         SELECT o.id,o.owner_user_id "ownerUserId",o.region_id "regionId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.organization_id=o.organization_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"

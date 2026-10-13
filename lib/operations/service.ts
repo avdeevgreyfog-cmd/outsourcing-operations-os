@@ -256,7 +256,7 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const rows=await sql<OperationsAnalyticsRow[]>`
       SELECT
-        o.organization_id "organizationId",o.id "objectId",o.name object,o.code,c.name client,rg.name region,
+        o.organization_id "organizationId",o.id "objectId",o.created_by_user_id "createdByUserId",o.name object,o.code,c.name client,rg.name region,
         owner.display_name manager,o.owner_user_id "ownerUserId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds",
@@ -270,8 +270,8 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
         COALESCE(hours.total,0)::numeric "monthHours",
         COALESCE(open_incidents.count,0)::int "openIncidents"
       FROM objects o
-      JOIN client_companies c ON c.id=o.client_company_id
-      JOIN regions rg ON rg.id=o.region_id
+      LEFT JOIN client_companies c ON c.id=o.client_company_id AND c.organization_id=o.organization_id
+      LEFT JOIN regions rg ON rg.id=o.region_id AND rg.organization_id=o.organization_id
       LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(n.count_required),0)::int required
@@ -412,14 +412,14 @@ export async function getOperationsReferenceData(
     };
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const objects=await sql<Array<{id:string;name:string;region:string|null;regionId:string|null;ownerUserId:string|null;ownerName:string|null;assigneeUserIds:string[]}>>`
-      SELECT o.id,o.name,rg.name region,o.region_id "regionId",o.owner_user_id "ownerUserId",owner.display_name "ownerName",
+    const objects=await sql<Array<{id:string;name:string;region:string|null;regionId:string|null;createdByUserId:string;ownerUserId:string|null;ownerName:string|null;assigneeUserIds:string[]}>>`
+      SELECT o.id,o.name,rg.name region,o.region_id "regionId",o.created_by_user_id "createdByUserId",o.owner_user_id "ownerUserId",owner.display_name "ownerName",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-      FROM objects o LEFT JOIN regions rg ON rg.id=o.region_id LEFT JOIN app_users owner ON owner.id=o.owner_user_id ORDER BY o.name
+      FROM objects o LEFT JOIN regions rg ON rg.id=o.region_id AND rg.organization_id=o.organization_id LEFT JOIN app_users owner ON owner.id=o.owner_user_id ORDER BY o.name
     `;
     const visibleObjects=objects
-      .filter(row=>canReadRow(actor.access,capability,{organizationId:actor.organizationId,objectId:row.id,regionId:row.regionId??undefined,ownerUserId:row.ownerUserId,assigneeUserIds:row.assigneeUserIds},actor))
+      .filter(row=>canReadRow(actor.access,capability,{organizationId:actor.organizationId,objectId:row.id,createdByUserId:row.createdByUserId,regionId:row.regionId??undefined,ownerUserId:row.ownerUserId,assigneeUserIds:row.assigneeUserIds},actor))
       .map(({regionId:_,...row})=>row);
     const ids=visibleObjects.map(row=>row.id);
     const specialties=includeSpecialties?await sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`:[];
@@ -758,8 +758,8 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
     };
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const [scope]=await sql<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
-      SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+    const [scope]=await sql<Array<{organizationId:string;createdByUserId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+      SELECT w.organization_id "organizationId",w.created_by_user_id "createdByUserId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM worker_profiles w
       LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
@@ -952,8 +952,8 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
     return {relationType:visible?worker.employment??null:null,relationFrom:visible?worker.startDate??null:null,relationTo:null,outstandingAssets:[],housing:[],exits:[]};
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const [scope]=await sql<Array<{organizationId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
-      SELECT w.organization_id "organizationId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
+    const [scope]=await sql<Array<{organizationId:string;createdByUserId:string;objectId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
+      SELECT w.organization_id "organizationId",w.created_by_user_id "createdByUserId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM worker_profiles w
       LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true

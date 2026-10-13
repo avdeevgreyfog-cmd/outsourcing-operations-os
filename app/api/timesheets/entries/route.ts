@@ -31,6 +31,7 @@ export async function PATCH(request:Request){
         FROM objects o WHERE o.id=${body.objectId}::uuid
       `;
       if(!object||!canReadRow(actor.access,"time.time_entry.edit",object,actor))throw new AccessDeniedError("time.time_entry.edit");
+      await tx`SELECT id FROM worker_profiles WHERE id=${body.workerId}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
       const [locked]=await tx<Array<{status:string;viewType:string}>>`
         SELECT status,"viewType" FROM (
           SELECT DISTINCT ON(view_type) view_type "viewType",status

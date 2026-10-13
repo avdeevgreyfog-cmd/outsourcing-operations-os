@@ -5,11 +5,12 @@ import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import * as demo from "@/lib/demo/data";
 import * as demoOrg from "@/lib/demo/organization";
 import { objectEditVersion } from "@/lib/operations/object-manager-options";
+import { objectMissingFields, workerMissingFields } from "@/lib/operations/profile-completeness.mjs";
 import { OWNER_SYSTEM_CAPABILITIES } from "@/lib/access/system";
 
 type ScopedRow = {
   id?: string; organizationId: string; createdByUserId?: string; ownerUserId?: string; assigneeUserIds?: string[];
-  teamId?: string; orgUnitId?: string; regionId?: string; objectId?: string; clientId?: string;
+  teamId?: string; orgUnitId?: string; regionId?: string; objectId?: string|null; clientId?: string;
 };
 export type ClientRow = ScopedRow & { updatedAt?:string; id:string; name:string; legalName?:string|null; inn?:string|null; notes?:string|null; status:string; ownerName?:string|null; region?:string|null; teamName?:string|null; primaryContactName?:string|null; primaryContactPhone?:string|null; primaryContactEmail?:string|null; latestRequestId?:string|null; latestRequestTitle?:string|null; contacts:number; requests:number; objects:number; activeObjects:number };
 export type ClientEditOptions = { members:Array<{id:string;name:string}>; regions:Array<{id:string;name:string}>; teams:Array<{id:string;name:string}>; canAssign:boolean };
@@ -19,10 +20,10 @@ export type RequestRow = ScopedRow & { id:string; title:string; client:string; s
 export type CalculationRow = ScopedRow & { id:string; requestId:string; request:string; role:string; name:string; model:string; status:string; workerNet:number|string; totalCost:number|string; clientRate:number|string; marginPct:number|string; monthlyContribution:number|string };
 export type ObjectPersonRow = { userId:string; name:string };
 export type ObjectRiskReason = { code:string; label:string; detail:string };
-export type ObjectRow = ScopedRow & { updatedAt?:string; editVersion?:string; id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; targetStartDate?:string|null; actualStartDate?:string|null; actualEndDate?:string|null; legalEntityId?:string|null; legalEntity?:string|null; additionalManagers?:ObjectPersonRow[]; recruitingMode?:"company_rules"|"object_team"; recruitingTeam?:ObjectPersonRow[]; activeRecruiters?:ObjectPersonRow[]; unassignedNeedCount?:number; defaultTransitionDays?:number; defaultDailyPaymentShifts?:number; defaultScheduleWorkDays?:number|null; defaultScheduleRestDays?:number|null; defaultShiftKind?:"day"|"night"|"mixed"; ppeTaskEnabled?:boolean; ppeTaskDueDays?:number|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; riskReasons?:ObjectRiskReason[]; attentionReasons?:string[]; revenueForecast?:number|string|null; marginForecast?:number|string|null };
+export type ObjectRow = ScopedRow & { missingFields?:string[]; clientDetailsComplete?:boolean; legalDetailsComplete?:boolean; updatedAt?:string; editVersion?:string; id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; targetStartDate?:string|null; actualStartDate?:string|null; actualEndDate?:string|null; legalEntityId?:string|null; legalEntity?:string|null; additionalManagers?:ObjectPersonRow[]; recruitingMode?:"company_rules"|"object_team"; recruitingTeam?:ObjectPersonRow[]; activeRecruiters?:ObjectPersonRow[]; unassignedNeedCount?:number; defaultTransitionDays?:number; defaultDailyPaymentShifts?:number; defaultScheduleWorkDays?:number|null; defaultScheduleRestDays?:number|null; defaultShiftKind?:"day"|"night"|"mixed"; ppeTaskEnabled?:boolean; ppeTaskDueDays?:number|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; riskReasons?:ObjectRiskReason[]; attentionReasons?:string[]; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
-export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; phone?:string|null; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; employmentDocumentsStatus?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; scheduleWorkDays?:number|null; scheduleRestDays?:number|null; scheduleShiftKind?:"day"|"night"|"mixed"|null; scheduleAnchorDate?:string|null; transitionDays?:number|null; dailyPaymentShifts?:number|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; issuedAssetCount?:number; issuedAssetNames?:string[]; ppeRequiredCount?:number; ppeIssuedCount?:number; ppeMissingNames?:string[]; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; plannedExitDate?:string|null; plannedExitReasonCode?:string|null; plannedTransferDate?:string|null; plannedTransferObject?:string|null; plannedTransferSpecialty?:string|null; upcomingShiftDates?:string[]; todayTimeCode?:string|null; todayFactHours?:number|string|null; todayEntrySource?:string|null; todayShiftAssigned?:boolean|null; todayShiftConfirmed?:boolean|null; todayShiftReserve?:boolean|null; todayShiftTime?:string|null; todayAttendanceEvent?:string|null; rate:number|string|null; rateUnit?:string|null; dayRate?:number|string|null; nightRate?:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
+export type WorkerRow = ScopedRow & { missingFields?:string[]; onboardingMetadata?:Record<string,unknown>; pendingObjectName?:string|null; pendingSpecialtyName?:string|null; id:string; originCandidateId?:string|null; fullName:string; phone?:string|null; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; employmentDocumentsStatus?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; scheduleWorkDays?:number|null; scheduleRestDays?:number|null; scheduleShiftKind?:"day"|"night"|"mixed"|null; scheduleAnchorDate?:string|null; transitionDays?:number|null; dailyPaymentShifts?:number|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; issuedAssetCount?:number; issuedAssetNames?:string[]; ppeRequiredCount?:number; ppeIssuedCount?:number; ppeMissingNames?:string[]; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; plannedExitDate?:string|null; plannedExitReasonCode?:string|null; plannedTransferDate?:string|null; plannedTransferObject?:string|null; plannedTransferSpecialty?:string|null; upcomingShiftDates?:string[]; todayTimeCode?:string|null; todayFactHours?:number|string|null; todayEntrySource?:string|null; todayShiftAssigned?:boolean|null; todayShiftConfirmed?:boolean|null; todayShiftReserve?:boolean|null; todayShiftTime?:string|null; todayAttendanceEvent?:string|null; rate:number|string|null; rateUnit?:string|null; dayRate?:number|string|null; nightRate?:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
 export type ShiftRow = ScopedRow & { id:string; objectId:string; object:string; specialtyId:string; date:string; dateIso?:string|null; kind:string; time:string; specialty:string; demand:number; assigned:number; reserve:number; confirmed?:number|null; deficit:number; cost:number|string; status:string; workerIds:string[]; reserveWorkerIds:string[] };
 export type TimesheetCellValue = number|string|null;
 export type TimesheetRatePeriod={kind:"any"|"day"|"night";amount:number|string;unit:"hour"|"shift"|"month";effectiveFrom:string;effectiveTo:string|null};
@@ -249,8 +250,8 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
     const rows = await sql<ObjectRow[]>`
       SELECT o.id, o.id "objectId", o.organization_id "organizationId", o.updated_at::text "updatedAt", o.name, o.code, o.status, o.source_request_id "sourceRequestId",o.source_proposal_id "sourceProposalId",
              owner.display_name "ownerName",
-             o.region_id "regionId", rg.name region,o.address_text address,o.owner_user_id "ownerUserId",o.created_by_user_id "createdByUserId",
-             o.client_company_id "clientId",c.name client,to_char(o.target_start_date,'DD.MM') "targetStart",to_char(o.target_start_date,'YYYY-MM-DD') "targetStartDate",
+             o.region_id "regionId", COALESCE(rg.name,'Не указан') region,o.address_text address,o.owner_user_id "ownerUserId",o.created_by_user_id "createdByUserId",
+             o.client_company_id "clientId",COALESCE(c.name,'Не указан') client,(NULLIF(trim(c.inn),'') IS NOT NULL) "clientDetailsComplete",(NULLIF(trim(le.inn),'') IS NOT NULL) "legalDetailsComplete",to_char(o.target_start_date,'DD.MM') "targetStart",to_char(o.target_start_date,'YYYY-MM-DD') "targetStartDate",
              to_char(o.actual_start_date,'YYYY-MM-DD') "actualStartDate",to_char(o.actual_end_date,'YYYY-MM-DD') "actualEndDate",
              o.legal_entity_id "legalEntityId",COALESCE(le.short_name,le.name) "legalEntity",
              o.recruiting_routing_mode "recruitingMode",
@@ -298,8 +299,8 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
              END risk,
              ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM objects o
-      JOIN client_companies c ON c.id=o.client_company_id
-      JOIN regions rg ON rg.id=o.region_id
+      LEFT JOIN client_companies c ON c.id=o.client_company_id AND c.organization_id=o.organization_id
+      LEFT JOIN regions rg ON rg.id=o.region_id AND rg.organization_id=o.organization_id
       LEFT JOIN legal_entities le ON le.id=o.legal_entity_id
       LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
@@ -314,7 +315,7 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
       ) workforce ON true
       ORDER BY o.name
     `;
-    return rows.filter((row) => canReadRow(actor.access, "operations.object.read", row, actor)).map(row=>({...row,editVersion:objectEditVersion(row.updatedAt!)}));
+    return rows.filter((row) => canReadRow(actor.access, "operations.object.read", row, actor)).map(row=>({...row,missingFields:objectMissingFields(row),editVersion:objectEditVersion(row.updatedAt!)}));
   });
 }
 
@@ -386,7 +387,8 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
   const maySeeAssets = !actor.access.denies.includes("assets.read") && (actor.access.capabilities.includes("*")||actor.access.capabilities.includes("assets.read"));
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<WorkerRow[]>`
-      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.phone,w.status,w.source,
+      SELECT w.id,w.origin_candidate_id "originCandidateId",w.organization_id "organizationId",w.full_name "fullName",w.phone,w.status,w.source,w.onboarding_metadata "onboardingMetadata",
+             pending_object.name "pendingObjectName",pending_specialty.name "pendingSpecialtyName",
              w.created_by_user_id "createdByUserId",woa.object_id "objectId",o.name object,o.client_company_id "clientId",o.region_id "regionId",
              COALESCE(o.owner_user_id,woa.manager_user_id) "ownerUserId",
              ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
@@ -414,6 +416,8 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
              ${maySeeComp ? sql`COALESCE(pay.paid,0)+COALESCE(adv.advances,0)` : sql`NULL::numeric`} paid,
              ${maySeeComp ? sql`GREATEST(COALESCE(wa.total_amount,0)-COALESCE(pay.paid,0)-COALESCE(adv.advances,0),0)` : sql`NULL::numeric`} payable
       FROM worker_profiles w
+      LEFT JOIN objects pending_object ON pending_object.id=NULLIF(w.onboarding_metadata->>'objectId','')::uuid AND pending_object.organization_id=w.organization_id
+      LEFT JOIN specialties pending_specialty ON pending_specialty.id=NULLIF(w.onboarding_metadata->>'specialtyId','')::uuid AND pending_specialty.organization_id=w.organization_id
       LEFT JOIN LATERAL (
         SELECT * FROM worker_object_assignments x
         WHERE x.worker_id=w.id
@@ -487,7 +491,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
       LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric advances FROM advance_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.payment_date BETWEEN wa.period_start AND wa.period_end)) adv ON true
       ORDER BY w.full_name
     `;
-    return rows.filter((row) => canReadRow(actor.access, "worker.read", row, actor));
+    return rows.filter((row) => canReadRow(actor.access, "worker.read", row, actor)).map(row=>({...row,missingFields:workerMissingFields(row),onboardingMetadata:maySeeComp?row.onboardingMetadata:Object.fromEntries(Object.entries(row.onboardingMetadata??{}).filter(([key])=>!["rate","rateUnit"].includes(key))),...(row.status==="requires_assignment"?{accrued:null,paid:null,payable:null,todayFactHours:null}: {})}));
   });
 }
 

@@ -1,48 +1,40 @@
 "use client";
 
-import { createPortal } from "react-dom";
 import { useState } from "react";
-import { Download, FileSpreadsheet, Upload, X } from "lucide-react";
+import dynamic from "next/dynamic";
+const QuickStartImportWizard=dynamic(()=>import("@/components/QuickStartImportWizard"),{ssr:false});
+import { ObjectQuickCreateButton } from "@/components/ObjectQuickCreateButton";
 import type { WorkerRow } from "@/lib/data/service";
 import type { OperationsReferenceData } from "@/lib/operations/service";
 import { WorkersRegistry } from "@/components/registry/WorkersRegistry";
 import { RegistryDrawer } from "@/components/registry/RegistryDrawer";
 
-type ImportRow={fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;specialtyName:string|null;startDate:string|null;relationType:"employment"|"gph"|"npd"|"custom"|null;rate:number|null;rateUnit:"hour"|"shift"|"month"|null;workMode:"local"|"rotation"|null;paidHoursPerShift:number|null};
-type FormState={fullName:string;phone:string;email:string;city:string;birthDate:string;objectId:string;specialtyId:string;startDate:string;relationType:"employment"|"gph"|"npd"|"custom";rate:string;rateUnit:"hour"|"shift"|"month";workMode:"local"|"rotation";paidHoursPerShift:string;clothingSize:string;shoeSize:string;heightCm:string;notes:string};
-const today=()=>new Date().toISOString().slice(0,10);
-const blank=():FormState=>({fullName:"",phone:"",email:"",city:"",birthDate:"",objectId:"",specialtyId:"",startDate:today(),relationType:"employment",rate:"",rateUnit:"hour",workMode:"local",paidHoursPerShift:"",clothingSize:"",shoeSize:"",heightCm:"",notes:""});
+type FormState={fullName:string;phone:string;email:string;city:string;birthDate:string;objectId:string;specialtyId:string;specialtyName:string;startDate:string;relationType:""|"employment"|"gph"|"npd"|"custom";rate:string;rateUnit:""|"hour"|"shift"|"month";workMode:""|"local"|"rotation";paidHoursPerShift:string;clothingSize:string;shoeSize:string;heightCm:string;notes:string};
+const blank=():FormState=>({fullName:"",phone:"",email:"",city:"",birthDate:"",objectId:"",specialtyId:"",specialtyName:"",startDate:"",relationType:"",rate:"",rateUnit:"",workMode:"",paidHoursPerShift:"",clothingSize:"",shoeSize:"",heightCm:"",notes:""});
 
-export function WorkersWorkspace({rows,options,sensitive,canEdit,demo,preferenceScope}:{rows:WorkerRow[];options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;demo:boolean;preferenceScope:string}){
+export function WorkersWorkspace({rows,options,sensitive,canEdit,canManageDirectories,demo,preferenceScope}:{rows:WorkerRow[];options:OperationsReferenceData;sensitive:boolean;canEdit:boolean;canManageDirectories:boolean;demo:boolean;preferenceScope:string}){
   const [localRows,setLocalRows]=useState(rows);
   const [showCreate,setShowCreate]=useState(false);
   const [showImport,setShowImport]=useState(false);
   const [form,setForm]=useState<FormState>(blank());
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
-  const [importRows,setImportRows]=useState<ImportRow[]>([]);
-  const [importObject,setImportObject]=useState(options.objects[0]?.id??"");
-  const [importSpecialty,setImportSpecialty]=useState("");
-  const [importStart,setImportStart]=useState(today());
-  const [importWorkMode,setImportWorkMode]=useState<"local"|"rotation">("local");
-  const [importPaidHours,setImportPaidHours]=useState("");
-  const [importResult,setImportResult]=useState("");
-
+  const [objectOptions,setObjectOptions]=useState(options.objects);
   async function createWorker(){
     setBusy(true);setError("");
     try{
-      if(form.fullName.trim().length<2)throw new Error("Укажите ФИО");
-      if((form.objectId&&!form.specialtyId)||(!form.objectId&&form.specialtyId))throw new Error("Объект и специальность указываются вместе");
+      if(!form.fullName.trim())throw new Error("Укажите ФИО");
       if(form.rate && (!Number.isFinite(Number(form.rate)) || Number(form.rate)<=0))throw new Error("Ставка должна быть больше нуля");
-      if(form.rateUnit==="shift" && form.rate && (!Number.isFinite(Number(form.paidHoursPerShift))||Number(form.paidHoursPerShift)<0.5||Number(form.paidHoursPerShift)>24))throw new Error("Укажите оплачиваемые часы в смене от 0,5 до 24");
+      if(form.objectId&&(form.specialtyId!=="__new"?form.specialtyId:form.specialtyName.trim())&&form.startDate&&form.rateUnit==="shift" && form.rate && (!Number.isFinite(Number(form.paidHoursPerShift))||Number(form.paidHoursPerShift)<0.5||Number(form.paidHoursPerShift)>24))throw new Error("Укажите оплачиваемые часы в смене от 0,5 до 24");
       if(demo){
-        const object=options.objects.find(x=>x.id===form.objectId);
+        const object=objectOptions.find(x=>x.id===form.objectId);
         const specialty=options.specialties.find(x=>x.id===form.specialtyId);
-        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName.trim(),phone:form.phone||null,status:"active",source:"Ручное создание",object:object?.name??null,objectId:object?.id,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:specialty?.name??null,specialtyId:specialty?.id??null,startDate:form.startDate,employment:form.relationType,workMode:form.workMode,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,rate:form.rate?Number(form.rate):null,rateUnit:form.rateUnit,accrued:null,paid:null,payable:null},...current]);
+        const assigned=Boolean(form.objectId&&(form.specialtyId!=="__new"?form.specialtyId:form.specialtyName.trim())&&form.startDate);
+        setLocalRows(current=>[{id:crypto.randomUUID(),organizationId:"demo",fullName:form.fullName.trim(),phone:form.phone||null,status:assigned?"active":"requires_assignment",source:"Ручное создание",object:assigned?object?.name??null:null,objectId:assigned?object?.id:null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:assigned?specialty?.name??(form.specialtyName||null):null,specialtyId:assigned?specialty?.id??null:null,startDate:assigned?form.startDate:null,employment:form.relationType||null,workMode:form.workMode||null,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,rate:form.rate?Number(form.rate):null,rateUnit:form.rateUnit||null,accrued:null,paid:null,payable:null},...current]);
       }else{
         const response=await fetch("/api/workers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-          ...form,phone:form.phone||null,email:form.email||null,city:form.city||null,birthDate:form.birthDate||null,
-          objectId:form.objectId||null,specialtyId:form.specialtyId||null,rate:form.rate?Number(form.rate):null,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,
+          ...form,rateUnit:form.rateUnit||null,workMode:form.workMode||null,startDate:form.startDate||null,relationType:form.relationType||null,specialtyName:form.specialtyName||null,phone:form.phone||null,email:form.email||null,city:form.city||null,birthDate:form.birthDate||null,
+          objectId:form.objectId||null,specialtyId:form.specialtyId&&form.specialtyId!=="__new"?form.specialtyId:null,rate:form.rate?Number(form.rate):null,paidHoursPerShift:form.paidHoursPerShift?Number(form.paidHoursPerShift):null,
           clothingSize:form.clothingSize||null,shoeSize:form.shoeSize||null,heightCm:form.heightCm?Number(form.heightCm):null,notes:form.notes||null,
         })});
         const json=await response.json().catch(()=>({}));
@@ -54,49 +46,9 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo,preference
     finally{setBusy(false);}
   }
 
-  async function downloadTemplate(){
-    const XLSX=await import("xlsx");
-    const sheet=XLSX.utils.json_to_sheet([{"ФИО":"Иванов Иван Иванович","Телефон":"+7 900 000-00-00","Email":"","Город":"Тула","Дата рождения":"","Специальность":"Комплектовщик","Дата начала":today(),"Оформление":"employment","Формат работы":"local","Ставка":3900,"Единица ставки":"shift","Оплачиваемых часов в смене":11}]);
-    const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"Сотрудники");XLSX.writeFile(book,"operis_workers_import.xlsx");
-  }
-
-  async function readImportFile(file:File){
-    setError("");setImportResult("");
-    try{
-      const XLSX=await import("xlsx");
-      const workbook=XLSX.read(await file.arrayBuffer(),{type:"array"});
-      const sheet=workbook.Sheets[workbook.SheetNames[0]];
-      const raw=XLSX.utils.sheet_to_json<Record<string,unknown>>(sheet,{defval:""});
-      const mapped=raw.map(mapImportRow).filter((row):row is ImportRow=>Boolean(row));
-      if(!mapped.length)throw new Error("В файле нет строк сотрудников");
-      setImportRows(mapped);
-    }catch(e){setError(e instanceof Error?e.message:"Не удалось прочитать Excel");setImportRows([]);}
-  }
-
-  async function runImport(){
-    if(!importRows.length||!importObject)return;
-    setBusy(true);setError("");setImportResult("");
-    try{
-      if(demo){
-        const object=options.objects.find(x=>x.id===importObject);
-        const fallbackSpecialty=options.specialties.find(x=>x.id===importSpecialty);
-        const created=importRows.map(row=>({id:crypto.randomUUID(),organizationId:"demo",fullName:row.fullName,status:"active",source:"Импорт сотрудников",object:object?.name??null,objectId:object?.id??null,ownerUserId:object?.ownerUserId??undefined,assigneeUserIds:object?.assigneeUserIds??[],managerName:object?.ownerName??null,specialty:row.specialtyName??fallbackSpecialty?.name??null,specialtyId:fallbackSpecialty?.id??null,startDate:row.startDate??importStart,employment:row.relationType??"employment",workMode:row.workMode??importWorkMode,paidHoursPerShift:row.paidHoursPerShift??(importPaidHours?Number(importPaidHours):null),rate:row.rate,rateUnit:row.rateUnit??"hour",accrued:null,paid:null,payable:null} as WorkerRow));
-        setLocalRows(current=>[...created,...current]);
-        setImportResult(`Добавлено сотрудников: ${created.length}`);
-      }else{
-        const response=await fetch("/api/workers/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({rows:importRows,objectId:importObject,specialtyId:importSpecialty||null,startDate:importStart,relationType:"employment",workMode:importWorkMode,paidHoursPerShift:importPaidHours?Number(importPaidHours):null})});
-        const json=await response.json().catch(()=>({}));
-        if(!response.ok)throw new Error(json.error??"Не удалось импортировать сотрудников");
-        setImportResult(`Новых: ${json.created}, найдено существующих: ${json.reused}, назначено: ${json.assigned}, замечаний: ${json.issues?.length??0}`);
-        window.setTimeout(()=>window.location.reload(),700);
-      }
-    }catch(e){setError(e instanceof Error?e.message:"Не удалось импортировать сотрудников");}
-    finally{setBusy(false);}
-  }
-
   return <div className="workers-portfolio-workspace">
     <WorkersRegistry rows={localRows} sensitive={sensitive} canEdit={canEdit} preferenceScope={preferenceScope} onCreate={()=>{setError("");setShowCreate(true)}} onImport={()=>{setError("");setShowImport(true)}}/>
-    {showCreate&&<RegistryDrawer title="Новый сотрудник" subtitle="Основная информация и назначение на объект" onClose={()=>{if(!busy)setShowCreate(false)}} footer={<><button className="button" disabled={busy} onClick={()=>setShowCreate(false)}>Отмена</button><button className="button primary" disabled={busy} onClick={()=>void createWorker()}>{busy?"Сохраняю…":"Создать сотрудника"}</button></>}>
+    {showCreate&&<RegistryDrawer title="Новый сотрудник" subtitle="Для сохранения достаточно ФИО. Назначение можно заполнить позднее" onClose={()=>{if(!busy)setShowCreate(false)}} footer={<><button className="button" disabled={busy} onClick={()=>setShowCreate(false)}>Отмена</button><button className="button primary" disabled={busy||!form.fullName.trim()} onClick={()=>void createWorker()}>{busy?"Сохраняю…":"Создать сотрудника"}</button></>}>
       <div className="operis-drawer-section"><h3>Личные данные и назначение</h3></div>
       <div className="candidate-import-body"><div className="candidate-import-options">
         <label>ФИО *<input required autoComplete="name" value={form.fullName} onChange={e=>setForm({...form,fullName:e.target.value})}/></label>
@@ -104,50 +56,20 @@ export function WorkersWorkspace({rows,options,sensitive,canEdit,demo,preference
         <label>Email<input type="email" autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label>
         <label>Город<input value={form.city} onChange={e=>setForm({...form,city:e.target.value})}/></label>
         <label>Дата рождения<input type="date" value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/></label>
-        <label>Объект<select value={form.objectId} onChange={e=>setForm({...form,objectId:e.target.value})}><option value="">Без назначения</option>{options.objects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Специальность<select value={form.specialtyId} onChange={e=>setForm({...form,specialtyId:e.target.value})}><option value="">Выберите</option>{options.specialties.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Дата начала<input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/></label>
-        <label>Формат работы<select value={form.workMode} onChange={e=>setForm({...form,workMode:e.target.value as FormState["workMode"]})}><option value="local">Местный</option><option value="rotation">Вахта</option></select></label>
-        <label>Оформление<select value={form.relationType} onChange={e=>setForm({...form,relationType:e.target.value as FormState["relationType"]})}><option value="employment">Трудовой договор</option><option value="gph">ГПХ</option><option value="npd">Самозанятый</option><option value="custom">Другое</option></select></label>
+        <label>Объект<select value={form.objectId} onChange={e=>setForm({...form,objectId:e.target.value})}><option value="">Без назначения</option>{objectOptions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select><ObjectQuickCreateButton demo={demo} onCreated={object=>{setObjectOptions(current=>[...current,{...object,region:null,ownerUserId:null,ownerName:null,assigneeUserIds:[]}]);setForm(current=>({...current,objectId:object.id}))}}/></label>
+        <label>Специальность<select value={form.specialtyId} onChange={e=>setForm({...form,specialtyId:e.target.value})}><option value="">Выберите</option>{options.specialties.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}{canManageDirectories&&<option value="__new">Создать специальность</option>}</select></label>{form.specialtyId==="__new"&&<label>Новая специальность<input value={form.specialtyName} onChange={e=>setForm({...form,specialtyName:e.target.value})} placeholder="Введите специальность"/></label>}
+        <label>Дата начала<input type="date" value={form.startDate} onChange={e=>setForm({...form,startDate:e.target.value})}/>{!form.startDate&&<small>Дата неизвестна</small>}</label>
+        <label>Формат работы<select value={form.workMode} onChange={e=>setForm({...form,workMode:e.target.value as FormState["workMode"]})}><option value="">Не указано</option><option value="local">Местный</option><option value="rotation">Вахта</option></select></label>
+        <label>Оформление<select value={form.relationType} onChange={e=>setForm({...form,relationType:e.target.value as FormState["relationType"]})}><option value="">Не указано</option><option value="employment">Трудовой договор</option><option value="gph">ГПХ</option><option value="npd">Самозанятый</option><option value="custom">Другое</option></select></label>
         <label>Ставка<input type="number" min="0" value={form.rate} onChange={e=>setForm({...form,rate:e.target.value})}/></label>
-        <label>Единица<select value={form.rateUnit} onChange={e=>setForm({...form,rateUnit:e.target.value as FormState["rateUnit"]})}><option value="hour">₽/час</option><option value="shift">₽/смену</option><option value="month">₽/месяц</option></select></label>
+        <label>Единица<select value={form.rateUnit} onChange={e=>setForm({...form,rateUnit:e.target.value as FormState["rateUnit"]})}><option value="">Не указано</option><option value="hour">₽/час</option><option value="shift">₽/смену</option><option value="month">₽/месяц</option></select></label>
         {form.rateUnit==="shift"&&<label>Оплачиваемых часов в смене<input type="number" min="0.5" max="24" step="0.5" value={form.paidHoursPerShift} onChange={e=>setForm({...form,paidHoursPerShift:e.target.value})} placeholder="Например, 11"/></label>}
         <label>Размер одежды<input value={form.clothingSize} onChange={e=>setForm({...form,clothingSize:e.target.value})}/></label>
         <label>Размер обуви<input value={form.shoeSize} onChange={e=>setForm({...form,shoeSize:e.target.value})}/></label>
 <label>Рост, см<input type="number" min="1" max="250" value={form.heightCm} onChange={e=>setForm({...form,heightCm:e.target.value})}/></label><label className="operis-form-full">Примечание<textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></label>
-      </div>{error&&<div className="recruiting-error">{error}</div>}</div>
+      </div>{!(form.objectId&&(form.specialtyId!=="__new"?form.specialtyId:form.specialtyName)&&form.startDate)&&<p className="form-hint">Требует назначения: объект, специальность и дата начала. До назначения планы, часы и персональная ссылка недоступны.</p>}{error&&<div className="recruiting-error">{error}</div>}</div>
     </RegistryDrawer>}
 
-    {showImport&&<Portal><div className="recruiting-modal" onMouseDown={e=>{if(e.currentTarget===e.target)setShowImport(false)}}><div className="recruiting-modal-card candidate-import-modal">
-      <div className="recruiting-modal-head"><div><h2>Импорт сотрудников</h2><p>Массовая загрузка действующего персонала на выбранный объект.</p></div><button className="icon-button" onClick={()=>setShowImport(false)}><X size={17}/></button></div>
-      <div className="candidate-import-body">
-        <section className="candidate-import-template"><div><FileSpreadsheet size={20}/><span><strong>Шаблон OPERIS</strong><small>ФИО, контакты, специальность, дата начала и ставка.</small></span></div><button className="button" onClick={()=>void downloadTemplate()}><Download size={14}/> Скачать .xlsx</button></section>
-        <label className="candidate-import-drop"><Upload size={18}/><strong>Выберите Excel-файл</strong><span>.xlsx или .xls · до 1000 строк</span><input type="file" accept=".xlsx,.xls" onChange={e=>{const file=e.target.files?.[0];if(file)void readImportFile(file)}}/></label>
-        <div className="candidate-import-options">
-          <label>Объект<select value={importObject} onChange={e=>setImportObject(e.target.value)}><option value="">Выберите объект</option>{options.objects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          <label>Специальность по умолчанию<select value={importSpecialty} onChange={e=>setImportSpecialty(e.target.value)}><option value="">Из файла</option>{options.specialties.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          <label>Дата начала по умолчанию<input type="date" value={importStart} onChange={e=>setImportStart(e.target.value)}/></label><label>Формат по умолчанию<select value={importWorkMode} onChange={e=>setImportWorkMode(e.target.value as "local"|"rotation")}><option value="local">Местный</option><option value="rotation">Вахта</option></select></label><label>Оплачиваемых часов в смене<input type="number" min="0.5" max="24" step="0.5" value={importPaidHours} onChange={e=>setImportPaidHours(e.target.value)} placeholder="Если ставка за смену"/></label>
-        </div>
-        {importRows.length>0&&<div className="candidate-import-preview"><header><strong>Найдено строк: {importRows.length}</strong><span>Первые 6 строк</span></header><div className="request-table-wrap"><table className="data-table"><thead><tr><th>ФИО</th><th>Телефон</th><th>Специальность</th><th>Старт</th></tr></thead><tbody>{importRows.slice(0,6).map((row,index)=><tr key={index}><td>{row.fullName}</td><td>{row.phone??"—"}</td><td>{row.specialtyName??"по умолчанию"}</td><td>{row.startDate??importStart}</td></tr>)}</tbody></table></div></div>}
-        {error&&<div className="recruiting-error">{error}</div>}{importResult&&<div className="candidate-import-result">{importResult}</div>}
-      </div>
-      <div className="recruiting-modal-footer"><button className="button" onClick={()=>setShowImport(false)}>Закрыть</button><button className="button primary" disabled={busy||!importRows.length||!importObject} onClick={()=>void runImport()}>{busy?"Импортирую…":`Импортировать ${importRows.length||""}`}</button></div>
-    </div></div></Portal>}
+    {showImport&&<QuickStartImportWizard demo={demo} onClose={()=>setShowImport(false)} onDone={()=>window.location.reload()}/>}
   </div>;
 }
-
-function mapImportRow(row:Record<string,unknown>):ImportRow|null{
-  const get=(...keys:string[])=>{for(const key of keys){const value=row[key];if(value!=null&&String(value).trim())return String(value).trim()}return""};
-  const fullName=get("ФИО","Фамилия Имя Отчество","fullName");if(!fullName)return null;
-  const relationRaw=get("Оформление","relationType").toLowerCase();
-  const relationType=(["employment","gph","npd","custom"].includes(relationRaw)?relationRaw:null) as ImportRow["relationType"];
-  const unitRaw=get("Единица ставки","rateUnit").toLowerCase();
-  const rateUnit=(["hour","shift","month"].includes(unitRaw)?unitRaw:null) as ImportRow["rateUnit"];
-  const rateRaw=get("Ставка","rate");
-  const modeRaw=get("Формат работы","workMode").toLocaleLowerCase("ru");
-  const workMode=modeRaw==="rotation"||modeRaw==="вахта"?"rotation":modeRaw==="local"||modeRaw==="местный"?"local":null;
-  const paidHoursRaw=get("Оплачиваемых часов в смене","paidHoursPerShift");
-  return {fullName,phone:nullable(get("Телефон","phone")),email:nullable(get("Email","E-mail","email")),city:nullable(get("Город","city")),birthDate:nullable(get("Дата рождения","birthDate")),specialtyName:nullable(get("Специальность","specialty")),startDate:nullable(get("Дата начала","startDate")),relationType,rate:rateRaw?Number(rateRaw.replace(",",".")):null,rateUnit,workMode,paidHoursPerShift:paidHoursRaw?Number(paidHoursRaw.replace(",",".")):null};
-}
-function nullable(value:string){return value||null}
-function Portal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body)}

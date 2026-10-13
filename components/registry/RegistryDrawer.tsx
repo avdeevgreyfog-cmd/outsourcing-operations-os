@@ -16,6 +16,9 @@ export function RegistryDrawer({title, subtitle, children, footer, onClose, clas
     document.body.style.overflow="hidden";
     ref.current?.querySelector<HTMLElement>("button,input,select,a[href]")?.focus();
     const key=(e:KeyboardEvent)=>{
+      // Nested creation keeps the parent form mounted; only the visible top dialog owns keys.
+      const dialogs=Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')).filter(node=>node.getClientRects().length);
+      if(dialogs.at(-1)!==ref.current)return;
       if(e.key==="Escape"){e.preventDefault();close.current();}
       if(e.key!=="Tab")return;
       const nodes=Array.from(ref.current?.querySelectorAll<HTMLElement>('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex="0"]')??[]).filter(n=>n.getClientRects().length);

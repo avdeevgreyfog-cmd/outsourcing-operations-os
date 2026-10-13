@@ -25,7 +25,7 @@ export default async function Objects(){
     const fact=analyticsByObject.get(row.id);
     const projectedDeficit=forecastDeficitByObject.get(row.id)??0;
     const signal=objectRisk(row.required,fact?.working??row.filled,projectedDeficit,fact?.noShows??0,fact?.openIncidents??0,row.unassignedNeedCount??0);
-    if(!row.legalEntityId)signal.attention.push("Не указано наше юрлицо");
+    signal.attention.push(...(row.missingFields??[]).map(field=>`Профиль: ${field}`));
     if(!row.ownerUserId)signal.attention.push("Не назначен основной менеджер");
     return {...row,risk:signal.level,riskReasons:signal.reasons,attentionReasons:[...new Set(signal.attention)]};
   });

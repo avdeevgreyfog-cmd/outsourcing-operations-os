@@ -53,6 +53,7 @@ function harness({periods=[],existing=true,scopeActor=actorFor(),workerContext={
     if(text.includes('UPDATE worker_object_assignments'))return [];
     if(text.includes('INSERT INTO worker_rates')){state.rates.push({id:id(400+state.rates.length),organizationId:values[0],workerId:values[1],specialtyId:values[2],objectId:values[3],amount:values[4]});return [];}
     if(text.includes('INSERT INTO activity_events')){if(failActivity)throw Error('private database credential secret');state.events.push(values.at(-1));return [];}
+    if(text.includes('pg_advisory_xact_lock'))return [];
     throw Error(`Unhandled SQL in import harness: ${text}`);
   };
   sql.json=value=>value;
@@ -73,7 +74,7 @@ function harness({periods=[],existing=true,scopeActor=actorFor(),workerContext={
   }};
 }
 const domainWrites=h=>h.queries.filter(q=>/^\s*(INSERT|UPDATE|DELETE)\b/.test(q.text)&&!q.text.includes('activity_events'));
-function assertTenantBound(h){for(const q of h.queries){assert.ok(q.values.includes(org),`tenant bound: ${q.text}`);assert.match(q.text,/organization_id/);}}
+function assertTenantBound(h){for(const q of h.queries){if(q.text.includes("pg_advisory_xact_lock")){assert.ok(q.values[0].startsWith(org+":worker-phone:"));continue;}assert.ok(q.values.includes(org),`tenant bound: ${q.text}`);assert.match(q.text,/organization_id/);}}
 function assertLockedBefore(h){
   const lock=h.queries.findIndex(q=>q.text.includes('FROM worker_profiles WHERE organization_id'));
   assert.ok(lock>=0);assert.match(h.queries[lock].text,/FOR UPDATE/);
