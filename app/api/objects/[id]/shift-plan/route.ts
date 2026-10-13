@@ -235,6 +235,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       const scope=await getScope(tx,id);
       if(!scope||!canReadRow(actor.access,"operations.shift.edit",scope,actor))throw new AccessDeniedError("operations.shift.edit");
 
+      // Use the same worker-first lock order as employee replies, links and exit.
+      // Lock the batch in UUID order before reading assignments or time entries.
+      const selectedWorkers=body.action==="set_cell"?[body.workerId]:body.action==="set_cells"?body.cells.map(cell=>cell.workerId):body.workerIds;
+      await tx`SELECT w.id FROM worker_profiles w
+        WHERE w.organization_id=${actor.organizationId}::uuid
+          AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.worker_id=w.id AND a.object_id=${id}::uuid)
+          AND (${selectedWorkers?.length??0}=0 OR w.id=ANY(${selectedWorkers??[]}::uuid[]))
+        ORDER BY w.id FOR UPDATE OF w`;
+
       const patterns=await tx<Array<{workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night"}>>`SELECT worker_id "workerId",effective_from::text "effectiveFrom",work_days "workDays",rest_days "restDays",shift_kind "shiftKind" FROM worker_schedule_pattern_changes WHERE object_id=${id}::uuid AND status='accepted' AND effective_from<=current_date+31 ORDER BY effective_from DESC`;
       const assignments=await tx<Assignment[]>`
         SELECT a.worker_id "workerId",a.specialty_id "specialtyId",a.schedule_work_days "workDays",a.schedule_rest_days "restDays",

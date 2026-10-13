@@ -107,17 +107,17 @@ export async function getObjectAnalyticsDetail(actor:Actor,objectId:string,from:
 
     const daily=await sql<ObjectAnalyticsDailyPoint[]>`
       WITH days AS (
-        SELECT generate_series(${from}::date,${to}::date,interval '1 day')::date day
+        SELECT generate_series(${from}::date,${to}::date,interval '1 day')::date AS work_date
       )
       SELECT
-        d.day::text date,to_char(d.day,'DD.MM') label,
+        d.work_date::text date,to_char(d.work_date,'DD.MM') label,
         COALESCE((
           SELECT sum(target.planned_count)::int FROM (
             SELECT DISTINCT ON (t.specialty_id,t.shift_kind) t.planned_count
             FROM staffing_plan_targets t
             WHERE t.object_id=${objectId}::uuid
-              AND t.effective_from<=d.day
-              AND (t.effective_to IS NULL OR t.effective_to>=d.day)
+              AND t.effective_from<=d.work_date
+              AND (t.effective_to IS NULL OR t.effective_to>=d.work_date)
             ORDER BY t.specialty_id,t.shift_kind,t.effective_from DESC,t.created_at DESC
           ) target
         ),0)::int planned,
@@ -125,36 +125,36 @@ export async function getObjectAnalyticsDetail(actor:Actor,objectId:string,from:
           SELECT count(DISTINCT a.worker_id)::int
           FROM worker_object_assignments a
           WHERE a.object_id=${objectId}::uuid
-            AND a.effective_from<=d.day
-            AND (a.effective_to IS NULL OR a.effective_to>=d.day)
+            AND a.effective_from<=d.work_date
+            AND (a.effective_to IS NULL OR a.effective_to>=d.work_date)
         ),0)::int working,
         COALESCE((
           SELECT sum(sh.demand_count)::int FROM shifts sh
-          WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=d.day
+          WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=d.work_date
         ),0)::int "shiftDemand",
         COALESCE((
           SELECT count(*)::int
           FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
-          WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=d.day
+          WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=d.work_date
             AND NOT sa.is_reserve AND sa.confirmation_status<>'cancelled'
         ),0)::int "shiftAssigned",
         COALESCE((
           SELECT count(DISTINCT te.worker_id)::int FROM time_entries te
-          WHERE te.object_id=${objectId}::uuid AND te.work_date=d.day AND COALESCE(te.fact_hours,0)>0
+          WHERE te.object_id=${objectId}::uuid AND te.work_date=d.work_date AND COALESCE(te.fact_hours,0)>0
         ),0)::int worked,
         COALESCE((
           SELECT count(DISTINCT te.worker_id)::int FROM time_entries te
-          WHERE te.object_id=${objectId}::uuid AND te.work_date=d.day AND te.time_code='NO_SHOW'
+          WHERE te.object_id=${objectId}::uuid AND te.work_date=d.work_date AND te.time_code='NO_SHOW'
         ),0)::int "noShows",
         COALESCE((
           SELECT sum(COALESCE(te.fact_hours,0))::numeric FROM time_entries te
-          WHERE te.object_id=${objectId}::uuid AND te.work_date=d.day
+          WHERE te.object_id=${objectId}::uuid AND te.work_date=d.work_date
         ),0)::numeric hours,
         COALESCE((
           SELECT count(*)::int FROM incidents i
-          WHERE i.object_id=${objectId}::uuid AND i.occurred_at::date=d.day
+          WHERE i.object_id=${objectId}::uuid AND i.occurred_at::date=d.work_date
         ),0)::int incidents
-      FROM days d ORDER BY d.day
+      FROM days d ORDER BY d.work_date
     `;
 
     const specialties=await sql<ObjectAnalyticsSpecialtyActivity[]>`

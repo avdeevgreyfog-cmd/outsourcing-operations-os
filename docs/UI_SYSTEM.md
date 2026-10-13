@@ -362,3 +362,16 @@ Acceptance: build/TypeScript, targeted lint with no findings, 398 tests, tempora
 SQL/RLS/rollback suite, HTTP/Secure-session/mobile chain, 108 tab/theme/width checks,
 24 form/confirmation checks. Native PostgreSQL concurrent/full-card SSR acceptance
 remains outside the disposable socket harness; no customer DB or production change.
+
+
+### Object native acceptance — 2026-10-13
+
+Native PostgreSQL 18.6 acceptance supplements the previous demo/PGlite checks:
+52 real-session object tab/theme/width combinations, mobile reconfirmation,
+reload/fresh login persistence, link lifecycle and completed dismissal.
+Fixed hidden timesheet DISTINCT ordering and analytics date alias SQL errors.
+Shift planning acquires worker rows in UUID order before assignments/time entries,
+matching employee reply, link and dismissal lock order. Deterministic concurrent
+HTTP checks cover plan-first, hours-first and pause-before-queued-employee-write.
+The fixture harness rejects a nonempty database and never uses external DATABASE_URL.
+See OBJECT_COMPLETION_PLAN.md for reproduction and evidence boundaries.

@@ -623,7 +623,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       WHERE a.object_id=${meta.objectId}::uuid
         AND a.effective_from<=${periodEnd}::date
         AND (a.effective_to IS NULL OR a.effective_to>=${periodStart}::date)
-      ORDER BY w.full_name,a.effective_from
+      ORDER BY name,"effectiveFrom"
     `;
     const workerIds=[...new Set(workers.map(row=>row.workerId))];
     const entries=workerIds.length?await sql<Array<{workerId:string;workDate:string;timeCode:string;factHours:number|string;dayHours:number|string;nightHours:number|string;overtimeHours:number|string;plannedShiftKind:"day"|"night"|"mixed"|null}>>`
