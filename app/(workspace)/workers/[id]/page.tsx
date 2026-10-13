@@ -79,7 +79,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
       {editor&&<WorkerDataEditor context={editor} demo={actor.demo} block="profile"/>}
       <div className="metrics-grid">
         <Metric label="Статус" value={workerStatusLabel(worker.status)} tone="good"/>
-        <Metric label="Часов в периоде" value={(worker as typeof worker&{monthHours?:number}).monthHours??"—"}/>
+        <Metric label="Часов за текущий месяц" value={worker.monthHours??"—"}/>
         {sensitive&&<Metric label="Начислено" value={worker.accrued==null?"—":rub(worker.accrued)}/>}
         {sensitive&&<Metric label="К выплате" value={worker.payable==null?"—":rub(worker.payable)} tone={Number(worker.payable)>0?"warn":"good"}/>}
       </div>
@@ -105,7 +105,7 @@ export default async function WorkerPage({params,searchParams}:{params:Promise<{
     </>)}
 
     {panel("employment",<>{editor&&<WorkerDataEditor context={editor} demo={actor.demo} block="employment"/>}<WorkerEmploymentWorkspace workerId={id} workerStatus={worker.status} context={offboarding} canOffboard={canOffboard} canAccessAssets={canViewAssets} demo={actor.demo}/></>)}
-    {panel("assignments",<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} demo={actor.demo} employmentDocumentsStatus={worker.employmentDocumentsStatus}/>)}
+    {panel("assignments",<WorkerAssignmentsWorkspace workerId={id} details={details} options={options} canEdit={canEdit} canManageDirectories={hasCapability(actor.access,"admin.permissions.manage")} demo={actor.demo} employmentDocumentsStatus={worker.employmentDocumentsStatus}/>)}
     {panel("schedule",<>
       <Section title="Ближайшие смены"><div className="stack-list">{shifts.map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {row.time}</strong><small>{row.specialty} · {row.object}</small></div><Status tone="info">{shiftKindLabel(row.kind)}</Status></div>)}</div>{!shifts.length&&<Empty title="Смен нет" text="Для текущего назначения смены не найдены."/>}</Section>
       <div style={{marginTop:16}}><WorkerAbsencesWorkspace workerId={id} details={details} canEdit={canEdit} demo={actor.demo}/></div>

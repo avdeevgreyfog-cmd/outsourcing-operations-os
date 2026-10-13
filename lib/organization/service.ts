@@ -38,6 +38,7 @@ export async function listOrganizationUnits(actor: Actor): Promise<OrganizationU
     LEFT JOIN organization_memberships manager_membership ON manager_membership.id=ou.manager_membership_id
     LEFT JOIN app_users manager_user ON manager_user.id=manager_membership.user_id
     LEFT JOIN organization_memberships m ON m.primary_org_unit_id=ou.id AND m.status='active'
+    WHERE ou.organization_id=${actor.organizationId}::uuid
     GROUP BY ou.id,rg.name,manager_user.display_name
     ORDER BY ou.sort_order,ou.name
   `);return filterUnits(actor,rows);
@@ -95,6 +96,7 @@ export async function listPositions(actor: Actor): Promise<PositionRow[]> {
     LEFT JOIN staff_positions sp ON sp.job_profile_id=p.id AND sp.status<>'closed' AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
     LEFT JOIN position_assignments pa ON pa.staff_position_id=sp.id AND pa.status<>'ended' AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
     LEFT JOIN position_permission_grants g ON g.position_id=p.id AND g.effect='allow'
+    WHERE p.organization_id=${actor.organizationId}::uuid
     GROUP BY p.id ORDER BY p.active DESC,p.name
   `);
 }
@@ -108,6 +110,7 @@ export async function listProcessRoles(actor: Actor): Promise<ProcessRoleRow[]> 
     FROM process_roles pr
     LEFT JOIN membership_process_roles mr ON mr.process_role_id=pr.id AND (mr.effective_to IS NULL OR mr.effective_to>=current_date)
     LEFT JOIN process_role_permission_grants g ON g.process_role_id=pr.id AND g.effect='allow'
+    WHERE pr.organization_id=${actor.organizationId}::uuid
     GROUP BY pr.id ORDER BY pr.active DESC,pr.name
   `);
 }
@@ -131,8 +134,8 @@ export async function listStaffPositions(actor: Actor): Promise<StaffPositionRow
     LEFT JOIN regions rg ON rg.id=COALESCE(sp.region_id,ou.region_id)
     LEFT JOIN staff_positions manager_position ON manager_position.id=sp.reports_to_position_id
     LEFT JOIN position_assignments pa ON pa.staff_position_id=sp.id
-    WHERE sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
-    GROUP BY sp.id,p.name,ou.name,rg.name,manager_position.name
+    WHERE sp.organization_id=${actor.organizationId}::uuid AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
+    GROUP BY sp.id,p.name,ou.id,ou.name,rg.name,manager_position.name
     ORDER BY sp.level,ou.sort_order,sp.name
   `);return filterStaffPositions(actor,rows);
 }
@@ -148,6 +151,7 @@ export async function listPositionAssignments(actor: Actor): Promise<PositionAss
     FROM position_assignments pa
     JOIN organization_memberships m ON m.id=pa.membership_id
     JOIN app_users u ON u.id=m.user_id
+    WHERE pa.organization_id=${actor.organizationId}::uuid
     ORDER BY pa.effective_from DESC,u.display_name
   `);
   return filterOrganizationAssignments(actor,rows,employees,positions);
@@ -176,7 +180,7 @@ export async function listResponsibilityRules(actor: Actor): Promise<Responsibil
     LEFT JOIN LATERAL resolve_organization_responsibility(rr.process_code,rr.step_code,rr.scope_type,rr.scope_ids[1],current_date) resolved ON true
     LEFT JOIN organization_memberships resolved_membership ON resolved_membership.id=resolved.membership_id
     LEFT JOIN app_users resolved_user ON resolved_user.id=resolved_membership.user_id
-    WHERE rr.active AND rr.effective_from<=current_date AND (rr.effective_to IS NULL OR rr.effective_to>=current_date)
+    WHERE rr.organization_id=${actor.organizationId}::uuid AND rr.active AND rr.effective_from<=current_date AND (rr.effective_to IS NULL OR rr.effective_to>=current_date)
     ORDER BY rr.process_name,rr.step_name,rr.responsibility_type
   `);
 }
@@ -197,3 +201,9 @@ export async function listOrganizationChangeSets(actor: Actor): Promise<Organiza
 function filterEmployees(actor:Actor,rows:CompanyEmployeeRow[]){return rows.filter(row=>canReadCompanyEmployee(actor,row))}
 function filterStaffPositions(actor:Actor,rows:StaffPositionRow[]){return rows.filter(row=>canReadOrganizationPosition(actor,row))}
 function filterUnits(actor:Actor,rows:OrganizationUnitRow[]){return filterOrganizationUnits(actor,rows)}
+
+export async function listWorkerSpecialties(actor:Actor):Promise<Array<{id:string;name:string}>> {
+  requireCapability(actor,"organization.read");
+  if(actor.demo)return [];
+  return withTenant(actor.organizationId,actor.userId,sql=>sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE organization_id=${actor.organizationId}::uuid AND active ORDER BY name`);
+}

@@ -112,6 +112,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     const {id}=await params;const body=schema.parse(await request.json());
     if(body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined||body.clientId!==undefined||body.regionId!==undefined)requireCapability(actor,"operations.object.assign");
     const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
+      // Manager synchronization touches assignments: use the same worker->object
+      // lock order as transfer/import, including workers not yet assigned.
+      if(body.ownerUserId!==undefined)await tx`SELECT id FROM worker_profiles WHERE organization_id=${actor.organizationId}::uuid ORDER BY id FOR UPDATE`;
       const current=await getScope(tx,actor.organizationId,id);
       if(!current||!canReadRow(actor.access,"operations.object.edit",current,actor))throw new AccessDeniedError("operations.object.edit");
       if(body.expectedVersion!==objectEditVersion(current.updatedAt))throw new ObjectSettingsConflict("Настройки объекта изменились после открытия формы. Ваш ввод сохранён. Загрузите актуальные данные и повторите правку.");

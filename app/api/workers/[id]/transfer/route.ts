@@ -21,15 +21,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     requireCapability(actor,"worker.edit");if(actor.demo)return NextResponse.json({error:"Демо-режим"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-      const [worker]=await tx<Array<{id:string;objectId:string|null;specialtyId:string|null;createdByUserId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];paidHoursPerShift:number|string|null}>>`
-        SELECT w.id,w.created_by_user_id "createdByUserId",a.object_id "objectId",a.specialty_id "specialtyId",a.paid_hours_per_shift "paidHoursPerShift",o.owner_user_id "ownerUserId",o.region_id "regionId",
+      const [worker]=await tx<Array<{id:string;objectId:string|null;specialtyId:string|null;effectiveFrom:string|null;workMode:string|null;createdByUserId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];paidHoursPerShift:number|string|null}>>`
+        SELECT w.id,w.created_by_user_id "createdByUserId",a.object_id "objectId",a.specialty_id "specialtyId",a.effective_from::text "effectiveFrom",a.work_mode "workMode",a.paid_hours_per_shift "paidHoursPerShift",o.owner_user_id "ownerUserId",o.region_id "regionId",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
         FROM worker_profiles w
         LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_to IS NULL ORDER BY x.effective_from DESC LIMIT 1) a ON true
         LEFT JOIN objects o ON o.id=a.object_id WHERE w.id=${id}::uuid AND w.organization_id=${actor.organizationId}::uuid FOR UPDATE OF w
       `;
       if(!worker)throw new Error("Сотрудник не найден");
-      if(!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:worker.objectId,ownerUserId:worker.objectId?worker.ownerUserId:worker.createdByUserId,regionId:worker.regionId,assigneeUserIds:worker.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
+      if(!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:worker.objectId,createdByUserId:worker.createdByUserId,ownerUserId:worker.objectId?worker.ownerUserId:worker.createdByUserId,regionId:worker.regionId,assigneeUserIds:worker.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
       const [specialty]=await tx`SELECT id FROM specialties WHERE id=${body.specialtyId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`;
       if(!specialty)throw new AccessDeniedError("worker.edit");
       const [exitPlan]=await tx<Array<{effectiveDate:string}>>`
@@ -52,7 +52,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM objects o WHERE o.id=${body.objectId}::uuid AND o.organization_id=${actor.organizationId}::uuid
       `;
       if(!target||!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:target.id,ownerUserId:target.ownerUserId,regionId:target.regionId,assigneeUserIds:target.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
-      if(!target.ownerUserId)throw new Error("У целевого объекта не назначен менеджер. Сначала назначьте менеджера объекта.");
+      // A missing object manager is an incomplete profile, not a fabricated owner.
+      // Repeating the same first assignment must not delete/recreate its history.
+      if(worker.objectId===body.objectId&&worker.specialtyId===body.specialtyId&&worker.effectiveFrom===body.effectiveFrom&&!body.dayRate&&!body.nightRate&&(body.workMode===undefined||body.workMode===worker.workMode)&&(body.paidHoursPerShift===undefined||body.paidHoursPerShift===null&&worker.paidHoursPerShift===null||body.paidHoursPerShift===Number(worker.paidHoursPerShift)))return;
       await tx`
         UPDATE worker_object_assignments SET effective_to=(${body.effectiveFrom}::date-1)
         WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<${body.effectiveFrom}::date

@@ -33,8 +33,9 @@ export async function POST(request:Request){
           VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'directory_region',${row.id}::uuid,'created',${summary})`;
         return row;
       }
-      const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE lower(name)=lower(${body.name}) LIMIT 1`;
-      if(duplicate)throw new Error("Такая специальность уже существует");
+      await tx`SELECT pg_advisory_xact_lock(hashtextextended(${actor.organizationId+":"+body.name.toLocaleLowerCase("ru")},0))`;
+      const [duplicate]=await tx<Array<{id:string;name:string;active:boolean}>>`SELECT id,name,active FROM specialties WHERE organization_id=${actor.organizationId}::uuid AND lower(btrim(name))=lower(${body.name}) LIMIT 1`;
+      if(duplicate)return {...duplicate,duplicate:true};
       const aliases=[...new Set((body.aliases??[]).map(item=>item.trim()).filter(Boolean))];
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO specialties(organization_id,code,name,aliases,active)
@@ -46,6 +47,7 @@ export async function POST(request:Request){
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'directory_specialty',${row.id}::uuid,'created',${summary})`;
       return row;
     }));
+    if("duplicate" in result)return NextResponse.json({...result,error:"Такая специальность уже существует"},{status:409});
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные справочника",issues:error.issues},{status:400});

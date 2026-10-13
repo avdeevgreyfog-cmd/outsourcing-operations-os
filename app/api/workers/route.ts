@@ -66,7 +66,6 @@ export async function POST(request:Request){
           FROM objects o WHERE o.id=${body.objectId??null}::uuid AND o.organization_id=${actor.organizationId}::uuid
         `;
         if(!object||!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,objectId:object.id,ownerUserId:object.ownerUserId,regionId:object.regionId,assigneeUserIds:object.assigneeUserIds},actor))throw new AccessDeniedError("worker.edit");
-        if(assigned&&!object.ownerUserId)throw new Error("У объекта не назначен менеджер. Сначала назначьте менеджера объекта.");
       }
       const [worker]=await tx<Array<{id:string}>>`
         INSERT INTO worker_profiles(organization_id,full_name,phone,email,city,birth_date,clothing_size,shoe_size,height_cm,notes,status,source,created_by_user_id,onboarding_metadata)
