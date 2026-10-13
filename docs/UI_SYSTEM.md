@@ -260,3 +260,118 @@ approval of every visual change. The 4 October scope is recorded in standard v1.
 Requests, clients and tenders share `SalesRecordTitle` (quick preview) and `SalesRecordActions` (Eye → preview, ArrowUpRight → full record). The action column is 88 px. Editing is explicit, prefilled and retains identity; creation remains separate. Compact editors use SalesDrawer; requests retain their detailed form. Browser-only demo copies are labeled and do not send business mutations. Missing demo records cannot be saved as empty replacements.
 
 Full sales records retain the existing entity layouts and canonical /requests/[id], /clients/[id], /tenders/[id] URLs. Browser demo overrides merge into these same layouts without replacing tabs, related records or detailed content with summary-only pages. Creation and explicit prefilled editing remain distinct.
+
+## Saved object surfaces (12 October 2026)
+
+The object card shares one scoped working-surface contract in
+`app/object-portfolio.css`: section headings 14 px / 650, body and controls 13 px,
+secondary text 12 px, controls 38 px / radius 7 px, panels radius 8 px, and local
+views as text tabs with an orange underline. Colors use the existing theme tokens.
+Main entity navigation and domain workflows stay in place. Planning and timesheet
+calendars retain their specialized cell geometry; ordinary tables use the shared
+42 px header and consistent cell padding. Analytics retains its analytical metrics.
+Supply and incidents begin with their section heading before operational metrics.
+Employee access management groups its settings below the employee register rather
+than presenting unstructured form rows. Payment actions wrap separately from input
+fields to respect the available object width, including the global sidebar.
+
+`tests/object-card-browser.mjs` checks all 13 top-level object views in light/dark
+at desktop/phone widths, rejects page overflow, checks section heading sizes, and
+opens confirmation/link/update views plus expanded link settings. It blocks API
+writes; this visual check does not establish live database workflow correctness.
+
+### Object composition amendment (12 October 2026)
+
+Planning exposes Schedule, Confirmations, Personal links and Employee changes in
+one local navigation row. Calendar representation is a subordinate view switch;
+weekly context is one compact line and detailed guidance is expandable. Supply
+uses permission-filtered views for employee issue, stock, norms, requests and
+housing inside one module shell. Settings uses parameter/basis, team, recruiting
+and personnel views; switching is disabled while a section is being edited.
+Hidden working views remain mounted so switching does not discard local edits.
+The field, history and permission contracts are preserved. Daily planning labels
+no longer call unknown demand a closed plan and explicitly show excess coverage.
+
+### Planning coverage semantics
+
+Unknown demand renders as a dash; a recorded zero renders as zero and says no
+exits are required. Coverage above a recorded target is shown explicitly. Weekly
+context states how many dates have demand records, so a partial demand sum cannot
+be mistaken for a complete weekly target. `planningCoverage` owns the daily label.
+
+### Verification harness boundary
+
+The isolated employee HTTP harness uses the real Next.js app and session login,
+postgres.js over a local PGlite socket, and ephemeral seeded data. Its socket
+multiplexer serializes PostgreSQL execution; it is not evidence for native
+multi-connection PostgreSQL locking. No customer DATABASE_URL is reused.
+
+Run `npm run build` before `npm run test:employee-http`. The harness needs Chromium
+(`npx playwright install chromium`) and OpenSSL for its temporary local HTTPS
+proxy; it preserves the application's Secure-cookie policy. The passing scenario
+covers real login, manager planning, a 390px employee cabinet, persisted hours,
+reconciliation protection, pause/resume, token rotation, manager offboarding
+permission denial, and director completion revoking employee read/write access.
+Planning dismissal leaves access active until completion. All fixtures are
+disposable; application authorization is exercised without injected actors.
+
+### Object secondary typography — 12 October 2026
+
+The object overview timeline, contour links and customer contact, staffing candidate
+cards, linked documents, document attention and metric notes follow the saved
+object's 13px identity / 12px secondary hierarchy. Candidate action buttons keep
+38px height even when labels wrap. Calendar weekday labels use 11px within the
+existing column widths; timesheet cell geometry and workflows remain unchanged.
+Validation: production build (including TypeScript), clean diff, and 108 browser
+combinations across 13 object tabs, nested views, 1440/390px and light/dark themes.
+Overview, staffing and documents screenshots were inspected. No database changes.
+At widths up to 560px, overview attention actions sit below the full-width event
+text. The final adjustment passed a rebuild and four additional overview browser
+combinations (both widths and themes); its mobile screenshot was inspected.
+
+### Object forms and employee link actions — 13 October 2026
+
+Contacts, object documents, incidents and link confirmations reuse RegistryDrawer:
+labelled dialog, focus containment, Escape, return focus and shared footer. Object
+forms use 18px panel headings, 13px controls and 12px labels. Contacts retain their
+490px role width; document/incident forms use the existing 560px drawer and a
+single column on narrow screens. The shared drawer's default behavior is unchanged.
+Link labels distinguish blocking/unblocking from replacement and permanent token
+revocation. Replacement/revocation and hours reconciliation explain consequences
+in a contextual panel before running the existing action. Document save prevents
+duplicate submission and handles network rejection without discarding input.
+Validation: build including TypeScript, targeted lint, 398 existing tests and 20
+browser fixture checks across two themes/widths for focus, Escape, cancel, demo
+save and link consequence panels. Screenshots of desktop documents/contacts and
+mobile incidents were inspected. Fixture checks do not issue real links or write
+customer data; backend lifecycle validation is documented in the earlier block.
+
+### Object acceptance and planning integrity — 13 October 2026
+
+The completion criteria/results are in `docs/OBJECT_COMPLETION_PLAN.md`. New shifts
+use the reporting timezone explicitly; completion date checks use the object's
+local date. Changing an unreported plan invalidates confirmed_at without deleting
+the employee report. Manager and employee UI request a fresh reply; stale replies
+are excluded from replied coverage and cannot submit hours. Reapplying the same
+plan preserves the reply and assignment status. Employee replies update active
+non-reserve assignments; declined assignments are highlighted and excluded from
+planned coverage. Calendar-only document dates use UTC formatting to avoid a day
+shift/hydration error. Manager date initialization uses local browser dates after
+hydration; fixture QA includes Europe/Moscow across the UTC date boundary.
+Acceptance: build/TypeScript, targeted lint with no findings, 398 tests, temporary
+SQL/RLS/rollback suite, HTTP/Secure-session/mobile chain, 108 tab/theme/width checks,
+24 form/confirmation checks. Native PostgreSQL concurrent/full-card SSR acceptance
+remains outside the disposable socket harness; no customer DB or production change.
+
+
+### Object native acceptance — 2026-10-13
+
+Native PostgreSQL 18.6 acceptance supplements the previous demo/PGlite checks:
+52 real-session object tab/theme/width combinations, mobile reconfirmation,
+reload/fresh login persistence, link lifecycle and completed dismissal.
+Fixed hidden timesheet DISTINCT ordering and analytics date alias SQL errors.
+Shift planning acquires worker rows in UUID order before assignments/time entries,
+matching employee reply, link and dismissal lock order. Deterministic concurrent
+HTTP checks cover plan-first, hours-first and pause-before-queued-employee-write.
+The fixture harness rejects a nonempty database and never uses external DATABASE_URL.
+See OBJECT_COMPLETION_PLAN.md for reproduction and evidence boundaries.

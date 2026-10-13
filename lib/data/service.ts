@@ -4,6 +4,7 @@ import { withTenant } from "@/lib/db/client";
 import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import * as demo from "@/lib/demo/data";
 import * as demoOrg from "@/lib/demo/organization";
+import { objectEditVersion } from "@/lib/operations/object-manager-options";
 import { OWNER_SYSTEM_CAPABILITIES } from "@/lib/access/system";
 
 type ScopedRow = {
@@ -18,7 +19,7 @@ export type RequestRow = ScopedRow & { id:string; title:string; client:string; s
 export type CalculationRow = ScopedRow & { id:string; requestId:string; request:string; role:string; name:string; model:string; status:string; workerNet:number|string; totalCost:number|string; clientRate:number|string; marginPct:number|string; monthlyContribution:number|string };
 export type ObjectPersonRow = { userId:string; name:string };
 export type ObjectRiskReason = { code:string; label:string; detail:string };
-export type ObjectRow = ScopedRow & { id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; targetStartDate?:string|null; actualStartDate?:string|null; actualEndDate?:string|null; legalEntityId?:string|null; legalEntity?:string|null; additionalManagers?:ObjectPersonRow[]; recruitingMode?:"company_rules"|"object_team"; recruitingTeam?:ObjectPersonRow[]; activeRecruiters?:ObjectPersonRow[]; unassignedNeedCount?:number; defaultTransitionDays?:number; defaultDailyPaymentShifts?:number; defaultScheduleWorkDays?:number|null; defaultScheduleRestDays?:number|null; defaultShiftKind?:"day"|"night"|"mixed"; ppeTaskEnabled?:boolean; ppeTaskDueDays?:number|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; riskReasons?:ObjectRiskReason[]; attentionReasons?:string[]; revenueForecast?:number|string|null; marginForecast?:number|string|null };
+export type ObjectRow = ScopedRow & { updatedAt?:string; editVersion?:string; id:string; objectId?:string; ownerName?:string|null; sourceRequestId?:string|null; sourceProposalId?:string|null; name:string; code:string; client:string; status:string; region:string; address?:string|null; targetStart?:string|null; targetStartDate?:string|null; actualStartDate?:string|null; actualEndDate?:string|null; legalEntityId?:string|null; legalEntity?:string|null; additionalManagers?:ObjectPersonRow[]; recruitingMode?:"company_rules"|"object_team"; recruitingTeam?:ObjectPersonRow[]; activeRecruiters?:ObjectPersonRow[]; unassignedNeedCount?:number; defaultTransitionDays?:number; defaultDailyPaymentShifts?:number; defaultScheduleWorkDays?:number|null; defaultScheduleRestDays?:number|null; defaultShiftKind?:"day"|"night"|"mixed"; ppeTaskEnabled?:boolean; ppeTaskDueDays?:number|null; coverage:number; required:number; filled:number; deficit:number; risk?:string|null; riskReasons?:ObjectRiskReason[]; attentionReasons?:string[]; revenueForecast?:number|string|null; marginForecast?:number|string|null };
 export type NeedRow = ScopedRow & { id:string; objectId:string; object:string; specialty:string; required:number; filled:number; deficit:number; deadline?:string|null; status:string };
 export type CandidateRow = ScopedRow & { id:string; fullName:string; phone?:string|null; source?:string|null; stage:string; stageLabel?:string|null; need?:string|null; object?:string|null; objectId:string; nextAction?:string|null };
 export type WorkerRow = ScopedRow & { id:string; originCandidateId?:string|null; fullName:string; phone?:string|null; status:string; source?:string|null; origin?:string|null; originalRecruiter?:string|null; managerName?:string|null; object?:string|null; objectId?:string|null; specialty?:string|null; specialtyId?:string|null; startDate?:string|null; employment?:string|null; employmentDocumentsStatus?:string|null; workMode?:string|null; paidHoursPerShift?:number|string|null; scheduleWorkDays?:number|null; scheduleRestDays?:number|null; scheduleShiftKind?:"day"|"night"|"mixed"|null; scheduleAnchorDate?:string|null; transitionDays?:number|null; dailyPaymentShifts?:number|null; clothingSize?:string|null; shoeSize?:string|null; heightCm?:number|null; issuedAssetCount?:number; issuedAssetNames?:string[]; ppeRequiredCount?:number; ppeIssuedCount?:number; ppeMissingNames?:string[]; absenceType?:string|null; absenceStatus?:string|null; absenceFrom?:string|null; absenceTo?:string|null; plannedExitDate?:string|null; plannedExitReasonCode?:string|null; plannedTransferDate?:string|null; plannedTransferObject?:string|null; plannedTransferSpecialty?:string|null; upcomingShiftDates?:string[]; todayTimeCode?:string|null; todayFactHours?:number|string|null; todayEntrySource?:string|null; todayShiftAssigned?:boolean|null; todayShiftConfirmed?:boolean|null; todayShiftReserve?:boolean|null; todayShiftTime?:string|null; todayAttendanceEvent?:string|null; rate:number|string|null; rateUnit?:string|null; dayRate?:number|string|null; nightRate?:number|string|null; accrued:number|string|null; paid?:number|string|null; payable?:number|string|null };
@@ -225,6 +226,8 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
       const entity=entities[index%Math.max(entities.length,1)]??null;
       return {
         ...row,
+        updatedAt:"2026-10-11 00:00:00+00",
+        editVersion:objectEditVersion("2026-10-11 00:00:00+00"),
         legalEntityId:entity?.id??null,
         legalEntity:entity?.shortName??entity?.name??null,
         additionalManagers:additionalIds.map(person),
@@ -244,7 +247,7 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
   requireCapability(actor, "operations.object.read");
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const rows = await sql<ObjectRow[]>`
-      SELECT o.id, o.id "objectId", o.organization_id "organizationId", o.name, o.code, o.status, o.source_request_id "sourceRequestId",o.source_proposal_id "sourceProposalId",
+      SELECT o.id, o.id "objectId", o.organization_id "organizationId", o.updated_at::text "updatedAt", o.name, o.code, o.status, o.source_request_id "sourceRequestId",o.source_proposal_id "sourceProposalId",
              owner.display_name "ownerName",
              o.region_id "regionId", rg.name region,o.address_text address,o.owner_user_id "ownerUserId",o.created_by_user_id "createdByUserId",
              o.client_company_id "clientId",c.name client,to_char(o.target_start_date,'DD.MM') "targetStart",to_char(o.target_start_date,'YYYY-MM-DD') "targetStartDate",
@@ -311,7 +314,7 @@ export async function listObjects(actor: Actor): Promise<ObjectRow[]> {
       ) workforce ON true
       ORDER BY o.name
     `;
-    return rows.filter((row) => canReadRow(actor.access, "operations.object.read", row, actor));
+    return rows.filter((row) => canReadRow(actor.access, "operations.object.read", row, actor)).map(row=>({...row,editVersion:objectEditVersion(row.updatedAt!)}));
   });
 }
 
@@ -428,7 +431,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
           WHERE sa.worker_id=w.id AND sh.object_id=woa.object_id AND sh.shift_date>=current_date AND sa.confirmation_status<>'cancelled'
           ORDER BY sh.shift_date,sh.starts_at LIMIT 90) dates
       ) upcoming_shifts ON true
-      LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
+      LEFT JOIN LATERAL (SELECT relation_type FROM employment_relations x WHERE x.worker_id=w.id AND x.organization_id=w.organization_id AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY x.effective_from DESC LIMIT 1) er ON true
       LEFT JOIN app_users rec ON rec.id=w.original_recruiter_user_id
       LEFT JOIN LATERAL (
         SELECT absence_type,status,planned_from,planned_to FROM worker_absence_plans x
@@ -620,7 +623,7 @@ export async function getTimesheet(actor: Actor, options?: { objectId?: string |
       WHERE a.object_id=${meta.objectId}::uuid
         AND a.effective_from<=${periodEnd}::date
         AND (a.effective_to IS NULL OR a.effective_to>=${periodStart}::date)
-      ORDER BY w.full_name,a.effective_from
+      ORDER BY name,"effectiveFrom"
     `;
     const workerIds=[...new Set(workers.map(row=>row.workerId))];
     const entries=workerIds.length?await sql<Array<{workerId:string;workDate:string;timeCode:string;factHours:number|string;dayHours:number|string;nightHours:number|string;overtimeHours:number|string;plannedShiftKind:"day"|"night"|"mixed"|null}>>`

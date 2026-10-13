@@ -1,3 +1,4 @@
+import {isRequestCommercialLocked} from "@/lib/commercial/request-lock-state";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -64,8 +65,9 @@ export default async function CalculationWorkspace({params,searchParams}:{params
   const projectWorkers=roles.reduce((sum,role)=>sum+Number(role.count||0),0);
   const vatMode=request?.vatMode??(typeof tender?.conditions?.vatMode==="string"?tender.conditions.vatMode:null);
   const schedule=request?.schedule??{};
-  const canCreate=hasCapability(actor.access,"calculation.scenario.create")&&!actor.demo;
-  const canEdit=hasCapability(actor.access,"calculation.scenario.edit")&&!actor.demo;
+  const commercialLocked=Boolean(request&&isRequestCommercialLocked(request));
+  const canCreate=!commercialLocked&&hasCapability(actor.access,"calculation.scenario.create")&&!actor.demo;
+  const canEdit=!commercialLocked&&hasCapability(actor.access,"calculation.scenario.edit")&&!actor.demo;
   const canReadApprovals=hasCapability(actor.access,"approval.read");
   const seed=query.seed&&!actor.demo?await getCalculationScenarioSeed(actor,query.seed):null;
   const validSeed=seed?.calculationId===meta.id?seed:null;

@@ -12,32 +12,44 @@ if(process.env.QA_START_SERVER==='1'){
 }
 const browser=await chromium.launch({headless:true});const errors=[],writes=[];let checks=0;
 const section=(page,title)=>page.locator('.section').filter({has:page.getByRole('heading',{name:title,exact:true})}).first();
+async function createDraft(page,title){
+ await page.goto(`${base}/requests/new`,{waitUntil:'networkidle'});
+ await page.getByLabel('Название заявки',{exact:true}).fill(title);
+ await page.getByLabel('Компания / рабочее название',{exact:true}).fill('ООО QA');
+ await page.getByLabel('Адрес объекта',{exact:true}).fill('Москва, Проверочная улица, 12');
+ await page.getByLabel('Специальность',{exact:true}).fill('Комплектовщик');
+ await page.getByLabel('Количество',{exact:true}).fill('12');
+ await page.getByRole('button',{name:'Сохранить черновик',exact:true}).click();
+ await page.waitForURL(/\/requests\/demo-local-/);
+ await page.getByRole('heading',{name:title,exact:true}).waitFor();
+ return new URL(page.url()).pathname.split('/').at(-1);
+}
 async function contextFor(width=1440,theme='light'){
  const context=await browser.newContext({viewport:{width,height:1000},colorScheme:theme,timezoneId:'Europe/Moscow'});context.setDefaultTimeout(15000);
  await context.addCookies([{name:'oo_workspace_mode',value:'demo',url:base},{name:'oo_demo_role',value:'director',url:base},{name:'oo_theme',value:theme,url:base}]);
  await context.route('**/api/**',async route=>{if(['POST','PATCH','PUT','DELETE'].includes(route.request().method())){writes.push(route.request().url());await route.abort();}else await route.continue();});
- const page=await context.newPage();diagnosticPage=page;page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(/hydration|hydrated/i.test(message.text()))errors.push(message.text());});return {context,page};
+ const page=await context.newPage();diagnosticPage=page;page.on('pageerror',error=>errors.push(error.message));page.on('console',message=>{if(/hydration|hydrated/i.test(message.text()))errors.push(message.text());});const requestId=await createDraft(page,`QA Черновик ${width} ${theme}`);return {context,page,requestId};
 }
 try{
  for(const width of (process.env.QA_DEEP_ONLY==='1'?[]:[1440,1024,768,390]))for(const theme of ['light','dark']){
-  const {context,page}=await contextFor(width,theme);
+  const {context,page,requestId}=await contextFor(width,theme);
   for(const entity of ['requests','clients','tenders']){console.log('Checking',entity);
-   await page.goto(`${base}/${entity}`,{waitUntil:'networkidle'});const title=page.locator('table tbody .sales-record-title').first();const name=await title.innerText();await title.click();let drawer=page.getByRole('dialog');await drawer.getByRole('heading',{name,exact:true}).waitFor();
+   await page.goto(`${base}/${entity}`,{waitUntil:'networkidle'});const selectedRow=entity==='requests'?page.locator('table tbody tr').filter({has:page.locator(`a[href="/requests/${requestId}"]`)}):page.locator('table tbody tr').first();const title=selectedRow.locator('.sales-record-title');const name=await title.innerText();await title.click();let drawer=page.getByRole('dialog');await drawer.getByRole('heading',{name,exact:true}).waitFor();
    await drawer.getByRole('button',{name:'Быстрое редактирование',exact:true}).click();drawer=page.getByRole('dialog');await drawer.getByRole('button',{name:'Сохранить изменения',exact:true}).waitFor();await drawer.locator('input').first().fill(`QA ${entity} ${width}`);
    if(entity==='tenders')assert.equal(await drawer.locator('.form-grid').evaluate(node=>getComputedStyle(node).display),'grid');await page.screenshot({path:`${output}/${entity}-quick-${width}-${theme}.png`,fullPage:true});
    page.once('dialog',dialog=>dialog.dismiss());await drawer.getByRole('button',{name:'Отмена',exact:true}).click();assert.equal(await page.getByRole('dialog').count(),1);
    page.once('dialog',dialog=>dialog.accept());await drawer.getByRole('button',{name:'Отмена',exact:true}).click();assert.equal(await page.getByRole('dialog').count(),0);
-   assert.equal(await page.locator('table tbody .sales-record-title').first().innerText(),name);
+   assert.equal(await selectedRow.locator('.sales-record-title').innerText(),name);
    await page.getByRole('link',{name:`Открыть карточку: ${name}`,exact:true}).click();await page.locator('h1').waitFor();
    const blockTitle={requests:'График и часы',clients:'Внутренние заметки',tenders:'Данные закупки'}[entity];const block=section(page,blockTitle);await block.getByRole('button',{name:'Редактировать',exact:true}).click();await block.getByRole('button',{name:'Сохранить изменения',exact:true}).waitFor();await page.screenshot({path:`${output}/${entity}-block-${width}-${theme}.png`,fullPage:true});
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),`${entity} block overflow at ${width}`);await block.getByRole('button',{name:'Отмена',exact:true}).click();checks++;
   }
   await context.close();
  }
- const {context,page}=await contextFor();
+ const {context,page,requestId}=await contextFor();
  // Quick edits stay on the same entity and survive a reload.
  for(const entity of ['requests','clients','tenders']){console.log('Checking',entity);
-  await page.goto(`${base}/${entity}`,{waitUntil:'networkidle'});const quickRow=entity==='tenders'?page.locator('table tbody tr').filter({has:page.locator('a[href="/tenders/a1000000-0000-4000-8000-000000000001"]')}):page.locator('table tbody tr').first();await quickRow.locator('.sales-record-title').click();await page.getByRole('dialog').getByRole('button',{name:'Быстрое редактирование',exact:true}).click();const drawer=page.getByRole('dialog');await drawer.locator('input').first().fill(`QA Сохранено ${entity}`);await drawer.getByRole('button',{name:'Сохранить изменения',exact:true}).click();console.log('Quick save clicked',entity);await page.waitForTimeout(150);if(await page.getByRole('dialog').count())await page.keyboard.press('Escape');console.log('Quick drawer closed',entity);
+  await page.goto(`${base}/${entity}`,{waitUntil:'networkidle'});const quickRow=entity==='requests'?page.locator('table tbody tr').filter({has:page.locator(`a[href="/requests/${requestId}"]`)}):entity==='tenders'?page.locator('table tbody tr').filter({has:page.locator('a[href="/tenders/a1000000-0000-4000-8000-000000000001"]')}):page.locator('table tbody tr').first();await quickRow.locator('.sales-record-title').click();await page.getByRole('dialog').getByRole('button',{name:'Быстрое редактирование',exact:true}).click();const drawer=page.getByRole('dialog');await drawer.locator('input').first().fill(`QA Сохранено ${entity}`);await drawer.getByRole('button',{name:'Сохранить изменения',exact:true}).click();console.log('Quick save clicked',entity);await page.waitForTimeout(150);if(await page.getByRole('dialog').count())await page.keyboard.press('Escape');console.log('Quick drawer closed',entity);
   await page.getByRole('link',{name:`Открыть карточку: QA Сохранено ${entity}`,exact:true}).click();await page.locator('h1').filter({hasText:`QA Сохранено ${entity}`}).waitFor();console.log('Card loaded',entity,page.url());await page.reload({waitUntil:'networkidle'});assert.equal(await page.locator('h1').innerText(),`QA Сохранено ${entity}`);console.log('Reload passed',entity);
  }
  console.log("Quick edits passed");

@@ -108,7 +108,7 @@ export type RecruitingApplicationRow = {
   rejectionReason: string | null;
   rejectionReasonCode: string | null;
   conditions: Record<string, unknown>;
-  recentCommunications?: Array<{id:string;channel:string;summary:string;happenedAt:string;author:string}>;
+  recentCommunications?: Array<{id:string;applicationId?:string|null;channel:string;summary:string;happenedAt:string;author:string}>;
   documentSummary?: {
     required:number; received:number; missing:string[];
     employmentRequired:number; employmentReady:number; employmentMissing:string[];
@@ -481,9 +481,9 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
         to_char(ca.next_action_at,'DD.MM.YYYY HH24:MI') "nextAction",ca.planned_start_date::text "plannedStartDate",ca.planned_shift_kind "plannedShiftKind",
         ca.planned_arrival_at::text "plannedArrivalAt",ca.actual_start_at::text "actualStartAt",ca.rejection_reason "rejectionReason",ca.rejection_reason_code "rejectionReasonCode",ca.conditions_snapshot conditions,
         COALESCE((
-          SELECT jsonb_agg(jsonb_build_object('id',x.id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)
+          SELECT jsonb_agg(jsonb_build_object('id',x.id,'applicationId',x.application_id,'channel',x.channel,'summary',x.summary,'happenedAt',x.happened_at,'author',x.author) ORDER BY x.sort_at DESC)
           FROM (
-            SELECT cc.id,cc.channel,cc.summary,to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') happened_at,u.display_name author,cc.happened_at sort_at
+            SELECT cc.id,cc.application_id,cc.channel,cc.summary,to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') happened_at,u.display_name author,cc.happened_at sort_at
             FROM candidate_communications cc JOIN app_users u ON u.id=cc.created_by_user_id
             WHERE cc.candidate_id=c.id AND (cc.application_id=ca.id OR cc.application_id IS NULL)
             ORDER BY cc.happened_at DESC LIMIT 5
@@ -583,7 +583,7 @@ export async function listRecruitingApplications(actor: Actor): Promise<Recruiti
   });
 }
 
-export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirectoryRow[]>{
+export async function listCandidateDirectory(actor:Actor, applicationRows?:RecruitingApplicationRow[]):Promise<CandidateDirectoryRow[]>{
   requireCapability(actor,"recruiting.candidate.read");
   if(actor.demo){
     const applications=demoApplications(actor);
@@ -612,49 +612,33 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
       } satisfies CandidateDirectoryRow;
     });
   }
+  const applications=(applicationRows??await listRecruitingApplications(actor))
+    .filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor));
+  const byCandidate=new Map<string,RecruitingApplicationRow[]>();
+  for(const application of applications){
+    const related=byCandidate.get(application.candidateId)??[];
+    related.push(application);
+    byCandidate.set(application.candidateId,related);
+  }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
-    const rows=await sql<Array<CandidateDirectoryRow & {
-      organizationId:string;createdByUserId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[];
-      rawStage:string|null;rawStatus:string;
+    const rows=await sql<Array<Omit<CandidateDirectoryRow,"latestNeed"|"latestObject"|"latestStage"|"latestStageLabel"|"applicationsCount"|"activeApplications"|"status"> & {
+      organizationId:string;createdByUserId:string;ownerUserId:string|null;assigneeUserIds:string[];
+      rawStatus:string;workerStatus:string|null;
     }>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.city,c.preferred_channel "preferredChannel",
         COALESCE(pref.value,c.phone,c.email) "preferredContact",c.source,c.organization_id "organizationId",c.created_by_user_id "createdByUserId",
-        CASE WHEN c.status='available' THEN c.current_recruiter_user_id ELSE COALESCE(latest.owner_user_id,c.current_recruiter_user_id) END "ownerUserId",latest.manager_user_id "managerUserId",latest.object_id "objectId",
-        COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
-        ARRAY[latest.owner_user_id::text,latest.manager_user_id::text,c.current_recruiter_user_id::text,c.original_recruiter_user_id::text]
-          || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=latest.need_id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL) "assigneeUserIds",
-        COALESCE(n.title,s.name) "latestNeed",o.name "latestObject",latest.stage "rawStage",
-        owner.display_name owner,count_apps.cnt::int "applicationsCount",count_apps.active::int "activeApplications",
-        wp.id "workerId",exit_info.reason_code "formerWorkerExitReasonCode",exit_info.reason "formerWorkerExitReason",exit_info.effective_date::text "formerWorkerExitDate",
-        c.status "rawStatus",c.updated_at::text "updatedAt",
-        CASE
-          WHEN wp.id IS NOT NULL AND wp.status='active' THEN 'worker'
-          WHEN c.status='available' THEN 'available'
-          WHEN count_apps.active>0 THEN 'active'
-          WHEN count_apps.reserve>0 THEN 'reserve'
-          WHEN count_apps.cnt>0 AND count_apps.terminal=count_apps.cnt THEN 'completed'
-          ELSE 'candidate'
-        END status
+        c.current_recruiter_user_id "ownerUserId",
+        ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text] "assigneeUserIds",
+        current_recruiter.display_name owner,
+        wp.id "workerId",wp.status "workerStatus",exit_info.reason_code "formerWorkerExitReasonCode",exit_info.reason "formerWorkerExitReason",exit_info.effective_date::text "formerWorkerExitDate",
+        c.status "rawStatus",c.updated_at::text "updatedAt"
       FROM candidates c
       LEFT JOIN LATERAL(
         SELECT cm.value FROM candidate_contact_methods cm
         WHERE cm.candidate_id=c.id AND cm.active
         ORDER BY cm.is_preferred DESC,cm.created_at LIMIT 1
       ) pref ON true
-      LEFT JOIN LATERAL(
-        SELECT ca.* FROM candidate_applications ca WHERE ca.candidate_id=c.id ORDER BY ca.updated_at DESC LIMIT 1
-      ) latest ON true
-      LEFT JOIN LATERAL(
-        SELECT count(*) cnt,
-          count(*) FILTER(WHERE stage IN ('new','interview','documents','clearance','preparation')) active,
-          count(*) FILTER(WHERE stage='reserve') reserve,
-          count(*) FILTER(WHERE stage IN ('rejected','no_show')) terminal
-        FROM candidate_applications ca WHERE ca.candidate_id=c.id
-      ) count_apps ON true
-      LEFT JOIN needs n ON n.id=latest.need_id
-      LEFT JOIN specialties s ON s.id=n.specialty_id
-      LEFT JOIN objects o ON o.id=latest.object_id
-      LEFT JOIN app_users owner ON owner.id=CASE WHEN c.status='available' THEN c.current_recruiter_user_id ELSE COALESCE(latest.owner_user_id,c.current_recruiter_user_id) END
+      LEFT JOIN app_users current_recruiter ON current_recruiter.id=c.current_recruiter_user_id
       LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       LEFT JOIN LATERAL (
         SELECT ep.reason_code,ep.reason,ep.effective_date
@@ -662,13 +646,22 @@ export async function listCandidateDirectory(actor:Actor):Promise<CandidateDirec
         WHERE ep.worker_id=wp.id AND ep.status='completed'
         ORDER BY ep.effective_date DESC,ep.completed_at DESC NULLS LAST LIMIT 1
       ) exit_info ON true
+      WHERE c.organization_id=${actor.organizationId}::uuid
       ORDER BY c.updated_at DESC
     `;
-    return rows.filter(row=>canReadRow(actor.access,"recruiting.candidate.read",row,actor)).map(row=>{
-      const latestStage=row.rawStage?normalizeRecruitingStage(row.rawStage):null;
-      const {rawStage,rawStatus,organizationId,createdByUserId,ownerUserId,managerUserId,objectId,regionId,clientId,assigneeUserIds,...rest}=row;
-      void rawStatus;void organizationId;void createdByUserId;void ownerUserId;void managerUserId;void objectId;void regionId;void clientId;void assigneeUserIds;
-      return {...rest,latestStage,latestStageLabel:latestStage?recruitingStageLabels[latestStage]:null} as CandidateDirectoryRow;
+    return rows.flatMap(row=>{
+      if(row.organizationId!==actor.organizationId)return[];
+      const related=(byCandidate.get(row.id)??[]).sort((a,b)=>(b.updatedAt??"").localeCompare(a.updatedAt??""));
+      if(!related.length&&!canReadRow(actor.access,"recruiting.candidate.read",row,actor))return[];
+      const latest=related[0];
+      const active=related.filter(application=>["new","interview","documents","clearance","preparation"].includes(application.stage)).length;
+      const status:CandidateDirectoryRow["status"]=row.workerId&&row.workerStatus==="active"?"worker":row.rawStatus==="available"?"available":active?"active":related.some(application=>application.stage==="reserve")?"reserve":related.length&&related.every(application=>["rejected","no_show"].includes(application.stage))?"completed":"candidate";
+      const {rawStatus,workerStatus,organizationId,createdByUserId,ownerUserId,assigneeUserIds,...rest}=row;
+      void rawStatus;void workerStatus;void organizationId;void createdByUserId;void ownerUserId;void assigneeUserIds;
+      return [{...rest,status,latestNeed:latest?.need??null,latestObject:latest?.object??null,
+        latestStage:latest?.stage??null,latestStageLabel:latest?.stageLabel??null,
+        owner:row.rawStatus==="available"?row.owner:latest?.owner??row.owner,
+        applicationsCount:related.length,activeApplications:row.rawStatus==="available"?0:active}];
     });
   });
 }
@@ -733,16 +726,21 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
       LEFT JOIN worker_profiles wp ON wp.origin_candidate_id=c.id AND wp.organization_id=c.organization_id
       LEFT JOIN app_users original_recruiter ON original_recruiter.id=c.original_recruiter_user_id
       LEFT JOIN app_users current_recruiter ON current_recruiter.id=c.current_recruiter_user_id
-      WHERE c.id=${id}::uuid
+      WHERE c.id=${id}::uuid AND c.organization_id=${actor.organizationId}::uuid
     `;
-    if (!candidate || !canReadRow(actor.access,"recruiting.candidate.read",candidate,actor)) return null;
+    if (!candidate || candidate.organizationId !== actor.organizationId) return null;
+    const canReadCandidate = canReadRow(actor.access,"recruiting.candidate.read",candidate,actor);
+    // An accessible application grants the shared person card, never other contexts.
+    if (!canReadCandidate && !applications.length) return null;
     const applicationIds = applications.map((application) => application.applicationId);
     const [communications, history, contacts, documents] = await Promise.all([
       sql<CandidateCommunication[]>`
         SELECT cc.id,cc.application_id "applicationId",cc.channel,cc.direction,cc.summary,
           to_char(cc.happened_at,'DD.MM.YYYY HH24:MI') "happenedAt",u.display_name author
         FROM candidate_communications cc JOIN app_users u ON u.id=cc.created_by_user_id
-        WHERE cc.candidate_id=${id}::uuid ORDER BY cc.happened_at DESC LIMIT 100
+        WHERE cc.candidate_id=${id}::uuid
+          AND (cc.application_id=ANY(${applicationIds}::uuid[]) OR (cc.application_id IS NULL AND ${canReadCandidate}))
+        ORDER BY cc.happened_at DESC LIMIT 100
       `,
       sql<CandidateStageEvent[]>`
         SELECT h.id,h.application_id "applicationId",h.from_stage "fromStage",h.to_stage "toStage",h.reason,h.reason_code "reasonCode",
@@ -766,18 +764,22 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
         FROM recruiting_document_types dt
         LEFT JOIN candidate_documents cd ON cd.candidate_id=${id}::uuid AND cd.document_type_id=dt.id
         LEFT JOIN need_document_requirements ndr ON ndr.document_type_id=dt.id AND ndr.required
-          AND EXISTS(SELECT 1 FROM candidate_applications ca0 WHERE ca0.candidate_id=${id}::uuid AND ca0.need_id=ndr.need_id)
+          AND EXISTS(SELECT 1 FROM candidate_applications ca0 WHERE ca0.candidate_id=${id}::uuid AND ca0.need_id=ndr.need_id AND ca0.id=ANY(${applicationIds}::uuid[]))
         LEFT JOIN needs n ON n.id=ndr.need_id
         LEFT JOIN specialties s ON s.id=n.specialty_id
         LEFT JOIN objects o ON o.id=n.object_id
-        LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id
+        LEFT JOIN candidate_applications ca ON ca.candidate_id=${id}::uuid AND ca.need_id=n.id AND ca.id=ANY(${applicationIds}::uuid[])
         LEFT JOIN candidate_application_documents cad ON cad.application_id=ca.id AND cad.document_type_id=dt.id
         WHERE dt.active AND (dt.default_required OR cd.id IS NOT NULL OR ndr.need_id IS NOT NULL)
         ORDER BY CASE dt.group_type WHEN 'employment' THEN 1 ELSE 2 END,dt.sort_order,n.created_at DESC NULLS LAST
       `,
     ]);
     const {organizationId,ownerUserId,createdByUserId,assigneeUserIds,...safeCandidate}=candidate;void organizationId;void ownerUserId;void createdByUserId;void assigneeUserIds;
-    return {...safeCandidate, contacts, documents, applications, communications, history};
+    const visibleApplications = canReadCandidate ? applications : applications.map(application => ({
+      ...application,
+      recentCommunications: application.recentCommunications?.filter(item => item.applicationId === application.applicationId),
+    }));
+    return {...safeCandidate, contacts, documents, applications:visibleApplications, communications, history};
   });
 }
 

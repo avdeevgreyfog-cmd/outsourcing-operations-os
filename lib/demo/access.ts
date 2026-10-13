@@ -14,7 +14,7 @@ const ALL = [
   "home.command.read","task.read","task.edit","sales.lead.read","sales.lead.create","sales.lead.edit",
   "sales.client.read","sales.client.create","sales.client.edit","sales.request.read","sales.request.create","sales.request.edit",...COMMERCIAL,
   "calculation.scenario.read","calculation.scenario.create","calculation.scenario.edit","calculation.scenario.approve","calculation.rate_reference.read","calculation.rate_reference.edit","calculation.rules.read","calculation.rules.manage",
-  "operations.object.read","operations.object.edit","operations.need.read","operations.need.create","operations.need.edit","operations.shift.read","operations.shift.edit","operations.crew.read","operations.crew.manage","assets.read","assets.manage","supply.housing.read","supply.housing.manage","supply.transport.read","supply.transport.manage","supplier.read","supplier.manage","procurement.read","procurement.create","procurement.manage","procurement.finance",
+  "operations.object.read","operations.object.create","operations.object.assign","operations.object.edit","operations.need.read","operations.need.create","operations.need.edit","operations.shift.read","operations.shift.edit","operations.crew.read","operations.crew.manage","assets.read","assets.manage","supply.housing.read","supply.housing.manage","supply.transport.read","supply.transport.manage","supplier.read","supplier.manage","procurement.read","procurement.create","procurement.manage","procurement.finance",
   "recruiting.candidate.read","recruiting.candidate.create","recruiting.candidate.edit","recruiting.candidate.assign","recruiting.candidate.convert","recruiting.analytics.configure","recruiting.pipeline.configure","recruiting.sources.manage",
   "worker.read","worker.edit","worker.offboarding.manage","worker.compensation.read","worker.personal_docs.read","time.time_entry.read","time.time_entry.edit",
   "time.timesheet.read","time.timesheet.edit","time.timesheet.submit","time.timesheet.approve_client",
@@ -71,6 +71,11 @@ DEMO_ACTORS.recruiter_staff_3 = {
 
 export function getDemoActor(code = "director") {
   const actor = structuredClone(DEMO_ACTORS[code] ?? DEMO_ACTORS.director);
+  // Organization membership is a unit scope, not an object assignment.
+  // Declare it explicitly so the demo does not depend on the old scope leak.
+  if(actor.access.scopes["organization.read"]?.some(scope=>scope.type==="assigned_to_me")){
+    actor.access.scopes["organization.read"]=[{type:"org_unit",ids:[...actor.orgUnitIds]}];
+  }
   // Tender fixtures follow the same commercial read scope as request fixtures.
   // This only supplies demo permissions; live access is loaded from the database.
   const requestScopes = actor.access.scopes["sales.request.read"];

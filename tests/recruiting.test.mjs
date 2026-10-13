@@ -16,8 +16,8 @@ test('preparation separates arrival from first shift and confirmed work requires
  assert.ok(validateStageChange({stage:'new',plannedStartDate:null,workflow:{}},{stage:'first_shift'},now));
  assert.equal(validateStageChange({stage:'preparation',plannedStartDate:'2026-09-20',workflow:{travelState:'not_required'}},{stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{travelState:'not_required'}},now),null);
  assert.ok(validateStageChange({stage:'preparation',plannedStartDate:'2026-09-20',workflow:{travelState:'ticket_required'}},{stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{travelState:'ticket_required'}},now));
- assert.ok(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{}},{stage:'first_shift',actualStartAt:'2026-09-20T10:00:00Z',workflow:{firstShiftOutcome:'worked'}},now));
- assert.equal(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{}},{stage:'first_shift',actualStartAt:'2026-09-19T10:00:00Z',workflow:{firstShiftOutcome:'worked'}},now),null);
+ assert.ok(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{}},{stage:'first_shift',actualStartAt:'2026-09-20T10:00:00Z',workflow:{firstShiftOutcome:'worked',employmentRelationType:'gph'}},now));
+ assert.equal(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',workflow:{}},{stage:'first_shift',actualStartAt:'2026-09-19T10:00:00Z',workflow:{firstShiftOutcome:'worked',employmentRelationType:'gph'}},now),null);
  assert.ok(validateStageChange({stage:'first_shift',plannedStartDate:'2026-09-20',actualStartAt:'2026-09-19T10:00:00Z'},{stage:'interview'},now));
 });
 
@@ -58,4 +58,16 @@ test('work dates render identically on server and browser time zones',()=>{
  const previous=process.env.TZ;
  try{process.env.TZ='UTC';const server=formatWorkDate('2026-09-19T06:00:00Z');process.env.TZ='Europe/Berlin';assert.equal(formatWorkDate('2026-09-19T06:00:00Z'),server);assert.ok(server.includes('09:00'));}
  finally{if(previous===undefined)delete process.env.TZ;else process.env.TZ=previous;}
+});
+
+
+test('confirmed first exit keeps its date and requires an explicit relation choice only on new confirmation',()=>{
+ const row={stage:'first_shift',plannedStartDate:'2026-09-19',workflow:{}};
+ const fact='2026-09-19T10:00:00Z';
+ assert.match(validateStageChange(row,{stage:'first_shift',actualStartAt:fact,workflow:{firstShiftOutcome:'worked'}},now),/Выберите тип/);
+ for(const employmentRelationType of ['employment','gph','npd','custom','unspecified'])assert.equal(validateStageChange(row,{stage:'first_shift',actualStartAt:fact,workflow:{firstShiftOutcome:'worked',employmentRelationType}},now),null);
+ assert.match(validateStageChange({...row,actualStartAt:fact},{stage:'first_shift',actualStartAt:null},now),/дату нельзя/);
+ assert.match(validateStageChange({...row,actualStartAt:fact},{stage:'first_shift',actualStartAt:'2026-09-18T10:00:00Z'},now),/дату нельзя/);
+ assert.equal(validateStageChange({...row,actualStartAt:'2026-09-01T10:00:00Z'},{stage:'retention_7'},now),null);
+ assert.match(validateStageChange(row,{stage:'first_shift',actualStartAt:fact,workflow:{firstShiftOutcome:'pending'}},now),/только при подтверждении/);
 });

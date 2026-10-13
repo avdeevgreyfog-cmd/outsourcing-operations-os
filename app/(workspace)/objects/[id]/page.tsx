@@ -86,7 +86,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canHousing=hasCapability(actor.access,"supply.housing.read");
   const canProcurement=hasCapability(actor.access,"procurement.read");
   const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
-  const canAssignObject=hasCapability(actor.access,"operations.object.assign");
+  const canAssignObject=canReadRow(actor.access,"operations.object.assign",object,actor);
   const objectManagementOptions=canEditObject
     ?await safeObjectLoad(id,"object-management",()=>getObjectManagementOptions(actor,{includeAssignments:canAssignObject}),null)
     :null;
@@ -156,7 +156,6 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const openSupply=objectSupplyRequests.filter(row=>!["closed","rejected"].includes(row.status));
   const launchBlockers=objectLaunchTasks.filter(row=>row.status!=="done"&&(row.status==="blocked"||row.critical||["high","critical"].includes(row.risk)));
   const launchProgress=objectLaunchTasks.length?Math.round(objectLaunchTasks.reduce((sum,row)=>sum+Number(row.progress||0),0)/objectLaunchTasks.length):100;
-  const currentDeficit=Math.max(required-working,0);
   const forecastAvailable=objectForecast.length?projectedAvailable:working;
   const effectiveForecastCovered=Math.max(required-projectedDeficit,0);
   const projectedSurplus=Math.max(forecastAvailable-effectiveForecastCovered,0);
@@ -217,12 +216,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     </div>
 
     {panel("overview",<>
-      <div className="metrics-grid object-operations-metrics object-overview-metrics">
-        <Metric label="Работает / требуется" value={working+" / "+required} note={currentDeficit?`дефицит ${currentDeficit}`:"план закрыт"} tone={currentDeficit?"warn":"good"}/>
-        <Metric label="Смена сегодня" value={todayAssigned+" / "+todayDemand} note={todayDemand?(noShows?`невыходов ${noShows}`:"по плану"):"смена не задана"} tone={todayDemand>todayAssigned||noShows?"warn":"good"}/>
-        <Metric label="Готовы к выходу · 7 дней" value={readyStarts7} note={readyStarts7?"согласованные ближайшие выходы":"выходов не запланировано"}/>
-        <Metric label="Через 30 дней" value={effectiveForecastCovered+" / "+required} note={projectedDeficit?`прогнозный дефицит ${projectedDeficit}`:"план покрыт"} tone={projectedDeficit?"warn":"good"}/>
-      </div>
+
 
       <div className="workspace-grid object-overview-grid object-overview-grid-v2">
         <div className="object-overview-main">
@@ -327,8 +321,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     />)}
 
     {panel("quality",<>
-      <div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div>
-      <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} canFinance={canFinanceAdjust} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
+
+      <Section title="Инциденты и нарушения" note="Фиксируйте событие, сотрудника и последствия. Предлагаемая сумма не удерживается автоматически."><div className="metrics-grid"><Metric label="Открытые инциденты" value={openIncidents} tone={openIncidents?"warn":"good"}/><Metric label="Критические" value={objectIncidents.filter(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical").length} tone={objectIncidents.some(row=>!["resolved","closed"].includes(row.status)&&row.severity==="critical")?"bad":"good"}/><Metric label="Финансовые последствия" value={objectIncidents.filter(row=>Number(row.financialEffectAmount??0)>0&&row.financialEffectStatus==="proposed").length} tone={objectIncidents.some(row=>row.financialEffectStatus==="proposed")?"warn":"good"}/><Metric label="Невыходы сегодня" value={noShows} tone={noShows?"bad":"good"}/></div><ObjectQualityWorkspace objectId={id} rows={objectIncidents} workers={objectWorkers} canEdit={canEditObject} canFinance={canFinanceAdjust} demo={actor.demo}/><div className="section-actions"><Link className="button" href={"/incidents?object="+id}>Общий журнал</Link></div></Section>
     </>)}
 
     {panel("analytics",objectAnalyticsDetail?<ObjectAnalyticsWorkspace
@@ -348,8 +342,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     {panel("finance",<Section title="Финансы объекта" note="Операционный контроль начислений, выплат, ежедневной схемы и сверки с финансовым контуром."><ObjectFinanceWorkspace objectId={id} pnl={objFinance} accruals={objectAccruals} payments={objectPayments} daily={dailyPayments} incidents={objectIncidents} objectDefaultDailyPaymentShifts={object.defaultDailyPaymentShifts??0} canConfirmDaily={canConfirmDaily} canRecordPayment={canRecordPayment} canReconcilePayments={canFinanceAdjust} canEditWorker={canEditWorkers} demo={actor.demo}/><div className="section-actions"><Link className="button" href="/finance">Полный финансовый контур</Link></div></Section>)}
 
     {panel("documents",<Section title="Документы объекта" note="Рабочие документы объекта и ссылки на исходные коммерческие и договорные сущности без дублирования файлов."><ObjectDocumentsWorkspace objectId={id} rows={objectDocuments} linked={linkedObjectDocuments} canEdit={canEditObject} demo={actor.demo}/></Section>)}
-    {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
-        {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span></div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
+    {objectManagementOptions&&panel("settings",<ObjectSettingsWorkspace key={object.editVersion??object.id} object={object} options={objectManagementOptions} demo={actor.demo} canAssign={canAssignObject}/>)}
+        {panel("history",<Section title="История объекта" note="Системные изменения объекта и ответственности. Комментарии пользователей ведутся отдельно.">{objectHistory.length?<div className="object-history-list">{objectHistory.map(item=><article key={item.id}><time>{item.createdAt}</time><div><strong>{objectHistoryLabel(item.verb,item.summary)}</strong><span>{item.actor}</span>{objectSettingsHistoryDetail(item.metadata)&&<p>{objectSettingsHistoryDetail(item.metadata)}</p>}</div></article>)}</div>:<Empty title="История пока пуста" text="Значимые изменения объекта будут автоматически появляться здесь."/>}</Section>)}
   </>;
   return staticDemo
     ?<StaticDemoQueryTabsController enabled defaultTab="overview" className={workspaceClass}>{workspaceContent}</StaticDemoQueryTabsController>
@@ -404,6 +398,7 @@ function objectContactChannel(contact:{preferredChannel:string|null;phone:string
 
 
 function objectHistoryLabel(verb:string,summary:string){
+  if(verb==="status_changed")return "Изменён статус объекта";
   if(summary)return summary;
   return ({
     created_manual:"Объект добавлен вручную",
@@ -411,4 +406,18 @@ function objectHistoryLabel(verb:string,summary:string){
     manager_handover:"Передан основному менеджеру",
     settings_updated:"Обновлены настройки объекта",
   } as Record<string,string>)[verb]??"Изменён объект";
+}
+
+function objectSettingsHistoryDetail(metadata:Record<string,unknown>){
+  const before=metadata.before;
+  const roles:Record<string,string>={primary_manager:"Основной менеджер",additional_manager:"Дополнительный менеджер",recruiter:"Подбор"};
+  const team=(rows:unknown)=>Array.isArray(rows)?rows.filter(row=>row&&typeof row.name==="string"&&roles[row.role]).map(row=>`${roles[row.role]}: ${row.name}`).sort().join(", "):null;
+  const oldTeam=team(metadata.responsibilitiesBefore),newTeam=team(metadata.responsibilitiesAfter);
+  const responsibilityChange=oldTeam!==null&&newTeam!==null&&oldTeam!==newTeam?`Ответственные: ${oldTeam||"Не назначены"} → ${newTeam||"Не назначены"}`:"";
+  if(!before||typeof before!=="object"||Array.isArray(before))return responsibilityChange;
+  const labels:Record<string,string>={name:"Название",address:"Адрес",targetStartDate:"Плановый старт",actualStartDate:"Начало работы",actualEndDate:"Завершение работы",status:"Статус",recruitingMode:"Подбор",defaultTransitionDays:"Адаптация, дней",defaultDailyPaymentShifts:"Ежедневные выплаты, смен",defaultScheduleWorkDays:"Рабочие дни",defaultScheduleRestDays:"Выходные дни",defaultShiftKind:"Смена",ppeTaskEnabled:"Напоминание по СИЗ",ppeTaskDueDays:"Срок СИЗ, дней"};
+  const values:Record<string,string>={day:"День",night:"Ночь",mixed:"День / ночь",company_rules:"По правилам компании",object_team:"Команда объекта",...objectStatusLabels};
+  const display=(value:unknown)=>value==null||value===""?"Не указано":typeof value==="boolean"?value?"Да":"Нет":values[String(value)]??String(value);
+  const source=before as Record<string,unknown>;
+  return [responsibilityChange,...Object.entries(labels).filter(([key])=>key in source&&key in metadata&&source[key]!==metadata[key]).map(([key,label])=>`${label}: ${display(source[key])} → ${display(metadata[key])}`)].filter(Boolean).join("; ");
 }

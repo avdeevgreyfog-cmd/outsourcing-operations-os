@@ -14,7 +14,7 @@ export default async function ApprovalsPage(){
   const actor=await requireActor();
   const [rows,calculations]=await Promise.all([listAllApprovals(actor),hasCapability(actor.access,"calculation.scenario.read")?listCommercialCalculations(actor):Promise.resolve([])]);
   const calculationMap=new Map(calculations.map(item=>[item.id,item]));const pending=rows.filter(item=>item.status==="pending");
-  const mayDecide=hasCapability(actor.access,"approval.decide");const allOrg=actor.access.allOrg||actor.access.scopes["approval.decide"]?.some(scope=>scope.type==="all_org");
+  const mayDecide=hasCapability(actor.access,"approval.decide");const allOrg=actor.access.scopes["approval.decide"]?.some(scope=>scope.type==="all_org")??false;
   return <>
     <PageHeader eyebrow="Команда" title="Согласования" subtitle="Единая очередь решений по расчётам, коммерческим предложениям, договорам, тендерам и операционным заявкам. Решение фиксируется в общей истории." breadcrumbs={[{label:"Главная"},{label:"Команда"},{label:"Согласования"}]}/>
     <SummaryStrip><span>Ожидают решения <strong>{pending.length}</strong></span><span>Всего в выборке <strong>{rows.length}</strong></span></SummaryStrip>

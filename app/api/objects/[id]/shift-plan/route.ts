@@ -52,7 +52,7 @@ async function dateLocked(tx:Sql,objectId:string,date:string){
   const [locked]=await tx<Array<{id:string}>>`
     SELECT id FROM timesheet_snapshots
     WHERE object_id=${objectId}::uuid AND period_start<=${date}::date AND period_end>=${date}::date
-      AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+      AND status IN ('fixed','internal_submitted','internal_checked','client_sent','client_approved','closed')
     ORDER BY created_at DESC LIMIT 1`;
   return Boolean(locked);
 }
@@ -110,10 +110,16 @@ async function assignCell(tx:Sql,actor:{organizationId:string;userId:string},obj
   const absence=await confirmedAbsence(tx,row.workerId,date);
   if(absence&&["day","night","reserve_day","reserve_night"].includes(kind))return skipProtected?"absence":Promise.reject(new Error("На выбранную дату у сотрудника подтверждено плановое отсутствие."));
 
-  const affected=await tx<Array<{id:string}>>`
-    SELECT DISTINCT sh.id FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+  const affected=await tx<Array<{id:string;kind:string;reserve:boolean;status:string}>>`
+    SELECT DISTINCT sh.id,sh.shift_kind kind,sa.is_reserve reserve,sa.confirmation_status status FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
     WHERE sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date
       AND sa.worker_id=${row.workerId}::uuid AND sa.confirmation_status<>'cancelled'`;
+  const requestedKind=kind==="night"||kind==="reserve_night"?"night":"day";
+  const requestedReserve=kind==="reserve_day"||kind==="reserve_night";
+  const planChanged=kind==="clear"||kind==="off"||!affected.some(a=>a.kind===requestedKind&&a.reserve===requestedReserve);
+  if(planChanged)await tx`UPDATE worker_shift_reports SET confirmed_at=NULL,updated_at=now()
+    WHERE worker_id=${row.workerId}::uuid AND object_id=${objectId}::uuid AND work_date=${date}::date
+      AND reported_hours IS NULL AND hours_reconciled_at IS NULL`;
   if(affected.length)await tx`UPDATE shift_assignments sa SET confirmation_status='cancelled'
     FROM shifts sh WHERE sh.id=sa.shift_id AND sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date
       AND sa.worker_id=${row.workerId}::uuid AND sa.confirmation_status<>'cancelled'`;
@@ -138,19 +144,20 @@ async function assignCell(tx:Sql,actor:{organizationId:string;userId:string},obj
       AND shift_kind=${shiftKind} AND status<>'cancelled'
     ORDER BY created_at LIMIT 1`;
   if(!shift){
+    const [clock]=await tx<Array<{timezone:string}>>`SELECT COALESCE((SELECT timezone FROM object_shift_reporting_settings WHERE object_id=${objectId}::uuid),'Europe/Moscow') timezone`;
     [shift]=await tx<Array<{id:string}>>`
       INSERT INTO shifts(
         organization_id,object_id,specialty_id,shift_date,starts_at,ends_at,shift_kind,demand_count,assigned_count,reserve_count,planned_cost,status,created_by_user_id
       ) VALUES(
         ${actor.organizationId}::uuid,${objectId}::uuid,${row.specialtyId}::uuid,${date}::date,
-        (${date}::date+${start}::time)::timestamptz,
-        (${date}::date+${end}::time+CASE WHEN ${end}::time<=${start}::time THEN interval '1 day' ELSE interval '0 day' END)::timestamptz,
+        (${date}::date+${start}::time) AT TIME ZONE ${clock.timezone},
+        (${date}::date+${end}::time+CASE WHEN ${end}::time<=${start}::time THEN interval '1 day' ELSE interval '0 day' END) AT TIME ZONE ${clock.timezone},
         ${shiftKind},1,0,0,0,'open',${actor.userId}::uuid
       ) RETURNING id`;
   }
   await tx`INSERT INTO shift_assignments(organization_id,shift_id,worker_id,confirmation_status,is_reserve,assigned_by_user_id)
-    VALUES(${actor.organizationId}::uuid,${shift.id}::uuid,${row.workerId}::uuid,'pending',${reserve},${actor.userId}::uuid)
-    ON CONFLICT(shift_id,worker_id) DO UPDATE SET confirmation_status='pending',is_reserve=EXCLUDED.is_reserve,assigned_by_user_id=EXCLUDED.assigned_by_user_id`;
+    VALUES(${actor.organizationId}::uuid,${shift.id}::uuid,${row.workerId}::uuid,${planChanged?'pending':affected[0]?.status??'pending'},${reserve},${actor.userId}::uuid)
+    ON CONFLICT(shift_id,worker_id) DO UPDATE SET confirmation_status=EXCLUDED.confirmation_status,is_reserve=EXCLUDED.is_reserve,assigned_by_user_id=EXCLUDED.assigned_by_user_id`;
   if(reserve)await clearPlanEntry(tx,objectId,row.workerId,date);
   else await upsertPlanEntry(tx,actor,objectId,row.workerId,date,shiftKind);
   await syncCounts(tx,[...affected.map(item=>item.id),shift.id]);
@@ -206,7 +213,7 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
         SELECT period_start::text "from",period_end::text "to",status
         FROM timesheet_snapshots
         WHERE object_id=${id}::uuid AND period_end>=${start}::date AND period_start<=${end}::date
-          AND status IN ('internal_submitted','internal_checked','client_sent','client_approved','closed')
+          AND status IN ('fixed','internal_submitted','internal_checked','client_sent','client_approved','closed')
         ORDER BY period_start`;
       return {assignments,entries,absences,demand,lockedRanges,patterns};
     });
@@ -224,9 +231,18 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const {id}=await params;
     const body=schema.parse(await request.json());
     if(actor.demo)return NextResponse.json({ok:true,demo:true});
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const scope=await getScope(tx,id);
       if(!scope||!canReadRow(actor.access,"operations.shift.edit",scope,actor))throw new AccessDeniedError("operations.shift.edit");
+
+      // Use the same worker-first lock order as employee replies, links and exit.
+      // Lock the batch in UUID order before reading assignments or time entries.
+      const selectedWorkers=body.action==="set_cell"?[body.workerId]:body.action==="set_cells"?body.cells.map(cell=>cell.workerId):body.workerIds;
+      await tx`SELECT w.id FROM worker_profiles w
+        WHERE w.organization_id=${actor.organizationId}::uuid
+          AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.worker_id=w.id AND a.object_id=${id}::uuid)
+          AND (${selectedWorkers?.length??0}=0 OR w.id=ANY(${selectedWorkers??[]}::uuid[]))
+        ORDER BY w.id FOR UPDATE OF w`;
 
       const patterns=await tx<Array<{workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night"}>>`SELECT worker_id "workerId",effective_from::text "effectiveFrom",work_days "workDays",rest_days "restDays",shift_kind "shiftKind" FROM worker_schedule_pattern_changes WHERE object_id=${id}::uuid AND status='accepted' AND effective_from<=current_date+31 ORDER BY effective_from DESC`;
       const assignments=await tx<Assignment[]>`
@@ -282,7 +298,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,'shift_plan_generated',
           'Сформирован план смен из графиков сотрудников',${tx.json({startDate:body.startDate,endDate:body.endDate,workerIds:body.workerIds??null,updated,skipped,skippedFact,skippedLocked,skippedAbsence,skippedExisting})})`;
       return {ok:true,updated,skipped,skippedFact,skippedLocked,skippedAbsence,skippedExisting};
-    }));
+    });
     return NextResponse.json(result);
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры плана",issues:error.issues},{status:400});

@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { randomBytes } from "node:crypto";
 import type { Actor } from "@/lib/access/types";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -174,18 +175,19 @@ export async function submitPublicRequest(token: string, payload: PublicRequestS
 
 export async function reviewPublicSubmission(actor: Actor, requestId: string, submissionId: string, decision: "accept" | "reject", comment: string | null) {
   requireCapability(actor, "sales.request.edit");
-  if (actor.demo) throw new Error("В демонстрационном режиме изменения доступны только для просмотра интерфейса");
+  if (actor.demo) throw new CommercialRequestConflict("В демонстрационном режиме изменения доступны только для просмотра интерфейса");
   const current = await getCommercialRequest(actor, requestId);
-  if (!current) throw new Error("Заявка не найдена");
+  if (!current) throw new CommercialRequestConflict("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", current, actor)) throw new AccessDeniedError("sales.request.edit");
-  if (current.archivedAt || ["accepted","launched"].includes(current.status)) throw new Error("Зафиксированную заявку нельзя обновить из внешней формы");
+  if (current.archivedAt || ["accepted","launched"].includes(current.status)) throw new CommercialRequestConflict("Зафиксированную заявку нельзя обновить из внешней формы");
 
   return withTenant(actor.organizationId, actor.userId, async (tx) => {
+    await assertRequestCommercialEditable(tx,actor,requestId);
     const [submission] = await tx<Array<{status:string;payload:PublicRequestSubmissionPayload}>>`
       SELECT status,payload FROM request_public_submissions WHERE id=${submissionId}::uuid AND request_id=${requestId}::uuid FOR UPDATE
     `;
-    if (!submission) throw new Error("Версия внешней формы не найдена");
-    if (submission.status !== "pending") throw new Error("Эта версия уже обработана");
+    if (!submission) throw new CommercialRequestConflict("Версия внешней формы не найдена");
+    if (submission.status !== "pending") throw new CommercialRequestConflict("Эта версия уже обработана");
 
     if (decision === "reject") {
       await tx`UPDATE request_public_submissions SET status='rejected',reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),review_comment=${comment} WHERE id=${submissionId}::uuid`;
@@ -195,7 +197,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
     const payload = submission.payload;
     for (const role of payload.roles) {
       const [specialty] = await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${role.specialtyId}::uuid AND active`;
-      if (!specialty) throw new Error("Одна из выбранных специальностей больше недоступна. Проверьте заявку вручную");
+      if (!specialty) throw new CommercialRequestConflict("Одна из выбранных специальностей больше недоступна. Проверьте заявку вручную");
     }
 
     await tx`
@@ -215,7 +217,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
       if (role.id) {
         const oldRole = current.roles.find((item) => item.id === role.id);
         if (oldRole && linkedIds.some((item) => item.id === role.id) && oldRole.specialtyId !== role.specialtyId) {
-          throw new Error("Нельзя менять специальность позиции, по которой уже создан расчёт");
+          throw new CommercialRequestConflict("Нельзя менять специальность позиции, по которой уже создан расчёт");
         }
         await tx`
           UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${tx.json(toJsonValue(role.schedule))},
@@ -231,7 +233,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
     }
     for (const oldRole of current.roles) {
       if (suppliedIds.has(oldRole.id)) continue;
-      if (linkedIds.some((item) => item.id === oldRole.id)) throw new Error("Нельзя удалить позицию, по которой уже создан расчёт");
+      if (linkedIds.some((item) => item.id === oldRole.id)) throw new CommercialRequestConflict("Нельзя удалить позицию, по которой уже создан расчёт");
       await tx`DELETE FROM request_roles WHERE id=${oldRole.id}::uuid AND request_id=${requestId}::uuid`;
     }
 

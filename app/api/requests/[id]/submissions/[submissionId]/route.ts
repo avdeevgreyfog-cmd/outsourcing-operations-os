@@ -1,3 +1,4 @@
+import {CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
@@ -18,9 +19,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = schema.parse(await request.json());
     return NextResponse.json(await reviewPublicSubmission(actor, id, submissionId, body.decision, body.comment ?? null));
   } catch (error) {
+    if(error instanceof CommercialRequestConflict)return NextResponse.json({error:error.message},{status:409});
     if (error instanceof z.ZodError) return NextResponse.json({ error: "Некорректное решение" }, { status: 400 });
     if (error instanceof AccessDeniedError) return NextResponse.json({ error: "Недостаточно прав" }, { status: 403 });
     console.error(error);
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal error" }, { status: 500 });
+    return NextResponse.json({ error: "Не удалось выполнить действие. Повторите попытку" }, { status: 500 });
   }
 }

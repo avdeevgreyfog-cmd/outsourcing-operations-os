@@ -1,7 +1,8 @@
 import {NextResponse} from "next/server";
+import {AccessDeniedError} from "@/lib/access/server";
 import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
-import {managerPortalData,editWorkerLink,reconcileEmployeeHours} from "@/lib/operations/worker-timesheet-portal";
+import {managerPortalData,editWorkerLink,reconcileEmployeeHours,EmployeePortalError} from "@/lib/operations/worker-timesheet-portal";
 import {employeeDetailManagerList,managerEmployeeDetailAction} from "@/lib/operations/employee-self-service";
 import {managerSetScheduleOwner,managerEmployeePlanningChanges,managerReviewEmployeePlan,managerSetWorkerPattern,managerReviewPattern} from "@/lib/operations/employee-planning";
 const actions=z.discriminatedUnion("action",[
@@ -25,7 +26,7 @@ export async function GET(request:Request){
   const objectId=url.searchParams.get("objectId")??undefined;
   const [portal,details,planning]=await Promise.all([managerPortalData(actor,objectId,url.searchParams.get("workerId")??undefined),employeeDetailManagerList(actor,objectId),managerEmployeePlanningChanges(actor,objectId)]);
   return NextResponse.json({...portal,...details,...planning});
- }catch(error){console.error("worker confirmations GET",error);return NextResponse.json({error:"Не удалось загрузить подтверждения. Проверьте миграцию базы данных."},{status:500})}
+ }catch(error){if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});console.error("worker confirmations GET",error);return NextResponse.json({error:"Не удалось загрузить подтверждения. Проверьте миграцию базы данных."},{status:500})}
 }
 export async function POST(request:Request){
  try{
@@ -49,7 +50,7 @@ export async function POST(request:Request){
   return NextResponse.json(result);
  }catch(error){
   if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные"},{status:400});
-  if(error instanceof Error&&error.message.includes("Forbidden"))return NextResponse.json({error:"Недостаточно прав"},{status:403});
-  return NextResponse.json({error:error instanceof Error?error.message:"Ошибка сохранения"},{status:400});
+  if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
+  return NextResponse.json({error:error instanceof EmployeePortalError?error.message:"Не удалось выполнить действие. Попробуйте позже"},{status:error instanceof EmployeePortalError?400:500});
  }
 }

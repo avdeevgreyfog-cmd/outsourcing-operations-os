@@ -24,8 +24,8 @@ export async function GET(request:Request,{params}:{params:Promise<{id:string}>}
     if(!applicationId)return NextResponse.json({error:"Не указана заявка кандидата"},{status:400});
     if(actor.demo)return NextResponse.json({items:[]});
     const items=await withTenant(actor.organizationId,actor.userId,async sql=>{
-      const [row]=await sql<Array<{id:string;candidateId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
-        SELECT ca.id,ca.candidate_id "candidateId",ca.owner_user_id "ownerUserId",ca.manager_user_id "managerUserId",ca.object_id "objectId",
+      const [row]=await sql<Array<{id:string;organizationId:string;candidateId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
+        SELECT ca.id,ca.organization_id "organizationId",ca.candidate_id "candidateId",ca.owner_user_id "ownerUserId",ca.manager_user_id "managerUserId",ca.object_id "objectId",
           COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
           ARRAY[ca.owner_user_id::text,ca.manager_user_id::text] || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL) "assigneeUserIds"
         FROM candidate_applications ca JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
@@ -102,7 +102,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           LEFT JOIN needs n ON n.id=latest.need_id LEFT JOIN objects o ON o.id=latest.object_id
           WHERE c.id=${id}::uuid LIMIT 1
         `;
-        if(!scope||(!actor.access.allOrg&&!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor)))throw new AccessDeniedError("recruiting.candidate.edit");
+        if(!scope||!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor))throw new AccessDeniedError("recruiting.candidate.edit");
         const [documentType]=await tx<Array<{name:string;groupType:"employment"|"clearance";provider:"candidate"|"company"|"client"}>>`
           SELECT name,group_type "groupType",default_provider provider
           FROM recruiting_document_types
@@ -123,8 +123,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         `;
         return;
       }
-      const [row]=await tx<Array<{id:string;candidateId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
-        SELECT ca.id,ca.candidate_id "candidateId",ca.owner_user_id "ownerUserId",ca.manager_user_id "managerUserId",ca.object_id "objectId",
+      const [row]=await tx<Array<{id:string;organizationId:string;candidateId:string;ownerUserId:string|null;managerUserId:string|null;objectId:string|null;regionId:string|null;clientId:string|null;assigneeUserIds:string[]}>>`
+        SELECT ca.id,ca.organization_id "organizationId",ca.candidate_id "candidateId",ca.owner_user_id "ownerUserId",ca.manager_user_id "managerUserId",ca.object_id "objectId",
           COALESCE(n.region_id,o.region_id) "regionId",o.client_company_id "clientId",
           ARRAY[ca.owner_user_id::text,ca.manager_user_id::text] || ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na WHERE na.need_id=ca.need_id AND na.unassigned_at IS NULL) "assigneeUserIds"
         FROM candidate_applications ca JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id

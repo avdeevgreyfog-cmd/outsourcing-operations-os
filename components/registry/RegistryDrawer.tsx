@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 /** Shared 560px shell for quick view and simple create. */
-export function RegistryDrawer({title, subtitle, children, footer, onClose}: {title:string; subtitle?:string; children:React.ReactNode; footer:React.ReactNode; onClose:()=>void}) {
+export function RegistryDrawer({title, subtitle, children, footer, onClose, className=""}: {title:string; subtitle?:string; children:React.ReactNode; footer:React.ReactNode; onClose:()=>void; className?:string}) {
   const ref=useRef<HTMLElement>(null);
   const close=useRef(onClose);
   const id=useId();
@@ -27,7 +27,7 @@ export function RegistryDrawer({title, subtitle, children, footer, onClose}: {ti
     return()=>{document.body.style.overflow=overflow;document.removeEventListener("keydown",key);previous?.focus()};
   },[]);
   return createPortal(<div className="operis-registry-layer" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
-    <aside className="operis-registry-drawer" ref={ref} role="dialog" aria-modal="true" aria-labelledby={id}>
+    <aside className={"operis-registry-drawer "+className} ref={ref} role="dialog" aria-modal="true" aria-labelledby={id}>
       <header><div><h2 id={id}>{title}</h2>{subtitle&&<p>{subtitle}</p>}</div><button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть панель"><X size={18}/></button></header>
       <div className="operis-registry-drawer-body">{children}</div><footer>{footer}</footer>
     </aside>

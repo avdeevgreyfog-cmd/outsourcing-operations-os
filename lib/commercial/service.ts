@@ -22,6 +22,7 @@ export type CommercialRequestDetail = {
   contactId: string | null;
   title: string;
   status: string;
+  commercialLocked?: boolean;
   source: string;
   location: string;
   regionId: string | null;
@@ -82,6 +83,7 @@ export type CommercialProposalRow = {
   teamId: string | null;
   version: number;
   status: string;
+  commercialLocked?:boolean;
   scenarioCount: number;
   totalValue: number | string;
   createdAt: string;
@@ -122,6 +124,7 @@ function demoRequest(id: string): CommercialRequestDetail | null {
     contactId: null,
     title: request.title,
     status: request.status,
+    commercialLocked: demo.proposals.some(item=>item.requestId===request.id&&['accepted','launched'].includes(item.status)),
     source: "manual",
     location: request.location,
     regionId: request.regionId ?? null,
@@ -163,7 +166,7 @@ export async function getCommercialRequest(actor: Actor, id: string): Promise<Co
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [row] = await sql<Array<CommercialRequestDetail & Record<string, unknown>>>`
       SELECT r.id,r.organization_id "organizationId",r.client_company_id "clientId",COALESCE(c.name,'Без клиента') client,
-        r.contact_id "contactId",r.title,r.status,r.source,r.location_text location,r.region_id "regionId",rg.name region,
+        r.contact_id "contactId",r.title,r.status,EXISTS(SELECT 1 FROM proposals fixed WHERE fixed.request_id=r.id AND fixed.organization_id=r.organization_id AND fixed.accepted_at IS NOT NULL) "commercialLocked",r.source,r.location_text location,r.region_id "regionId",rg.name region,
         r.expected_start_date::text "startDate",r.duration_text "durationText",r.schedule_json schedule,r.lunch_paid "lunchPaid",
         r.vat_mode "vatMode",r.housing_rule "housingRule",r.travel_rule "travelRule",r.shuttle_rule "shuttleRule",
         r.ppe_rule "ppeRule",r.medical_rule "medicalRule",r.citizenship_rule "citizenshipRule",r.tools_rule "toolsRule",
@@ -267,6 +270,7 @@ export async function listCommercialProposals(actor: Actor): Promise<CommercialP
   requireCapability(actor, actor.access.capabilities.includes("sales.proposal.read") ? "sales.proposal.read" : "sales.request.read");
   if (actor.demo) return demo.proposals.map((item) => ({
     ...item,
+    commercialLocked: demo.proposals.some(fixed=>fixed.requestId===item.requestId&&['accepted','launched'].includes(fixed.status)),
     approvedAt: null,
     sentAt: null,
     acceptedAt: item.status === "accepted" ? item.createdAt : null,
@@ -276,7 +280,7 @@ export async function listCommercialProposals(actor: Actor): Promise<CommercialP
     const rows = await sql<CommercialProposalRow[]>`
       SELECT p.id,p.organization_id "organizationId",p.request_id "requestId",r.title request,COALESCE(c.name,'Без клиента') client,
         r.client_company_id "clientId",r.region_id "regionId",r.owner_user_id "ownerUserId",r.assigned_team_id "teamId",
-        p.version,p.status,cardinality(p.scenario_ids)::int "scenarioCount",COALESCE(p.total_value,0) "totalValue",
+        p.version,p.status,EXISTS(SELECT 1 FROM proposals fixed WHERE fixed.request_id=r.id AND fixed.organization_id=r.organization_id AND fixed.accepted_at IS NOT NULL) "commercialLocked",cardinality(p.scenario_ids)::int "scenarioCount",COALESCE(p.total_value,0) "totalValue",
         to_char(p.created_at,'DD.MM.YYYY') "createdAt",u.display_name "createdBy",
         p.approved_at::text "approvedAt",p.sent_at::text "sentAt",p.accepted_at::text "acceptedAt",p.launched_at::text "launchedAt"
       FROM proposals p JOIN requests r ON r.id=p.request_id LEFT JOIN client_companies c ON c.id=r.client_company_id

@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
@@ -43,7 +44,7 @@ export async function POST(request:Request){
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"calculation.scenario.create");if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const b=schema.parse(await request.json());
-    const row=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const row=await withTenant(actor.organizationId,actor.userId,async tx=>{
       let calculationId:string|null=b.calculationId??null;
       let calculationVersion=1;
       let existingCalculation:ExistingCalculation|undefined;
@@ -54,12 +55,12 @@ export async function POST(request:Request){
           SELECT id,request_id "requestId",tender_id "tenderId",status,version,economics_date::text "economicsDate",allocation_mode "allocationMode"
           FROM calculations WHERE id=${calculationId}::uuid
         `;
-        if(!calc)throw new Error("Расчёт не найден");
-        if(["approved","superseded"].includes(calc.status))throw new Error("Принятый расчёт зафиксирован. Создайте новую версию расчёта для изменений");
+        if(!calc)throw new CommercialRequestConflict("Расчёт не найден");
+        if(["approved","superseded"].includes(calc.status))throw new CommercialRequestConflict("Принятый расчёт зафиксирован. Создайте новую версию расчёта для изменений");
         existingCalculation=calc;calculationVersion=calc.version;
         sourceType=calc.tenderId?"tender":"request";sourceId=calc.tenderId??calc.requestId;
       }
-      if(!sourceType||!sourceId)throw new Error("Не удалось определить источник расчёта");
+      if(!sourceType||!sourceId)throw new CommercialRequestConflict("Не удалось определить источник расчёта");
       const resolvedSourceType:SourceType=sourceType;
       const resolvedSourceId:string=sourceId;
       const requestId:string|null=resolvedSourceType==="request"?resolvedSourceId:null;
@@ -67,14 +68,15 @@ export async function POST(request:Request){
 
       let sourceRow:SourceScope|undefined;
       if(resolvedSourceType==="request"){
+        await assertRequestCommercialEditable(tx,actor,resolvedSourceId);
         [sourceRow]=await tx<SourceScope[]>`
           SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",status,
             archived_at::text "archivedAt",expected_start_date::text "expectedStartDate"
           FROM requests WHERE id=${resolvedSourceId}::uuid
         `;
         if(!sourceRow||!canReadRow(actor.access,"calculation.scenario.create",sourceRow,actor))throw new AccessDeniedError("calculation.scenario.create");
-        if(sourceRow.archivedAt)throw new Error("Сначала восстановите заявку из архива");
-        if(["accepted","launched","lost"].includes(sourceRow.status??""))throw new Error("Коммерческий цикл заявки закрыт; новый расчёт нельзя добавить в зафиксированный результат");
+        if(sourceRow.archivedAt)throw new CommercialRequestConflict("Сначала восстановите заявку из архива");
+        if(["accepted","launched","lost"].includes(sourceRow.status??""))throw new CommercialRequestConflict("Коммерческий цикл заявки закрыт; новый расчёт нельзя добавить в зафиксированный результат");
       }else{
         [sourceRow]=await tx<SourceScope[]>`
           SELECT organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",assigned_team_id "teamId",region_id "regionId",client_company_id "clientId",stage,
@@ -82,22 +84,22 @@ export async function POST(request:Request){
           FROM tenders WHERE id=${resolvedSourceId}::uuid AND archived_at IS NULL
         `;
         if(!sourceRow||!canReadRow(actor.access,"calculation.scenario.create",sourceRow,actor))throw new AccessDeniedError("calculation.scenario.create");
-        if(sourceRow.stage==="completed")throw new Error("Тендер завершён; новый расчёт нельзя добавить в закрытый процесс");
+        if(sourceRow.stage==="completed")throw new CommercialRequestConflict("Тендер завершён; новый расчёт нельзя добавить в закрытый процесс");
       }
 
       const sourceRoleId=b.sourceRoleId??b.requestRoleId;
-      if(!sourceRoleId)throw new Error("Не удалось определить позицию расчёта");
+      if(!sourceRoleId)throw new CommercialRequestConflict("Не удалось определить позицию расчёта");
       const resolvedRoleId:string=sourceRoleId;
       let specialtyId:string|null=null;
       if(resolvedSourceType==="request"){
         const [role]=await tx<Array<{id:string;specialtyId:string}>>`SELECT id,specialty_id "specialtyId" FROM request_roles WHERE id=${resolvedRoleId}::uuid AND request_id=${resolvedSourceId}::uuid`;
-        if(!role)throw new Error("Позиция не относится к выбранной заявке");specialtyId=role.specialtyId;
+        if(!role)throw new CommercialRequestConflict("Позиция не относится к выбранной заявке");specialtyId=role.specialtyId;
       }else{
         const [role]=await tx<Array<{id:string;specialtyId:string|null}>>`SELECT id,specialty_id "specialtyId" FROM tender_roles WHERE id=${resolvedRoleId}::uuid AND tender_id=${resolvedSourceId}::uuid`;
-        if(!role)throw new Error("Позиция не относится к выбранному тендеру");specialtyId=role.specialtyId;
+        if(!role)throw new CommercialRequestConflict("Позиция не относится к выбранному тендеру");specialtyId=role.specialtyId;
       }
       const [model]=await tx<Array<{id:string}>>`SELECT id FROM calculation_models WHERE id=${b.modelId}::uuid AND active`;
-      if(!model)throw new Error("Модель расчёта недоступна");
+      if(!model)throw new CommercialRequestConflict("Модель расчёта недоступна");
 
       const economicsDate=dateFromJson(b.inputs.economicsDate)??existingCalculation?.economicsDate??sourceRow.expectedStartDate??new Date().toISOString().slice(0,10);
       const allocationMode=b.allocationMode??(b.inputs.projectAllocationMode==="labor_hours"?"labor_hours":"headcount");
@@ -109,7 +111,7 @@ export async function POST(request:Request){
           WHERE id=${b.ruleVersionId}::uuid AND calculation_model_id=${b.modelId}::uuid
             AND effective_from<=${economicsDate}::date AND (effective_to IS NULL OR effective_to>=${economicsDate}::date)
         `;
-        if(!rule)throw new Error("Версия правил не относится к выбранной модели или не действует на дату экономики");
+        if(!rule)throw new CommercialRequestConflict("Версия правил не относится к выбранной модели или не действует на дату экономики");
       }else{
         [rule]=await tx<RuleRow[]>`
           SELECT id,rules_json rules FROM calculation_rule_versions
@@ -152,18 +154,18 @@ export async function POST(request:Request){
           `;calculationId=createdCalc.id;
         }
       }
-      if(!calculationId)throw new Error("Не удалось создать расчёт");
+      if(!calculationId)throw new CommercialRequestConflict("Не удалось создать расчёт");
 
       const inputs:JsonRecord={...b.inputs,ruleVersionId,sourceType:resolvedSourceType,sourceId:resolvedSourceId,economicsDate,calculationVersion,projectAllocationMode:allocationMode,commercialPolicyVersionId:policyVersion?.id??null,commercialPolicySnapshot:{...commercialPolicy}};
       const isCommercialScenario="workerPayAmount" in b.inputs||"billingUnit" in b.inputs||"pricingMode" in b.inputs;
       const serverResult:JsonRecord=isCommercialScenario?calculateCommercialScenario({...inputs,costs:b.costs,rules:effectiveRules}) as JsonRecord:b.result??{};
-      if(isCommercialScenario&&Object.keys(serverResult).length===0)throw new Error("Не удалось рассчитать экономику сценария");
+      if(isCommercialScenario&&Object.keys(serverResult).length===0)throw new CommercialRequestConflict("Не удалось рассчитать экономику сценария");
 
       let referenceSnapshot:JsonRecord|null=null;
       const appliedRateReferenceId=b.inputs.rateReferenceId;
       if(appliedRateReferenceId!=null&&(typeof appliedRateReferenceId!=="string"
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(appliedRateReferenceId)))
-        throw new Error("Неверный идентификатор ориентира ставки");
+        throw new CommercialRequestConflict("Неверный идентификатор ориентира ставки");
       if(specialtyId){
         const [reference]=await tx<Array<{id:string;amountMin:number|string;amountMax:number|string|null;unit:string;paySemantics:string;employmentModel:string;source:string;sourceDate:string;confidence:string}>>`
           SELECT id,amount_min "amountMin",amount_max "amountMax",unit,pay_semantics "paySemantics",employment_model "employmentModel",source,source_date::text "sourceDate",confidence
@@ -176,14 +178,14 @@ export async function POST(request:Request){
             AND valid_from<=${economicsDate}::date AND (valid_to IS NULL OR valid_to>=${economicsDate}::date)
           ORDER BY (region_id=${sourceRow.regionId}::uuid) DESC,source_date DESC,created_at DESC LIMIT 1
         `;
-        if(appliedRateReferenceId&&!reference)throw new Error("Выбранный ориентир недоступен для позиции, региона или даты расчёта");
+        if(appliedRateReferenceId&&!reference)throw new CommercialRequestConflict("Выбранный ориентир недоступен для позиции, региона или даты расчёта");
         if(appliedRateReferenceId&&reference){
           const value=numberFromJson(b.inputs.workerPayAmount,-1);
           const minimum=Number(reference.amountMin);
           const maximum=Number(reference.amountMax??reference.amountMin);
           if(reference.paySemantics!=="net"||reference.unit!==b.inputs.workerPayUnit
             ||value<minimum-0.01||value>maximum+0.01)
-            throw new Error("Выплата сотруднику не соответствует выбранному ориентиру");
+            throw new CommercialRequestConflict("Выплата сотруднику не соответствует выбранному ориентиру");
         }
         referenceSnapshot=reference?{
           id:reference.id,amountMin:Number(reference.amountMin),amountMax:reference.amountMax==null?null:Number(reference.amountMax),unit:reference.unit,
@@ -197,7 +199,7 @@ export async function POST(request:Request){
         return {...cost,amount:entered,enteredAmount:entered,allocationShare:1};
       });
       await tx`
-        UPDATE calculations SET economics_date=${economicsDate}::date,allocation_mode=${allocationMode},project_costs_json=${sql.json(rawProjectCosts)},updated_at=now()
+        UPDATE calculations SET economics_date=${economicsDate}::date,allocation_mode=${allocationMode},project_costs_json=${tx.json(rawProjectCosts)},updated_at=now()
         WHERE id=${calculationId}::uuid
       `;
 
@@ -209,7 +211,7 @@ export async function POST(request:Request){
           SELECT id FROM calculation_scenarios WHERE id=${supersedesScenarioId}::uuid AND calculation_id=${calculationId}::uuid
             AND COALESCE(request_role_id,tender_role_id)=${resolvedRoleId}::uuid
         `;
-        if(!previous)throw new Error("Исходный сценарий не относится к выбранной позиции расчёта");
+        if(!previous)throw new CommercialRequestConflict("Исходный сценарий не относится к выбранной позиции расчёта");
       }else{
         const [previous]=await tx<Array<{id:string}>>`
           SELECT id FROM calculation_scenarios WHERE calculation_id=${calculationId}::uuid
@@ -225,17 +227,18 @@ export async function POST(request:Request){
       const scenarioVersion=versionRow?.version??1;
       const [created]=await tx<Array<{id:string;name:string;status:string;createdAt:string}>>`
         INSERT INTO calculation_scenarios(organization_id,calculation_id,request_role_id,tender_role_id,model_id,rule_version_id,name,status,version,supersedes_scenario_id,inputs_snapshot,cost_snapshot,result_snapshot,rate_reference_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${calculationId}::uuid,${requestRoleId}::uuid,${tenderRoleId}::uuid,${b.modelId}::uuid,${ruleVersionId}::uuid,${b.name},'draft',${scenarioVersion},${supersedesScenarioId}::uuid,${sql.json(inputs)},${sql.json(b.costs)},${sql.json(serverResult)},${referenceSnapshot?sql.json(referenceSnapshot):null},${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${calculationId}::uuid,${requestRoleId}::uuid,${tenderRoleId}::uuid,${b.modelId}::uuid,${ruleVersionId}::uuid,${b.name},'draft',${scenarioVersion},${supersedesScenarioId}::uuid,${tx.json(inputs)},${tx.json(b.costs)},${tx.json(serverResult)},${referenceSnapshot?tx.json(referenceSnapshot):null},${actor.userId}::uuid)
         RETURNING id,name,status,created_at "createdAt"
       `;
       if(resolvedSourceType==="request")await tx`UPDATE requests SET status='calculation',updated_at=now() WHERE id=${resolvedSourceId}::uuid`;
       else await tx`UPDATE tenders SET stage='calculation',updated_at=now() WHERE id=${resolvedSourceId}::uuid AND stage IN ('new','analysis','clarification','calculation','approval')`;
       return {...created,calculationId,calculationVersion,scenarioVersion,sourceType:resolvedSourceType,sourceId:resolvedSourceId,requestId,tenderId,ruleVersionId,economicsDate,result:serverResult};
-    }));
+    });
     return NextResponse.json(row,{status:201});
   }catch(error){
+    if(error instanceof CommercialRequestConflict)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры расчёта",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
+    console.error(error);return NextResponse.json({error:"Не удалось выполнить действие. Повторите попытку"},{status:500});
   }
 }

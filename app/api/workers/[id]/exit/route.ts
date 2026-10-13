@@ -5,6 +5,8 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 
+class WorkerExitConflict extends Error {}
+
 const schema=z.discriminatedUnion("action",[
   z.object({action:z.literal("plan"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional(),replacementRequired:z.boolean().default(true),returnToRecruiting:z.boolean().default(true)}),
   z.object({action:z.literal("complete"),effectiveDate:z.string().date(),reasonCode:z.enum(["employee_request","employer_decision","project_end","transfer_out","no_show","medical","other"]),reason:z.string().trim().max(1200).nullable().optional(),returnToRecruiting:z.boolean().default(true)}),
@@ -16,7 +18,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
     requireCapability(actor,"worker.offboarding.manage");if(actor.demo)return NextResponse.json({error:"В демо-режиме завершение работы не сохраняется"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [worker]=await tx<Array<{id:string;fullName:string;phone:string|null;email:string|null;city:string|null;source:string|null;originCandidateId:string|null;originalRecruiterUserId:string|null;objectId:string|null;specialtyId:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}>>`
         SELECT w.id,w.full_name "fullName",w.phone,w.email,w.city,w.source,w.origin_candidate_id "originCandidateId",w.original_recruiter_user_id "originalRecruiterUserId",
           a.object_id "objectId",a.specialty_id "specialtyId",o.owner_user_id "ownerUserId",o.region_id "regionId",
@@ -24,7 +26,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         FROM worker_profiles w
         LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id AND x.effective_to IS NULL ORDER BY x.effective_from DESC LIMIT 1) a ON true
         LEFT JOIN objects o ON o.id=a.object_id
-        WHERE w.id=${id}::uuid FOR UPDATE OF w
+        WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${id}::uuid FOR UPDATE OF w
       `;
       if(!worker)throw new Error("Сотрудник не найден");
       const scope={organizationId:actor.organizationId,objectId:worker.objectId??undefined,ownerUserId:worker.ownerUserId??undefined,regionId:worker.regionId??undefined,assigneeUserIds:worker.assigneeUserIds};
@@ -115,8 +117,16 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         return {status:"planned",exitId,replacementNeedId};
       }
 
-      const [dateCheck]=await tx<Array<{future:boolean}>>`SELECT ${body.effectiveDate}::date>current_date future`;
+      const [dateCheck]=await tx<Array<{future:boolean}>>`SELECT ${body.effectiveDate}::date>(now() AT TIME ZONE COALESCE((SELECT timezone FROM object_shift_reporting_settings WHERE object_id=${worker.objectId??null}::uuid),'Europe/Moscow'))::date future`;
       if(dateCheck?.future)throw new Error("Будущую дату сначала сохраните как план завершения работы");
+
+      const periods=await tx<Array<{id:string;relationType:string;effectiveFrom:string;effectiveTo:string|null;contractReference:string|null}>>`
+        SELECT id,relation_type "relationType",effective_from::text "effectiveFrom",effective_to::text "effectiveTo",contract_reference "contractReference"
+        FROM employment_relations WHERE worker_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
+        AND (effective_to IS NULL OR effective_to>${body.effectiveDate}::date) ORDER BY effective_from,id
+      `;
+      if(periods.some(period=>period.effectiveFrom>body.effectiveDate))
+        throw new WorkerExitConflict("Есть будущий период оформления. Сначала явно исправьте его даты в карточке сотрудника; он не будет удалён автоматически.");
 
       const outstanding=await tx<Array<{item:string;variant:string;quantity:number|string;unit:string}>>`
         SELECT i.name item,m.variant,
@@ -149,8 +159,10 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
 
       await tx`UPDATE worker_object_assignments SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<=${body.effectiveDate}::date`;
       await tx`DELETE FROM worker_object_assignments WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from>${body.effectiveDate}::date`;
-      await tx`UPDATE employment_relations SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<=${body.effectiveDate}::date`;
-      await tx`DELETE FROM employment_relations WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from>${body.effectiveDate}::date`;
+      await tx`UPDATE employment_relations SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
+        AND (effective_to IS NULL OR effective_to>${body.effectiveDate}::date) AND effective_from<=${body.effectiveDate}::date`;
+      if(periods.length)await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'employment_period_closed','Закрыты периоды оформления при завершении работы',${tx.json({before:periods,after:periods.map(period=>({...period,effectiveTo:body.effectiveDate})),reason:body.reason??body.reasonCode})})`;
       await tx`UPDATE worker_rates SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<=${body.effectiveDate}::date`;
       await tx`DELETE FROM worker_rates WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from>${body.effectiveDate}::date`;
       await tx`UPDATE object_crew_members SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<=${body.effectiveDate}::date`;
@@ -191,7 +203,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         `;
       }
 
-      await tx`UPDATE worker_profiles SET status='dismissed',updated_at=now() WHERE id=${id}::uuid`;
+      await tx`UPDATE worker_timesheet_links SET status='revoked',revoked_at=now()
+        WHERE organization_id=${actor.organizationId}::uuid AND worker_id=${id}::uuid AND status IN ('active','paused')`;
+      await tx`UPDATE worker_profiles SET status='dismissed' ,updated_at=now() WHERE id=${id}::uuid`;
 
       let recruitingCandidateId=worker.originCandidateId;
       if(body.returnToRecruiting){
@@ -252,8 +266,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
               SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
               WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
                 AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
-            )>=n.count_required THEN COALESCE(n.closed_at,now()) ELSE NULL END,
-            updated_at=now()
+            )>=n.count_required THEN COALESCE(n.closed_at,now()) ELSE NULL END
           WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.status NOT IN ('cancelled','archived')
         `;
       }
@@ -261,10 +274,11 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${id}::uuid,'offboarded',${"Работа сотрудника завершена: "+worker.fullName},${tx.json({exitId,effectiveDate:body.effectiveDate,reasonCode:body.reasonCode,objectId:worker.objectId})})`;
       return {status:"completed",exitId};
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные завершения работы",issues:error.issues},{status:400});
+    if(error instanceof WorkerExitConflict)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
     console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось завершить работу сотрудника"},{status:500});
   }

@@ -5,8 +5,10 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import {assertEligibleObjectManagers,assertEligibleObjectRecruiters,objectEditVersion,ObjectSettingsConflict} from "@/lib/operations/object-manager-options";
 
 const schema=z.object({
+  expectedVersion:z.string().length(64),
   name:z.string().trim().min(2).max(240).optional(),
   legalEntityId:z.string().uuid().optional(),
   address:z.string().trim().max(500).nullable().optional(),
@@ -34,7 +36,7 @@ const schema=z.object({
 type ObjectScope={
   organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string;
   legalEntityId:string|null;recruitingMode:"company_rules"|"object_team";name:string;status:string;assigneeUserIds:string[];
-  actualStartDate:string|null;actualEndDate:string|null;
+  address:string|null;targetStartDate:string|null;actualStartDate:string|null;actualEndDate:string|null;updatedAt:string;
   defaultTransitionDays:number;defaultDailyPaymentShifts:number;defaultScheduleWorkDays:number|null;defaultScheduleRestDays:number|null;defaultShiftKind:"day"|"night"|"mixed";ppeTaskEnabled:boolean;ppeTaskDueDays:number|null;
 };
 
@@ -42,13 +44,13 @@ async function getScope(tx:Sql,organizationId:string,id:string):Promise<ObjectSc
   const [row]=await tx<Array<ObjectScope>>`
     SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
       o.client_company_id "clientId",o.legal_entity_id "legalEntityId",o.recruiting_routing_mode "recruitingMode",o.name,o.status,
-      o.actual_start_date::text "actualStartDate",o.actual_end_date::text "actualEndDate",
+      o.address_text address,o.target_start_date::text "targetStartDate",o.actual_start_date::text "actualStartDate",o.actual_end_date::text "actualEndDate",o.updated_at::text "updatedAt",
       o.default_transition_days "defaultTransitionDays",o.default_daily_payment_shifts "defaultDailyPaymentShifts",
       o.default_schedule_work_days "defaultScheduleWorkDays",o.default_schedule_rest_days "defaultScheduleRestDays",o.default_shift_kind "defaultShiftKind",
       o.ppe_task_enabled "ppeTaskEnabled",o.ppe_task_due_days "ppeTaskDueDays",
       ARRAY(SELECT oa.user_id::text FROM object_assignments oa
-        WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-    FROM objects o WHERE o.organization_id=${organizationId}::uuid AND o.id=${id}::uuid
+        WHERE oa.object_id=o.id AND oa.organization_id=o.organization_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
+    FROM objects o WHERE o.organization_id=${organizationId}::uuid AND o.id=${id}::uuid FOR UPDATE OF o
   `;
   return row??null;
 }
@@ -58,7 +60,7 @@ async function syncAssignments(tx:Sql,organizationId:string,objectId:string,type
   await tx`
     UPDATE object_assignments
     SET effective_to=current_date-1
-    WHERE object_id=${objectId}::uuid
+    WHERE organization_id=${organizationId}::uuid AND object_id=${objectId}::uuid
       AND responsibility_type=${type}
       AND effective_from<current_date
       AND (effective_to IS NULL OR effective_to>=current_date)
@@ -66,7 +68,7 @@ async function syncAssignments(tx:Sql,organizationId:string,objectId:string,type
   `;
   await tx`
     DELETE FROM object_assignments
-    WHERE object_id=${objectId}::uuid
+    WHERE organization_id=${organizationId}::uuid AND object_id=${objectId}::uuid
       AND responsibility_type=${type}
       AND effective_from=current_date
       AND (effective_to IS NULL OR effective_to>=current_date)
@@ -75,7 +77,7 @@ async function syncAssignments(tx:Sql,organizationId:string,objectId:string,type
   for(const userId of wanted){
     const [active]=await tx<Array<{id:string}>>`
       SELECT id FROM object_assignments
-      WHERE object_id=${objectId}::uuid AND user_id=${userId}::uuid AND responsibility_type=${type}
+      WHERE organization_id=${organizationId}::uuid AND object_id=${objectId}::uuid AND user_id=${userId}::uuid AND responsibility_type=${type}
         AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
       LIMIT 1
     `;
@@ -86,6 +88,20 @@ async function syncAssignments(tx:Sql,organizationId:string,objectId:string,type
   }
 }
 
+async function responsibilitySnapshot(tx:Sql,organizationId:string,objectId:string){
+  return tx<Array<{userId:string;name:string;role:string}>>`
+    SELECT o.owner_user_id "userId",u.display_name name,'primary_manager' role
+    FROM objects o JOIN app_users u ON u.id=o.owner_user_id
+    WHERE o.organization_id=${organizationId}::uuid AND o.id=${objectId}::uuid
+    UNION ALL
+    SELECT a.user_id "userId",u.display_name name,a.responsibility_type role
+    FROM object_assignments a JOIN app_users u ON u.id=a.user_id
+    WHERE a.organization_id=${organizationId}::uuid AND a.object_id=${objectId}::uuid
+      AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+      AND a.responsibility_type IN ('additional_manager','recruiter')
+  `;
+}
+
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
     const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -93,18 +109,23 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     if(actor.demo)return NextResponse.json({error:"Изменения демо-объекта отображаются локально"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     if(body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined)requireCapability(actor,"operations.object.assign");
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const current=await getScope(tx,actor.organizationId,id);
       if(!current||!canReadRow(actor.access,"operations.object.edit",current,actor))throw new AccessDeniedError("operations.object.edit");
+      if(body.expectedVersion!==objectEditVersion(current.updatedAt))throw new ObjectSettingsConflict("Настройки объекта изменились после открытия формы. Ваш ввод сохранён. Загрузите актуальные данные и повторите правку.");
+      const assignmentChange=body.ownerUserId!==undefined||body.additionalManagerUserIds!==undefined||body.recruitingMode!==undefined||body.recruiterUserIds!==undefined||body.legalEntityId!==undefined;
+      if(assignmentChange&&!canReadRow(actor.access,"operations.object.assign",current,actor))throw new AccessDeniedError("operations.object.assign");
+
+      const responsibilitiesBefore=assignmentChange?await responsibilitySnapshot(tx,actor.organizationId,id):null;
 
       if(body.legalEntityId){
-        const [legalEntity]=await tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND active`;
+        const [legalEntity]=await tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`;
         if(!legalEntity)throw new Error("Юридическое лицо недоступно");
       }
 
       if(body.status!==undefined&&body.status!==current.status){
         const [launch]=await tx<Array<{phase:string}>>`
-          SELECT phase FROM launches WHERE object_id=${id}::uuid ORDER BY created_at DESC LIMIT 1
+          SELECT phase FROM launches WHERE object_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid ORDER BY created_at DESC LIMIT 1
         `;
         if(launch&&(["prelaunch","launch"].includes(current.status)||["prelaunch","launch"].includes(body.status))){
           throw new Error("Статусы подготовки и запуска управляются из плана запуска объекта");
@@ -119,67 +140,28 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
 
       const nextOwner=body.ownerUserId??current.ownerUserId;
       if(!nextOwner)throw new Error("У объекта должен быть основной менеджер");
-      const requestedAdditional:string[]=body.additionalManagerUserIds!==undefined
-        ?body.additionalManagerUserIds
-        :(await tx<Array<{userId:string}>>`
-          SELECT user_id "userId" FROM object_assignments
-          WHERE object_id=${id}::uuid AND responsibility_type='additional_manager'
-            AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
-        `).map(row=>row.userId);
-      const nextAdditional=[...new Set(requestedAdditional.filter(userId=>userId!==nextOwner))];
       const ownerChanged=nextOwner!==current.ownerUserId;
+      const syncAdditional=body.additionalManagerUserIds!==undefined||ownerChanged;
+      const requestedAdditional:string[]=body.additionalManagerUserIds??(syncAdditional?(await tx<Array<{userId:string}>>`
+        SELECT user_id "userId" FROM object_assignments WHERE object_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
+          AND responsibility_type='additional_manager' AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
+      `).map(row=>row.userId):[]);
+      const nextAdditional=[...new Set(requestedAdditional.filter(userId=>userId!==nextOwner))];
       if(ownerChanged&&body.keepPreviousManager&&current.ownerUserId&&!nextAdditional.includes(current.ownerUserId))nextAdditional.push(current.ownerUserId);
+      const requestedManagers=[...(body.ownerUserId!==undefined?[body.ownerUserId]:[]),...(body.additionalManagerUserIds??[])];
+      if(requestedManagers.length)await assertEligibleObjectManagers(tx,actor.organizationId,requestedManagers);
 
-      const requestedRecruiters:string[]=body.recruiterUserIds!==undefined
-        ?body.recruiterUserIds
-        :(await tx<Array<{userId:string}>>`
-          SELECT user_id "userId" FROM object_assignments
-          WHERE object_id=${id}::uuid AND responsibility_type='recruiter'
-            AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
-        `).map(row=>row.userId);
+      const syncRecruiters=body.recruitingMode!==undefined||body.recruiterUserIds!==undefined;
       const nextRecruitingMode=body.recruitingMode??current.recruitingMode;
-      const nextRecruiters=nextRecruitingMode==="object_team"?[...new Set(requestedRecruiters)]:[];
-      if(nextRecruitingMode==="object_team"&&!nextRecruiters.length)throw new Error("Для закреплённой команды подбора выберите хотя бы одного сотрудника");
+      const requestedRecruiters:string[]=body.recruiterUserIds??(syncRecruiters&&nextRecruitingMode==='object_team'?(await tx<Array<{userId:string}>>`
+        SELECT user_id "userId" FROM object_assignments WHERE object_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
+          AND responsibility_type='recruiter' AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
+      `).map(row=>row.userId):[]);
+      const nextRecruiters=nextRecruitingMode==='object_team'?[...new Set(requestedRecruiters)]:[];
+      if(syncRecruiters&&nextRecruitingMode==='object_team'&&!nextRecruiters.length)throw new ObjectSettingsConflict('Для закреплённой команды подбора выберите хотя бы одного сотрудника');
+      if(syncRecruiters&&nextRecruiters.length)await assertEligibleObjectRecruiters(tx,actor.organizationId,nextRecruiters);
 
-      const managerIds=[...new Set([nextOwner,...nextAdditional])];
-      const validManagers=await tx<Array<{id:string}>>`
-        SELECT DISTINCT m.user_id id
-        FROM organization_memberships m
-        LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-        WHERE m.status='active' AND m.user_id=ANY(${managerIds}::uuid[])
-          AND (
-            rt.code='object_manager'
-            OR EXISTS (
-              SELECT 1 FROM position_assignments pa
-              JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN positions p ON p.id=sp.job_profile_id
-              WHERE pa.membership_id=m.id AND pa.status<>'ended'
-                AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND p.code IN ('object-manager','object_manager')
-            )
-          )
-      `;
-      if(validManagers.length!==managerIds.length)throw new Error("Один из выбранных менеджеров не имеет права работать с объектами");
-      if(nextRecruiters.length){
-        const validRecruiters=await tx<Array<{id:string}>>`
-          SELECT DISTINCT m.user_id id
-          FROM organization_memberships m
-          LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-          WHERE m.status='active' AND m.user_id=ANY(${nextRecruiters}::uuid[])
-            AND (
-              rt.code IN ('recruiter','recruiting_manager','recruitment_head')
-              OR EXISTS (
-                SELECT 1 FROM permission_grants pg
-                WHERE pg.role_template_id=m.role_template_id
-                  AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign')
-                  AND pg.effect='allow'
-              )
-            )
-        `;
-        if(validRecruiters.length!==new Set(nextRecruiters).size)throw new Error("Один из выбранных сотрудников не имеет доступа к подбору");
-      }
-
-      await tx`
+      let [updated]=await tx<Array<{updatedAt:string}>>`
         UPDATE objects SET
           name=COALESCE(${body.name??null},name),
           legal_entity_id=COALESCE(${body.legalEntityId??null}::uuid,legal_entity_id),
@@ -196,22 +178,37 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           default_shift_kind=COALESCE(${body.defaultShiftKind??null},default_shift_kind),
           ppe_task_enabled=COALESCE(${body.ppeTaskEnabled??null}::boolean,ppe_task_enabled),
           ppe_task_due_days=CASE WHEN ${body.ppeTaskDueDays===undefined} THEN ppe_task_due_days ELSE ${body.ppeTaskDueDays??null}::int END,
-          owner_user_id=${nextOwner}::uuid,
-          updated_at=now()
-        WHERE id=${id}::uuid
+          updated_at=clock_timestamp()
+        WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
+        RETURNING updated_at::text "updatedAt"
       `;
 
-      await syncAssignments(tx,actor.organizationId,id,"additional_manager",nextAdditional,actor.userId);
-      await syncAssignments(tx,actor.organizationId,id,"recruiter",nextRecruiters,actor.userId);
+      if(ownerChanged){
+        [updated]=await tx<Array<{updatedAt:string}>>`UPDATE objects SET owner_user_id=${nextOwner}::uuid,updated_at=clock_timestamp()
+          WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid RETURNING updated_at::text "updatedAt"`;
+      }
+      if(syncAdditional)await syncAssignments(tx,actor.organizationId,id,"additional_manager",nextAdditional,actor.userId);
+      if(syncRecruiters)await syncAssignments(tx,actor.organizationId,id,"recruiter",nextRecruiters,actor.userId);
 
+      const responsibilitiesAfter=assignmentChange?await responsibilitySnapshot(tx,actor.organizationId,id):null;
       const statusChanged=nextStatus!==current.status;
+      const before={name:current.name,address:current.address,targetStartDate:current.targetStartDate,
+        legalEntityId:current.legalEntityId,ownerUserId:current.ownerUserId,status:current.status,
+        actualStartDate:current.actualStartDate,actualEndDate:current.actualEndDate,recruitingMode:current.recruitingMode,
+        defaultTransitionDays:current.defaultTransitionDays,defaultDailyPaymentShifts:current.defaultDailyPaymentShifts,
+        defaultScheduleWorkDays:current.defaultScheduleWorkDays,defaultScheduleRestDays:current.defaultScheduleRestDays,
+        defaultShiftKind:current.defaultShiftKind,ppeTaskEnabled:current.ppeTaskEnabled,ppeTaskDueDays:current.ppeTaskDueDays};
       const changes={
+        before,
+        ...(assignmentChange?{responsibilitiesBefore,responsibilitiesAfter}:{}),
+        name:body.name??current.name,address:body.address===undefined?current.address:body.address,
+        targetStartDate:body.targetStartDate===undefined?current.targetStartDate:body.targetStartDate,
         ownerChanged,statusChanged,previousStatus:current.status,
         previousOwnerUserId:current.ownerUserId,
         ownerUserId:nextOwner,
-        additionalManagerUserIds:nextAdditional,
+        ...(syncAdditional?{additionalManagerUserIds:nextAdditional}:{}),
         recruitingMode:nextRecruitingMode,
-        recruiterUserIds:nextRecruiters,
+        ...(syncRecruiters?{recruiterUserIds:nextRecruiters}:{}),
         legalEntityId:body.legalEntityId??current.legalEntityId,
         status:nextStatus,actualStartDate:nextActualStart,actualEndDate:nextActualEnd,
         defaultTransitionDays:body.defaultTransitionDays??current.defaultTransitionDays,
@@ -227,16 +224,17 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         VALUES(
           ${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${id}::uuid,
           ${ownerChanged?"manager_handover":statusChanged?"status_changed":"settings_updated"},
-          ${ownerChanged?"Изменён основной менеджер объекта":statusChanged?`Статус объекта изменён: ${current.status} → ${nextStatus}`:"Обновлены настройки объекта"},
+          ${ownerChanged?"Изменён основной менеджер объекта":statusChanged?"Изменён статус объекта":"Обновлены настройки объекта"},
           ${tx.json(changes)}
         )
       `;
-      return {id,changes};
-    }));
+      return {id,changes,updatedAt:updated.updatedAt,version:objectEditVersion(updated.updatedAt)};
+    });
     return NextResponse.json(result);
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте настройки объекта",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось обновить объект"},{status:500});
+    if(error instanceof ObjectSettingsConflict)return NextResponse.json({error:error.message},{status:409});
+    console.error(error);return NextResponse.json({error:"Не удалось обновить объект. Введённые значения сохранены в форме"},{status:500});
   }
 }

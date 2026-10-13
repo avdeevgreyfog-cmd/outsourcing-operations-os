@@ -1,29 +1,32 @@
 import {randomBytes,createHash,createCipheriv,createDecipheriv} from "node:crypto";
+import type {Sql} from "postgres";
 import type {Actor} from "@/lib/access/types";
 import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {db,withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
 
+export class EmployeePortalError extends Error {}
+export class EmployeePortalAccessError extends EmployeePortalError {}
 const tokenHash=(token:string)=>createHash("sha256").update(token).digest("hex");
 function tokenCipherKey(){const secret=process.env.SESSION_SECRET;if(!secret)throw new Error("SESSION_SECRET не задан");return createHash("sha256").update(secret).digest()}
 function encryptToken(raw:string){const iv=randomBytes(12),cipher=createCipheriv("aes-256-gcm",tokenCipherKey(),iv);const encrypted=Buffer.concat([cipher.update(raw,"utf8"),cipher.final()]);return [iv,cipher.getAuthTag(),encrypted].map(x=>x.toString("base64url")).join(".")}
 function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".").map(x=>Buffer.from(x,"base64url"));const cipher=createDecipheriv("aes-256-gcm",tokenCipherKey(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(blob),cipher.final()]).toString("utf8")}
-export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
+export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null;needsReconfirmation?:boolean};
 export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number;showEmployeeDocuments:boolean;showEmployeeWorkwear:boolean};
 
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
-  const visible=(await listWorkers(actor)).filter(row=>row.objectId&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
+  const visible=(await listWorkers(actor)).filter(row=>row.objectId&&canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
   if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[]};
   if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[]};
   const objects=new Set(visible.map(w=>w.objectId!));
   const ids=visible.map(w=>w.id);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
     const [reports,links,settings,plans]=await Promise.all([
-      sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt"
+      sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt",hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation"
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
       sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
         FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
@@ -45,12 +48,13 @@ async function assertManage(actor:Actor,objectId:string,workerId?:string){
   if(!object||!canReadRow(actor.access,"operations.shift.edit",object,actor))throw new AccessDeniedError("operations.shift.edit");
   if(workerId){
     const workers=await listWorkers(actor);
-    if(!workers.some(w=>w.id===workerId&&w.objectId===objectId&&w.status==="active"))throw new Error("Сотрудник не назначен на объект");
+    if(!workers.some(w=>w.id===workerId&&w.objectId===objectId&&w.status==="active"))throw new EmployeePortalError("Сотрудник не назначен на объект");
   }
+  return object;
 }
 
 export async function editPortalSettings(actor:Actor,objectId:string,owner:"manager"|"worker"){
-  if(actor.demo)throw new Error("Настройки сохраняются только в рабочем контуре");
+  if(actor.demo)throw new EmployeePortalError("Настройки сохраняются только в рабочем контуре");
   await assertManage(actor,objectId);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
     await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,schedule_owner,updated_by_user_id)
@@ -61,12 +65,17 @@ export async function editPortalSettings(actor:Actor,objectId:string,owner:"mana
 }
 
 export async function editWorkerLink(actor:Actor,objectId:string,workerId:string,action:"create"|"rotate"|"copy"|"pause"|"resume"|"revoke"){
-  if(actor.demo)throw new Error("Ссылки выдаются только в рабочем контуре");
+  if(actor.demo)throw new EmployeePortalError("Ссылки выдаются только в рабочем контуре");
   await assertManage(actor,objectId,workerId);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
+    const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w
+      WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${workerId}::uuid AND w.status='active'
+        AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=w.organization_id AND a.worker_id=w.id AND a.object_id=${objectId}::uuid
+          AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)) FOR UPDATE OF w`;
+    if(!worker)throw new EmployeePortalError("Сотрудник больше не работает на объекте");
     if(action==="copy"){
       const [existing]=await sql<Array<{ciphertext:string}>>`SELECT token_ciphertext ciphertext FROM worker_timesheet_links WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND status='active' ORDER BY created_at DESC LIMIT 1`;
-      if(!existing)throw new Error("Активная ссылка не найдена");
+      if(!existing)throw new EmployeePortalError("Активная ссылка не найдена");
       return {ok:true,path:"/employee-timesheet/"+decryptToken(existing.ciphertext)};
     }
     if(action==="create"||action==="rotate"){
@@ -99,6 +108,22 @@ export async function resolveToken(token:string):Promise<TokenContext|null>{
     return row??null;
   });
 }
+export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;linkId:string},token:string){
+  const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w JOIN worker_timesheet_links l ON l.worker_id=w.id AND l.organization_id=w.organization_id
+    WHERE l.id=${ref.linkId}::uuid AND l.organization_id=${ref.tenantId}::uuid AND l.token_hash=${tokenHash(token)} AND w.status='active' FOR UPDATE OF w`;
+  if(!worker)throw new EmployeePortalAccessError("Ссылка недействительна или заблокирована");
+  const [row]=await sql<Array<{id:string}>>`
+    SELECT l.id FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id AND w.organization_id=l.organization_id
+    WHERE l.id=${ref.linkId}::uuid AND l.organization_id=${ref.tenantId}::uuid AND l.token_hash=${tokenHash(token)}
+      AND l.status='active' AND w.status='active'
+      AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=l.organization_id AND a.worker_id=l.worker_id AND a.object_id=l.object_id
+        AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date))
+      AND NOT EXISTS(SELECT 1 FROM object_shift_reporting_settings s WHERE s.organization_id=l.organization_id AND s.object_id=l.object_id AND NOT s.reporting_enabled)
+    FOR UPDATE OF l
+  `;
+  if(!row)throw new EmployeePortalAccessError("Ссылка недействительна или заблокирована");
+}
+
 export async function employeePortal(token:string,selectedMonth?:string){
   const ref=await resolveToken(token);if(!ref)return null;
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
@@ -126,8 +151,8 @@ export async function employeePortal(token:string,selectedMonth?:string){
      const rangeFrom=monthFrom;
      const rangeTo=monthTo;
      const [reports,plans]=await Promise.all([
-      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null}>>`
-        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,hours_reconciled_at::text "reconciledAt"
+      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null;needsReconfirmation:boolean}>>`
+        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation"
         FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
           AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31))) ORDER BY work_date`,
       sql<Array<{date:string;kind:string;timeCode:string;hours:number;source:string}>>`
@@ -142,8 +167,9 @@ export async function employeePortal(token:string,selectedMonth?:string){
 
 function dateAddOne(date:string){const day=new Date(date+"T00:00:00Z");day.setUTCDate(day.getUTCDate()+1);return day.toISOString().slice(0,10)}
 export async function submitEmployeeReply(token:string,payload:{date:string;response?:"working"|"day_off"|"cannot_work";kind?:"day"|"night"|"off";hours?:number;reason?:string}){
-  const ref=await resolveToken(token);if(!ref)throw new Error("Недействительная ссылка");
+  const ref=await resolveToken(token);if(!ref)throw new EmployeePortalAccessError("Недействительная ссылка");
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
+    await assertEmployeeLinkActive(sql,ref,token);
     const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string}>>`
       SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text "localToday",
@@ -156,21 +182,31 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
       LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
       WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active' AND COALESCE(s.reporting_enabled,true)
       LIMIT 1`;
-    if(!link)throw new Error("Доступ закрыт");
+    if(!link)throw new EmployeePortalAccessError("Доступ закрыт");
+    if(link.owner==='manager'&&payload.response==='working'){
+      const [planned]=await sql<Array<{kind:string;reserve:boolean}>>`SELECT sh.shift_kind kind,sa.is_reserve reserve
+        FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+        WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid AND sh.shift_date=${payload.date}::date
+          AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+        ORDER BY sa.is_reserve,sh.starts_at LIMIT 1`;
+      if(planned?.reserve)throw new EmployeePortalError("Вы в резерве. Для выхода требуется назначение менеджера");
+      if(planned&&payload.kind&&planned.kind!==payload.kind)throw new EmployeePortalError("Смена отличается от плана менеджера. Обратитесь к менеджеру для изменения графика");
+    }
+
     const today=link.localToday;
     const offset=Math.round((Date.parse(payload.date+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
-    if(!Number.isFinite(offset)||offset< -3||offset>31)throw new Error("Эту дату больше нельзя редактировать");
-    if(payload.hours!==undefined&&(offset>0||offset< -3))throw new Error("Часы можно уточнить только после завершения смены");
-    if(payload.hours!==undefined&&(payload.hours<0||payload.hours>24))throw new Error("Часы должны быть от 0 до 24");
-    if(payload.response==="day_off")throw new Error("Выходные дни отмечаются в разделе планирования графика");
-    if(payload.response==="cannot_work"&&!payload.reason?.trim())throw new Error("Укажите причину невыхода");
+    if(!Number.isFinite(offset)||offset< -3||offset>31)throw new EmployeePortalError("Эту дату больше нельзя редактировать");
+    if(payload.hours!==undefined&&(offset>0||offset< -3))throw new EmployeePortalError("Часы можно уточнить только после завершения смены");
+    if(payload.hours!==undefined&&(payload.hours<0||payload.hours>24))throw new EmployeePortalError("Часы должны быть от 0 до 24");
+    if(payload.response==="day_off")throw new EmployeePortalError("Выходные дни отмечаются в разделе планирования графика");
+    if(payload.response==="cannot_work"&&!payload.reason?.trim())throw new EmployeePortalError("Укажите причину невыхода");
     if(payload.hours!==undefined){
       const [assignmentShift]=await sql<Array<{endClock:string;endDate:string}>>`
         SELECT to_char(sh.ends_at AT TIME ZONE ${link.timezone},'HH24:MI') "endClock",
           (sh.ends_at AT TIME ZONE ${link.timezone})::date::text "endDate"
         FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
         WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid
-          AND sh.shift_date=${payload.date}::date AND sa.confirmation_status<>'cancelled' AND NOT sa.is_reserve
+          AND sh.shift_date=${payload.date}::date AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled' AND NOT sa.is_reserve
         ORDER BY sh.starts_at LIMIT 1`;
       const [customTime]=await sql<Array<{endClock:string;nextDay:boolean}>>`
         SELECT to_char(end_time,'HH24:MI') "endClock",ends_next_day "nextDay"
@@ -187,28 +223,42 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
       const parts=new Intl.DateTimeFormat("en-GB",{timeZone:link.timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());
       const stamp=Object.fromEntries(parts.map(p=>[p.type,p.value]));
       const nowLocal=`${stamp.year}-${stamp.month}-${stamp.day}T${stamp.hour}:${stamp.minute}`;
-      if(nowLocal<`${finishDate}T${finishTime}`)throw new Error("Смена ещё не завершилась. Укажите часы после её окончания.");
+      if(nowLocal<`${finishDate}T${finishTime}`)throw new EmployeePortalError("Смена ещё не завершилась. Укажите часы после её окончания.");
     }
     const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${payload.date}::date AND period_end>=${payload.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
-    if(locked)throw new Error("Табель за эту дату уже зафиксирован");
-    const [old]=await sql<Array<{response:string;shiftKind:string|null}>>`SELECT response,shift_kind "shiftKind" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
-    if(payload.hours!==undefined||(payload.response!==undefined&&payload.date<=link.localToday)){const [verified]=await sql<Array<{id:string}>>`SELECT worker_id id FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND hours_reconciled_at IS NOT NULL LIMIT 1`;if(verified)throw new Error("Смена уже согласована. Для исправления обратитесь к менеджеру.")}
-     if(payload.hours!==undefined&&!old)throw new Error("Сначала подтвердите выход");
-    if(payload.hours!==undefined&&old?.response!=="working")throw new Error("Часы указываются только за отработанную смену");
-    if(payload.hours===undefined&&!payload.response)throw new Error("Не указан ответ");
+    if(locked)throw new EmployeePortalError("Табель за эту дату уже зафиксирован");
+    const [old]=await sql<Array<{response:string;shiftKind:string|null;needsReconfirmation:boolean}>>`SELECT response,shift_kind "shiftKind",(confirmed_at IS NULL) "needsReconfirmation" FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
+    if(payload.hours!==undefined||(payload.response!==undefined&&payload.date<=link.localToday)){const [verified]=await sql<Array<{id:string}>>`SELECT worker_id id FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND hours_reconciled_at IS NOT NULL LIMIT 1`;if(verified)throw new EmployeePortalError("Смена уже согласована. Для исправления обратитесь к менеджеру.")}
+    if(payload.hours!==undefined&&old?.needsReconfirmation)throw new EmployeePortalError("План смены изменён. Сначала подтвердите актуальную смену менеджера");
+    if(link.owner==='manager'&&payload.hours!==undefined&&old?.response==='working'){
+      const [planned]=await sql<Array<{kind:string;reserve:boolean}>>`SELECT sh.shift_kind kind,sa.is_reserve reserve
+        FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+        WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid AND sh.shift_date=${payload.date}::date
+          AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+        ORDER BY sa.is_reserve,sh.starts_at LIMIT 1`;
+      if(planned?.reserve)throw new EmployeePortalError("Вы в резерве. Для выхода требуется назначение менеджера");
+      if(planned&&old.shiftKind!==planned.kind)throw new EmployeePortalError("План смены изменён. Сначала подтвердите актуальную смену менеджера");
+    }
+     if(payload.hours!==undefined&&!old)throw new EmployeePortalError("Сначала подтвердите выход");
+    if(payload.hours!==undefined&&old?.response!=="working")throw new EmployeePortalError("Часы указываются только за отработанную смену");
+    if(payload.hours===undefined&&!payload.response)throw new EmployeePortalError("Не указан ответ");
     if(payload.hours===undefined){
       await sql`INSERT INTO worker_shift_reports(organization_id,worker_id,object_id,work_date,shift_kind,response,reason,confirmed_at,source_link_id)
         VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${payload.date}::date,${payload.kind??old?.shiftKind??null},${payload.response!},${payload.reason??null},now(),${ref.linkId}::uuid)
-        ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET shift_kind=EXCLUDED.shift_kind,response=EXCLUDED.response,reason=EXCLUDED.reason,confirmed_at=now(),source_link_id=EXCLUDED.source_link_id,updated_at=now(),reported_hours=NULL,hours_submitted_at=NULL`;
+        ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET shift_kind=EXCLUDED.shift_kind,response=EXCLUDED.response,reason=EXCLUDED.reason,confirmed_at=now(),source_link_id=EXCLUDED.source_link_id,updated_at=now(),reported_hours=CASE WHEN worker_shift_reports.response=EXCLUDED.response AND worker_shift_reports.shift_kind IS NOT DISTINCT FROM EXCLUDED.shift_kind THEN worker_shift_reports.reported_hours ELSE NULL END,
+          hours_submitted_at=CASE WHEN worker_shift_reports.response=EXCLUDED.response AND worker_shift_reports.shift_kind IS NOT DISTINCT FROM EXCLUDED.shift_kind THEN worker_shift_reports.hours_submitted_at ELSE NULL END`;
     }else{
       await sql`UPDATE worker_shift_reports SET reported_hours=${payload.hours},hours_submitted_at=now(),updated_at=now() WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date`;
     }
+    if(payload.response)await sql`UPDATE shift_assignments sa SET confirmation_status=${payload.response==='working'?'confirmed':'declined'}
+      FROM shifts sh WHERE sh.id=sa.shift_id AND sh.object_id=${link.objectId}::uuid AND sh.shift_date=${payload.date}::date
+        AND sa.worker_id=${link.workerId}::uuid AND sa.confirmation_status<>'cancelled' AND sh.status<>'cancelled' AND NOT sa.is_reserve`;
     // Mirror only provisional planning and self-reported hours into the existing
     // time_entries model. Never overwrite a manager-entered fact or a locked period.
     const [next]=await sql<Array<{response:string;shiftKind:string|null;hours:number|null}>>`SELECT response,shift_kind "shiftKind",reported_hours::float8 hours FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
-    if(next?.response==="cannot_work"){
+    if(next?.response==="cannot_work"||(next?.response==="working"&&next.hours===null)){
       await sql`UPDATE time_entries SET time_code='WORK_PENDING',fact_hours=0,day_hours=0,night_hours=0,source='schedule',
-        correction_reason='Сотрудник отменил ранее заявленную отработку',updated_at=now()
+        correction_reason='Сотрудник изменил подтверждение; часы требуют уточнения',updated_at=now()
         WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND source='worker_report'`;
     }
     if(next&&next.response==="working"&&next.hours!==null){
@@ -240,14 +290,15 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
 
 export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDate:string,toDate:string){
   requireCapability(actor,"time.time_entry.edit");
-  await assertManage(actor,objectId);
-  if(actor.demo)throw new Error("Сверка недоступна в демонстрационном режиме");
-  if(toDate<fromDate||Date.parse(toDate)-Date.parse(fromDate)>31*86400000)throw new Error("Выберите период не длиннее 31 дня");
+  const object=await assertManage(actor,objectId);
+  if(!canReadRow(actor.access,"time.time_entry.edit",object,actor))throw new AccessDeniedError("time.time_entry.edit");
+  if(actor.demo)throw new EmployeePortalError("Сверка недоступна в демонстрационном режиме");
+  if(toDate<fromDate||Date.parse(toDate)-Date.parse(fromDate)>31*86400000)throw new EmployeePortalError("Выберите период не длиннее 31 дня");
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
     const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots
       WHERE object_id=${objectId}::uuid AND period_start<=${toDate}::date AND period_end>=${fromDate}::date
       AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
-    if(locked)throw new Error("В выбранном периоде есть зафиксированный табель");
+    if(locked)throw new EmployeePortalError("В выбранном периоде есть зафиксированный табель");
     const reviewed=await sql<Array<{workerId:string;date:string}>>`UPDATE worker_shift_reports r
       SET hours_reconciled_at=now(),hours_reconciled_by_user_id=${actor.userId}::uuid,updated_at=now()
       FROM time_entries t WHERE t.worker_id=r.worker_id AND t.object_id=r.object_id AND t.work_date=r.work_date

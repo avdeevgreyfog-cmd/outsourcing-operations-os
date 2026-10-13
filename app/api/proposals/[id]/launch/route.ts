@@ -5,6 +5,7 @@ import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
 import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
+import {resolveProposalLaunchSnapshot,ProposalLaunchSnapshotConflict,type ProposalLaunchScenario} from "@/lib/commercial/proposal-launch-snapshot";
 
 const schema=z.object({name:z.string().trim().min(2).max(240).optional(),code:z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).optional(),legalEntityId:z.string().uuid().optional()});
 
@@ -20,14 +21,17 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     requireCapability(actor,"sales.proposal.launch");
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
+      const [identity]=await tx<Array<{requestId:string}>>`SELECT request_id "requestId" FROM proposals WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid`;
+      if(!identity)throw new Error("КП не найдено");
+      await tx`SELECT id FROM requests WHERE id=${identity.requestId}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
       const [source]=await tx<Array<SourceRow>>`
         SELECT p.id "proposalId",p.request_id "requestId",p.status "proposalStatus",p.version "proposalVersion",p.scenario_ids "scenarioIds",p.content_snapshot content,
           r.organization_id "organizationId",r.client_company_id "clientId",r.region_id "regionId",r.owner_user_id "ownerUserId",r.created_by_user_id "createdByUserId",r.assigned_team_id "teamId",
           COALESCE(NULLIF(p.content_snapshot->>'objectName',''),NULLIF(p.content_snapshot->>'title',''),r.title) title,
           COALESCE(NULLIF(p.content_snapshot->>'location',''),r.location_text) location,
           COALESCE(NULLIF(p.content_snapshot->>'expectedStartDate',''),r.expected_start_date::text) "startDate"
-        FROM proposals p JOIN requests r ON r.id=p.request_id WHERE p.id=${id}::uuid FOR UPDATE
+        FROM proposals p JOIN requests r ON r.id=p.request_id AND r.organization_id=p.organization_id WHERE p.id=${id}::uuid AND p.organization_id=${actor.organizationId}::uuid FOR UPDATE OF p
       `;
       if(!source)throw new Error("КП не найдено");
       if(!canReadRow(actor.access,"sales.proposal.launch",source,actor))throw new AccessDeniedError("sales.proposal.launch");
@@ -35,11 +39,24 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       if(!source.clientId)throw new Error("Перед подготовкой привяжите заявку к клиенту");
       if(!source.regionId)throw new Error("Перед подготовкой укажите регион заявки");
       if(!source.scenarioIds.length)throw new Error("В принятой версии КП нет зафиксированных сценариев расчёта");
-      const [existing]=await tx<Array<{id:string;name:string;code:string;contractId:string|null}>>`SELECT id,name,code,contract_id "contractId" FROM objects WHERE source_proposal_id=${id}::uuid`;
+      const [existing]=await tx<Array<{id:string;name:string;code:string;contractId:string|null}>>`SELECT id,name,code,contract_id "contractId" FROM objects WHERE source_proposal_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid`;
       if(existing)return {...existing,alreadyExists:true};
 
+      const scenarios=await tx<ProposalLaunchScenario[]>`
+        SELECT cs.id,cs.request_role_id "requestRoleId",rr.specialty_id "specialtyId",(cs.inputs_snapshot->>'workers')::numeric::float8 workers,
+          jsonb_build_object('scenarioId',cs.id,'billingUnit',COALESCE(cs.result_snapshot->>'billingUnit','hour'),'variableBillingUnit',cs.result_snapshot->'variableBillingUnit',
+            'clientRateNet',COALESCE(cs.result_snapshot->'clientRateNet',cs.result_snapshot->'clientRateHourly'),'clientRateGross',cs.result_snapshot->'clientRateGross',
+            'vatPct',cs.result_snapshot->'vatPct','fixedMonthlyNet',cs.result_snapshot->'fixedMonthlyNet','minimumMonthlyNet',cs.result_snapshot->'minimumMonthlyNet',
+            'monthlyRevenueNet',COALESCE(cs.result_snapshot->'monthlyRevenueNet',to_jsonb(COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,0)*(cs.inputs_snapshot->>'workers')::numeric*COALESCE((cs.inputs_snapshot->>'hoursPerWorker')::numeric,0))),
+            'projectMonths',cs.result_snapshot->'projectMonths') pricing
+        FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id AND c.organization_id=cs.organization_id
+        JOIN request_roles rr ON rr.id=cs.request_role_id AND rr.organization_id=cs.organization_id
+        WHERE cs.id=ANY(${source.scenarioIds}::uuid[]) AND cs.organization_id=${actor.organizationId}::uuid AND c.request_id=${source.requestId}::uuid AND rr.request_id=${source.requestId}::uuid
+      `;
+      const frozenRoles=resolveProposalLaunchSnapshot(source.content,source.scenarioIds,scenarios);
+
       const legalEntities=await tx<Array<{id:string;primary:boolean}>>`
-        SELECT id,is_primary "primary" FROM legal_entities WHERE active ORDER BY is_primary DESC,name
+        SELECT id,is_primary "primary" FROM legal_entities WHERE active AND organization_id=${actor.organizationId}::uuid ORDER BY is_primary DESC,name
       `;
       let legalEntityId=body.legalEntityId??null;
       if(legalEntityId&&!legalEntities.some(item=>item.id===legalEntityId))throw new Error("Выбранное юридическое лицо недоступно");
@@ -118,12 +135,15 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           ('Первый выход','Стабилизация запуска')
         )
       `;
-      const needs=await tx<Array<{id:string;countRequired:number;specialtyId:string}>>`
-        INSERT INTO needs(organization_id,object_id,source_request_role_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,created_by_user_id)
-        SELECT rr.organization_id,${object.id}::uuid,rr.id,rr.specialty_id,rr.count_required,0,GREATEST(current_date,COALESCE(${source.startDate??null}::date,current_date+14)-3),'open',${needOwnerUserId}::uuid,${actor.userId}::uuid
-        FROM request_roles rr WHERE rr.request_id=${source.requestId}::uuid
-        RETURNING id,count_required "countRequired",specialty_id "specialtyId"
-      `;
+      const needs:Array<{id:string;countRequired:number;specialtyId:string}>=[];
+      for(const role of frozenRoles){
+        const [need]=await tx<Array<{id:string;countRequired:number;specialtyId:string}>>`
+          INSERT INTO needs(organization_id,object_id,source_request_role_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${role.requestRoleId}::uuid,${role.specialtyId}::uuid,${role.count},0,GREATEST(current_date,COALESCE(${source.startDate??null}::date,current_date+14)-3),'open',${needOwnerUserId}::uuid,${actor.userId}::uuid)
+          RETURNING id,count_required "countRequired",specialty_id "specialtyId"
+        `;
+        needs.push(need);
+      }
       await tx`
         INSERT INTO launch_site_visits(organization_id,launch_id,visit_type,scheduled_date,owner_user_id,status,checklist_json,created_by_user_id)
         VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,'primary',GREATEST(current_date,${launch.targetDate}::date-10),${ownerUserId}::uuid,'planned',${tx.json(defaultPrimarySiteVisitChecklist())},${actor.userId}::uuid)
@@ -144,18 +164,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         }
       }
 
-      await tx`
+      for(const role of frozenRoles)await tx`
         INSERT INTO client_rates(organization_id,client_company_id,object_id,specialty_id,accepted_scenario_id,amount,unit,pricing_snapshot,effective_from,created_by_user_id)
-        SELECT ${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,rr.specialty_id,cs.id,
-          COALESCE((cs.result_snapshot->>'clientRateNet')::numeric,(cs.result_snapshot->>'clientRateHourly')::numeric,rr.target_client_rate,0),
-          CASE COALESCE(cs.result_snapshot->>'billingUnit','hour')
-            WHEN 'hour' THEN 'hour' WHEN 'shift' THEN 'shift' WHEN 'worker_month' THEN 'month' WHEN 'project_month' THEN 'month'
-            WHEN 'mixed' THEN CASE COALESCE(cs.result_snapshot->>'variableBillingUnit','hour') WHEN 'hour' THEN 'hour' WHEN 'shift' THEN 'shift' ELSE 'service' END
-            ELSE 'service' END,
-          jsonb_build_object('scenarioId',cs.id,'billingUnit',COALESCE(cs.result_snapshot->>'billingUnit','hour'),'variableBillingUnit',cs.result_snapshot->'variableBillingUnit','clientRateNet',COALESCE(cs.result_snapshot->'clientRateNet',cs.result_snapshot->'clientRateHourly'),'clientRateGross',cs.result_snapshot->'clientRateGross','vatPct',cs.result_snapshot->'vatPct','fixedMonthlyNet',cs.result_snapshot->'fixedMonthlyNet','minimumMonthlyNet',cs.result_snapshot->'minimumMonthlyNet','monthlyRevenueNet',COALESCE(cs.result_snapshot->'monthlyRevenueNet',to_jsonb(COALESCE((cs.result_snapshot->>'clientRateHourly')::numeric,0)*COALESCE((cs.inputs_snapshot->>'workers')::numeric,rr.count_required)*COALESCE((cs.inputs_snapshot->>'hoursPerWorker')::numeric,0))),'projectMonths',cs.result_snapshot->'projectMonths'),
-          COALESCE(${source.startDate??null}::date,current_date),${actor.userId}::uuid
-        FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id JOIN request_roles rr ON rr.id=cs.request_role_id
-        WHERE cs.id=ANY(${source.scenarioIds}::uuid[]) AND c.request_id=${source.requestId}::uuid AND rr.request_id=${source.requestId}::uuid
+        VALUES(${actor.organizationId}::uuid,${source.clientId}::uuid,${object.id}::uuid,${role.specialtyId}::uuid,${role.scenarioId}::uuid,${role.amount},${role.unit},${tx.json(JSON.parse(JSON.stringify(role.pricing)))},COALESCE(${source.startDate??null}::date,current_date),${actor.userId}::uuid)
       `;
       const [rateCount]=await tx<Array<{count:number}>>`SELECT count(*)::int count FROM client_rates WHERE object_id=${object.id}::uuid`;
       const needCount=needs.length;
@@ -174,20 +185,21 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       `;
       const [contractVersion]=await tx<Array<{id:string}>>`
         INSERT INTO contract_versions(organization_id,contract_id,version,status,terms_snapshot,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${contract.id}::uuid,1,'draft',${sql.json(terms)},${actor.userId}::uuid) RETURNING id
+        VALUES(${actor.organizationId}::uuid,${contract.id}::uuid,1,'draft',${tx.json(terms)},${actor.userId}::uuid) RETURNING id
       `;
       await tx`UPDATE contracts SET current_version_id=${contractVersion.id}::uuid WHERE id=${contract.id}::uuid`;
       await tx`UPDATE objects SET contract_id=${contract.id}::uuid WHERE id=${object.id}::uuid`;
       await tx`UPDATE proposals SET prelaunch_at=now() WHERE id=${id}::uuid`;
       await tx`UPDATE requests SET status='prelaunch',updated_at=now() WHERE id=${source.requestId}::uuid`;
       await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'proposal',${id}::uuid,'prelaunch_started','Начата параллельная подготовка: подбор, план запуска и договор',${sql.json({objectId:object.id,contractId:contract.id,needCount,legalEntityId,recruitingRouteOwnerUserId:recruitingOwner?.userId??null})})`;
+        VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'proposal',${id}::uuid,'prelaunch_started','Начата параллельная подготовка: подбор, план запуска и договор',${tx.json({objectId:object.id,contractId:contract.id,needCount,legalEntityId,recruitingRouteOwnerUserId:recruitingOwner?.userId??null})})`;
       return {...object,contractId:contract.id,needCount,legalEntityId,recruitingRouteOwnerUserId:recruitingOwner?.userId??null,alreadyExists:false};
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры объекта",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
+    if(error instanceof ProposalLaunchSnapshotConflict)return NextResponse.json({error:error.message},{status:409});
+    console.error(error);return NextResponse.json({error:"Не удалось начать подготовку. Проверьте принятую версию КП и параметры запуска"},{status:500});
   }
 }

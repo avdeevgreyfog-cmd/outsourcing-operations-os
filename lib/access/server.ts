@@ -85,6 +85,27 @@ function forceSystemCapability(access: EffectiveAccess, capability: string) {
   access.scopes[capability] = [{ type: "all_org", ids: [] }];
 }
 
+export async function loadMembershipAccessContext(sql:Sql,membershipId:string,positionId:string|null,primaryOrgUnitId:string|null){
+  const regions=await sql<Array<{region_id:string}>>`SELECT region_id FROM membership_regions WHERE membership_id=${membershipId}::uuid`;
+  const seats=await sql<Array<{job_profile_id:string;organization_unit_id:string;region_id:string|null}>>`
+    SELECT DISTINCT sp.job_profile_id,sp.organization_unit_id,COALESCE(sp.region_id,ou.region_id) region_id
+    FROM position_assignments pa JOIN staff_positions sp ON sp.id=pa.staff_position_id
+    JOIN organization_units ou ON ou.id=sp.organization_unit_id
+    WHERE pa.membership_id=${membershipId}::uuid AND pa.status<>'ended'
+      AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
+      AND sp.effective_from<=current_date AND (sp.effective_to IS NULL OR sp.effective_to>=current_date)
+  `;
+  const units=await sql<Array<{organization_unit_id:string}>>`
+    SELECT organization_unit_id FROM membership_organization_units WHERE membership_id=${membershipId}::uuid
+      AND effective_from<=current_date AND (effective_to IS NULL OR effective_to>=current_date)
+  `;
+  return {
+    positionIds:[...new Set([positionId,...seats.map(row=>row.job_profile_id)].filter((id):id is string=>Boolean(id)))],
+    regionIds:[...new Set([...regions.map(row=>row.region_id),...seats.map(row=>row.region_id)].filter((id):id is string=>Boolean(id)))],
+    orgUnitIds:[...new Set([primaryOrgUnitId,...units.map(row=>row.organization_unit_id),...seats.map(row=>row.organization_unit_id)].filter((id):id is string=>Boolean(id)))],
+  };
+}
+
 export async function loadEffectiveAccess(sql: Sql, membershipId: string, roleTemplateId: string, positionIds: string[], membershipRegionIds: string[], membershipOrgUnitIds: string[]): Promise<EffectiveAccess> {
   const inherited = await sql<GrantRow[]>`
     SELECT capability, effect, scope_type, scope_ids FROM permission_grants

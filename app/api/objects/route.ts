@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { withTenant } from "@/lib/db/client";
+import { assertEligibleObjectManagers,assertEligibleObjectRecruiters,ObjectSettingsConflict } from "@/lib/operations/object-manager-options";
 import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 
 const schema=z.object({
@@ -31,57 +32,19 @@ export async function POST(request:Request){
     requireCapability(actor,"operations.object.create");
     if(actor.demo)return NextResponse.json({error:"В демо-режиме объект добавляется локально"},{status:409});
     const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [[client],[legalEntity],[region]]=await Promise.all([
-        tx<Array<{id:string}>>`SELECT id FROM client_companies WHERE id=${body.clientId}::uuid AND status<>'archived'`,
-        tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND active`,
-        tx<Array<{id:string}>>`SELECT id FROM regions WHERE id=${body.regionId}::uuid`,
+        tx<Array<{id:string}>>`SELECT id FROM client_companies WHERE id=${body.clientId}::uuid AND organization_id=${actor.organizationId}::uuid AND status<>'archived'`,
+        tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`,
+        tx<Array<{id:string}>>`SELECT id FROM regions WHERE id=${body.regionId}::uuid AND organization_id=${actor.organizationId}::uuid`,
       ]);
       if(!client)throw new Error("Клиент не найден");
       if(!legalEntity)throw new Error("Юридическое лицо недоступно");
       if(!region)throw new Error("Регион не найден");
 
       const managerIds=[...new Set([body.ownerUserId,...body.additionalManagerUserIds])];
-      const validManagers=await tx<Array<{id:string}>>`
-        SELECT DISTINCT m.user_id id
-        FROM organization_memberships m
-        LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-        WHERE m.status='active' AND m.user_id=ANY(${managerIds}::uuid[])
-          AND (
-            rt.code IN ('director','object_manager','regional_manager','operations_head')
-            OR EXISTS (
-              SELECT 1 FROM permission_grants pg
-              WHERE pg.role_template_id=m.role_template_id AND pg.capability='operations.object.edit' AND pg.effect='allow'
-            )
-            OR EXISTS (
-              SELECT 1 FROM position_assignments pa
-              JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
-              WHERE pa.membership_id=m.id AND pa.status<>'ended'
-                AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND ppg.capability='operations.object.edit' AND ppg.effect='allow'
-            )
-          )
-      `;
-      if(validManagers.length!==managerIds.length)throw new Error("Один из выбранных менеджеров не имеет права работать с объектами");
-      if(body.recruiterUserIds.length){
-        const validRecruiters=await tx<Array<{id:string}>>`
-          SELECT DISTINCT m.user_id id
-          FROM organization_memberships m
-          LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-          WHERE m.status='active' AND m.user_id=ANY(${body.recruiterUserIds}::uuid[])
-            AND (
-              rt.code IN ('recruiter','recruiting_manager','recruitment_head')
-              OR EXISTS (
-                SELECT 1 FROM permission_grants pg
-                WHERE pg.role_template_id=m.role_template_id
-                  AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign')
-                  AND pg.effect='allow'
-              )
-            )
-        `;
-        if(validRecruiters.length!==new Set(body.recruiterUserIds).size)throw new Error("Один из выбранных сотрудников не имеет доступа к подбору");
-      }
+      await assertEligibleObjectManagers(tx,actor.organizationId,managerIds);
+      if(body.recruiterUserIds.length)await assertEligibleObjectRecruiters(tx,actor.organizationId,body.recruiterUserIds);
 
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`
@@ -145,11 +108,12 @@ export async function POST(request:Request){
         )
       `;
       return object;
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные объекта",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось создать объект"},{status:500});
+    if(error instanceof ObjectSettingsConflict)return NextResponse.json({error:error.message},{status:409});
+    console.error(error);return NextResponse.json({error:"Не удалось создать объект. Проверьте данные и повторите попытку"},{status:500});
   }
 }
