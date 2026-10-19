@@ -140,9 +140,9 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         const work=body.scheduleWorkDays??scope.scheduleWorkDays,rest=body.scheduleRestDays??scope.scheduleRestDays;
         const kind=body.scheduleShiftKind??scope.scheduleShiftKind;
         if(work==null||rest==null||kind==='mixed')throw new Error("Для индивидуального графика укажите рабочие/выходные дни и дневную либо ночную смену");
-        await tx`INSERT INTO worker_schedule_pattern_changes(organization_id,object_id,worker_id,effective_from,work_days,rest_days,shift_kind,floating_days_off,status,reviewed_by_user_id,reviewed_at)
-          VALUES(${actor.organizationId}::uuid,${scope.objectId}::uuid,${id}::uuid,${assignmentDate}::date,${work},${rest},${kind},false,'accepted',${actor.userId}::uuid,now())
-          ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,status='accepted',reviewed_by_user_id=EXCLUDED.reviewed_by_user_id,reviewed_at=now()`;
+        await tx`INSERT INTO worker_schedule_pattern_changes(organization_id,object_id,worker_id,effective_from,anchor_date,work_days,rest_days,shift_kind,floating_days_off,status,reviewed_by_user_id,reviewed_at)
+          VALUES(${actor.organizationId}::uuid,${scope.objectId}::uuid,${id}::uuid,${assignmentDate}::date,${body.scheduleAnchorDate??null}::date,${work},${rest},${kind},false,'accepted',${actor.userId}::uuid,now())
+          ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET anchor_date=EXCLUDED.anchor_date,work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,status='accepted',reviewed_by_user_id=EXCLUDED.reviewed_by_user_id,reviewed_at=now()`;
         await tx`UPDATE worker_object_assignments SET individual_schedule=true WHERE id=${assignmentId}::uuid AND organization_id=${actor.organizationId}::uuid`;
       }
       await tx`UPDATE worker_object_assignments SET transition_days=COALESCE(${body.transitionDays??null}::int,transition_days),daily_payment_shifts=COALESCE(${body.dailyPaymentShifts??null}::int,daily_payment_shifts) WHERE id=${assignmentId}::uuid AND organization_id=${actor.organizationId}::uuid`;

@@ -74,7 +74,7 @@ export async function POST(request:Request){
       const [worker]=await tx<Array<{id:string}>>`
         INSERT INTO worker_profiles(organization_id,full_name,phone,email,city,birth_date,clothing_size,shoe_size,height_cm,notes,status,source,created_by_user_id,onboarding_metadata)
         VALUES(${actor.organizationId}::uuid,${body.fullName},${body.phone?.trim()||null},${body.email??null},${body.city??null},${body.birthDate??null}::date,
-          ${body.clothingSize??null},${body.shoeSize??null},${body.heightCm??null},${body.notes??null},${assigned?"active":"requires_assignment"},'Ручное создание',${actor.userId}::uuid,${tx.json({objectId:body.objectId??null,specialtyId,startDate:body.startDate??null,relationType:body.relationType??null,rate:body.rate??null,rateUnit:body.rate?body.rateUnit:null,workMode:body.workMode??null,paidHoursPerShift:body.paidHoursPerShift??null})})
+          ${body.clothingSize??null},${body.shoeSize??null},${body.heightCm??null},${body.notes??null},${assigned?"active":"requires_assignment"},'Ручное создание',${actor.userId}::uuid,${tx.json({objectId:body.objectId??null,specialtyId,shiftKind:body.shiftKind,startDate:body.startDate??null,relationType:body.relationType??null,rate:body.rate??null,rateUnit:body.rate?body.rateUnit:null,workMode:body.workMode??null,paidHoursPerShift:body.paidHoursPerShift??null})})
         RETURNING id
       `;
       if(body.startDate&&body.relationType)await tx`

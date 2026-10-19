@@ -396,7 +396,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
              COALESCE(o.owner_user_id,woa.manager_user_id) "ownerUserId",
              ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date))
                || ARRAY[COALESCE(o.owner_user_id,woa.manager_user_id)::text] "assigneeUserIds",
-             s.name specialty,woa.specialty_id "specialtyId",woa.effective_from::text "startDate",woa.work_mode "workMode",woa.paid_hours_per_shift "paidHoursPerShift",
+             s.name specialty,woa.specialty_id "specialtyId",woa.effective_from::text "startDate",woa.work_mode "workMode",CASE WHEN woa.source_condition_id IS NOT NULL AND NOT woa.paid_hours_override THEN COALESCE((current_comp.value->(CASE WHEN woa.schedule_shift_kind='night' THEN 'night' ELSE 'day' END)->>'paidHours')::numeric,woa.paid_hours_per_shift) ELSE woa.paid_hours_per_shift END "paidHoursPerShift",
              woa.schedule_work_days "scheduleWorkDays",woa.schedule_rest_days "scheduleRestDays",woa.schedule_shift_kind "scheduleShiftKind",woa.schedule_anchor_date::text "scheduleAnchorDate",
              woa.transition_days "transitionDays",woa.daily_payment_shifts "dailyPaymentShifts",w.employment_documents_status "employmentDocumentsStatus",
              w.clothing_size "clothingSize",w.shoe_size "shoeSize",w.height_cm "heightCm",
@@ -412,9 +412,9 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
              ${maySeeAssets ? sql`COALESCE(ppe.required_count,0)` : sql`0`} "ppeRequiredCount",
              ${maySeeAssets ? sql`COALESCE(ppe.issued_count,0)` : sql`0`} "ppeIssuedCount",
              ${maySeeAssets ? sql`COALESCE(ppe.missing_names,ARRAY[]::text[])` : sql`ARRAY[]::text[]`} "ppeMissingNames",
-             ${maySeeComp ? sql`COALESCE(wr_day.amount,wr_any.amount,wr.amount)` : sql`NULL::numeric`} rate,${maySeeComp ? sql`COALESCE(wr_day.unit,wr_any.unit,wr.unit)` : sql`NULL::text`} "rateUnit",
-             ${maySeeComp ? sql`COALESCE(wr_day.amount,wr_any.amount)` : sql`NULL::numeric`} "dayRate",
-             ${maySeeComp ? sql`COALESCE(wr_night.amount,wr_any.amount)` : sql`NULL::numeric`} "nightRate",
+             ${maySeeComp ? sql`(current_comp.value->(CASE WHEN woa.schedule_shift_kind='night' THEN 'night' ELSE 'day' END)->>'amount')::numeric` : sql`NULL::numeric`} rate,${maySeeComp ? sql`current_comp.value->(CASE WHEN woa.schedule_shift_kind='night' THEN 'night' ELSE 'day' END)->>'unit'` : sql`NULL::text`} "rateUnit",
+             ${maySeeComp ? sql`(current_comp.value->'day'->>'amount')::numeric` : sql`NULL::numeric`} "dayRate",
+             ${maySeeComp ? sql`(current_comp.value->'night'->>'amount')::numeric` : sql`NULL::numeric`} "nightRate",
              ${maySeeComp ? sql`COALESCE(wa.total_amount,0)` : sql`NULL::numeric`} accrued,
              ${maySeeComp ? sql`COALESCE(pay.paid,0)+COALESCE(adv.advances,0)` : sql`NULL::numeric`} paid,
              ${maySeeComp ? sql`GREATEST(COALESCE(wa.total_amount,0)-COALESCE(pay.paid,0)-COALESCE(adv.advances,0),0)` : sql`NULL::numeric`} payable
@@ -485,10 +485,7 @@ export async function listWorkers(actor: Actor): Promise<WorkerRow[]> {
           FROM inventory_movements m WHERE m.worker_id=w.id AND m.item_id=ti.item_id AND (ti.variant='' OR m.variant=ti.variant)
         ) issued ON true
       ) ppe ON true
-      LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.object_id=woa.object_id OR x.object_id IS NULL) AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY (x.object_id=woa.object_id) DESC,x.effective_from DESC LIMIT 1) wr ON true
-      LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.object_id=woa.object_id OR x.object_id IS NULL) AND x.day_night='any' AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY (x.object_id=woa.object_id) DESC,x.effective_from DESC LIMIT 1) wr_any ON true
-      LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.object_id=woa.object_id OR x.object_id IS NULL) AND x.day_night='day' AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY (x.object_id=woa.object_id) DESC,x.effective_from DESC LIMIT 1) wr_day ON true
-      LEFT JOIN LATERAL (SELECT amount,unit FROM worker_rates x WHERE x.worker_id=w.id AND (x.object_id=woa.object_id OR x.object_id IS NULL) AND x.day_night='night' AND x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date) ORDER BY (x.object_id=woa.object_id) DESC,x.effective_from DESC LIMIT 1) wr_night ON true
+      LEFT JOIN LATERAL (SELECT resolve_time_entry_compensation(w.organization_id,w.id,woa.object_id,current_date) value) current_comp ON true
       LEFT JOIN LATERAL (SELECT id,total_amount,period_start,period_end FROM worker_accruals x WHERE x.worker_id=w.id ORDER BY x.period_end DESC LIMIT 1) wa ON true
       LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric paid FROM worker_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.accrual_id=wa.id)) pay ON true
       LEFT JOIN LATERAL (SELECT COALESCE(sum(amount),0)::numeric advances FROM advance_payments x WHERE x.worker_id=w.id AND x.status='paid' AND (wa.id IS NULL OR x.payment_date BETWEEN wa.period_start AND wa.period_end)) adv ON true

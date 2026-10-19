@@ -1,3 +1,4 @@
+import {scheduleCycleWork} from "@/lib/operations/schedule-cycle";
 import {plannedShiftCost} from "@/lib/operations/shift-cost";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -79,6 +80,13 @@ export async function POST(request:Request){
           ${body.startDate}::date,${body.endDate}::date,${body.startTime}::time,${body.endTime}::time,${body.shiftKind},${body.demandCount},'active',${actor.userId}::uuid)
         RETURNING id
       `;
+      // Workers are already locked in UUID order above: read their dated exceptions
+      // in the same transaction, so a concurrent settings save cannot race this plan.
+      const individualPatterns=await tx<Array<{workerId:string;effectiveFrom:string;anchorDate:string|null;workDays:number;restDays:number;shiftKind:"day"|"night"}>>`
+        SELECT worker_id "workerId",effective_from::text "effectiveFrom",anchor_date::text "anchorDate",work_days "workDays",rest_days "restDays",shift_kind "shiftKind"
+        FROM worker_schedule_pattern_changes WHERE organization_id=${actor.organizationId}::uuid AND object_id=${body.objectId}::uuid
+          AND worker_id=ANY(${[...body.workerIds,...body.reserveWorkerIds]}::uuid[]) AND status='accepted' AND effective_from<=${body.endDate}::date
+        ORDER BY effective_from DESC`;
       const primary=[...new Set(body.workerIds)];
       const reserve=[...new Set(body.reserveWorkerIds)];
       const requested=[...primary,...reserve];
@@ -138,6 +146,13 @@ export async function POST(request:Request){
             if(!info.eligible){warnings.push({date:shiftDate,worker:info.name,reason:"Нет действующего назначения на объект по этой специальности"});continue;}
             if(info.absence){warnings.push({date:shiftDate,worker:info.name,reason:"Подтверждённое отсутствие"});continue;}
             if(info.conflict){warnings.push({date:shiftDate,worker:info.name,reason:"Пересечение с другой сменой"});continue;}
+            const pattern=individualPatterns.find(p=>p.workerId===workerId&&p.effectiveFrom<=shiftDate);
+            if(pattern){
+              if(!scheduleCycleWork(shiftDate,{...pattern,anchorDate:pattern.anchorDate??pattern.effectiveFrom,explicitAnchor:pattern.anchorDate!=null})){
+                warnings.push({date:shiftDate,worker:info.name,reason:"Выходной по индивидуальному графику"});continue;
+              }
+              if(body.shiftKind!=="mixed"&&pattern.shiftKind!==body.shiftKind){warnings.push({date:shiftDate,worker:info.name,reason:"Другая смена по индивидуальному графику"});continue;}
+            }
             const isReserve=reserve.includes(workerId);
             await tx`
               INSERT INTO shift_assignments(organization_id,shift_id,worker_id,confirmation_status,is_reserve,assigned_by_user_id)

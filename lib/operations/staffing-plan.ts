@@ -3,8 +3,9 @@ import {getOperationsReferenceData} from "@/lib/operations/service";
 import {z} from "zod";
 import type {Actor} from "@/lib/access/types";
 import {withTenant} from "@/lib/db/client";
-import {requireObjectScope,staffingEditCapability} from "./object-conditions";
+import {conditionSchema,requireObjectScope,saveObjectConditionInTransaction,staffingEditCapability} from "./object-conditions";
 export const staffingPlanSchema=z.object({id:z.string().uuid().optional(),objectId:z.string().uuid(),specialtyId:z.string().uuid(),plannedCount:z.number().int().min(0).max(10000),shiftKind:z.enum(["day","night","mixed"]).default("mixed"),effectiveFrom:z.string().date().nullable().optional(),effectiveTo:z.string().date().nullable().optional(),status:z.enum(["active","paused","closed"]).default("active"),note:z.string().trim().max(2000).nullable().optional()}).superRefine((v,c)=>{if(v.effectiveFrom&&v.effectiveTo&&v.effectiveTo<v.effectiveFrom)c.addIssue({code:"custom",message:"Дата окончания раньше начала"});if(v.status!=="active"&&!v.note?.trim())c.addIssue({code:"custom",message:"Укажите причину приостановки или закрытия"})});
+export const staffingPlanWithConditionsSchema=z.object({plan:staffingPlanSchema,initialCondition:conditionSchema.optional()}).superRefine((v,c)=>{if(v.initialCondition&&(v.plan.id||v.initialCondition.supersedesId||v.initialCondition.specialtyId!==v.plan.specialtyId||v.initialCondition.shiftKind!==v.plan.shiftKind))c.addIssue({code:"custom",message:"Начальные условия должны соответствовать новой строке плана. Для изменения используйте новую версию условий"})});
 export type StaffingPlanTargetWrite=z.infer<typeof staffingPlanSchema>;
 export type StaffingPlanRow={id:string;objectId:string;specialtyId:string;specialty:string;plannedCount:number;shiftKind:"day"|"night"|"mixed";effectiveFrom:string|null;effectiveTo:string|null;status:"active"|"paused"|"closed";note:string|null;actualCount:number;plannedExits:number;replacementCount:number;openNeedCount:number;deficit:number};
 export async function listStaffingPlan(actor:Actor,objectId:string):Promise<StaffingPlanRow[]>{
@@ -17,8 +18,8 @@ export async function listStaffingPlan(actor:Actor,objectId:string):Promise<Staf
  LEFT JOIN LATERAL(SELECT count(*) FILTER(WHERE source_kind='replacement')::int replacements,count(*)::int open_count FROM needs WHERE organization_id=t.organization_id AND object_id=t.object_id AND specialty_id=t.specialty_id AND status IN('open','in_progress') AND(shift_kind=t.shift_kind OR t.shift_kind='mixed'))n ON true
  WHERE t.organization_id=${actor.organizationId}::uuid AND t.object_id=${objectId}::uuid ORDER BY t.status,s.name,t.shift_kind,t.created_at DESC`);
 }
-export async function setStaffingPlanTarget(actor:Actor,raw:StaffingPlanTargetWrite){
- const input=staffingPlanSchema.parse(raw);await requireObjectScope(actor,input.objectId,staffingEditCapability(actor));
+export async function setStaffingPlanTarget(actor:Actor,raw:StaffingPlanTargetWrite,initialCondition?:z.infer<typeof conditionSchema>){
+ const {plan:input}=staffingPlanWithConditionsSchema.parse({plan:raw,initialCondition});await requireObjectScope(actor,input.objectId,staffingEditCapability(actor));
  if(actor.demo)throw new Error("Демо: изменения плана не записываются. Используйте рабочую организацию");
  return withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
  await tx`SELECT pg_advisory_xact_lock(hashtextextended(${actor.organizationId+':'+input.objectId},77))`;
@@ -30,6 +31,7 @@ export async function setStaffingPlanTarget(actor:Actor,raw:StaffingPlanTargetWr
  const [duplicate]=await tx`SELECT id FROM staffing_plan_targets WHERE organization_id=${actor.organizationId}::uuid AND object_id=${input.objectId}::uuid AND specialty_id=${input.specialtyId}::uuid AND shift_kind=${input.shiftKind} AND status='active' AND ${input.status}='active' AND daterange(effective_from,effective_to,'[]')&&daterange(${input.effectiveFrom??null}::date,${input.effectiveTo??null}::date,'[]')`;if(duplicate)throw new Error("Активная строка этой специальности и смены уже существует. Отредактируйте её");
  [row]=await tx`INSERT INTO staffing_plan_targets(organization_id,object_id,specialty_id,shift_kind,planned_count,effective_from,effective_to,status,source_kind,note,created_by_user_id)VALUES(${actor.organizationId}::uuid,${input.objectId}::uuid,${input.specialtyId}::uuid,${input.shiftKind},${input.plannedCount},${input.effectiveFrom??null}::date,${input.effectiveTo??null}::date,${input.status},'manual',${input.note??null},${actor.userId}::uuid)RETURNING id`;
  }
+ if(initialCondition)await saveObjectConditionInTransaction(tx,actor,input.objectId,conditionSchema.parse(initialCondition));
  await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${input.objectId}::uuid,'staffing_plan_updated','Обновлён план комплектации',${tx.json(input)})`;return row;
  }));
 }

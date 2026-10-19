@@ -21,9 +21,9 @@ try{
  const request=async(method,url,data)=>{const r=await manager.request.fetch(origin+url,{method,data});const body=await r.json();assert.ok(r.ok(),url+' status '+r.status()+' '+JSON.stringify(body));return body};
  const object=await post('/api/objects',{name:'Изолированный HTTP объект',status:'active'});assert.ok(object.id);
  const specialty=await post('/api/admin/directories',{kind:'specialty',name:'Изолированная HTTP специальность'});assert.ok(specialty.id);
- const plan=await post('/api/staffing-plan/targets',{objectId:object.id,specialtyId:specialty.id,plannedCount:3,shiftKind:'day',effectiveFrom:null,effectiveTo:null,status:'active'});assert.ok(plan.id);
  const first={specialtyId:specialty.id,shiftKind:'day',schedule:'5/2',startTime:'08:00',endTime:'20:00',shiftDurationHours:12,paidHours:11,paymentUnit:'shift',baseRate:4500,effectiveFrom:null,effectiveTo:null,status:'active'};
- const condition=await post('/api/objects/'+object.id+'/conditions',first);assert.ok(condition.id);
+ const plan=await post('/api/staffing-plan/targets',{objectId:object.id,specialtyId:specialty.id,plannedCount:3,shiftKind:'day',effectiveFrom:null,effectiveTo:null,status:'active',initialCondition:first});assert.ok(plan.id);
+ const [condition]=(await pg.query('SELECT id FROM object_specialty_conditions WHERE object_id=$1 AND specialty_id=$2',[object.id,specialty.id])).rows;assert.ok(condition.id,'combined plan save persists actual condition');
  const historical=await post('/api/workers',{fullName:'Изолированный HTTP исторический сотрудник'});assert.ok(historical.workerId);
  const transfer={objectId:object.id,specialtyId:specialty.id,effectiveFrom:null,dateUnknown:true,shiftKind:'day'};
  await post('/api/workers/'+historical.workerId+'/transfer',transfer);await post('/api/workers/'+historical.workerId+'/transfer',transfer);

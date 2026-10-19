@@ -14,7 +14,7 @@ const nativeHandle=sql=>({nativeSql:sql,exec:q=>sql.unsafe(q),query:async(q,args
 const pg=native?{...nativeHandle(connection),transaction:fn=>connection.begin(tx=>fn(nativeHandle(tx))),close:()=>connection.end()}:new PGlite({extensions:{citext,pgcrypto,btree_gist}});
 const org='00000000-0000-4000-8000-000000000001',foreign='00000000-0000-4000-8000-000000000002',user='10000000-0000-4000-8000-000000000001';
 class AccessDeniedError extends Error{}
-const caps=['operations.need.read','operations.need.edit','operations.need.create','operations.staffing_plan.edit','operations.object.create','operations.object.edit','operations.object.read','worker.edit','recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.convert','recruiting.application.edit','operations.shift.edit','operations.shift.read','time.time_entry.edit','time.timesheet.submit','time.timesheet.read','admin.permissions.manage','worker.compensation.read','finance.worker_accrual.edit'];
+const caps=['worker.read','operations.need.read','operations.need.edit','operations.need.create','operations.staffing_plan.edit','operations.object.create','operations.object.edit','operations.object.read','worker.edit','recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.convert','recruiting.application.edit','operations.shift.edit','operations.shift.read','time.time_entry.edit','time.timesheet.submit','time.timesheet.read','admin.permissions.manage','worker.compensation.read','finance.worker_accrual.edit'];
 const fullActor={organizationId:org,userId:user,demo:false,regionIds:[],teamIds:[],access:{allOrg:true,capabilities:caps,denies:[],scopes:Object.fromEntries(caps.map(c=>[c,[{type:'all_org',ids:[]}]]))}};
 let actor=fullActor,serial=0;
 function adapter(tx){
@@ -39,6 +39,22 @@ try{
  assert.ok(incompleteObject,'candidate/need selectors include existing objects without a region or need');
  assert.equal(incompleteObject.regionId,'');assert.equal(incompleteObject.region,'');
  const staffing=compile('lib/operations/staffing-plan.ts'),conditions=compile('lib/operations/object-conditions.ts');
+ const [atomicObject]=await withTenant(org,user,s=>s`INSERT INTO objects(organization_id,name,code,status,created_by_user_id)VALUES(${org}::uuid,'Изолированное совместное сохранение','QA-CONDITIONS-ATOMIC','active',${user}::uuid)RETURNING id`);
+ const atomicPlan={objectId:atomicObject.id,specialtyId:specialty.id,plannedCount:2,shiftKind:'day',effectiveFrom:null,effectiveTo:null,status:'active'};
+ const atomicCondition={specialtyId:specialty.id,shiftKind:'day',schedule:'5/2',startTime:'08:00',endTime:'20:00',shiftDurationHours:12,paidHours:11,paymentUnit:'shift',baseRate:4500,effectiveFrom:null,effectiveTo:null,status:'active'};
+ await conditions.saveObjectCondition(actor,atomicObject.id,atomicCondition);
+ const failedCombined=await call('app/api/staffing-plan/targets/route.ts','POST',{...atomicPlan,initialCondition:atomicCondition});assert.equal(failedCombined.status,409);
+ assert.equal((await withTenant(org,user,s=>s`SELECT id FROM staffing_plan_targets WHERE object_id=${atomicObject.id}::uuid`)).length,0,'condition conflict rolls back plan, not a partial save');
+ const combined=await call('app/api/staffing-plan/targets/route.ts','POST',{...atomicPlan,shiftKind:'night',initialCondition:{...atomicCondition,shiftKind:'night'}});assert.equal(combined.status,200,JSON.stringify(combined.body));
+ assert.equal((await conditions.listObjectConditions(actor,atomicObject.id)).length,2);
+ const mismatched=await call('app/api/staffing-plan/targets/route.ts','POST',{...atomicPlan,initialCondition:{...atomicCondition,shiftKind:'night'}});assert.equal(mismatched.status,400);
+ const directWorker=await call('app/api/workers/route.ts','POST',{fullName:'Изолированный наследник дневных условий',objectId:atomicObject.id,specialtyId:specialty.id,startDate:'2026-10-01',shiftKind:'day'});assert.equal(directWorker.status,201,JSON.stringify(directWorker.body));
+ const [inheritedDirect]=await withTenant(org,user,s=>s`SELECT paid_hours_per_shift::float8 paid,schedule_work_days work,schedule_rest_days rest,source_condition_id FROM worker_object_assignments WHERE worker_id=${directWorker.body.workerId}::uuid`);assert.equal(inheritedDirect.paid,11);assert.equal(inheritedDirect.work,5);assert.equal(inheritedDirect.rest,2);assert.ok(inheritedDirect.source_condition_id);
+ const directRow=(await compile('lib/data/service.ts').listWorkers(actor)).find(row=>row.id===directWorker.body.workerId);assert.equal(Number(directRow.rate),4500,'worker card shows inherited base rate');assert.equal(directRow.rateUnit,'shift');
+ const noCompActor={...actor,access:{...actor.access,capabilities:actor.access.capabilities.filter(c=>c!=='worker.compensation.read')}};assert.equal((await compile('lib/data/service.ts').listWorkers(noCompActor)).find(row=>row.id===directWorker.body.workerId).rate,null);
+ await staffing.setStaffingPlanTarget(actor,{...atomicPlan,id:combined.body.id,shiftKind:'night',status:'paused',note:'Изолированная приостановка'});await staffing.setStaffingPlanTarget(actor,{...atomicPlan,id:combined.body.id,shiftKind:'night',status:'closed',note:'Изолированное закрытие'});assert.equal((await staffing.listStaffingPlan(actor,atomicObject.id)).find(row=>row.id===combined.body.id).status,'closed');assert.equal((await conditions.listObjectConditions(actor,atomicObject.id)).length,2,'closing plan preserves conditions history');
+ console.log('PASS combined plan + conditions: atomic rollback on condition conflict, separate persisted conditions, tuple validation and direct day-shift worker inheritance');
+
  const plan={objectId:object,specialtyId:specialty.id,plannedCount:3,shiftKind:'day',effectiveFrom:null,effectiveTo:null,status:'active',note:'Неизвестные исторические даты'};
  const saved=await staffing.setStaffingPlanTarget(actor,plan);assert.ok(saved.id);const rows=await staffing.listStaffingPlan(actor,object);const row=rows.find(r=>r.id===saved.id);assert.equal(row.effectiveFrom,null);assert.equal(row.effectiveTo,null);assert.equal(row.deficit,3);
  await assert.rejects(()=>staffing.setStaffingPlanTarget(actor,plan),/уже существует|пересека/);
