@@ -79,6 +79,8 @@ function makeHarness({
   const realWorkflow=compileModule(workflowPath,{'./model':compileModule(modelPath)});
   const episode=compileModule(helperPath);
   const dependencies={
+    // Legacy episode tests have no object-condition fixture; SQL inheritance is checked by operating-contour-db.
+    '@/lib/operations/object-conditions':{resolveObjectConditionInTransaction:async()=>null,conditionScheduleParts:()=>({workDays:null,restDays:null})},
     'next/server':{NextResponse:{json:(body,options)=>Response.json(body,options)}},
     '@/lib/auth/server':{getCurrentActor:async()=>unauthenticated?null:actor},
     '@/lib/access/server':{AccessDeniedError,requireCapability(currentActor,capability){if(!hasCapability(currentActor.access,capability))throw new AccessDeniedError(capability);}},

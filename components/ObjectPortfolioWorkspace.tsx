@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {InlineClientContact} from "./InlineClientContact";
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -12,11 +13,11 @@ import type { ObjectManagementOptions } from "@/lib/operations/object-management
 
 const statusLabels:Record<string,string>={prelaunch:"Подготовка",launch:"Запуск",active:"Действующий",paused:"Приостановлен",completed:"Завершён",archived:"Архив"};
 const riskLabels:Record<string,string>={normal:"Норма",watch:"Контроль",high:"Высокий",critical:"Критический"};
-type CreateForm={name:string;code:string;clientId:string;legalEntityId:string;regionId:string;address:string;targetStartDate:string;actualStartDate:string;ownerUserId:string;additionalManagerUserIds:string[];recruitingMode:"company_rules"|"object_team";recruiterUserIds:string[];status:"prelaunch"|"active"};
+type CreateForm={contactId:string;name:string;code:string;clientId:string;legalEntityId:string;regionId:string;address:string;targetStartDate:string;actualStartDate:string;ownerUserId:string;additionalManagerUserIds:string[];recruitingMode:"company_rules"|"object_team";recruiterUserIds:string[];status:"prelaunch"|"active"};
 
 function initialForm():CreateForm{
   return {
-    name:"",code:"",clientId:"",legalEntityId:"",
+    contactId:"",name:"",code:"",clientId:"",legalEntityId:"",
     regionId:"",address:"",targetStartDate:"",actualStartDate:"",ownerUserId:"",additionalManagerUserIds:[],
     recruitingMode:"company_rules",recruiterUserIds:[],status:"active",
   };
@@ -113,7 +114,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
         },...current]);
         setCreateOpen(false);setForm(initialForm());return;
       }
-      const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,clientId:form.clientId||null,legalEntityId:form.legalEntityId||null,regionId:form.regionId||null,ownerUserId:form.ownerUserId||null,code:form.code||null,address:form.address||null,targetStartDate:form.targetStartDate||null,actualStartDate:form.status==="active"?(form.actualStartDate||null):null})});
+      const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,clientId:form.clientId||null,contactId:form.contactId||null,legalEntityId:form.legalEntityId||null,regionId:form.regionId||null,ownerUserId:form.ownerUserId||null,code:form.code||null,address:form.address||null,targetStartDate:form.targetStartDate||null,actualStartDate:form.status==="active"?(form.actualStartDate||null):null})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось создать объект");
       setCreateOpen(false);router.push(`/objects/${json.id}`);router.refresh();
@@ -171,7 +172,8 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
     {createOpen&&<RegistryDrawer title="Добавить объект" subtitle="Для действующего объекта достаточно названия. Остальные сведения можно дополнить позднее." className="object-create-drawer" onClose={()=>{if(!busy)setCreateOpen(false)}} footer={<><button className="button" disabled={busy} onClick={()=>setCreateOpen(false)}>Отмена</button><button className="button primary" disabled={busy||form.name.trim().length<2||inlineKind!==null} onClick={()=>void createObject()}>{busy?"Создаю…":"Создать объект"}</button></>}>
       <div className="object-create-form">
         <label className="wide">Название объекта<input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Например, РЦ Северный"/></label>
-        <label>Клиент<select value={form.clientId} onChange={e=>setForm({...form,clientId:e.target.value})}><option value="">Выберите клиента</option>{creationOptions.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.client===false} onClick={()=>{setInlineKind("client");setInlineName("");setDuplicates([])}}>Создать клиента</button></label>
+        <label>Клиент<select value={form.clientId} onChange={e=>setForm({...form,clientId:e.target.value,contactId:""})}><option value="">Выберите клиента</option>{creationOptions.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.client===false} onClick={()=>{setInlineKind("client");setInlineName("");setDuplicates([])}}>Создать клиента</button></label>
+        <InlineClientContact key={form.clientId} clientId={form.clientId} demo={demo} value={form.contactId} onChange={contactId=>setForm(x=>({...x,contactId}))}/>
         <label>Наше юрлицо<select value={form.legalEntityId} onChange={e=>setForm({...form,legalEntityId:e.target.value})}><option value="">Выберите юрлицо</option>{creationOptions.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.legalEntity===false} onClick={()=>{setInlineKind("legalEntity");setInlineName("");setDuplicates([])}}>Создать наше юрлицо</button></label>
         <label>Регион<select value={form.regionId} onChange={e=>setForm({...form,regionId:e.target.value})}><option value="">Выберите регион</option>{creationOptions.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={creationOptions.creationPermissions?.region===false} onClick={()=>{setInlineKind("region");setInlineName("");setDuplicates([])}}>Добавить регион</button></label>
         <label>Основной менеджер<select value={form.ownerUserId} onChange={e=>setForm({...form,ownerUserId:e.target.value,additionalManagerUserIds:form.additionalManagerUserIds.filter(id=>id!==e.target.value)})}><option value="">Выберите менеджера</option>{options.managers.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>

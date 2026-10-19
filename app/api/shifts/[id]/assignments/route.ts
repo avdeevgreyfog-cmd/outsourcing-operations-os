@@ -1,3 +1,4 @@
+import {plannedShiftCost} from "@/lib/operations/shift-cost";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
@@ -20,16 +21,17 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     if(actor.demo)return NextResponse.json({error:"В демо-режиме состав смены не сохраняется"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+      await tx`SELECT id FROM worker_profiles WHERE organization_id=${actor.organizationId}::uuid AND id=ANY(${[...body.workerIds,...body.reserveWorkerIds]}::uuid[]) ORDER BY id FOR UPDATE`;
       const [shift]=await tx<Array<{
         id:string;organizationId:string;objectId:string;specialtyId:string;shiftDate:string;startsAt:string;endsAt:string;
-        object:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];demandCount:number;
+        shiftKind:string;object:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];demandCount:number;
       }>>`
         SELECT sh.id,sh.organization_id "organizationId",sh.object_id "objectId",sh.specialty_id "specialtyId",
-          sh.shift_date::text "shiftDate",sh.starts_at::text "startsAt",sh.ends_at::text "endsAt",o.name object,
+          sh.shift_date::text "shiftDate",sh.starts_at::text "startsAt",sh.ends_at::text "endsAt",o.name object,sh.shift_kind "shiftKind",
           o.owner_user_id "ownerUserId",o.region_id "regionId",sh.demand_count "demandCount",
           ARRAY(SELECT oa.user_id::text FROM object_assignments oa
             WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-        FROM shifts sh JOIN objects o ON o.id=sh.object_id WHERE sh.id=${id}::uuid FOR UPDATE OF sh
+        FROM shifts sh JOIN objects o ON o.id=sh.object_id WHERE sh.id=${id}::uuid AND sh.organization_id=${actor.organizationId}::uuid FOR UPDATE OF sh
       `;
       if(!shift||!canReadRow(actor.access,"operations.shift.edit",shift,actor))throw new AccessDeniedError("operations.shift.edit");
       const primary=[...new Set(body.workerIds)],reserve=[...new Set(body.reserveWorkerIds)],requested=[...primary,...reserve];
@@ -40,7 +42,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
             EXISTS(
               SELECT 1 FROM worker_object_assignments a
               WHERE a.worker_id=w.id AND a.object_id=${shift.objectId}::uuid AND a.specialty_id=${shift.specialtyId}::uuid
-                AND a.effective_from<=${shift.shiftDate}::date AND (a.effective_to IS NULL OR a.effective_to>=${shift.shiftDate}::date)
+                AND (a.effective_from IS NULL OR a.effective_from<=${shift.shiftDate}::date) AND (a.effective_to IS NULL OR a.effective_to>=${shift.shiftDate}::date)
             ) eligible,
             EXISTS(
               SELECT 1 FROM worker_absence_plans ap WHERE ap.worker_id=w.id AND ap.status='confirmed'
@@ -51,7 +53,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
               WHERE sa.worker_id=w.id AND sa.confirmation_status<>'cancelled' AND other.id<>${shift.id}::uuid
                 AND tstzrange(other.starts_at,other.ends_at,'[)') && tstzrange(${shift.startsAt}::timestamptz,${shift.endsAt}::timestamptz,'[)')
             ) conflict
-          FROM worker_profiles w WHERE w.id=ANY(${requested}::uuid[]) AND w.status='active'
+          FROM worker_profiles w WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=ANY(${requested}::uuid[]) AND w.status='active'
         `;
         const byId=new Map(rows.map(row=>[row.id,row]));
         for(const workerId of requested){
@@ -94,7 +96,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
                ),0) ELSE 0 END),0)::numeric cost
         FROM active a
       `;
-      await tx`UPDATE shifts SET assigned_count=${counts?.assigned??0},reserve_count=${counts?.reserve??0},planned_cost=${Number(counts?.cost??0)} WHERE id=${shift.id}::uuid`;
+      const cost=await plannedShiftCost(tx,actor.organizationId,{objectId:shift.objectId,specialtyId:shift.specialtyId,date:shift.shiftDate,shiftKind:shift.shiftKind,physicalHours:(Date.parse(shift.endsAt)-Date.parse(shift.startsAt))/3600000,workerIds:primary});
+      await tx`UPDATE shifts SET assigned_count=${counts?.assigned??0},reserve_count=${counts?.reserve??0},planned_cost=${cost} WHERE id=${shift.id}::uuid`;
       const deficit=Math.max(shift.demandCount-(counts?.assigned??0),0);
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)

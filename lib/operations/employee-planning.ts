@@ -1,3 +1,4 @@
+import {scheduleCycleWork,schedulingConditionForDate,schedulingCycle,type SchedulingCondition} from "@/lib/operations/schedule-cycle";
 import type {Actor} from "@/lib/access/types";
 import {AccessDeniedError,requireCapability} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
@@ -9,18 +10,18 @@ import type {Sql} from "postgres";
 export type ScheduleOwner="manager"|"worker";
 export type PlannedKind="day"|"night"|"off";
 export type PlanningDay={reserveKind?:"day"|"night"|null;date:string;kind:PlannedKind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:PlannedKind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
-export type EmployeePlanning={owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanningDay[]};
+export type EmployeePlanning={owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string|null;days:PlanningDay[]};
 
-type TenantScope={org:string;actor:string;worker:string;object:string;link:string;today:string;timezone:string;owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;anchor:string;defaultKind:"day"|"night"|null};
+type TenantScope={specialtyId:string|null;org:string;actor:string;worker:string;object:string;link:string;today:string;timezone:string;owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;anchor:string|null;defaultKind:"day"|"night"|null};
 type Entry={date:string;kind:string|null;code:string;source:string;hours:number};
 type Shift={reserve?:boolean;date:string;kind:string;start:string;end:string;endsNextDay:boolean};
 type Proposal={date:string;kind:PlannedKind;status:"proposed"|"accepted"|"rejected"};
 type TimeChange={date:string;start:string;end:string;next:boolean;appliesTo:string;status:string;kind:"day"|"night"|null};
-type Pattern={effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean;status:"proposed"|"accepted"|"rejected"};
+type Pattern={effectiveFrom:string;anchorDate:string|null;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean;status:"proposed"|"accepted"|"rejected"};
 
 function addDays(date:string,days:number){const d=new Date(date+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
-export function cycleKind(date:string,anchor:string,workDays:number|null,restDays:number|null,kind:"day"|"night"|null):PlannedKind|null{
- if(!workDays||restDays===null||workDays<1||restDays<0||!kind||date<anchor)return null;
+export function cycleKind(date:string,anchor:string|null,workDays:number|null,restDays:number|null,kind:"day"|"night"|null):PlannedKind|null{
+ if(!workDays||restDays===null||workDays<1||restDays<0||!kind||!anchor||date<anchor)return null;
  if((workDays===5&&restDays===2)||(workDays===6&&restDays===1)){
   const dow=new Date(date+"T00:00:00Z").getUTCDay();
   return dow===0||(workDays===5&&dow===6)?"off":kind;
@@ -33,7 +34,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
  const ref=await resolveToken(token);if(!ref)throw new EmployeePortalAccessError("Недействительная ссылка");
  return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
   const [row]=await sql<Array<Omit<TenantScope,"org"|"actor"|"link">>>`SELECT
-   l.worker_id worker,l.object_id object,
+   l.worker_id worker,l.object_id object,a.specialty_id "specialtyId",
    (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
    COALESCE(s.timezone,'Europe/Moscow') timezone,
    COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
@@ -43,7 +44,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
    CASE WHEN a.schedule_shift_kind='night' THEN 'night' WHEN a.schedule_shift_kind='day' THEN 'day' ELSE NULL END "defaultKind"
    FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
    JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
-     AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+     AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
    LEFT JOIN object_shift_reporting_settings s ON s.object_id=l.object_id
    LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
    WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active'
@@ -54,7 +55,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
  });
 }
 async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
- const [entries,shifts,proposals,changes,patterns]=await Promise.all([
+ const [entries,shifts,proposals,changes,patterns,conditions]=await Promise.all([
   sql<Array<Entry>>`SELECT DISTINCT ON(work_date) work_date::text date,planned_shift_kind kind,time_code code,source,fact_hours::float8 hours
    FROM time_entries WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid
      AND work_date BETWEEN ${from}::date AND ${to}::date ORDER BY work_date,(shift_id IS NULL) DESC,updated_at DESC`,
@@ -72,11 +73,12 @@ async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
     ends_next_day "next",applies_to "appliesTo",status,shift_kind kind FROM worker_shift_time_changes
    WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid AND
      (work_date BETWEEN ${from}::date AND ${to}::date OR (applies_to='regular' AND status='accepted' AND work_date<=${to}::date))`,
-  sql<Array<Pattern>>`SELECT effective_from::text "effectiveFrom",work_days "workDays",rest_days "restDays",shift_kind "shiftKind",floating_days_off "floatingDaysOff",status
+  sql<Array<Pattern>>`SELECT effective_from::text "effectiveFrom",anchor_date::text "anchorDate",work_days "workDays",rest_days "restDays",shift_kind "shiftKind",floating_days_off "floatingDaysOff",status
     FROM worker_schedule_pattern_changes WHERE worker_id=${s.worker}::uuid AND object_id=${s.object}::uuid
     AND effective_from<=${to}::date ORDER BY effective_from DESC`,
+  sql<Array<SchedulingCondition>>`SELECT specialty_id "specialtyId",shift_kind "shiftKind",schedule,start_time::text "startTime",end_time::text "endTime",effective_from::text "effectiveFrom",effective_to::text "effectiveTo" FROM object_specialty_conditions WHERE organization_id=${s.org}::uuid AND object_id=${s.object}::uuid AND specialty_id=${s.specialtyId}::uuid AND status='active' AND(effective_from IS NULL OR effective_from<=${to}::date) AND(effective_to IS NULL OR effective_to>=${from}::date) ORDER BY effective_from DESC NULLS LAST,created_at DESC`,
  ]);
- return {entries,shifts,proposals,changes,patterns};
+ return {entries,shifts,proposals,changes,patterns,conditions};
 }
 export async function employeePlanning(token:string):Promise<EmployeePlanning>{
  const s=await scopeForToken(token);
@@ -90,10 +92,13 @@ export async function employeePlanning(token:string):Promise<EmployeePlanning>{
   const recurring=records.changes.filter(e=>e.appliesTo==="regular"&&e.status==="accepted").sort((a,b)=>b.date.localeCompare(a.date));
   const accepted=records.patterns.filter(p=>p.status==="accepted");
  const current=accepted.find(p=>p.effectiveFrom<=s.today);
+ const currentBase=schedulingConditionForDate(records.conditions,s.specialtyId,s.defaultKind,s.today);
+ const currentCycle=currentBase?schedulingCycle(currentBase):null;
  const days:PlanningDay[]=[];
   for(let d=from;d<=to;d=addDays(d,1)){
    const en=entries.get(d),sh=shifts.get(d),pr=requests.get(d);
    const regular=recurring.find(x=>x.date<=d),custom=specific.get(d)??regular;
+   const baseCondition=schedulingConditionForDate(records.conditions,s.specialtyId,s.defaultKind,d);
    let kind:PlannedKind|null=null,source:PlanningDay["source"]="none";
    if(sh){kind=sh.reserve?null:sh.kind==="night"?"night":"day";source="assigned";}
    else if(en?.code==="DAY_OFF"&&en.source==="schedule"){kind="off";source=pr?.status==="accepted"?"worker":"manual";}
@@ -101,15 +106,16 @@ export async function employeePlanning(token:string):Promise<EmployeePlanning>{
    else if(en?.code==="WORK"&&en.hours>0){kind=(en.kind==="night"?"night":"day");source="manual";}
    else {
     const pattern=accepted.find(p=>p.effectiveFrom<=d);
-    kind=cycleKind(d,pattern?.effectiveFrom??s.anchor,pattern?.workDays??s.workDays,pattern?.restDays??s.restDays,pattern?.shiftKind??s.defaultKind);
+    if(pattern){const works=scheduleCycleWork(d,{...pattern,anchorDate:pattern.anchorDate??pattern.effectiveFrom,explicitAnchor:pattern.anchorDate!=null});kind=works==null?null:works?pattern.shiftKind:"off";}
+    else {const condition=schedulingConditionForDate(records.conditions,s.specialtyId,s.defaultKind,d);if(condition){const cycle=schedulingCycle(condition);const works=scheduleCycleWork(d,{...cycle,anchorDate:cycle.anchorDate??s.anchor});kind=works==null?null:works?(condition.shiftKind==="night"?"night":"day"):"off";}else kind=cycleKind(d,s.anchor,s.workDays,s.restDays,s.defaultKind);}
     if(kind)source="cycle";
    }
    if(!sh&&custom?.kind&&kind!=="off"&&source==="cycle"){kind=custom.kind;source="manual";}
    days.push({date:d,kind,source,reserveKind:sh?.reserve?(sh.kind==="night"?"night":"day"):null,proposal:pr?.status==="proposed"?pr.kind:null,
     proposalStatus:pr?.status==="proposed"||pr?.status==="rejected"?pr.status:null,
-    startTime:custom?.start??sh?.start??null,endTime:custom?.end??sh?.end??null,endsNextDay:custom?.next??sh?.endsNextDay??kind==="night"});
+    startTime:custom?.start??sh?.start??baseCondition?.startTime?.slice(0,5)??null,endTime:custom?.end??sh?.end??baseCondition?.endTime?.slice(0,5)??null,endsNextDay:custom?.next??sh?.endsNextDay??kind==="night"});
   }
-  return {owner:s.owner,horizon:s.horizon,workDays:current?.workDays??s.workDays,restDays:current?.restDays??s.restDays,
+  return {owner:s.owner,horizon:s.horizon,workDays:current?.workDays??currentCycle?.workDays??s.workDays,restDays:current?.restDays??currentCycle?.restDays??s.restDays,
     defaultKind:current?.shiftKind??s.defaultKind,floatingDaysOff:current?.floatingDaysOff??false,patternFrom:current?.effectiveFrom??s.anchor,days};
  });
 }
@@ -199,7 +205,7 @@ export async function managerReviewEmployeePlan(actor:Actor,objectId:string,work
   if(!request)throw new EmployeePortalError("Предложение не найдено или уже рассмотрено");
   const s={org:actor.organizationId,actor:actor.userId,worker:workerId,object:objectId};
   if(approve){
-   await ensureNotLocked(sql,{...s,link:"",today:date,timezone:"Europe/Moscow",owner:"manager",horizon:7,workDays:null,restDays:null,anchor:date,defaultKind:null},date);
+   await ensureNotLocked(sql,{...s,specialtyId:null,link:"",today:date,timezone:"Europe/Moscow",owner:"manager",horizon:7,workDays:null,restDays:null,anchor:date,defaultKind:null},date);
    const active=await sql<Array<{shiftId:string}>>`SELECT DISTINCT sh.id "shiftId" FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
     WHERE sa.worker_id=${workerId}::uuid AND sh.object_id=${objectId}::uuid AND sh.shift_date=${date}::date AND sa.confirmation_status<>'cancelled'`;
    if(active.length){
@@ -251,7 +257,7 @@ export async function submitEmployeePattern(token:string,pattern:PatternInput){
   await ensureNotLocked(sql,s,pattern.effectiveFrom);
   await sql`INSERT INTO worker_schedule_pattern_changes(organization_id,object_id,worker_id,effective_from,work_days,rest_days,shift_kind,floating_days_off,status,source_link_id)
    VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${pattern.effectiveFrom}::date,${pattern.workDays},${pattern.restDays},${pattern.shiftKind},${pattern.floatingDaysOff},'proposed',${s.link}::uuid)
-   ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,floating_days_off=EXCLUDED.floating_days_off,
+   ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET anchor_date=NULL,work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,floating_days_off=EXCLUDED.floating_days_off,
       status='proposed',source_link_id=EXCLUDED.source_link_id,reviewed_at=NULL,reviewed_by_user_id=NULL,updated_at=now()`;
   return {ok:true,status:"proposed"};
  });
@@ -293,7 +299,7 @@ export async function managerSetWorkerPattern(actor:Actor,objectId:string,worker
   if(fact)throw new EmployeePortalError("Дата попадает в закрытый период");
   await sql`INSERT INTO worker_schedule_pattern_changes(organization_id,object_id,worker_id,effective_from,work_days,rest_days,shift_kind,floating_days_off,status,reviewed_by_user_id,reviewed_at)
    VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${workerId}::uuid,${pattern.effectiveFrom}::date,${pattern.workDays},${pattern.restDays},${pattern.shiftKind},${pattern.floatingDaysOff},'accepted',${actor.userId}::uuid,now())
-   ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,
+   ON CONFLICT(worker_id,object_id,effective_from) DO UPDATE SET anchor_date=NULL,work_days=EXCLUDED.work_days,rest_days=EXCLUDED.rest_days,shift_kind=EXCLUDED.shift_kind,
      floating_days_off=EXCLUDED.floating_days_off,status='accepted',reviewed_by_user_id=EXCLUDED.reviewed_by_user_id,reviewed_at=now(),updated_at=now()`;
   return {ok:true};
  });

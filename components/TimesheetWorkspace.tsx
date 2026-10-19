@@ -3,6 +3,7 @@
 import {useEffect,useMemo,useRef,useState,type KeyboardEvent} from "react";
 import {useRouter} from "next/navigation";
 import {CheckCircle2,Download,Printer,RotateCcw,ShieldCheck,WalletCards} from "lucide-react";
+import {TimesheetProvenance} from "@/components/TimesheetProvenance";
 import {Status} from "@/components/UI";
 import {rub} from "@/lib/ui/format";
 import type {TimesheetAbsenceRange,TimesheetCellValue,TimesheetData,TimesheetRatePeriod,TimesheetWorkerRow} from "@/lib/data/service";
@@ -28,6 +29,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
   const [detailsOpen,setDetailsOpen]=useState(false);
   const [attentionOnly,setAttentionOnly]=useState(false);
   const [financeOpen,setFinanceOpen]=useState(false);
+  const cellInitial=useRef<Record<string,string>>({});
 
   const todayIso=new Date().toISOString().slice(0,10);
   const currentDay=data.month===todayIso.slice(0,7)?Number(todayIso.slice(8,10)):null;
@@ -269,7 +271,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   const raw=cells?.[String(day)];
                   const value=ended||band?stateCode:raw;
                   const key=`${row.workerId}:${day}:${segment}`;
-                  const editable=canEditFact&&row.rowKind!=="candidate"&&!ended&&!band;
+                  const editable=canEditFact&&row.rowKind!=="candidate"&&!ended&&!band&&rowCoversDate(row,date);
                   const classes=[
                     timesheetCellClass(value,ended,isWeekend(data.month,day)),
                     currentDay===day?"today":"",
@@ -278,7 +280,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
                   ].filter(Boolean).join(" ");
                   return <td key={day} className={classes}>
                     {editable
-                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onKeyDown={handleCellKeyDown} onFocus={event=>event.currentTarget.select()} onChange={event=>setRows(current=>current.map(item=>(item.rowId??item.workerId)!==(row.rowId??row.workerId)?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>void persistCell(row.workerId,day,event.target.value,segment)} aria-label={`${row.name} ${segment} ${day}`}/>
+                      ?<input className="timesheet-cell-input" value={raw==null?"":String(raw)} disabled={saving===key} onKeyDown={handleCellKeyDown} onFocus={event=>{cellInitial.current[key]=event.currentTarget.value;event.currentTarget.select()}} onChange={event=>setRows(current=>current.map(item=>(item.rowId??item.workerId)!==(row.rowId??row.workerId)?item:{...item,[segment==="day"?"dayCells":"nightCells"]:{...(segment==="day"?item.dayCells:item.nightCells),[String(day)]:normalizeCell(event.target.value)}}))} onBlur={event=>{if(event.target.value!==cellInitial.current[key])void persistCell(row.workerId,day,event.target.value,segment)}} aria-label={`${row.name} ${segment} ${day}`}/>
                       :stateCode??""}
                   </td>;
                 })}
@@ -325,6 +327,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
       </div>
     </section>
 
+    <TimesheetProvenance objectId={data.objectId} month={data.month}/>
     <section className="section">
       <div className="section-head"><div><h2>Фиксация табеля</h2><p>В работе факт можно менять. После фиксации часы блокируются; повторное открытие доступно руководителю и сохраняется в истории версий.</p></div><Status tone={fixed?"good":data.status==="returned"?"warn":"neutral"}>{statusLabel(data.status)}</Status></div>
       <div className="timesheet-workflow-panel">
@@ -340,7 +343,7 @@ export function TimesheetWorkspace({data,options,sensitive,canEdit,canSubmit,can
 }
 
 function EmployeeIdentity({row}:{row:TimesheetWorkerRow}){
-  const history=(row.specialtyHistory??[]).slice().sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const history=(row.specialtyHistory??[]).slice().sort((a,b)=>(a.effectiveFrom??"").localeCompare(b.effectiveFrom??""));
   const current=history.at(-1);
   return <div className="timesheet-worker-identity">
     <strong>{row.name}</strong>
@@ -411,7 +414,7 @@ function calculateSegmentAccrued(row:TimesheetWorkerRow,segment:Segment,days:num
     const hours=numericCell((segment==="day"?row.dayCells:row.nightCells)?.[String(day)]);if(hours<=0)continue;
     const rate=rateAt(row,dateString(month,day),segment);if(!rate)continue;
     if(rate.unit==="hour")total+=hours*Number(rate.amount);
-    else if(rate.unit==="shift"){const planned=Number(row.plannedHours??0);total+=planned>0?hours*(Number(rate.amount)/planned):Number(rate.amount)}
+    else if(rate.unit==="shift"){const planned=Number(row.compensationByDate?.[dateString(month,day)]?.[segment]?.paidHours??row.plannedHours??0);total+=planned>0?hours*(Number(rate.amount)/planned):Number(rate.amount)}
   }
   if(segment==="day"){
     const dates=days.filter(day=>numericCell(row.dayCells?.[String(day)])>0||numericCell(row.nightCells?.[String(day)])>0).map(day=>dateString(month,day));
@@ -421,18 +424,19 @@ function calculateSegmentAccrued(row:TimesheetWorkerRow,segment:Segment,days:num
   return total;
 }
 function rateAt(row:TimesheetWorkerRow,date:string,segment:Segment){
+  const frozen=row.compensationByDate?.[date]?.[segment];if(frozen)return frozen.amount==null||frozen.unit==null?null:{kind:segment,amount:frozen.amount,unit:frozen.unit,effectiveFrom:date,effectiveTo:date};
   const active=(row.rateHistory??[]).filter(rate=>rate.effectiveFrom<=date&&(!rate.effectiveTo||rate.effectiveTo>=date));
   return active.filter(rate=>rate.kind===segment).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]??active.filter(rate=>rate.kind==="any").sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]??null;
 }
 function relevantRates(row:TimesheetWorkerRow,segment:Segment,month:string){
   const start=month+"-01",end=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
-  const all=(row.rateHistory??[]).filter(rate=>(rate.kind===segment||rate.kind==="any")&&rate.effectiveFrom<=end&&(!rate.effectiveTo||rate.effectiveTo>=start)).sort((a,b)=>a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const all=(row.rateHistory??[]).filter(rate=>(rate.kind===segment||rate.kind==="any")&&rate.effectiveFrom<=end&&(!rate.effectiveTo||rate.effectiveTo>=start)).sort((a,b)=>(a.effectiveFrom??"").localeCompare(b.effectiveFrom??""));
   const effective:TimesheetRatePeriod[]=[];
   for(const rate of all){if(!effective.some(item=>item.kind===rate.kind&&item.effectiveFrom===rate.effectiveFrom&&Number(item.amount)===Number(rate.amount)))effective.push(rate)}
   return effective;
 }
 function formatRate(rate:TimesheetRatePeriod,plannedHours:number|null|undefined){
-  if(rate.unit==="shift"){const hours=Number(plannedHours??0);return hours>0?`${rub(Number(rate.amount)/hours)}/ч`:`${rub(rate.amount)}/смена`}
+  if(rate.unit==="shift"){const hours=Number(rate.paidHours??plannedHours??0);return hours>0?`${rub(Number(rate.amount)/hours)}/ч`:`${rub(rate.amount)}/смена`}
   return rate.unit==="month"?`${rub(rate.amount)}/мес`:`${rub(rate.amount)}/ч`;
 }
 function ratePeriodLabel(rate:TimesheetRatePeriod,month:string){

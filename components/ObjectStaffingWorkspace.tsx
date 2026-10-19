@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {ObjectStaffingPlanEditor} from "@/components/ObjectStaffingPlanEditor";
 import { useMemo,useState } from "react";
 import { useRouter } from "next/navigation";
 import type { WorkerRow } from "@/lib/data/service";
@@ -16,12 +17,11 @@ const shiftLabels:Record<string,string>={day:"День",night:"Ночь",mixed:"
 
 export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,facts,today,canEditPlan,canFeedback,demo}:{objectId:string;forecast:StaffingForecastRow[];applications:RecruitingApplicationRow[];workers:WorkerRow[];facts:ObjectOperationalFactRow[];today:string;canEditPlan:boolean;canFeedback:boolean;demo:boolean}){
   const router=useRouter();
-  const [needRows,setNeedRows]=useState(forecast);
+  const needRows=forecast;
   const [rows,setRows]=useState(applications);
   const [busy,setBusy]=useState("");
   const [message,setMessage]=useState("");
   const [workedConfirmation,setWorkedConfirmation]=useState<{applicationId:string;actualStartAt:string;employmentRelationType:EmploymentRelationTypeChoice|""}|null>(null);
-  const [needDrafts,setNeedDrafts]=useState<Record<string,string>>(()=>Object.fromEntries(forecast.map(row=>[row.specialtyId,String(row.required)])));
   const [dates,setDates]=useState<Record<string,string>>(()=>Object.fromEntries(applications.map(row=>[row.applicationId,row.plannedStartDate??addDays(today,1)])));
   const [shifts,setShifts]=useState<Record<string,"day"|"night"|"mixed">>(()=>Object.fromEntries(applications.map(row=>[row.applicationId,row.plannedShiftKind??"day"])));
 
@@ -36,17 +36,6 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
   const actionCount=active.filter(requiresManagerAction).length;
   const recruitingFacts=facts.filter(row=>row.audiences.includes("recruiting"));
 
-  function setNeedDraft(row:StaffingForecastRow,value:number|string){const next=Math.max(0,Number(value)||0);setNeedDrafts(current=>({...current,[row.specialtyId]:String(next)}));}
-  async function savePlan(row:StaffingForecastRow){
-    if(!canEditPlan)return;const next=Math.max(0,Number(needDrafts[row.specialtyId]??row.required)||0);if(next===row.required)return;
-    if(!window.confirm(`Изменить плановую численность «${row.specialty}»: ${row.required} → ${next}?`))return;
-    setBusy("plan:"+row.specialtyId);setMessage("");
-    try{
-      if(!demo){const response=await fetch("/api/staffing-plan/targets",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({objectId:row.objectId,specialtyId:row.specialtyId,plannedCount:next,shiftKind:"mixed",effectiveFrom:today,note:"Корректировка из карточки объекта"})});const json=await response.json().catch(()=>({}));if(!response.ok)throw new Error(json.error??"Не удалось изменить план");}
-      setNeedRows(current=>current.map(item=>item.specialtyId===row.specialtyId?{...item,required:next,planSource:"target",projectedDeficit:Math.max(next-item.projectedAvailable,0)}:item));
-      setNeedDrafts(current=>({...current,[row.specialtyId]:String(next)}));setMessage(`План «${row.specialty}» сохранён: ${row.required} → ${next}`);if(!demo)router.refresh();
-    }catch(e){setMessage(e instanceof Error?e.message:"Не удалось изменить план");}finally{setBusy("");}
-  }
 
   async function candidateAction(row:RecruitingApplicationRow,action:"schedule"|"worked"|"no_show"|"no_contact"|"reschedule",confirmation?:{actualStartAt:string;employmentRelationType:EmploymentRelationTypeChoice|""}){
     if(action==="worked"&&!confirmation){setWorkedConfirmation({applicationId:row.applicationId,actualStartAt:localDateTime(new Date().toISOString()),employmentRelationType:""});return;}
@@ -67,6 +56,7 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
   }
 
   return <>
+    <ObjectStaffingPlanEditor objectId={objectId} canEdit={canEditPlan} demo={demo}/>
 
 
     <section className="section section-flush object-recruiting-brief">
@@ -75,8 +65,8 @@ export function ObjectStaffingWorkspace({objectId,forecast,applications,workers,
     </section>
 
     <section className="section section-flush">
-      <div className="section-head"><div><h2>Плановая численность по специальностям</h2><p>План объекта хранится отдельно. Потребность в подбор создаётся только на объём, который необходимо закрыть.</p></div></div>
-      <div className="request-table-wrap"><table className="data-table object-staffing-table"><thead><tr><th>Специальность</th><th>План</th><th>На объекте</th><th>Доступны</th><th>Плановое выбытие</th><th>Замена</th><th>Прогнозный дефицит</th><th></th></tr></thead><tbody>{needRows.map(row=>{const currentAbsences=workers.filter(worker=>worker.specialty===row.specialty&&activeAbsence(worker,today)).length;const available=Math.max(row.working-currentAbsences,0);const draft=Number(needDrafts[row.specialtyId]??row.required);const dirty=draft!==row.required;return <tr key={row.specialtyId}><td><strong className="cell-title">{row.specialty}</strong>{row.needIds.length>1&&<span className="cell-sub">{row.needIds.length} базовые потребности</span>}</td><td><div className="object-need-editor"><button disabled={!canEditPlan||busy===`plan:${row.specialtyId}`} onClick={()=>setNeedDraft(row,draft-1)}>−</button><input type="number" min="0" value={needDrafts[row.specialtyId]??String(row.required)} disabled={!canEditPlan} onChange={e=>setNeedDrafts(current=>({...current,[row.specialtyId]:e.target.value}))}/><button disabled={!canEditPlan||busy===`plan:${row.specialtyId}`} onClick={()=>setNeedDraft(row,draft+1)}>+</button>{dirty&&<button className="save" disabled={busy===`plan:${row.specialtyId}`} onClick={()=>void savePlan(row)}>Сохранить</button>}</div></td><td className="num">{row.working}</td><td className="num">{available}</td><td className="num">{row.plannedExits||"—"}</td><td><span className="object-staffing-replacement">{row.replacementReady?`Найдена ${row.replacementReady}`:row.replacementNeeds?`Ищем ${row.replacementNeeds}`:"—"}</span></td><td className={`num ${row.projectedDeficit?"object-deficit-text":""}`}>{row.projectedDeficit?`${row.projectedDeficit} чел.`:"—"}</td><td><Link className="table-link" href={`/needs?object=${objectId}`}>{row.openNeedCount?"Потребность":"Создать потребность"}</Link></td></tr>})}</tbody></table></div>
+      <div className="section-head"><div><h2>Прогноз комплектации по специальностям</h2><p>План объекта хранится отдельно. Потребность в подбор создаётся только на объём, который необходимо закрыть.</p></div></div>
+      <div className="request-table-wrap"><table className="data-table object-staffing-table"><thead><tr><th>Специальность</th><th>План</th><th>На объекте</th><th>Доступны</th><th>Плановое выбытие</th><th>Замена</th><th>Прогнозный дефицит</th><th></th></tr></thead><tbody>{needRows.map(row=>{const currentAbsences=workers.filter(worker=>worker.specialty===row.specialty&&activeAbsence(worker,today)).length;const available=Math.max(row.working-currentAbsences,0);return <tr key={row.specialtyId}><td><strong className="cell-title">{row.specialty}</strong>{row.needIds.length>1&&<span className="cell-sub">{row.needIds.length} базовые потребности</span>}</td><td className="num">{row.required}</td><td className="num">{row.working}</td><td className="num">{available}</td><td className="num">{row.plannedExits||"—"}</td><td><span className="object-staffing-replacement">{row.replacementReady?`Найдена ${row.replacementReady}`:row.replacementNeeds?`Ищем ${row.replacementNeeds}`:"—"}</span></td><td className={`num ${row.projectedDeficit?"object-deficit-text":""}`}>{row.projectedDeficit?`${row.projectedDeficit} чел.`:"—"}</td><td><Link className="table-link" href={`/needs?object=${objectId}`}>{row.openNeedCount?"Потребность":"Создать потребность"}</Link></td></tr>})}</tbody></table></div>
       {!needRows.length&&<div className="empty-inline">Плановая численность по объекту пока не задана</div>}
     </section>
 

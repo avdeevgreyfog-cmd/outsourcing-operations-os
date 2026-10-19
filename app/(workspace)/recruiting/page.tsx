@@ -20,6 +20,9 @@ export default async function Recruiting({searchParams}:{searchParams:Promise<{n
       canEdit={hasCapability(actor.access,"recruiting.candidate.edit")}
       canConvert={hasCapability(actor.access,"recruiting.candidate.convert")}
       canConfigurePipeline={hasCapability(actor.access,"recruiting.pipeline.configure")}
+      canCreateNeed={hasCapability(actor.access,"operations.need.create")}
+      canCreateObject={hasCapability(actor.access,"operations.object.create")}
+      canManageDirectories={hasCapability(actor.access,"admin.permissions.manage")}
       canManageSources={hasCapability(actor.access,"recruiting.sources.manage")}
       initialQueue={queue}
       initialStage={stage}

@@ -1,6 +1,7 @@
 "use client";
 
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
+import {InlineClientContact} from "./InlineClientContact";
 import {useState} from "react";
 import type {ObjectManagementOptions} from "@/lib/operations/object-management";
 
@@ -13,6 +14,7 @@ export function ObjectQuickCreateButton({demo,onCreated}:{demo:boolean;onCreated
   const [open,setOpen]=useState(false);
   const [options,setOptions]=useState(blankOptions);
   const [name,setName]=useState("");
+  const [contactId,setContactId]=useState("");
   const [clientId,setClientId]=useState("");
   const [legalEntityId,setLegalEntityId]=useState("");
   const [regionId,setRegionId]=useState("");
@@ -33,7 +35,7 @@ export function ObjectQuickCreateButton({demo,onCreated}:{demo:boolean;onCreated
     }catch(e){setError(e instanceof Error?e.message:"Не удалось загрузить параметры");}finally{setBusy(false);}
   }
   function selectOption(item:Option){
-    if(inline==="client"){setClientId(item.id);setOptions(current=>({...current,clients:[...current.clients.filter(row=>row.id!==item.id),item]}));}
+    if(inline==="client"){setClientId(item.id);setContactId("");setOptions(current=>({...current,clients:[...current.clients.filter(row=>row.id!==item.id),item]}));}
     if(inline==="legalEntity"){setLegalEntityId(item.id);setOptions(current=>({...current,legalEntities:[...current.legalEntities.filter(row=>row.id!==item.id),{...item,shortName:null,primary:false}]}));}
     if(inline==="region"){setRegionId(item.id);setOptions(current=>({...current,regions:[...current.regions.filter(row=>row.id!==item.id),item]}));}
     setInline(null);setDuplicates([]);setError("");
@@ -59,7 +61,7 @@ export function ObjectQuickCreateButton({demo,onCreated}:{demo:boolean;onCreated
       let created:Option;
       if(demo)created={id:crypto.randomUUID(),name:name.trim()};
       else{
-        const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name,clientId:clientId||null,legalEntityId:legalEntityId||null,regionId:regionId||null,address:address||null,actualStartDate:actualStartDate||null,status:"active"})});
+        const response=await fetch("/api/objects",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name,clientId:clientId||null,contactId:contactId||null,legalEntityId:legalEntityId||null,regionId:regionId||null,address:address||null,actualStartDate:actualStartDate||null,status:"active"})});
         const json=await response.json();if(!response.ok)throw new Error(json.error??"Не удалось создать объект");created=json;
       }
       onCreated(created);setOpen(false);setName("");setClientId("");setLegalEntityId("");setRegionId("");setAddress("");setActualStartDate("");
@@ -70,7 +72,8 @@ export function ObjectQuickCreateButton({demo,onCreated}:{demo:boolean;onCreated
       <p className="form-hint">Достаточно названия. Остальные сведения можно дополнить в карточке объекта.</p>
       <div className="object-create-form">
         <label className="wide">Название объекта<input value={name} onChange={e=>setName(e.target.value)} placeholder="Симферопольское / Боброво"/></label>
-        <label>Клиент<select value={clientId} onChange={e=>setClientId(e.target.value)}><option value="">Не указано</option>{options.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={busy||options.creationPermissions?.client===false} onClick={()=>startInline("client")}>Создать клиента</button></label>
+        <label>Клиент<select value={clientId} onChange={e=>{setClientId(e.target.value);setContactId("")}}><option value="">Не указано</option>{options.clients.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={busy||options.creationPermissions?.client===false} onClick={()=>startInline("client")}>Создать клиента</button></label>
+        <InlineClientContact key={clientId} clientId={clientId} demo={demo} value={contactId} onChange={setContactId}/>
         <label>Наше юрлицо<select value={legalEntityId} onChange={e=>setLegalEntityId(e.target.value)}><option value="">Не указано</option>{options.legalEntities.map(item=><option key={item.id} value={item.id}>{item.shortName??item.name}</option>)}</select><button type="button" className="button" disabled={busy||options.creationPermissions?.legalEntity===false} onClick={()=>startInline("legalEntity")}>Создать наше юрлицо</button></label>
         <label>Регион<select value={regionId} onChange={e=>setRegionId(e.target.value)}><option value="">Не указано</option>{options.regions.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><button type="button" className="button" disabled={busy||options.creationPermissions?.region===false} onClick={()=>startInline("region")}>Добавить регион</button></label>
         <label>Фактическая дата начала<input type="date" value={actualStartDate} onChange={e=>setActualStartDate(e.target.value)}/>{!actualStartDate&&<small>Дата неизвестна</small>}</label>

@@ -18,6 +18,7 @@ const contactSchema=z.object({
   maxContact:z.string().trim().max(120).nullable().optional(),
   preferredChannel:z.enum(["phone","email","telegram","whatsapp","max","other"]).nullable().optional(),
   roles:z.array(roleSchema).min(1).max(10),
+  isPrimary:z.boolean().optional(),
   note:z.string().trim().max(1200).nullable().optional(),
 }).superRefine((value,ctx)=>{if(!value.contactId&&!value.fullName)ctx.addIssue({code:"custom",path:["fullName"],message:"Выберите контакт или укажите ФИО"});});
 const deleteSchema=z.object({assignmentId:z.string().uuid()});
@@ -41,9 +42,11 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
       const scope=await scopeFor(tx,actor.organizationId,id);
       if(!scope||!canReadRow(actor.access,"operations.object.edit",scope,actor))throw new AccessDeniedError("operations.object.edit");
+      if(!scope.clientId)throw new Error("Сначала укажите клиента объекта: контакт клиента должен принадлежать известному клиенту.");
+      await tx`SELECT id FROM objects WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
       let contactId=body.contactId??null;
       if(contactId){
-        const [contact]=await tx<Array<{id:string}>>`SELECT id FROM contacts WHERE id=${contactId}::uuid AND client_company_id=${scope.clientId}::uuid`;
+        const [contact]=await tx<Array<{id:string}>>`SELECT id FROM contacts WHERE organization_id=${actor.organizationId}::uuid AND id=${contactId}::uuid AND client_company_id=${scope.clientId}::uuid`;
         if(!contact)throw new Error("Контакт не принадлежит клиенту этого объекта");
         await tx`
           UPDATE contacts SET
@@ -58,17 +61,26 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           WHERE id=${contactId}::uuid
         `;
       }else{
+        const [duplicate]=await tx<Array<{id:string}>>`SELECT id FROM contacts WHERE organization_id=${actor.organizationId}::uuid AND client_company_id=${scope.clientId}::uuid AND (
+          lower(trim(full_name))=lower(trim(${body.fullName!}))
+          OR (${body.phone??null}::text IS NOT NULL AND regexp_replace(coalesce(phone,''),'[^0-9]','','g')=regexp_replace(${body.phone??''},'[^0-9]','','g'))
+          OR (${body.email??null}::text IS NOT NULL AND lower(email)=lower(${body.email??''}))
+        ) ORDER BY id LIMIT 1`;
+        if(duplicate)contactId=duplicate.id;
+        else{
         const [contact]=await tx<Array<{id:string}>>`
           INSERT INTO contacts(organization_id,client_company_id,full_name,position,phone,email,telegram,whatsapp,max_contact,communication_preference,owner_user_id,created_by_user_id)
           VALUES(${actor.organizationId}::uuid,${scope.clientId}::uuid,${body.fullName!},${body.position??null},${body.phone??null},${body.email??null},${body.telegram??null},${body.whatsapp??null},${body.maxContact??null},${body.preferredChannel??null},${actor.userId}::uuid,${actor.userId}::uuid)
           RETURNING id
         `;
         contactId=contact.id;
+        }
       }
+      if(body.isPrimary)await tx`UPDATE object_contact_assignments SET is_primary=false,updated_at=now() WHERE organization_id=${actor.organizationId}::uuid AND object_id=${id}::uuid AND is_primary`;
       const [assignment]=await tx<Array<{id:string}>>`
-        INSERT INTO object_contact_assignments(organization_id,object_id,contact_id,roles,note,active,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${id}::uuid,${contactId}::uuid,${body.roles},${body.note??null},true,${actor.userId}::uuid)
-        ON CONFLICT(object_id,contact_id) DO UPDATE SET roles=EXCLUDED.roles,note=EXCLUDED.note,active=true,updated_at=now()
+        INSERT INTO object_contact_assignments(organization_id,object_id,contact_id,roles,note,is_primary,active,created_by_user_id)
+        VALUES(${actor.organizationId}::uuid,${id}::uuid,${contactId}::uuid,${body.roles},${body.note??null},${body.isPrimary??false},true,${actor.userId}::uuid)
+        ON CONFLICT(object_id,contact_id) DO UPDATE SET roles=EXCLUDED.roles,note=EXCLUDED.note,is_primary=EXCLUDED.is_primary,active=true,updated_at=now()
         RETURNING id
       `;
       await tx`

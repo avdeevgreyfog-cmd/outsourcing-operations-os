@@ -9,6 +9,6 @@ export default async function Workers(){
   const [rows,options]=await Promise.all([listWorkers(actor),getOperationsReferenceData(actor)]);
   return <>
 
-    <WorkersWorkspace rows={rows} options={options} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"worker.edit")} canManageDirectories={hasCapability(actor.access,"admin.permissions.manage")} demo={actor.demo} preferenceScope={`${actor.organizationId}:${actor.userId}:${actor.roleCode}:${actor.demo?"demo":"live"}`}/>
+    <WorkersWorkspace rows={rows} options={options} sensitive={hasCapability(actor.access,"worker.compensation.read")} canEdit={hasCapability(actor.access,"worker.edit")} canManageDirectories={hasCapability(actor.access,"admin.permissions.manage")} canCreateObject={hasCapability(actor.access,"operations.object.create")} demo={actor.demo} preferenceScope={`${actor.organizationId}:${actor.userId}:${actor.roleCode}:${actor.demo?"demo":"live"}`}/>
   </>;
 }

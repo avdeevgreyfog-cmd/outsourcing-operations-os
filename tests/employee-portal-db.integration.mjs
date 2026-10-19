@@ -7,6 +7,7 @@ import {citext} from '@electric-sql/pglite/contrib/citext';
 import {pgcrypto} from '@electric-sql/pglite/contrib/pgcrypto';
 import {btree_gist} from '@electric-sql/pglite/contrib/btree_gist';
 import fs from 'node:fs';
+import nodePath from 'node:path';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 import {createRequire} from 'node:module';
@@ -31,7 +32,8 @@ try{
  const listObjects=a=>withTenant(a.organizationId,a.userId,sql=>sql`SELECT id,id "objectId",organization_id "organizationId",owner_user_id "ownerUserId",region_id "regionId" FROM objects`);
  const listWorkers=a=>withTenant(a.organizationId,a.userId,sql=>sql`SELECT w.id,w.status,w.full_name "fullName",a.object_id "objectId",w.organization_id "organizationId",o.owner_user_id "ownerUserId" FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id JOIN objects o ON o.id=a.object_id WHERE a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)`);
  const deps={'@/lib/access/server':auth,'@/lib/core/access.mjs':access,'@/lib/db/client':{db:()=>raw,withTenant},'@/lib/data/service':{listObjects,listWorkers}};
- function compile(path){const exports={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(exports,n=>deps[n]??require(n));return exports;}
+ const modules=new Map();
+ function compile(file){file=nodePath.resolve(file);if(modules.has(file))return modules.get(file);const exports={};modules.set(file,exports);new Function('exports','require',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(exports,n=>{if(n in deps)return deps[n];if(n.startsWith('@/')||n.startsWith('.')){const base=n.startsWith('@/')?nodePath.resolve(n.slice(2)):nodePath.resolve(nodePath.dirname(file),n);const target=[base,base+'.ts',base+'.mjs',base+'/index.ts'].find(f=>fs.existsSync(f)&&fs.statSync(f).isFile());if(!target)throw Error('Missing dependency '+n+' from '+file);return target.endsWith('.mjs')?require(target):compile(target)}return require(n)});return exports;}
  const portal=compile('lib/operations/worker-timesheet-portal.ts');deps['@/lib/operations/worker-timesheet-portal']=portal;const planning=compile('lib/operations/employee-planning.ts');
  const caps=['operations.shift.edit','operations.shift.read','time.time_entry.edit','worker.offboarding.manage'];
  const actor={organizationId:org,userId:director,demo:false,access:{capabilities:caps,denies:[],scopes:Object.fromEntries(caps.map(c=>[c,[{type:'all_org'}]]))}};

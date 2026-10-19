@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import {RegistryDrawer} from "./registry/RegistryDrawer";
+import {ObjectQuickCreateButton} from "./ObjectQuickCreateButton";
+import {CreateWorkerSpecialty} from "./WorkerSpecialties";
+import {RelatedNeedCreate,type InlineNeed} from "./RelatedNeedCreate";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -22,6 +26,7 @@ type Props={
   canConvert:boolean;
   canConfigurePipeline:boolean;
   canManageSources:boolean;
+  canCreateNeed?:boolean;canCreateObject?:boolean;canManageDirectories?:boolean;
   initialNeed?:string|null;
   initialObject?:string|null;
   initialSpecialty?:string|null;
@@ -35,6 +40,7 @@ type ContactKind="telegram"|"whatsapp"|"max"|"email";
 type ExtraContact={kind:ContactKind;value:string};
 type CandidateForm={
   needId:string;
+  preferredObjectId:string;preferredSpecialtyId:string;
   ownerUserId:string;
   originalRecruiterUserId:string;
   fullName:string;
@@ -46,7 +52,7 @@ type CandidateForm={
   sourceCampaign:string;
   sourceReference:string;
 };
-const blank:CandidateForm={needId:"",ownerUserId:"",originalRecruiterUserId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
+const blank:CandidateForm={needId:"",preferredObjectId:"",preferredSpecialtyId:"",ownerUserId:"",originalRecruiterUserId:"",fullName:"",phone:"",preferredChannel:"phone",city:"",source:"",sourceChannel:"",sourceCampaign:"",sourceReference:""};
 const stageSettingsStorage="operis.recruiting.funnel-stages.v2";
 
 const sourceKindLabels:Record<string,string>={
@@ -54,10 +60,15 @@ const sourceKindLabels:Record<string,string>={
 };
 
 export function RecruitingFunnelWorkspace({
-  rows,needs,options,demo,canCreate,canEdit,canConvert,canConfigurePipeline,canManageSources,
+  rows,needs:baseNeeds,options,demo,canCreate,canEdit,canConvert,canConfigurePipeline,canManageSources,canCreateNeed=false,canCreateObject=false,canManageDirectories=false,
   initialQueue,initialStage,initialNeed,initialObject,initialSpecialty,initialRecruiter,initialSource,
 }:Props){
   const router=useRouter();
+  const [candidateObjects,setCandidateObjects]=useState(options.objects.map(x=>({id:x.id,name:x.name})));
+  const [candidateSpecialties,setCandidateSpecialties]=useState(options.specialties);
+  const [createdNeeds,setCreatedNeeds]=useState<RecruitingNeedRow[]>([]);
+  const needs=[...createdNeeds,...baseNeeds.filter(x=>!createdNeeds.some(y=>y.id===x.id))];
+  function acceptNeed(row:InlineNeed){if(row.objectId&&row.object)setCandidateObjects(x=>[...x.filter(y=>y.id!==row.objectId),{id:row.objectId!,name:row.object!}]);setCandidateSpecialties(x=>[...x.filter(y=>y.id!==row.specialtyId),{id:row.specialtyId,name:row.specialty}]);const created={...row,filled:0,working:0,deficit:row.required,recruiters:[],stageCounts:{},quantityHistory:[],requiredDocumentTypeIds:[],documentRequirements:[],organizationId:baseNeeds[0]?.organizationId??"demo",regionId:null,clientId:null,managerUserId:null,manager:null,assigneeUserIds:[],conditions:{},status:"open",toRecruit:row.required} as unknown as RecruitingNeedRow;setCreatedNeeds(x=>[created,...x]);setForm(x=>({...x,needId:row.id,preferredObjectId:row.objectId??"",preferredSpecialtyId:row.specialtyId}));}
   const [query,setQuery]=useState("");
   const [needFilter,setNeedFilter]=useState(initialNeed??"all");
   const [objectFilter,setObjectFilter]=useState(initialObject??"all");
@@ -168,19 +179,20 @@ export function RecruitingFunnelWorkspace({
   async function createCandidate(event:React.FormEvent){
     event.preventDefault();setError("");
     const need=needs.find(item=>item.id===form.needId);
-    if(!need){setError("Выберите потребность");return;}
-    if(!form.phone){setError("Укажите телефон кандидата");return;}
+    if(!form.fullName.trim()){setError("Укажите ФИО кандидата");return;}
     const telegram=contacts.find(x=>x.kind==="telegram")?.value??"";
     const whatsapp=contacts.find(x=>x.kind==="whatsapp")?.value??"";
     const email=contacts.find(x=>x.kind==="email")?.value??"";
     setBusy("create");
     try{
-      if(demo){
+      if(demo&&!need){
+        setError("Демо: кандидат без потребности не сохраняется на сервере. Для полного сценария выберите потребность.");return;
+      }else if(demo&&need){
         const stage:RecruitingStage="new";
         const created:RecruitingApplicationRow={
           applicationId:crypto.randomUUID(),
           candidateId:allRows.find(x=>x.phone?.replace(/\D/g,"")===form.phone.replace(/\D/g,""))?.candidateId??crypto.randomUUID(),
-          organizationId:need.organizationId,fullName:form.fullName||"Без имени",phone:form.phone,email:email||null,
+          organizationId:need.organizationId,fullName:form.fullName||"Без имени",phone:form.phone||null,email:email||null,
           preferredChannel:form.preferredChannel||"phone",telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,
           source:form.source||"Ручной ввод",sourceChannel:form.sourceChannel||null,sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,
           stage,stageLabel:stageLabelByCode.get(stage)??recruitingStageLabels[stage],needId:need.id,need:need.title,objectId:need.objectId,object:need.object,
@@ -195,9 +207,9 @@ export function RecruitingFunnelWorkspace({
         saveDemoApplication(created);
       }else{
         const response=await fetch("/api/candidates",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-          fullName:form.fullName||"Без имени",phone:form.phone,email:email||null,preferredChannel:form.preferredChannel||"phone",
+          fullName:form.fullName||"Без имени",phone:form.phone||null,email:email||null,preferredChannel:form.preferredChannel||"phone",
           telegram:telegram||null,whatsapp:whatsapp||null,city:form.city||null,source:form.source||null,sourceChannel:form.sourceChannel||null,
-          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,needId:form.needId,ownerUserId:form.ownerUserId||null,originalRecruiterUserId:form.originalRecruiterUserId||null,
+          sourceCampaign:form.sourceCampaign||null,sourceReference:form.sourceReference||null,preferredObjectId:form.preferredObjectId||null,preferredSpecialtyId:form.preferredSpecialtyId||null,needId:form.needId||null,ownerUserId:form.ownerUserId||null,originalRecruiterUserId:form.originalRecruiterUserId||null,
           contacts:contacts.filter(item=>item.value.trim()).map(item=>({channel:item.kind,value:item.value.trim(),isPreferred:form.preferredChannel===item.kind})),
         })});
         const json=await response.json().catch(()=>({}));
@@ -211,6 +223,7 @@ export function RecruitingFunnelWorkspace({
 
   async function addSource(){
     if(!newSourceName.trim())return;
+    const duplicate=localSources.find(x=>x.name.trim().toLocaleLowerCase("ru")===newSourceName.trim().toLocaleLowerCase("ru"));if(duplicate){setForm(x=>({...x,source:duplicate.name}));setShowSourceCreate(false);return;}
     if(demo){
       const item={id:`demo-${crypto.randomUUID()}`,code:`custom-${Date.now()}`,name:newSourceName.trim(),kind:newSourceKind,active:true};
       setLocalSources(current=>[...current,item]);setForm(current=>({...current,source:item.name}));
@@ -221,7 +234,7 @@ export function RecruitingFunnelWorkspace({
       const response=await fetch("/api/recruiting/sources",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({name:newSourceName,kind:newSourceKind})});
       const json=await response.json();
       if(!response.ok)throw new Error(json.error??"Не удалось добавить источник");
-      setLocalSources(current=>[...current,json]);setForm(current=>({...current,source:json.name}));setNewSourceName("");setShowSourceCreate(false);
+      setLocalSources(current=>[...current.filter(x=>x.id!==json.id),json]);setForm(current=>({...current,source:json.name}));setNewSourceName("");setShowSourceCreate(false);
     }catch(e){setError(e instanceof Error?e.message:"Не удалось добавить источник");}
     finally{setBusy("");}
   }
@@ -303,15 +316,20 @@ export function RecruitingFunnelWorkspace({
       onSaved={()=>router.refresh()}
     />}
 
-    {showCreate&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowCreate(false)}}>
-      <form className="recruiting-modal-card recruiting-candidate-create" onSubmit={createCandidate}>
-        <div className="recruiting-modal-head"><div><h2>Добавить кандидата</h2><p>Быстрый ввод во время звонка. Условия выбранной потребности всегда перед глазами.</p></div><button className="icon-button" type="button" onClick={()=>setShowCreate(false)}><X size={17}/></button></div>
+    {showCreate&&<RegistryDrawer className="object-form-drawer candidate-create-drawer" title="Добавить кандидата" subtitle="Достаточно ФИО. Потребность и контакты можно уточнить позднее." onClose={()=>setShowCreate(false)} footer={<><button type="button" className="button" onClick={()=>setShowCreate(false)}>Отмена</button><button type="submit" form="candidate-create-form" className="button primary" disabled={busy==="create"||!form.fullName.trim()}>Добавить кандидата</button></>}><form id="candidate-create-form" onSubmit={createCandidate}>
+
         <div className="candidate-create-layout">
           <div className="recruiting-form candidate-create-form">
-            <label>Потребность<select required value={form.needId} onChange={e=>setForm(x=>({...x,needId:e.target.value}))}><option value="">Выберите потребность</option>{needs.filter(x=>["open","in_progress"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"} · найти {x.toRecruit}</option>)}</select></label>
+            <label>Потребность<select value={form.needId} onChange={e=>{const need=needs.find(x=>x.id===e.target.value);setForm(x=>({...x,needId:e.target.value,preferredObjectId:need?.objectId??x.preferredObjectId,preferredSpecialtyId:need?.specialtyId??x.preferredSpecialtyId}))}}><option value="">Выберите потребность</option>{needs.filter(x=>["open","in_progress"].includes(x.status)).map(x=><option key={x.id} value={x.id}>{x.title} · {x.object??x.region??"без объекта"} · найти {x.toRecruit}</option>)}</select></label>
+            {canCreateNeed&&<RelatedNeedCreate initialObjectId={form.preferredObjectId} initialSpecialtyId={form.preferredSpecialtyId} options={{...options,specialties:candidateSpecialties,objects:candidateObjects.map(x=>({...x,regionId:"",region:""}))}} demo={demo} canCreateObject={canCreateObject} canManageDirectories={canManageDirectories} onCreated={acceptNeed}/>}
+            <label>Объект<select value={form.preferredObjectId} onChange={e=>{setForm(x=>({...x,preferredObjectId:e.target.value,needId:""}));}}><option value="">Не указан</option>{candidateObjects.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+            {canCreateObject&&<ObjectQuickCreateButton demo={demo} onCreated={row=>{setCandidateObjects(x=>[...x.filter(y=>y.id!==row.id),row]);setForm(x=>({...x,preferredObjectId:row.id,needId:""}))}}/>}
+            <label>Специальность<select value={form.preferredSpecialtyId} onChange={e=>setForm(x=>({...x,preferredSpecialtyId:e.target.value,needId:""}))}><option value="">Не указана</option>{candidateSpecialties.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+            {canManageDirectories&&<CreateWorkerSpecialty demo={demo} canManage onCreated={row=>{setCandidateSpecialties(x=>[...x.filter(y=>y.id!==row.id),row]);setForm(x=>({...x,preferredSpecialtyId:row.id,needId:""}))}}/>}
+            <p className="form-hint">Без потребности объект и специальность сохраняются как направление подбора. Изменение направления снимает выбранную потребность — выберите подходящую заново.</p>
             <label>Кто привёл кандидата<select value={form.originalRecruiterUserId} onChange={e=>setForm(x=>({...x,originalRecruiterUserId:e.target.value,ownerUserId:x.ownerUserId||e.target.value}))}><option value="">Не указан</option>{options.recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label>Ответственный сейчас<select value={form.ownerUserId} onChange={e=>setForm(x=>({...x,ownerUserId:e.target.value}))}><option value="">Не назначен</option>{options.recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <div className="candidate-create-grid"><label>Имя / ФИО<input value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="Можно заполнить после начала разговора"/></label><label>Телефон<input required value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label></div>
+            <div className="candidate-create-grid"><label>Имя / ФИО<input required value={form.fullName} onChange={e=>setForm(x=>({...x,fullName:e.target.value}))} placeholder="ФИО или известное имя"/></label><label>Телефон<input value={form.phone} onChange={e=>setForm(x=>({...x,phone:e.target.value}))}/></label><label>Город<input value={form.city} onChange={e=>setForm(x=>({...x,city:e.target.value}))}/></label><label>Предпочтительный способ связи<select value={form.preferredChannel} onChange={e=>setForm(x=>({...x,preferredChannel:e.target.value}))}><option value="phone">Телефон</option><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select></label></div>
 
             <div className="candidate-contact-list">
               {contacts.map((contact,index)=><div className="candidate-contact-row" key={index}><select value={contact.kind} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,kind:e.target.value as ContactKind}:x))}><option value="telegram">Telegram</option><option value="max">MAX</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option></select><input value={contact.value} onChange={e=>setContacts(current=>current.map((x,i)=>i===index?{...x,value:e.target.value}:x))} placeholder={contact.kind==="telegram"?"@username или номер":contact.kind==="email"?"email":"Номер"}/><button className="icon-button" type="button" onClick={()=>setContacts(current=>current.filter((_,i)=>i!==index))}><X size={14}/></button></div>)}
@@ -333,9 +351,9 @@ export function RecruitingFunnelWorkspace({
           </div>
           <NeedCallCheatSheet need={selectedNeed??null}/>
         </div>
-        <div className="recruiting-form-actions"><button type="button" className="button" onClick={()=>setShowCreate(false)}>Отмена</button><button className="button primary" disabled={busy==="create"}>{busy==="create"?"Сохраняю…":"Добавить кандидата"}</button></div>
+
       </form>
-    </div></RecruitingPortal>}
+    </RegistryDrawer>}
 
     {showStageSettings&&<RecruitingPortal><div className="recruiting-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStageSettings(false)}}>
       <div className="recruiting-modal-card recruiting-stage-settings recruiting-stage-settings-v2">

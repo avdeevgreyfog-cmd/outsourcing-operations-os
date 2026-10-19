@@ -5,19 +5,20 @@ import type { Actor } from "@/lib/access/types";
 import { requireCapability, AccessDeniedError } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import {resolveObjectConditionInTransaction,conditionScheduleParts} from "@/lib/operations/object-conditions";
 
 const key=z.string().trim().min(1).max(240);
 const nullableText=z.string().trim().max(240).nullable().optional();
 export const quickStartImportSchema=z.object({
  objects:z.array(z.object({key,name:key,id:z.string().uuid().optional(),address:nullableText,actualStartDate:z.string().date().nullable().optional()})).max(500).default([]),
  workers:z.array(z.object({key,fullName:key,id:z.string().uuid().optional(),phone:nullableText,status:z.enum(["requires_assignment","active"]).optional()})).max(1000).default([]),
- assignments:z.array(z.object({worker:key,object:key,specialtyId:z.string().uuid().optional(),specialtyName:nullableText,startDate:z.string().date(),endDate:z.string().date().nullable().optional()})).max(1000).default([]),
+ assignments:z.array(z.object({worker:key,object:key,specialtyId:z.string().uuid().optional(),specialtyName:nullableText,startDate:z.string().date().nullable().optional(),endDate:z.string().date().nullable().optional()})).max(1000).default([]),
  hours:z.array(z.object({worker:key,object:key,date:z.string().date(),hours:z.number().min(0).max(24),kind:z.enum(["day","night"])})).max(3000).default([]),
 }).superRefine((v,c)=>{if(!v.objects.length&&!v.workers.length&&!v.assignments.length&&!v.hours.length)c.addIssue({code:"custom",message:"Нет строк для импорта"});});
 export type QuickStartImportPayload=z.infer<typeof quickStartImportSchema>;
 export type ImportIssue={section:string;row:number;message:string;blocking:boolean};
 type Context={id:string;organizationId:string;createdByUserId?:string;ownerUserId?:string|null;regionId?:string|null;assigneeUserIds?:string[];objectId?:string|null;status:string;updatedAt:string;name?:string;fullName?:string;phone?:string|null;today?:string};
-type Assignment={id:string;workerId:string;objectId:string;specialtyId:string|null;startDate:string;endDate:string|null};
+type Assignment={id:string;workerId:string;objectId:string;specialtyId:string|null;startDate:string|null;endDate:string|null};
 export class QuickStartImportError extends Error {}
 const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const uuid=(v:unknown)=>{const h=hash(v);return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`;};
@@ -71,10 +72,10 @@ export async function resolveQuickStartImport(sql:Sql,actor:Actor,payload:QuickS
   const matchingSpecialties=row.specialtyName?specialties.filter(v=>normalized(v.name)===normalized(row.specialtyName!)):[];
   const specialtyId=row.specialtyId??(matchingSpecialties.length===1?matchingSpecialties[0].id:null);
   if(!specialtyId||!specialtyIds.has(specialtyId)){note("Назначения",index,"Специальность не указана, неоднозначна или недоступна. Выберите существующую специальность");return;}
-  if(row.endDate&&row.endDate<row.startDate){note("Назначения",index,"Окончание раньше начала");return;}
+  if(row.startDate&&row.endDate&&row.endDate<row.startDate){note("Назначения",index,"Окончание раньше начала");return;}
   if(!["active","requires_assignment"].includes(w.status)||o.status!=="active"){note("Назначения",index,"Назначение несовместимо со статусом сотрудника/объекта");return;}
-  const item={id:uuid([org,payload,"assignment",index]),workerId:w.id,objectId:o.id,specialtyId,startDate:row.startDate,endDate:row.endDate??null,reuse:false};
-  const overlaps=[...existingAssignments,...assignments].filter(a=>a.workerId===w.id&&a.startDate<=(item.endDate??"9999-12-31")&&(a.endDate??"9999-12-31")>=item.startDate);
+  const item={id:uuid([org,payload,"assignment",index]),workerId:w.id,objectId:o.id,specialtyId,startDate:row.startDate??null,endDate:row.endDate??null,reuse:false};
+  const overlaps=[...existingAssignments,...assignments].filter(a=>a.workerId===w.id&&(a.startDate??"0001-01-01")<=(item.endDate??"9999-12-31")&&(a.endDate??"9999-12-31")>=(item.startDate??"0001-01-01"));
   const same=overlaps.find(a=>a.objectId===item.objectId&&a.specialtyId===item.specialtyId&&a.startDate===item.startDate&&a.endDate===item.endDate);
   if(overlaps.length&&(!same||overlaps.length>1)){note("Назначения",index,"Период пересекается с существующим/импортируемым назначением");return;}
   if(same){item.id=same.id;item.reuse=true;note("Назначения",index,"Назначение уже существует: без изменений",false);} assignments.push(item);
@@ -87,7 +88,7 @@ export async function resolveQuickStartImport(sql:Sql,actor:Actor,payload:QuickS
   permit(w,"time.time_entry.edit");permit(o,"time.time_entry.edit");
   if(!["active","requires_assignment"].includes(w.status)||o.status!=="active"){note("Часы",index,"Статус сотрудника/объекта не позволяет импортировать часы");continue;}
   if(row.date>o.today!){note("Часы",index,"Будущие часы запрещены");continue;}
-  if(![...existingAssignments,...assignments].some(a=>a.workerId===w.id&&a.objectId===o.id&&a.startDate<=row.date&&(!a.endDate||a.endDate>=row.date))){note("Часы",index,"Нет назначения, действующего в эту дату");continue;}
+  if(![...existingAssignments,...assignments].some(a=>a.workerId===w.id&&a.objectId===o.id&&(!a.startDate||a.startDate<=row.date)&&(!a.endDate||a.endDate>=row.date))){note("Часы",index,"Нет назначения, действующего в эту дату");continue;}
   const [fact]=await sql<Array<{id:string}>>`SELECT id FROM time_entries WHERE organization_id=${org}::uuid AND worker_id=${w.id}::uuid AND object_id=${o.id}::uuid AND work_date=${row.date}::date LIMIT 1`;
   const [fixed]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE organization_id=${org}::uuid AND object_id=${o.id}::uuid AND period_start<=${row.date}::date AND period_end>=${row.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
   if(fact||fixed||hours.some(h=>h.workerId===w.id&&h.objectId===o.id&&h.date===row.date)){note("Часы",index,"Есть факт/фиксированный табель или повтор строки: перезапись запрещена");continue;}
@@ -115,10 +116,12 @@ export async function quickStartImport(actor:Actor,payload:QuickStartImportPaylo
   for(const v of plan.objectRows)if(!v.reuse)await sql`INSERT INTO objects(id,organization_id,name,code,status,client_company_id,region_id,address_text,actual_start_date,created_by_user_id) VALUES(${v.id}::uuid,${actor.organizationId}::uuid,${v.row.name},${`OBJ-${v.id.slice(0,8)}`},'active',NULL,NULL,${v.row.address??null},${v.row.actualStartDate??null}::date,${actor.userId}::uuid)`;
   for(const v of plan.workerRows)if(!v.reuse)await sql`INSERT INTO worker_profiles(id,organization_id,full_name,phone,status,source,created_by_user_id) VALUES(${v.id}::uuid,${actor.organizationId}::uuid,${v.row.fullName},${v.row.phone??null},'requires_assignment','Быстрый старт: импорт',${actor.userId}::uuid)`;
   for(const a of plan.assignments)if(!a.reuse){
-   await sql`INSERT INTO worker_object_assignments(id,organization_id,worker_id,object_id,specialty_id,effective_from,effective_to,manager_user_id,created_by_user_id) VALUES(${a.id}::uuid,${actor.organizationId}::uuid,${a.workerId}::uuid,${a.objectId}::uuid,${a.specialtyId}::uuid,${a.startDate}::date,${a.endDate}::date,(SELECT owner_user_id FROM objects WHERE id=${a.objectId}::uuid AND organization_id=${actor.organizationId}::uuid),${actor.userId}::uuid)`;
-   await sql`UPDATE worker_profiles SET status='active',updated_at=now() WHERE id=${a.workerId}::uuid AND organization_id=${actor.organizationId}::uuid AND status='requires_assignment' AND ${a.startDate}::date<=current_date AND (${a.endDate}::date IS NULL OR ${a.endDate}::date>=current_date)`;
+   const condition=await resolveObjectConditionInTransaction(sql,actor.organizationId,{objectId:a.objectId,specialtyId:a.specialtyId!,shiftKind:"mixed",date:a.startDate});
+   const schedule=conditionScheduleParts(condition);
+   await sql`INSERT INTO worker_object_assignments(id,organization_id,worker_id,object_id,specialty_id,effective_from,effective_to,manager_user_id,paid_hours_per_shift,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,source_condition_id,created_by_user_id) VALUES(${a.id}::uuid,${actor.organizationId}::uuid,${a.workerId}::uuid,${a.objectId}::uuid,${a.specialtyId}::uuid,${a.startDate}::date,${a.endDate}::date,(SELECT owner_user_id FROM objects WHERE id=${a.objectId}::uuid AND organization_id=${actor.organizationId}::uuid),${condition?.paidHours??null},${schedule.workDays},${schedule.restDays},${condition?.shiftKind??"mixed"},${a.startDate??condition?.effectiveFrom??null}::date,${condition?.id??null}::uuid,${actor.userId}::uuid)`;
+   await sql`UPDATE worker_profiles SET status='active',updated_at=now() WHERE id=${a.workerId}::uuid AND organization_id=${actor.organizationId}::uuid AND status='requires_assignment' AND (${a.startDate}::date IS NULL OR ${a.startDate}::date<=current_date) AND (${a.endDate}::date IS NULL OR ${a.endDate}::date>=current_date)`;
   }
-  for(const h of plan.hours)await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,planned_shift_kind,source,correction_reason,corrected_by_user_id) VALUES(${actor.organizationId}::uuid,${h.workerId}::uuid,${h.objectId}::uuid,${h.date}::date,false,'WORK',${h.hours},${h.kind==="day"?h.hours:0},${h.kind==="night"?h.hours:0},${h.kind},'attendance','Импорт исторического факта',${actor.userId}::uuid)`;
+  for(const h of plan.hours)await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,planned_shift_kind,source,correction_reason,corrected_by_user_id) VALUES(${actor.organizationId}::uuid,${h.workerId}::uuid,${h.objectId}::uuid,${h.date}::date,false,'WORK',${h.hours},${h.kind==="day"?h.hours:0},${h.kind==="night"?h.hours:0},${h.kind},'import','Импорт исторического факта',${actor.userId}::uuid)`;
   await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'quick_start_import','bulk_import','Импорт действующего контура',${sql.json({objects:plan.objectRows.length,workers:plan.workerRows.length,assignments:plan.assignments.length,hours:plan.hours.length})})`;
   return {ok:true,objects:plan.objectRows.filter(v=>!v.reuse).length,workers:plan.workerRows.filter(v=>!v.reuse).length,assignments:plan.assignments.filter(v=>!v.reuse).length,hours:plan.hours.length};
  });

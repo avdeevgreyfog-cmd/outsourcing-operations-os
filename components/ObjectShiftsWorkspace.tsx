@@ -1,4 +1,5 @@
 "use client";
+import {scheduleCycleWork,schedulingConditionForDate,schedulingCycle,type SchedulingCondition} from "@/lib/operations/schedule-cycle";
 import {planningCoverage} from "@/lib/operations/planning-coverage";
 
 import Link from "next/link";
@@ -12,10 +13,10 @@ type Mode="workers"|"specialties"|"attention";
 type PlannerAssignment={workerId:string;date:string;kind:"day"|"night"|"mixed";reserve:boolean;status:string};
 type PlannerEntry={workerId:string;date:string;timeCode:string;factHours:number|string;dayHours:number|string;nightHours:number|string;source:string;plannedShiftKind:"day"|"night"|"mixed"|null};
 type PlannerAbsence={workerId:string;type:string;from:string;to:string|null;status:string};
-type PlannerDemand={date:string;specialtyId:string;specialty:string;required:number};
+type PlannerDemand={date:string;specialtyId:string;specialty:string;shiftKind?:"day"|"night"|"mixed";required:number};
 type LockedRange={from:string;to:string;status:string};
-type PlannerPattern={workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean};
-type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];patterns?:PlannerPattern[];demo?:boolean};
+type PlannerPattern={workerId:string;effectiveFrom:string;anchorDate:string|null;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean};
+type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];patterns?:PlannerPattern[];conditions?:SchedulingCondition[];demo?:boolean};
 type CellState={kind:Kind;label:string;source:"fact"|"plan"|"suggested"|"absence"|"none";editable:boolean;attention:boolean;factWithoutPlan:boolean;title:string};
 
 const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",reserve_day:"Резерв день",reserve_night:"Резерв ночь",clear:"Очистить"};
@@ -85,19 +86,23 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return null;
   }
   function scheduleKind(worker:WorkerRow,date:string):Kind{
-    if(!worker.startDate||date<worker.startDate)return "";
+    if(worker.startDate&&date<worker.startDate)return "";
     const pattern=planner?.patterns?.find(p=>p.workerId===worker.id&&p.effectiveFrom<=date);
-    const workDays=pattern?.workDays??worker.scheduleWorkDays,restDays=pattern?.restDays??worker.scheduleRestDays;
+    if(pattern){const works=scheduleCycleWork(date,{...pattern,anchorDate:pattern.anchorDate??pattern.effectiveFrom,explicitAnchor:pattern.anchorDate!=null});return works==null?"":works?pattern.shiftKind:"off";}
+    const condition=schedulingConditionForDate(planner?.conditions??[],worker.specialtyId,worker.scheduleShiftKind,date);
+    if(condition){const cycle=schedulingCycle(condition);const works=scheduleCycleWork(date,{...cycle,anchorDate:cycle.anchorDate??worker.scheduleAnchorDate??worker.startDate??null});return works==null?"":works?(condition.shiftKind==="night"?"night":"day"):"off";}
+    const workDays=worker.scheduleWorkDays,restDays=worker.scheduleRestDays;
     if(workDays==null||restDays==null||workDays<1)return "";
-    const anchor=pattern?.effectiveFrom??worker.scheduleAnchorDate??worker.startDate;const cycle=workDays+restDays;
+    const anchor=worker.scheduleAnchorDate??worker.startDate;const cycle=workDays+restDays;
     if((workDays===5&&restDays===2)||(workDays===6&&restDays===1)){
       const dow=new Date(date+"T00:00:00Z").getUTCDay();
       if(dow===0||(dow===6&&workDays===5))return "off";
-      return (pattern?.shiftKind??worker.scheduleShiftKind)==="night"?"night":"day";
+      return worker.scheduleShiftKind==="night"?"night":"day";
     }
+    if(!anchor)return "";
     const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);
     const offset=((diff%cycle)+cycle)%cycle;if(offset>=workDays)return "off";
-    return (pattern?.shiftKind??worker.scheduleShiftKind)==="night"?"night":"day";
+    return worker.scheduleShiftKind==="night"?"night":"day";
   }
   function planned(worker:WorkerRow,date:string):Kind{
     const key=`${worker.id}:${date}`;const absence=absenceFor(worker,date);
@@ -121,11 +126,12 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     for(const row of filtered)bySpecialty.set(row.specialty,Math.max(bySpecialty.get(row.specialty)??0,Number(row.demand??0)));
     return [...bySpecialty.values()].reduce((sum,value)=>sum+value,0);
   }
-  function countsFor(date:string,specialty?:string){
+  function countsFor(date:string,specialty?:string,shiftKind?:"day"|"night"|"mixed"){
     let plan=0,reserve=0,suggested=0,fact=0;
     for(const worker of workers){
       if(specialty&&(worker.specialty??"Без специальности")!==specialty)continue;
       const key=`${worker.id}:${date}`,entry=entryMap.get(key),value=planned(worker,date);
+      if(shiftKind&&shiftKind!=="mixed"&&value!==shiftKind&&!(entry&&isFactual(entry)&&(shiftKind==="night"?Number(entry.nightHours)>0:Number(entry.dayHours)>0)))continue;
       const scheduleEntryPlan=Boolean(entry&&!isFactual(entry)&&entry.timeCode==="PLANNED"&&entry.plannedShiftKind);
       if(entry&&isFactual(entry)&&(Number(entry.factHours)>0||entry.timeCode==="WORK_PENDING"))fact++;
       if(declined.has(key)&&overrides[key]===undefined)continue;
@@ -187,7 +193,8 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   const attentionCount=workers.filter(workerNeedsAttention).length;
   const knownDemandDays=dates.filter(date=>demandKnown(date)).length;
   const weekSummary=dates.reduce((acc,date)=>{const required=demandTotal(date),counts=countsFor(date),coverage=date<today?counts.fact:counts.plan;acc.required+=required;acc.plan+=coverage;acc.reserve+=counts.reserve;acc.suggested+=date>=today?counts.suggested:0;acc.deficit+=Math.max(required-coverage,0);return acc},{required:0,plan:0,reserve:0,suggested:0,deficit:0});
-  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name),coverage=focusDate<today?counts.fact:counts.plan;return {name,required,known:demandKnown(focusDate,name),plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.known||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
+  const focusDemand=planner?demandRows.filter(row=>row.date===focusDate):specialties.map(specialty=>({specialty,shiftKind:"mixed" as const,required:demandTotal(focusDate,specialty)}));
+  const focusGaps=focusDemand.map(demand=>{const name=demand.specialty,shiftKind=demand.shiftKind??"mixed",required=demand.required,counts=countsFor(focusDate,name,shiftKind),coverage=focusDate<today?counts.fact:counts.plan;return {name,shiftKind,required,known:demandKnown(focusDate,name),plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.known||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
 
   function toggleWorker(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
   function toggleAll(){setSelected(current=>current.size===visibleWorkers.length?new Set():new Set(visibleWorkers.map(worker=>worker.id)))}
@@ -269,7 +276,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
 
     <div className="object-shift-deficit-panel">
       <div><strong>{weekday(focusDate)} · {shortDate(focusDate)}</strong><span>Потребность и покрытие по специальностям</span></div>
-      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.known?row.required:"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
+      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name+row.shiftKind} className={row.gap?"has-gap":""}><b>{row.name} · {row.shiftKind==="day"?"День":row.shiftKind==="night"?"Ночь":"Смешанная"}</b> {row.plan}/{row.known?row.required:"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&row.shiftKind==="mixed"&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
       <div className="page-actions"><Link className="button" href={`/needs?object=${objectId}`}>Потребности</Link><Link className="button" href={`/recruiting?object=${objectId}`}>Подбор</Link></div>
     </div>
 

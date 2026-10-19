@@ -5,6 +5,7 @@ import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
 import { canReadRow } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import {resolveObjectConditionInTransaction,conditionScheduleParts} from "@/lib/operations/object-conditions";
 
 const schema=z.object({
   fullName:z.string().trim().min(1).max(240),
@@ -19,6 +20,8 @@ const schema=z.object({
   objectId:z.string().uuid().nullable().optional(),
   specialtyId:z.string().uuid().nullable().optional(),
   startDate:z.string().date().nullable().optional(),
+  dateUnknown:z.boolean().optional(),
+  shiftKind:z.enum(["day","night","mixed"]).default("mixed"),
   relationType:z.enum(["employment","gph","npd","custom"]).nullable().optional(),
   specialtyName:z.string().trim().min(1).max(240).nullable().optional(),
   rate:z.number().positive().nullable().optional(),
@@ -56,7 +59,8 @@ export async function POST(request:Request){
         if(existing)specialtyId=existing.id;
         else{const [created]=await tx<Array<{id:string}>>`INSERT INTO specialties(organization_id,code,name) VALUES(${actor.organizationId}::uuid,${"custom-"+randomUUID()},${body.specialtyName}) RETURNING id`;specialtyId=created.id;}
       }
-      const assigned=Boolean(body.objectId&&specialtyId&&body.startDate);
+      const assigned=Boolean(body.objectId&&specialtyId&&(body.startDate||body.dateUnknown));
+      if(assigned&&!body.startDate&&body.rate)throw new Error("Для индивидуальной ставки укажите дату начала действия");
       if(!assigned&&!canReadRow(actor.access,"worker.edit",{organizationId:actor.organizationId,createdByUserId:actor.userId},actor))throw new AccessDeniedError("worker.edit");
       let object:null|{id:string;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[]}=null;
       if(body.objectId){
@@ -70,7 +74,7 @@ export async function POST(request:Request){
       const [worker]=await tx<Array<{id:string}>>`
         INSERT INTO worker_profiles(organization_id,full_name,phone,email,city,birth_date,clothing_size,shoe_size,height_cm,notes,status,source,created_by_user_id,onboarding_metadata)
         VALUES(${actor.organizationId}::uuid,${body.fullName},${body.phone?.trim()||null},${body.email??null},${body.city??null},${body.birthDate??null}::date,
-          ${body.clothingSize??null},${body.shoeSize??null},${body.heightCm??null},${body.notes??null},${assigned?"active":"requires_assignment"},'Ручное создание',${actor.userId}::uuid,${tx.json({objectId:body.objectId??null,specialtyId,startDate:body.startDate??null,relationType:body.relationType??null,rate:body.rate??null,rateUnit:body.rate?body.rateUnit:null,workMode:body.workMode??null,paidHoursPerShift:body.paidHoursPerShift??null})})
+          ${body.clothingSize??null},${body.shoeSize??null},${body.heightCm??null},${body.notes??null},${assigned?"active":"requires_assignment"},'Ручное создание',${actor.userId}::uuid,${tx.json({objectId:body.objectId??null,specialtyId,shiftKind:body.shiftKind,startDate:body.startDate??null,relationType:body.relationType??null,rate:body.rate??null,rateUnit:body.rate?body.rateUnit:null,workMode:body.workMode??null,paidHoursPerShift:body.paidHoursPerShift??null})})
         RETURNING id
       `;
       if(body.startDate&&body.relationType)await tx`
@@ -78,12 +82,14 @@ export async function POST(request:Request){
         VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.relationType},${body.startDate??null}::date,${actor.userId}::uuid)
       `;
       if(assigned){
+        const condition=await resolveObjectConditionInTransaction(tx,actor.organizationId,{objectId:body.objectId!,specialtyId:specialtyId!,shiftKind:body.shiftKind,date:body.startDate??null});
+        const schedule=conditionScheduleParts(condition);
         await tx`
-          INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,created_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.objectId??null}::uuid,${specialtyId}::uuid,${body.startDate??null}::date,${object!.ownerUserId}::uuid,${body.workMode??null},${body.paidHoursPerShift??null},${actor.userId}::uuid)
+          INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,source_condition_id,paid_hours_override,created_by_user_id)
+          VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${body.objectId??null}::uuid,${specialtyId}::uuid,${body.startDate??null}::date,${object!.ownerUserId}::uuid,${body.workMode??null},${body.paidHoursPerShift??condition?.paidHours??null},${schedule.workDays},${schedule.restDays},${body.shiftKind},${body.startDate??condition?.effectiveFrom??null}::date,${condition?.id??null}::uuid,${body.paidHoursPerShift!=null},${actor.userId}::uuid)
         `;
       }
-      if(body.rate&&body.rateUnit&&assigned){
+      if(body.startDate&&body.rate&&body.rateUnit&&assigned){
         await tx`
           INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id)
           VALUES(${actor.organizationId}::uuid,${worker.id}::uuid,${specialtyId}::uuid,${body.objectId??null}::uuid,${body.rate},${body.rateUnit},'any',${body.startDate??null}::date,${actor.userId}::uuid)

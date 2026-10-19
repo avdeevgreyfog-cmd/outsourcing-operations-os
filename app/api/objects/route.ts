@@ -10,6 +10,7 @@ import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checkl
 const schema=z.object({
   name:z.string().trim().min(2).max(240),
   code:z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).nullable().optional(),
+  contactId:z.string().uuid().nullable().optional(),
   clientId:z.string().uuid().nullable().optional(),
   legalEntityId:z.string().uuid().nullable().optional(),
   regionId:z.string().uuid().nullable().optional(),
@@ -39,6 +40,7 @@ export async function POST(request:Request){
         tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId??null}::uuid AND organization_id=${actor.organizationId}::uuid AND active`,
         tx<Array<{id:string}>>`SELECT id FROM regions WHERE id=${body.regionId??null}::uuid AND organization_id=${actor.organizationId}::uuid`,
       ]);
+      if(body.contactId){const [contact]=await tx<Array<{id:string}>>`SELECT id FROM contacts WHERE organization_id=${actor.organizationId}::uuid AND client_company_id=${body.clientId??null}::uuid AND id=${body.contactId}::uuid`;if(!contact)throw new Error("Контакт не принадлежит выбранному клиенту");}
       if(body.clientId&&(!client||!canReadRow(actor.access,"sales.client.read",{...client,clientId:client.id},actor)))throw new AccessDeniedError("sales.client.read");
       if(body.legalEntityId&&!legalEntity)throw new Error("Юридическое лицо недоступно");
       if(body.regionId&&!region)throw new Error("Регион не найден");
@@ -59,6 +61,7 @@ export async function POST(request:Request){
         )
         RETURNING id,name,code
       `;
+      if(body.contactId)await tx`INSERT INTO object_contact_assignments(organization_id,object_id,contact_id,roles,is_primary,created_by_user_id) VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${body.contactId}::uuid,ARRAY['operations'],true,${actor.userId}::uuid)`;
       if(body.ownerUserId)await tx`
         INSERT INTO object_assignments(organization_id,object_id,user_id,responsibility_type,effective_from,assigned_by_user_id)
         VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${body.ownerUserId??null}::uuid,'object_manager',current_date,${actor.userId}::uuid)
