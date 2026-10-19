@@ -44,6 +44,8 @@ export type RecruitingNeedRow = {
   toRecruit: number;
   deadline: string | null;
   status: string;
+  shiftKind?:"day"|"night"|"mixed";
+  closureReason?:string|null;
   ownerUserId: string | null;
   owner: string | null;
   managerUserId: string | null;
@@ -184,6 +186,7 @@ export type CandidateStageEvent = {
 };
 
 export type CandidateProfile = {
+  preferredObjectId?:string|null;preferredSpecialtyId?:string|null;
   id: string;
   fullName: string;
   phone: string | null;
@@ -320,7 +323,7 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         COALESCE(workforce.working,0)::int filled,COALESCE(workforce.working,0)::int working,
         GREATEST(n.count_required-COALESCE(workforce.working,0),0)::int deficit,
         GREATEST(n.count_required-COALESCE(workforce.working,0)-COALESCE(funnel.ready,0),0)::int "toRecruit",
-        to_char(n.deadline,'DD.MM.YYYY') deadline,n.status,n.owner_user_id "ownerUserId",owner.display_name owner,
+        to_char(n.deadline,'DD.MM.YYYY') deadline,n.status,n.shift_kind "shiftKind",n.closure_reason "closureReason",n.owner_user_id "ownerUserId",owner.display_name owner,
         n.manager_user_id "managerUserId",manager.display_name manager,n.conditions_snapshot conditions,
         COALESCE(assignments."assigneeUserIds",ARRAY[]::text[]) "assigneeUserIds",
         COALESCE(assignments.recruiters,'[]'::jsonb) recruiters,
@@ -344,8 +347,10 @@ export async function listRecruitingNeeds(actor: Actor): Promise<RecruitingNeedR
         SELECT count(DISTINCT woa.worker_id)::int working
         FROM worker_object_assignments woa
         JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
-        WHERE woa.object_id=n.object_id AND woa.specialty_id=n.specialty_id
-          AND woa.effective_from<=current_date AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
+        WHERE woa.organization_id=n.organization_id AND woa.object_id=n.object_id AND woa.specialty_id=n.specialty_id
+          AND (n.shift_kind='mixed' OR woa.schedule_shift_kind=n.shift_kind)
+          AND (n.staffing_plan_target_id IS NULL OR EXISTS(SELECT 1 FROM candidate_applications ca WHERE ca.organization_id=n.organization_id AND ca.need_id=n.id AND ca.candidate_id=wp.origin_candidate_id))
+          AND (woa.effective_from IS NULL OR woa.effective_from<=current_date) AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
       ) workforce ON true
       LEFT JOIN LATERAL (
         SELECT count(*)::int candidates,
@@ -717,7 +722,7 @@ export async function getCandidateProfile(actor: Actor, id: string): Promise<Can
       organizationId:string;ownerUserId:string|null;createdByUserId:string;assigneeUserIds:string[];
     }>>`
       SELECT c.id,c.full_name "fullName",c.phone,c.email,c.preferred_channel "preferredChannel",c.telegram,c.whatsapp,c.city,c.birth_date::text "birthDate",
-        c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,
+        c.source,c.source_channel "sourceChannel",c.source_campaign "sourceCampaign",c.source_reference "sourceReference",c.notes,c.status,c.preferred_object_id "preferredObjectId",c.preferred_specialty_id "preferredSpecialtyId",
         original_recruiter.display_name "originalRecruiter",current_recruiter.display_name "currentRecruiter",
         c.organization_id "organizationId",c.current_recruiter_user_id "ownerUserId",c.created_by_user_id "createdByUserId",
         ARRAY[c.current_recruiter_user_id::text,c.original_recruiter_user_id::text] "assigneeUserIds",

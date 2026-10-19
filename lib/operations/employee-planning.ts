@@ -9,9 +9,9 @@ import type {Sql} from "postgres";
 export type ScheduleOwner="manager"|"worker";
 export type PlannedKind="day"|"night"|"off";
 export type PlanningDay={reserveKind?:"day"|"night"|null;date:string;kind:PlannedKind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:PlannedKind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
-export type EmployeePlanning={owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanningDay[]};
+export type EmployeePlanning={owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string|null;days:PlanningDay[]};
 
-type TenantScope={org:string;actor:string;worker:string;object:string;link:string;today:string;timezone:string;owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;anchor:string;defaultKind:"day"|"night"|null};
+type TenantScope={org:string;actor:string;worker:string;object:string;link:string;today:string;timezone:string;owner:ScheduleOwner;horizon:number;workDays:number|null;restDays:number|null;anchor:string|null;defaultKind:"day"|"night"|null};
 type Entry={date:string;kind:string|null;code:string;source:string;hours:number};
 type Shift={reserve?:boolean;date:string;kind:string;start:string;end:string;endsNextDay:boolean};
 type Proposal={date:string;kind:PlannedKind;status:"proposed"|"accepted"|"rejected"};
@@ -19,8 +19,8 @@ type TimeChange={date:string;start:string;end:string;next:boolean;appliesTo:stri
 type Pattern={effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean;status:"proposed"|"accepted"|"rejected"};
 
 function addDays(date:string,days:number){const d=new Date(date+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10)}
-export function cycleKind(date:string,anchor:string,workDays:number|null,restDays:number|null,kind:"day"|"night"|null):PlannedKind|null{
- if(!workDays||restDays===null||workDays<1||restDays<0||!kind||date<anchor)return null;
+export function cycleKind(date:string,anchor:string|null,workDays:number|null,restDays:number|null,kind:"day"|"night"|null):PlannedKind|null{
+ if(!workDays||restDays===null||workDays<1||restDays<0||!kind||!anchor||date<anchor)return null;
  if((workDays===5&&restDays===2)||(workDays===6&&restDays===1)){
   const dow=new Date(date+"T00:00:00Z").getUTCDay();
   return dow===0||(workDays===5&&dow===6)?"off":kind;
@@ -43,7 +43,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
    CASE WHEN a.schedule_shift_kind='night' THEN 'night' WHEN a.schedule_shift_kind='day' THEN 'day' ELSE NULL END "defaultKind"
    FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
    JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
-     AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+     AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
    LEFT JOIN object_shift_reporting_settings s ON s.object_id=l.object_id
    LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
    WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active'

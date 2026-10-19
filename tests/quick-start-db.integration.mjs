@@ -5,6 +5,7 @@ import {citext} from '@electric-sql/pglite/contrib/citext';
 import {pgcrypto} from '@electric-sql/pglite/contrib/pgcrypto';
 import {btree_gist} from '@electric-sql/pglite/contrib/btree_gist';
 import fs from 'node:fs';
+import nodePath from 'node:path';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 import {createRequire} from 'node:module';
@@ -28,7 +29,8 @@ let savepoint=0;
 function adapter(tx){const sql=tx.nativeSql?((parts,...values)=>tx.nativeSql(parts,...values)):async(parts,...values)=>(await tx.query(parts.reduce((q,part,i)=>q+(i?'$'+i:'')+part,''),values)).rows;sql.json=tx.nativeSql?tx.nativeSql.json:JSON.stringify;sql.unsafe=tx.nativeSql?tx.nativeSql.unsafe:async(q,args=[])=>(await tx.query(q,args)).rows;sql.begin=async fn=>{const name='quick_start_'+(++savepoint);await tx.exec('SAVEPOINT '+name);try{const result=await fn(sql);await tx.exec('RELEASE SAVEPOINT '+name);return result}catch(e){await tx.exec('ROLLBACK TO SAVEPOINT '+name);throw e}};return sql;}
 const withTenant=(o,u,fn)=>pg.transaction(async tx=>{await tx.exec('SET LOCAL ROLE quick_start_runtime');await tx.query("SELECT set_config('app.organization_id',$1,true),set_config('app.user_id',$2,true)",[o,u]);return fn(adapter(tx));});
 const deps={'next/server':{NextResponse:{json:(b,o)=>Response.json(b,o)}},'@/lib/auth/server':{getCurrentActor:async()=>actor},'@/lib/access/server':{AccessDeniedError,requireCapability(a,c){if(!access.hasCapability(a.access,c))throw new AccessDeniedError(c)}},'@/lib/core/access.mjs':access,'@/lib/db/client':{withTenant},'@/lib/demo/organization':{},'@/lib/organization/read-scope.mjs':orgScope,'@/lib/operations/launch-checklist':{defaultPrimarySiteVisitChecklist:()=>[]}};
-function compile(path){const exports={};new Function('exports','require',ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(exports,n=>deps[n]??require(n));return exports;}
+const modules=new Map();
+function compile(file){file=nodePath.resolve(file);if(modules.has(file))return modules.get(file);const exports={};modules.set(file,exports);new Function('exports','require',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(exports,n=>{if(n in deps)return deps[n];if(n.startsWith('@/')||n.startsWith('.')){const base=n.startsWith('@/')?nodePath.resolve(n.slice(2)):nodePath.resolve(nodePath.dirname(file),n);const target=[base,base+'.ts',base+'.mjs',base+'/index.ts'].find(f=>fs.existsSync(f)&&fs.statSync(f).isFile());if(!target)throw Error('Missing dependency '+n+' from '+file);return target.endsWith('.mjs')?require(target):compile(target)}return require(n)});return exports;}
 async function post(path,body,id){const response=await compile(path).POST(new Request('http://isolated.test/api',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),id?{params:Promise.resolve({id})}:undefined);return {status:response.status,body:await response.json()};}
 try{
  if(!native)for(const name of fs.readdirSync('migrations').filter(n=>/^\d{4}_.*\.sql$/.test(n)).sort())await pg.exec(fs.readFileSync('migrations/'+name,'utf8'));

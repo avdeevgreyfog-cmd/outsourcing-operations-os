@@ -1106,7 +1106,9 @@
 
 
 /* Recruiting final UI consistency pass — 2026-09-20 */
-.recruiting-funnel-workspace{gap:18px}
+.recruiting-funnel-workspace{gap:18px;min-width:0;grid-template-columns:minmax(0,1fr)}
+.recruiting-funnel-workspace>*{min-width:0}
+.recruiting-funnel-workspace>.recruiting-board{max-width:100%;overflow-x:auto}
 .recruiting-funnel-viewbar,.candidate-directory-viewbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .recruiting-funnel-viewbar>.sales-segments,.candidate-directory-viewbar>.sales-segments{min-width:0}
 .recruiting-funnel-actions,.candidate-directory-buttons{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
@@ -1230,3 +1232,9 @@
  .candidate-import-options,.recruiting-form-grid{grid-template-columns:1fr}
  .candidate-import-options .wide,.recruiting-form-grid .wide{grid-column:auto}
 }
+
+/* Related creation uses the shared nested drawer; keep its compact body within the shell. */
+.candidate-create-drawer .candidate-create-layout{grid-template-columns:minmax(0,1fr)!important;overflow:visible!important}
+.candidate-create-drawer .candidate-create-form{min-width:0;padding:0}
+.candidate-create-drawer .candidate-create-grid{grid-template-columns:minmax(0,1fr)}
+.candidate-create-drawer .candidate-call-cheat-sheet{min-width:0}

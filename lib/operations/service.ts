@@ -275,14 +275,14 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
       LEFT JOIN app_users owner ON owner.id=o.owner_user_id
       LEFT JOIN LATERAL (
         SELECT COALESCE(sum(n.count_required),0)::int required
-        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed')
+        FROM needs n WHERE n.object_id=o.id AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived','closed','paused')
       ) needs ON true
       LEFT JOIN LATERAL (
         SELECT count(DISTINCT woa.worker_id)::int working
         FROM worker_object_assignments woa
         JOIN worker_profiles wp ON wp.id=woa.worker_id AND wp.status='active'
         WHERE woa.object_id=o.id
-          AND woa.effective_from<=current_date
+          AND (woa.effective_from IS NULL OR woa.effective_from<=current_date)
           AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
       ) workforce ON true
       LEFT JOIN LATERAL (
@@ -301,7 +301,7 @@ export async function listOperationsAnalytics(actor:Actor):Promise<OperationsAna
         SELECT count(DISTINCT a.worker_id)::int count
         FROM worker_object_assignments a
         JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-        WHERE a.object_id=o.id AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+        WHERE a.object_id=o.id AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
           AND NOT EXISTS (
             SELECT 1 FROM worker_absence_plans ap
             WHERE ap.worker_id=a.worker_id AND ap.object_id=o.id AND ap.status='confirmed'
@@ -429,7 +429,7 @@ export async function getOperationsReferenceData(
           FROM worker_profiles w
           JOIN LATERAL (
             SELECT * FROM worker_object_assignments woa
-            WHERE woa.worker_id=w.id AND woa.effective_from<=current_date
+            WHERE woa.worker_id=w.id AND (woa.effective_from IS NULL OR woa.effective_from<=current_date)
               AND (woa.effective_to IS NULL OR woa.effective_to>=current_date)
             ORDER BY woa.effective_from DESC LIMIT 1
           ) a ON true
@@ -738,7 +738,7 @@ export async function getHousingSnapshot(actor:Actor):Promise<HousingSnapshot>{
 }
 
 
-export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null;transitionDays:number;dailyPaymentShifts:number;dayRate:number|null;nightRate:number|null};
+export type WorkerAssignmentHistoryRow={id:string;objectId:string;object:string;specialtyId:string|null;specialty:string|null;effectiveFrom:string|null;effectiveTo:string|null;manager:string|null;workMode:"local"|"rotation";paidHoursPerShift:number|null;scheduleWorkDays:number|null;scheduleRestDays:number|null;scheduleShiftKind:"day"|"night"|"mixed";scheduleAnchorDate:string|null;transitionDays:number;dailyPaymentShifts:number;dayRate:number|null;nightRate:number|null};
 export type WorkerAbsenceRow={id:string;absenceType:string;status:string;plannedFrom:string;plannedTo:string|null;actualFrom:string|null;actualTo:string|null;flexibleReturn:boolean;note:string|null};
 export type WorkerOperationsDetails={assignments:WorkerAssignmentHistoryRow[];absences:WorkerAbsenceRow[]};
 
@@ -762,7 +762,7 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
       SELECT w.organization_id "organizationId",w.created_by_user_id "createdByUserId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM worker_profiles w
-      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
+      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY ((x.effective_from IS NULL OR x.effective_from<=current_date) AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
       LEFT JOIN objects o ON o.id=a.object_id
       WHERE w.id=${workerId}::uuid
     `;
@@ -775,9 +775,9 @@ export async function getWorkerOperationsDetails(actor:Actor,workerId:string):Pr
           COALESCE(day_rate.amount,any_rate.amount)::numeric "dayRate",COALESCE(night_rate.amount,any_rate.amount)::numeric "nightRate"
         FROM worker_object_assignments a JOIN objects o ON o.id=a.object_id
         LEFT JOIN specialties s ON s.id=a.specialty_id LEFT JOIN app_users u ON u.id=a.manager_user_id
-        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) any_rate ON true
-        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='day' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) day_rate ON true
-        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='night' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR r.effective_to>=a.effective_from) ORDER BY r.effective_from DESC LIMIT 1) night_rate ON true
+        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='any' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR (a.effective_from IS NULL OR r.effective_to>=a.effective_from)) ORDER BY r.effective_from DESC LIMIT 1) any_rate ON true
+        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='day' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR (a.effective_from IS NULL OR r.effective_to>=a.effective_from)) ORDER BY r.effective_from DESC LIMIT 1) day_rate ON true
+        LEFT JOIN LATERAL (SELECT amount FROM worker_rates r WHERE r.worker_id=a.worker_id AND r.object_id=a.object_id AND r.day_night='night' AND r.effective_from<=COALESCE(a.effective_to,current_date) AND (r.effective_to IS NULL OR (a.effective_from IS NULL OR r.effective_to>=a.effective_from)) ORDER BY r.effective_from DESC LIMIT 1) night_rate ON true
         WHERE a.worker_id=${workerId}::uuid ORDER BY a.effective_from DESC
       `,
       sql<WorkerAbsenceRow[]>`
@@ -956,7 +956,7 @@ export async function getWorkerOffboardingContext(actor:Actor,workerId:string):P
       SELECT w.organization_id "organizationId",w.created_by_user_id "createdByUserId",a.object_id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa WHERE oa.object_id=a.object_id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
       FROM worker_profiles w
-      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY (x.effective_from<=current_date AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
+      LEFT JOIN LATERAL (SELECT * FROM worker_object_assignments x WHERE x.worker_id=w.id ORDER BY ((x.effective_from IS NULL OR x.effective_from<=current_date) AND (x.effective_to IS NULL OR x.effective_to>=current_date)) DESC,x.effective_from DESC LIMIT 1) a ON true
       LEFT JOIN objects o ON o.id=a.object_id
       WHERE w.id=${workerId}::uuid
     `;
@@ -1045,7 +1045,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
             ORDER BY t.effective_from DESC,t.created_at DESC
           ) rn
         FROM staffing_plan_targets t
-        WHERE t.effective_from<=current_date+${horizon}::int
+        WHERE t.status='active' AND (t.effective_from IS NULL OR t.effective_from<=current_date+${horizon}::int)
           AND (t.effective_to IS NULL OR t.effective_to>=current_date+${horizon}::int)
       ),
       target_demand AS (
@@ -1059,7 +1059,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         FROM needs n
         WHERE n.object_id IS NOT NULL
           AND n.source_kind<>'replacement'
-          AND n.status NOT IN ('cancelled','archived','closed')
+          AND n.status NOT IN ('cancelled','archived','closed','paused')
           AND NOT EXISTS (
             SELECT 1 FROM target_demand td
             WHERE td.object_id=n.object_id AND td.specialty_id=n.specialty_id
@@ -1081,7 +1081,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         FROM needs n
         WHERE n.object_id IS NOT NULL
           AND n.source_kind<>'replacement'
-          AND n.status NOT IN ('cancelled','archived','closed')
+          AND n.status NOT IN ('cancelled','archived','closed','paused')
         GROUP BY n.object_id,n.specialty_id
       )
       SELECT o.organization_id "organizationId",o.id "objectId",o.name object,d.specialty_id "specialtyId",s.name specialty,
@@ -1111,7 +1111,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         FROM worker_object_assignments a
         JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
         WHERE a.object_id=o.id AND a.specialty_id=d.specialty_id
-          AND a.effective_from<=current_date
+          AND (a.effective_from IS NULL OR a.effective_from<=current_date)
           AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       ) workforce ON true
       LEFT JOIN LATERAL (
@@ -1140,7 +1140,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         FROM worker_absence_plans ap
         JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
         WHERE ap.status IN ('confirmed','tentative')
-          AND a.effective_from<=current_date+${horizon}::int
+          AND (a.effective_from IS NULL OR a.effective_from<=current_date+${horizon}::int)
           AND (a.effective_to IS NULL OR a.effective_to>=current_date+${horizon}::int)
           AND ap.planned_from<=current_date+${horizon}::int
           AND (ap.planned_to IS NULL OR ap.planned_to>=current_date+${horizon}::int)
@@ -1150,7 +1150,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
         FROM worker_exit_processes ep
         JOIN worker_object_assignments a ON a.worker_id=ep.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
         WHERE ep.status='planned'
-          AND a.effective_from<=ep.effective_date
+          AND (a.effective_from IS NULL OR a.effective_from<=ep.effective_date)
           AND (a.effective_to IS NULL OR a.effective_to>=ep.effective_date)
           AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
       ) exits ON true
@@ -1168,7 +1168,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
           FROM worker_absence_plans ap
           JOIN worker_object_assignments a ON a.worker_id=ap.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
           WHERE ap.status='confirmed'
-            AND a.effective_from<=current_date+${horizon}::int
+            AND (a.effective_from IS NULL OR a.effective_from<=current_date+${horizon}::int)
             AND (a.effective_to IS NULL OR a.effective_to>=current_date+${horizon}::int)
             AND ap.planned_from<=current_date+${horizon}::int
             AND (ap.planned_to IS NULL OR ap.planned_to>=current_date+${horizon}::int)
@@ -1177,7 +1177,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
           FROM worker_exit_processes ep
           JOIN worker_object_assignments a ON a.worker_id=ep.worker_id AND a.object_id=o.id AND a.specialty_id=d.specialty_id
           WHERE ep.status='planned'
-            AND a.effective_from<=ep.effective_date
+            AND (a.effective_from IS NULL OR a.effective_from<=ep.effective_date)
             AND (a.effective_to IS NULL OR a.effective_to>=ep.effective_date)
             AND ep.effective_date BETWEEN current_date AND current_date+${horizon}::int
         ) x
@@ -1189,7 +1189,7 @@ export async function listStaffingForecast(actor:Actor,horizonDays=30):Promise<S
 }
 
 export type ObjectContactRow={
-  assignmentId:string;contactId:string;fullName:string;position:string|null;phone:string|null;email:string|null;
+  assignmentId:string;isPrimary?:boolean;contactId:string;fullName:string;position:string|null;phone:string|null;email:string|null;
   telegram:string|null;whatsapp:string|null;maxContact:string|null;preferredChannel:string|null;roles:string[];note:string|null;
 };
 export type ClientContactOption={
@@ -1217,7 +1217,7 @@ export async function getObjectContacts(actor:Actor,objectId:string):Promise<{as
     const [assigned,contacts]=await Promise.all([
       sql<ObjectContactRow[]>`
         SELECT a.id "assignmentId",c.id "contactId",c.full_name "fullName",c.position,c.phone,c.email,c.telegram,c.whatsapp,c.max_contact "maxContact",
-          c.communication_preference "preferredChannel",a.roles,a.note
+          c.communication_preference "preferredChannel",a.roles,a.note,a.is_primary "isPrimary"
         FROM object_contact_assignments a JOIN contacts c ON c.id=a.contact_id
         WHERE a.object_id=${objectId}::uuid AND a.active
         ORDER BY c.full_name
@@ -1267,7 +1267,7 @@ export async function listObjectDocuments(actor:Actor,objectId:string):Promise<O
 export type DailyPaymentShift={workDate:string;hours:number;dayHours:number;nightHours:number;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|null;paymentDate:string|null;suggestedAmount:number};
 export type DailyPaymentProgressRow={
   organizationId:string;objectId:string;workerId:string;worker:string;specialty:string|null;ownerUserId:string|null;regionId:string|null;assigneeUserIds:string[];
-  shiftLimit:number;assignmentStart:string;workedCount:number;remaining:number;rate:number|null;rateUnit:string|null;paidHoursPerShift:number|null;shifts:DailyPaymentShift[];
+  shiftLimit:number;assignmentStart:string|null;workedCount:number;remaining:number;rate:number|null;rateUnit:string|null;paidHoursPerShift:number|null;shifts:DailyPaymentShift[];
 };
 export async function listDailyPaymentProgress(actor:Actor,objectId:string):Promise<DailyPaymentProgressRow[]>{
   requireCapability(actor,"finance.payments.read");
@@ -1293,7 +1293,7 @@ export async function listDailyPaymentProgress(actor:Actor,objectId:string):Prom
     `;
     if(!scope||!canReadRow(actor.access,"finance.payments.read",scope,actor))return[];
     const rows=await sql<Array<{
-      workerId:string;worker:string;specialty:string|null;shiftLimit:number;assignmentStart:string;rate:number|string|null;rateUnit:string|null;paidHoursPerShift:number|string|null;
+      workerId:string;worker:string;specialty:string|null;shiftLimit:number;assignmentStart:string|null;rate:number|string|null;rateUnit:string|null;paidHoursPerShift:number|string|null;
       shifts:Array<{workDate:string;hours:number|string;dayHours:number|string;nightHours:number|string;dayRate:number|string|null;nightRate:number|string|null;paymentId:string|null;paymentStatus:string|null;paymentAmount:number|string|null;paymentDate:string|null}>;
     }>>`
       SELECT w.id "workerId",w.full_name worker,s.name specialty,a.daily_payment_shifts "shiftLimit",a.effective_from::text "assignmentStart",
@@ -1308,7 +1308,7 @@ export async function listDailyPaymentProgress(actor:Actor,objectId:string):Prom
           FROM (
             SELECT te.work_date,sum(te.fact_hours)::numeric hours,sum(te.day_hours)::numeric day_hours,sum(te.night_hours)::numeric night_hours
             FROM time_entries te
-            WHERE te.worker_id=w.id AND te.object_id=a.object_id AND te.work_date>=a.effective_from AND te.fact_hours>0
+            WHERE te.worker_id=w.id AND te.object_id=a.object_id AND (a.effective_from IS NULL OR te.work_date>=a.effective_from) AND te.fact_hours>0
             GROUP BY te.work_date ORDER BY te.work_date LIMIT a.daily_payment_shifts
           ) x
           LEFT JOIN advance_payments ap ON ap.worker_id=w.id AND ap.object_id=a.object_id AND ap.payment_purpose='daily_shift' AND ap.work_date=x.work_date
@@ -1320,7 +1320,7 @@ export async function listDailyPaymentProgress(actor:Actor,objectId:string):Prom
         SELECT amount,unit FROM worker_rates r WHERE r.worker_id=w.id AND r.effective_from<=current_date AND (r.effective_to IS NULL OR r.effective_to>=current_date)
         ORDER BY r.effective_from DESC LIMIT 1
       ) wr ON true
-      WHERE a.object_id=${objectId}::uuid AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.full_name
+      WHERE a.object_id=${objectId}::uuid AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.full_name
     `;
     return rows.map(row=>{
       const rate=row.rate==null?null:Number(row.rate);const paidHours=row.paidHoursPerShift==null?null:Number(row.paidHoursPerShift);

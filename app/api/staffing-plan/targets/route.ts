@@ -1,29 +1,13 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
-import { getCurrentActor } from "@/lib/auth/server";
-import { AccessDeniedError } from "@/lib/access/server";
-import { setStaffingPlanTarget } from "@/lib/operations/staffing-plan";
-
-const schema=z.object({
-  objectId:z.string().uuid(),
-  specialtyId:z.string().uuid(),
-  plannedCount:z.number().int().min(0).max(10000),
-  shiftKind:z.enum(["day","night","mixed"]).default("mixed"),
-  effectiveFrom:z.string().date(),
-  note:z.string().trim().max(1000).nullable().optional(),
-});
-
-export async function POST(request:Request){
-  try{
-    const actor=await getCurrentActor();
-    if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
-    const body=schema.parse(await request.json());
-    const result=await setStaffingPlanTarget(actor,body);
-    return NextResponse.json(result);
-  }catch(error){
-    if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте параметры плана",issues:error.issues},{status:400});
-    if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);
-    return NextResponse.json({error:error instanceof Error?error.message:"Не удалось сохранить план комплектации"},{status:500});
-  }
-}
+import {getOperationsReferenceData} from "@/lib/operations/service";
+import {NextResponse} from "next/server";
+import {z} from "zod";
+import {getCurrentActor} from "@/lib/auth/server";
+import {AccessDeniedError} from "@/lib/access/server";
+import {listStaffingPlan,setStaffingPlanTarget,staffingPlanSchema} from "@/lib/operations/staffing-plan";
+import {listObjectConditions} from "@/lib/operations/object-conditions";
+import {hasCapability} from "@/lib/core/access.mjs";
+import {withTenant} from "@/lib/db/client";
+function fail(error:unknown){if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});if(error instanceof z.ZodError)return NextResponse.json({error:error.issues[0]?.message??"Проверьте поля",issues:error.issues},{status:400});return NextResponse.json({error:error instanceof Error?error.message:"Ошибка плана"},{status:409})}
+export async function GET(request:Request){try{const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});const objectId=z.string().uuid().parse(new URL(request.url).searchParams.get('objectId'));const [rows,conditions,specialties]=await Promise.all([listStaffingPlan(actor,objectId),listObjectConditions(actor,objectId),actor.demo?getOperationsReferenceData(actor,"operations.need.read",{includeWorkers:false}).then(r=>r.specialties):withTenant(actor.organizationId,actor.userId,sql=>sql`SELECT id,name FROM specialties WHERE organization_id=${actor.organizationId}::uuid AND active ORDER BY name`)]);return NextResponse.json({rows,conditions,specialties,demo:actor.demo,canManageDirectories:hasCapability(actor.access,"admin.permissions.manage"),canCreateNeed:hasCapability(actor.access,"operations.need.create")})}catch(e){return fail(e)}}
+export async function POST(request:Request){try{const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});return NextResponse.json(await setStaffingPlanTarget(actor,staffingPlanSchema.parse(await request.json())))}catch(e){return fail(e)}}
+export const PATCH=POST;

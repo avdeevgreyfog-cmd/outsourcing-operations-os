@@ -7,6 +7,8 @@ import { withTenant } from "@/lib/db/client";
 import { hasCapability } from "@/lib/core/access.mjs";
 
 const conditionSchema = z.object({
+  paidHoursPerShift:z.number().positive().max(24).nullable().optional(),
+  workMode:z.enum(["local","rotation"]).nullable().optional(),
   location: z.string().trim().max(500).nullable().optional(),
   schedule: z.string().trim().max(1000).nullable().optional(),
   workerPay: z.string().trim().max(500).nullable().optional(),
@@ -37,7 +39,10 @@ const patchSchema = z.object({
   countRequired: z.number().int().min(1).max(10000).optional(),
   deadline: z.string().date().nullable().optional(),
   priority: z.enum(["low","normal","high","critical"]).optional(),
-  status: z.enum(["open","in_progress","filled","paused","cancelled"]).optional(),
+  status: z.enum(["open","in_progress","filled","paused","closed","cancelled"]).optional(),
+  closureReason:z.string().trim().max(2000).nullable().optional(),
+  shiftKind:z.enum(["day","night","mixed"]).optional(),
+  ownerUserId:z.string().uuid().nullable().optional(),
   conditions: conditionSchema.partial().optional(),
   recruiters: z.array(z.object({
     userId: z.string().uuid(),
@@ -76,16 +81,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (actor.demo) return NextResponse.json({error:"Изменения демо-потребности сохраняются в браузере"},{status:409});
     const { id } = await params;
     const body = patchSchema.parse(await request.json());
+    if(["closed","cancelled"].includes(body.status??"")&&!body.closureReason?.trim())return NextResponse.json({error:"Укажите причину закрытия или отмены"},{status:400});
 
     const result = await withTenant(actor.organizationId, actor.userId, async sql => sql.begin(async tx => {
       const [current] = await tx<EditableNeed[]>`
         SELECT n.id,n.organization_id "organizationId",COALESCE(n.title,s.name) title,n.region_id "regionId",
-          n.owner_user_id "ownerUserId",n.manager_user_id "managerUserId",n.count_required "countRequired",
+          n.owner_user_id "ownerUserId",n.created_by_user_id "createdByUserId",n.manager_user_id "managerUserId",n.count_required "countRequired",
           n.deadline::text deadline,n.priority,n.status,n.conditions_snapshot conditions,
           ARRAY(SELECT na.recruiter_user_id::text FROM need_assignments na
                 WHERE na.need_id=n.id AND na.unassigned_at IS NULL AND na.recruiter_user_id IS NOT NULL) "assigneeUserIds"
         FROM needs n JOIN specialties s ON s.id=n.specialty_id
-        WHERE n.id=${id}::uuid
+        WHERE n.id=${id}::uuid AND n.organization_id=${actor.organizationId}::uuid FOR UPDATE OF n
       `;
       if (!current) return null;
       if (!canReadRow(actor.access,"operations.need.edit",current,actor)) throw new AccessDeniedError("operations.need.edit");
@@ -123,20 +129,24 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       }
 
+      if(body.ownerUserId){const [member]=await tx`SELECT user_id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${body.ownerUserId}::uuid AND status='active'`;if(!member)throw new Error("Ответственный не состоит в организации");}
       await tx`
         UPDATE needs SET
           title=${body.title ?? current.title},
           count_required=${countRequired},
           deadline=${deadline}::date,
           priority=${body.priority ?? current.priority},
+          owner_user_id=CASE WHEN ${body.ownerUserId!==undefined} THEN ${body.ownerUserId??null}::uuid ELSE owner_user_id END,
           status=CASE
             WHEN ${body.status ?? null}::text IS NOT NULL THEN ${body.status ?? null}
             WHEN ${countChanged} AND ${countRequired}>count_filled AND status='filled' THEN 'in_progress'
             ELSE status
           END,
-          closed_at=CASE WHEN ${countChanged} AND ${countRequired}>count_filled THEN NULL ELSE closed_at END,
+          shift_kind=COALESCE(${body.shiftKind??null},shift_kind),
+          closure_reason=COALESCE(${body.closureReason??null},closure_reason),
+          closed_at=CASE WHEN ${['closed','cancelled','filled'].includes(body.status??'')} THEN now() WHEN ${body.status==='open'||body.status==='in_progress'} THEN NULL WHEN ${countChanged} AND ${countRequired}>count_filled THEN NULL ELSE closed_at END,
           conditions_snapshot=${sql.json(nextConditions)}
-        WHERE id=${id}::uuid
+        WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
       `;
 
       if(countChanged){
@@ -182,7 +192,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             VALUES(${actor.organizationId}::uuid,${id}::uuid,${item.userId}::uuid,${item.targetCount},${actor.userId}::uuid)
           `;
         }
-        await tx`UPDATE needs SET owner_user_id=${recruiters[0]?.userId ?? null}::uuid WHERE id=${id}::uuid`;
+        await tx`UPDATE needs SET owner_user_id=${recruiters[0]?.userId ?? null}::uuid WHERE id=${id}::uuid AND organization_id=${actor.organizationId}::uuid`;
       }
 
       const changed = Object.keys(body).filter(key=>body[key as keyof typeof body] !== undefined && !["quantityReason"].includes(key));

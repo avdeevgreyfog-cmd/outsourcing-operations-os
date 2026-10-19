@@ -2,13 +2,17 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, UsersRound, X } from "lucide-react";
 import { KeyValue, Metric, Status } from "@/components/UI";
 import { rub } from "@/lib/ui/format";
 import type { ShiftRow } from "@/lib/data/service";
 import type { OperationsReferenceData } from "@/lib/operations/service";
+
+import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
+import {CreateWorkerSpecialty} from "@/components/WorkerSpecialties";
+import type {ObjectCondition} from "@/lib/operations/object-conditions";
 
 type ShiftView="calendar"|"list"|"workers";
 
@@ -21,7 +25,8 @@ function monday(value:string){const date=new Date(value+"T00:00:00Z");const day=
 function displayDay(value:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z"))}
 function weekday(value:string){return new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(value+"T00:00:00Z")).replace(".","")}
 
-export function ResourceScheduler({rows,options,canEdit}:{rows:ShiftRow[];options:OperationsReferenceData;canEdit:boolean}){
+export function ResourceScheduler({rows,options,canEdit,canManageDirectories=false,canEditWorkers=false,demo=false}:{rows:ShiftRow[];options:OperationsReferenceData;canEdit:boolean;canManageDirectories?:boolean;canEditWorkers?:boolean;demo?:boolean}){
+  const params=useSearchParams();
   const router=useRouter();
   const [view,setView]=useState<ShiftView>("calendar");
   const [week,setWeek]=useState(monday(isoToday()));
@@ -31,7 +36,7 @@ export function ResourceScheduler({rows,options,canEdit}:{rows:ShiftRow[];option
   const [kind,setKind]=useState("all");
   const [deficitOnly,setDeficitOnly]=useState(false);
   const [selected,setSelected]=useState<ShiftRow|null>(null);
-  const [showCreate,setShowCreate]=useState(false);
+  const [showCreate,setShowCreate]=useState(params.get("create")==="1"&&canEdit);
   const [showAssignments,setShowAssignments]=useState(false);
   const [message,setMessage]=useState("");
 
@@ -153,64 +158,76 @@ export function ResourceScheduler({rows,options,canEdit}:{rows:ShiftRow[];option
       <div className="drawer-actions">{canEdit&&<button className="button primary" onClick={()=>setShowAssignments(true)}><UsersRound size={14}/> Состав смены</button>}<Link className="button" href={`/objects/${selected.objectId}?tab=staffing`}><CalendarDays size={14}/> Передать в подбор</Link></div>
     </aside></>}
 
-    {showCreate&&<ScheduleModal options={options} onClose={()=>setShowCreate(false)} onSaved={(text)=>{setShowCreate(false);setMessage(text);router.refresh()}}/>}
+    {showCreate&&<ScheduleModal options={options} canManageDirectories={canManageDirectories} canEditWorkers={canEditWorkers} demo={demo} initial={{objectId:params.get("objectId")??"",specialtyId:params.get("specialtyId")??"",shiftKind:params.get("shiftKind")??"day",demandCount:Number(params.get("demandCount")??1)}} onClose={()=>setShowCreate(false)} onSaved={(text)=>{setShowCreate(false);setMessage(text);router.refresh()}}/>}
     {selected&&showAssignments&&<AssignmentsModal shift={selected} options={options} onClose={()=>setShowAssignments(false)} onSaved={(text)=>{setShowAssignments(false);setSelected(null);setMessage(text);router.refresh()}}/>}
   </>;
 }
 
-function ScheduleModal({options,onClose,onSaved}:{options:OperationsReferenceData;onClose:()=>void;onSaved:(message:string)=>void}){
-  const [objectId,setObjectId]=useState(options.objects[0]?.id??"");
-  const [specialtyId,setSpecialtyId]=useState(options.specialties[0]?.id??"");
+function ScheduleModal({options,onClose,onSaved,canManageDirectories,canEditWorkers,demo,initial}:{options:OperationsReferenceData;onClose:()=>void;onSaved:(message:string)=>void;canManageDirectories:boolean;canEditWorkers:boolean;demo:boolean;initial:{objectId:string;specialtyId:string;shiftKind:string;demandCount:number}}){
+  const [objectId,setObjectId]=useState(initial.objectId||options.objects[0]?.id||"");
+  const [specialtyId,setSpecialtyId]=useState(initial.specialtyId||options.specialties[0]?.id||"");
   const [startDate,setStartDate]=useState("");
   const [endDate,setEndDate]=useState("");
   const [workDays,setWorkDays]=useState(6);
   const [restDays,setRestDays]=useState(1);
-  const [shiftKind,setShiftKind]=useState<"day"|"night"|"mixed">("day");
+  const [shiftKind,setShiftKind]=useState<"day"|"night"|"mixed">(["day","night","mixed"].includes(initial.shiftKind)?initial.shiftKind as "day"|"night"|"mixed":"day");
   const [startTime,setStartTime]=useState("08:00");
   const [endTime,setEndTime]=useState("20:00");
-  const [demandCount,setDemandCount]=useState(1);
+  const [demandCount,setDemandCount]=useState(Number.isFinite(initial.demandCount)?Math.max(1,initial.demandCount):1);
   const [workerIds,setWorkerIds]=useState<string[]>([]);
   const [reserveWorkerIds,setReserveWorkerIds]=useState<string[]>([]);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
 
-  const workers=options.workers.filter(worker=>worker.objectId===objectId&&(!specialtyId||worker.specialtyId===specialtyId));
+  const [specialties,setSpecialties]=useState(options.specialties);
+  const [workerRows,setWorkerRows]=useState(options.workers);
+  const [condition,setCondition]=useState<ObjectCondition|null>(null);
+  const [conditionMessage,setConditionMessage]=useState("");
+  const [inheritConditions,setInheritConditions]=useState(true);
+  const [createWorker,setCreateWorker]=useState(false);
+  const [workerName,setWorkerName]=useState("");
+  useEffect(()=>{if(demo||!objectId||!specialtyId)return;const controller=new AbortController();fetch(`/api/shifts/defaults?objectId=${objectId}&specialtyId=${specialtyId}&shiftKind=${shiftKind}&date=${startDate}`,{signal:controller.signal}).then(async response=>{const json=await response.json();if(!response.ok)throw new Error(json.error??"Условия недоступны");setCondition(json.condition??null);if(json.condition&&inheritConditions){if(json.condition.startTime)setStartTime(json.condition.startTime.slice(0,5));if(json.condition.endTime)setEndTime(json.condition.endTime.slice(0,5));const match=json.condition.schedule?.match(/^(\d+)\/(\d+)$/);if(match){setWorkDays(Number(match[1]));setRestDays(Number(match[2]))}}setConditionMessage(json.condition?"Условия объекта доступны — примените перед сохранением":"Условия для этой специальности и смены пока не заданы");}).catch(e=>{if(e.name!=="AbortError")setConditionMessage("Не удалось прочитать условия; можно указать параметры вручную")});return()=>controller.abort()},[objectId,specialtyId,shiftKind,startDate,demo,inheritConditions]);
+  function applyConditions(){if(!condition)return;setInheritConditions(true);if(condition.startTime)setStartTime(condition.startTime.slice(0,5));if(condition.endTime)setEndTime(condition.endTime.slice(0,5));const match=condition.schedule?.match(/^(\d+)\/(\d+)$/);if(match){setWorkDays(Number(match[1]));setRestDays(Number(match[2]))}setConditionMessage("Время и цикл подставлены из условий объекта. Оплачиваемые часы: "+(condition.paidHours??"не указано"));}
+  async function saveWorker(){setBusy(true);setError("");try{const existing=workerRows.find(w=>w.fullName.trim().toLocaleLowerCase("ru")===workerName.trim().toLocaleLowerCase("ru"));if(existing){if(existing.objectId!==objectId||existing.specialtyId!==specialtyId)throw new Error("Сотрудник с этим ФИО уже существует. Проверьте его назначение в карточке сотрудника.");selectWorker(existing.id,"primary");setCreateWorker(false);return;}if(demo){const id=crypto.randomUUID();setWorkerRows(rows=>[...rows,{id,fullName:workerName.trim(),objectId,object:options.objects.find(o=>o.id===objectId)?.name??null,specialtyId,specialty:specialties.find(s=>s.id===specialtyId)?.name??null}]);selectWorker(id,"primary");setCreateWorker(false);return;}const response=await fetch("/api/workers",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({fullName:workerName,objectId,specialtyId,startDate:null,dateUnknown:true,shiftKind})});const result=await response.json();if(!response.ok)throw new Error(result.error??"Не удалось создать сотрудника");setWorkerRows(rows=>[...rows,{id:result.workerId,fullName:workerName.trim(),objectId,object:options.objects.find(o=>o.id===objectId)?.name??null,specialtyId,specialty:specialties.find(s=>s.id===specialtyId)?.name??null}]);selectWorker(result.workerId,"primary");setCreateWorker(false);}catch(e){setError(e instanceof Error?e.message:"Не удалось создать сотрудника")}finally{setBusy(false)}}
+  const workers=workerRows.filter(worker=>worker.objectId===objectId&&(!specialtyId||worker.specialtyId===specialtyId));
   function selectWorker(id:string,mode:"primary"|"reserve"|"none"){
     setWorkerIds(current=>mode==="primary"?[...new Set([...current,id])]:current.filter(value=>value!==id));
     setReserveWorkerIds(current=>mode==="reserve"?[...new Set([...current,id])]:current.filter(value=>value!==id));
   }
-  function applyPattern(work:number,rest:number){setWorkDays(work);setRestDays(rest)}
+  function applyPattern(work:number,rest:number){setInheritConditions(false);setWorkDays(work);setRestDays(rest)}
   async function save(){
     setBusy(true);setError("");
     try{
-      const response=await fetch("/api/shifts/series",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({objectId,specialtyId,startDate,endDate,startTime,endTime,shiftKind,demandCount,workDays,restDays,workerIds,reserveWorkerIds})});
+      const response=await fetch("/api/shifts/series",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({objectId,specialtyId,startDate,endDate,startTime,endTime,shiftKind,demandCount,workDays,restDays,workerIds,reserveWorkerIds,inheritConditions})});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось создать график");
       const warningCount=Array.isArray(json.warnings)?json.warnings.length:0;
       onSaved(`График создан: ${json.created??0} смен. Дефицит: ${json.totalDeficit??0}${warningCount?`. Пропущено назначений: ${warningCount}`:""}`);
     }catch(e){setError(e instanceof Error?e.message:"Не удалось создать график");}finally{setBusy(false)}
   }
-  return <Portal><div className="recruiting-modal" onMouseDown={event=>{if(event.currentTarget===event.target)onClose()}}><div className="recruiting-modal-card schedule-modal">
-    <div className="recruiting-modal-head"><div><h2>Создать график смен</h2><p>Система построит смены на период, проверит подтверждённые отсутствия и пересечения.</p></div><button className="icon-button" onClick={onClose}><X size={17}/></button></div>
+  return <><RegistryDrawer title="Создать график смен" subtitle="Система построит смены на период, проверит подтверждённые отсутствия и пересечения." onClose={onClose} footer={<><button className="button" onClick={onClose}>Отмена</button><button className="button primary" disabled={busy||!objectId||!specialtyId||!startDate||!endDate} onClick={()=>void save()}>{busy?"Создаю…":"Создать график"}</button></>}>
     <div className="candidate-import-body">
+      {demo&&<p className="form-hint">Демо: изменения связанного справочника и сотрудников действуют только до перезагрузки страницы.</p>}
+      <div className="form-hint">{conditionMessage}{condition&&<button className="button" type="button" onClick={applyConditions}>Подставить условия объекта</button>}</div>
       <div className="candidate-import-options">
         <label>Объект<select value={objectId} onChange={e=>{setObjectId(e.target.value);setWorkerIds([]);setReserveWorkerIds([])}}>{options.objects.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-        <label>Специальность<select value={specialtyId} onChange={e=>{setSpecialtyId(e.target.value);setWorkerIds([]);setReserveWorkerIds([])}}>{options.specialties.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        <label>Специальность<select value={specialtyId} onChange={e=>{setSpecialtyId(e.target.value);setWorkerIds([]);setReserveWorkerIds([])}}>{specialties.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+        <CreateWorkerSpecialty canManage={canManageDirectories} demo={demo} onCreated={row=>{setSpecialties(items=>[...items.filter(x=>x.id!==row.id),row]);setSpecialtyId(row.id)}}/>
         <label>Начало<input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}/></label>
         <label>Окончание<input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}/></label>
         <label>Тип смены<select value={shiftKind} onChange={e=>setShiftKind(e.target.value as typeof shiftKind)}><option value="day">Дневная</option><option value="night">Ночная</option><option value="mixed">Смешанная</option></select></label>
         <label>Потребность<input type="number" min="1" value={demandCount} onChange={e=>setDemandCount(Number(e.target.value)||1)}/></label>
-        <label>Начало смены<input type="time" value={startTime} onChange={e=>setStartTime(e.target.value)}/></label>
-        <label>Конец смены<input type="time" value={endTime} onChange={e=>setEndTime(e.target.value)}/></label>
+        <label>Начало смены<input type="time" value={startTime} onChange={e=>{setInheritConditions(false);setStartTime(e.target.value)}}/></label>
+        <label>Конец смены<input type="time" value={endTime} onChange={e=>{setInheritConditions(false);setEndTime(e.target.value)}}/></label>
       </div>
-      <div className="schedule-pattern-row"><strong>Цикл</strong><div className="segmented"><button type="button" className={workDays===6&&restDays===1?"active":""} onClick={()=>applyPattern(6,1)}>6/1</button><button type="button" className={workDays===7&&restDays===0?"active":""} onClick={()=>applyPattern(7,0)}>7/0</button><button type="button" className={workDays===5&&restDays===2?"active":""} onClick={()=>applyPattern(5,2)}>5/2</button></div><label>Рабочих<input type="number" min="1" max="31" value={workDays} onChange={e=>setWorkDays(Number(e.target.value)||1)}/></label><label>Выходных<input type="number" min="0" max="31" value={restDays} onChange={e=>setRestDays(Math.max(0,Number(e.target.value)||0))}/></label></div>
+      <div className="schedule-pattern-row"><strong>Цикл</strong><div className="segmented"><button type="button" className={workDays===6&&restDays===1?"active":""} onClick={()=>applyPattern(6,1)}>6/1</button><button type="button" className={workDays===7&&restDays===0?"active":""} onClick={()=>applyPattern(7,0)}>7/0</button><button type="button" className={workDays===5&&restDays===2?"active":""} onClick={()=>applyPattern(5,2)}>5/2</button></div><label>Рабочих<input type="number" min="1" max="31" value={workDays} onChange={e=>{setInheritConditions(false);setWorkDays(Number(e.target.value)||1)}}/></label><label>Выходных<input type="number" min="0" max="31" value={restDays} onChange={e=>{setInheritConditions(false);setRestDays(Math.max(0,Number(e.target.value)||0))}}/></label></div>
       <div className="schedule-workers"><div className="section-head"><div><h3>Состав на период</h3><p>Можно оставить пустым и закрыть смены позже. Подтверждённые отсутствия автоматически исключаются.</p></div><span className="cell-sub">{workers.length} доступно</span></div>
+        {canEditWorkers&&<button className="button" type="button" disabled={!objectId||!specialtyId} onClick={()=>setCreateWorker(true)}>+ Создать сотрудника</button>}
         <div className="schedule-worker-list">{workers.map(worker=>{const mode=workerIds.includes(worker.id)?"primary":reserveWorkerIds.includes(worker.id)?"reserve":"none";return <div className="schedule-worker-row" key={worker.id}><div><strong>{worker.fullName}</strong><small>{worker.specialty??"Специальность не указана"}</small></div><select value={mode} onChange={e=>selectWorker(worker.id,e.target.value as typeof mode)}><option value="none">Не назначен</option><option value="primary">Основной</option><option value="reserve">Резерв</option></select></div>})}{!workers.length&&<div className="empty-inline">На объекте пока нет сотрудников с этой специальностью.</div>}</div>
       </div>
       {error&&<div className="recruiting-error">{error}</div>}
     </div>
-    <div className="recruiting-modal-footer"><button className="button" onClick={onClose}>Отмена</button><button className="button primary" disabled={busy||!objectId||!specialtyId||!startDate||!endDate} onClick={()=>void save()}>{busy?"Создаю…":"Создать график"}</button></div>
-  </div></div></Portal>;
+  </RegistryDrawer>{createWorker&&<RegistryDrawer title="Создать сотрудника" subtitle="Будет назначен на выбранный объект по выбранной специальности. Историческая дата начала останется неизвестной." onClose={()=>setCreateWorker(false)} footer={<><button className="button" onClick={()=>setCreateWorker(false)}>Отмена</button><button className="button primary" disabled={busy||!workerName.trim()} onClick={()=>void saveWorker()}>Создать и выбрать</button></>}><label>ФИО<input value={workerName} onChange={e=>setWorkerName(e.target.value)}/></label>{error&&<p role="alert">{error}</p>}</RegistryDrawer>}</>;
 }
 
 function AssignmentsModal({shift,options,onClose,onSaved}:{shift:ShiftRow;options:OperationsReferenceData;onClose:()=>void;onSaved:(message:string)=>void}){

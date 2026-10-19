@@ -71,7 +71,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           if(!replacementNeedId){
             const [sourceNeed]=await tx<Array<{id:string;regionId:string|null;ownerUserId:string|null;managerUserId:string|null;conditions:Record<string,unknown>;priority:string}>>`
               SELECT n.id,n.region_id "regionId",n.owner_user_id "ownerUserId",n.manager_user_id "managerUserId",n.conditions_snapshot conditions,n.priority
-              FROM needs n WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.source_kind<>'replacement' AND n.status NOT IN ('cancelled','archived')
+              FROM needs n WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.source_kind<>'replacement' AND n.status IN ('open','in_progress','filled')
               ORDER BY n.created_at DESC LIMIT 1
             `;
             const [object]=await tx<Array<{regionId:string;recruitingMode:string}>>`SELECT region_id "regionId",recruiting_routing_mode "recruitingMode" FROM objects WHERE id=${worker.objectId}::uuid`;
@@ -157,7 +157,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         `;exitId=exit.id;
       }
 
-      await tx`UPDATE worker_object_assignments SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from<=${body.effectiveDate}::date`;
+      await tx`UPDATE worker_object_assignments SET effective_to=${body.effectiveDate}::date WHERE organization_id=${actor.organizationId}::uuid AND worker_id=${id}::uuid AND effective_to IS NULL AND (effective_from IS NULL OR effective_from<=${body.effectiveDate}::date)`;
       await tx`DELETE FROM worker_object_assignments WHERE worker_id=${id}::uuid AND effective_to IS NULL AND effective_from>${body.effectiveDate}::date`;
       await tx`UPDATE employment_relations SET effective_to=${body.effectiveDate}::date WHERE worker_id=${id}::uuid AND organization_id=${actor.organizationId}::uuid
         AND (effective_to IS NULL OR effective_to>${body.effectiveDate}::date) AND effective_from<=${body.effectiveDate}::date`;
@@ -213,7 +213,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           SELECT COALESCE(
             (SELECT na.recruiter_user_id FROM needs n JOIN need_assignments na ON na.need_id=n.id AND na.unassigned_at IS NULL
              WHERE n.object_id=${worker.objectId}::uuid AND (${worker.specialtyId}::uuid IS NULL OR n.specialty_id=${worker.specialtyId}::uuid)
-             AND n.status NOT IN ('cancelled','archived') AND na.recruiter_user_id IS NOT NULL
+             AND n.status IN ('open','in_progress','filled') AND na.recruiter_user_id IS NOT NULL
              ORDER BY n.created_at DESC,na.assigned_at DESC LIMIT 1),
             ${worker.originalRecruiterUserId}::uuid
           ) "userId"
@@ -254,20 +254,26 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
           UPDATE needs n SET
             count_filled=LEAST(n.count_required,(
               SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-              WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
-                AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+              WHERE a.organization_id=n.organization_id AND a.object_id=n.object_id AND a.specialty_id=n.specialty_id
+                AND (n.shift_kind='mixed' OR a.schedule_shift_kind=n.shift_kind)
+                AND (n.staffing_plan_target_id IS NULL OR EXISTS(SELECT 1 FROM candidate_applications ca WHERE ca.organization_id=n.organization_id AND ca.need_id=n.id AND ca.candidate_id=w.origin_candidate_id))
+                AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
             )),
             status=CASE WHEN (
               SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-              WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
-                AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+              WHERE a.organization_id=n.organization_id AND a.object_id=n.object_id AND a.specialty_id=n.specialty_id
+                AND (n.shift_kind='mixed' OR a.schedule_shift_kind=n.shift_kind)
+                AND (n.staffing_plan_target_id IS NULL OR EXISTS(SELECT 1 FROM candidate_applications ca WHERE ca.organization_id=n.organization_id AND ca.need_id=n.id AND ca.candidate_id=w.origin_candidate_id))
+                AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
             )>=n.count_required THEN 'filled' ELSE 'in_progress' END,
             closed_at=CASE WHEN (
               SELECT count(DISTINCT a.worker_id)::int FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.status='active'
-              WHERE a.object_id=n.object_id AND a.specialty_id=n.specialty_id
-                AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+              WHERE a.organization_id=n.organization_id AND a.object_id=n.object_id AND a.specialty_id=n.specialty_id
+                AND (n.shift_kind='mixed' OR a.schedule_shift_kind=n.shift_kind)
+                AND (n.staffing_plan_target_id IS NULL OR EXISTS(SELECT 1 FROM candidate_applications ca WHERE ca.organization_id=n.organization_id AND ca.need_id=n.id AND ca.candidate_id=w.origin_candidate_id))
+                AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
             )>=n.count_required THEN COALESCE(n.closed_at,now()) ELSE NULL END
-          WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.status NOT IN ('cancelled','archived')
+          WHERE n.object_id=${worker.objectId}::uuid AND n.specialty_id=${worker.specialtyId}::uuid AND n.status IN ('open','in_progress','filled')
         `;
       }
 

@@ -1,3 +1,4 @@
+import {resolveObjectConditionInTransaction,conditionScheduleParts} from "@/lib/operations/object-conditions";
 import { NextResponse } from "next/server";
 import type { Sql } from "postgres";
 import { z } from "zod";
@@ -299,10 +300,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           SELECT id FROM worker_object_assignments WHERE worker_id=${workerId}::uuid AND object_id=${current.objectId}::uuid AND effective_to IS NULL
         `;
         if(!assignment){
+          const startDate=new Date(actualStartValue).toLocaleDateString("sv-SE",{timeZone:"Europe/Moscow"});
+          const condition=current.specialtyId?await resolveObjectConditionInTransaction(tx,actor.organizationId,{objectId:current.objectId,specialtyId:current.specialtyId,shiftKind:plannedShiftKindValue??current.defaultShiftKind,date:startDate}):null;
+          const schedule=conditionScheduleParts(condition);
           await tx`
-            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${current.managerUserId??current.objectOwnerId}::uuid,${current.workMode},${current.paidHoursPerShift??null},
-              ${current.defaultTransitionDays},${current.defaultDailyPaymentShifts},${current.defaultScheduleWorkDays},${current.defaultScheduleRestDays},COALESCE(${plannedShiftKindValue},${current.defaultShiftKind}),(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${actor.userId}::uuid)
+            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,source_condition_id,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${current.managerUserId??current.objectOwnerId}::uuid,${current.workMode},${condition?.paidHours??current.paidHoursPerShift??null},
+              ${current.defaultTransitionDays},${current.defaultDailyPaymentShifts},${schedule.workDays??current.defaultScheduleWorkDays},${schedule.restDays??current.defaultScheduleRestDays},COALESCE(${plannedShiftKindValue},${condition?.shiftKind??current.defaultShiftKind}),(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${condition?.id??null}::uuid,${actor.userId}::uuid)
           `;
         }
         const [activeRate]=await tx<Array<{id:string}>>`
@@ -310,7 +314,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE worker_id=${workerId}::uuid AND object_id=${current.objectId}::uuid AND specialty_id=${current.specialtyId}::uuid AND effective_to IS NULL
           LIMIT 1
         `;
-        if(!activeRate&&current.sourceRequestRoleId){
+        const defaultConditions=current.specialtyId?await resolveObjectConditionInTransaction(tx,actor.organizationId,{objectId:current.objectId,specialtyId:current.specialtyId,shiftKind:plannedShiftKindValue??current.defaultShiftKind,date:new Date(actualStartValue).toLocaleDateString("sv-SE",{timeZone:"Europe/Moscow"})}):null;
+        if(!activeRate&&!defaultConditions&&current.sourceRequestRoleId){
           const [rate]=await tx<Array<{amount:number|null}>>`
             SELECT COALESCE(
               NULLIF(cs.inputs_snapshot->>'workerNetHourly','')::numeric,
@@ -350,14 +355,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           await tx`
             UPDATE needs SET count_filled=LEAST(count_required,(
               SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+              WHERE wa.organization_id=${actor.organizationId}::uuid AND wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND (wa.effective_from IS NULL OR wa.effective_from<=current_date) AND (wa.effective_to IS NULL OR wa.effective_to>=current_date) AND EXISTS(SELECT 1 FROM candidates nc JOIN candidate_applications ca ON ca.candidate_id=nc.id AND ca.organization_id=nc.organization_id WHERE nc.id=wp.origin_candidate_id AND nc.organization_id=wa.organization_id AND ca.need_id=${current.needId}::uuid)
             )),status=CASE WHEN (
               SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+              WHERE wa.organization_id=${actor.organizationId}::uuid AND wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND (wa.effective_from IS NULL OR wa.effective_from<=current_date) AND (wa.effective_to IS NULL OR wa.effective_to>=current_date) AND EXISTS(SELECT 1 FROM candidates nc JOIN candidate_applications ca ON ca.candidate_id=nc.id AND ca.organization_id=nc.organization_id WHERE nc.id=wp.origin_candidate_id AND nc.organization_id=wa.organization_id AND ca.need_id=${current.needId}::uuid)
             )>=count_required THEN 'filled' ELSE 'in_progress' END,
             closed_at=CASE WHEN (
               SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+              WHERE wa.organization_id=${actor.organizationId}::uuid AND wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND (wa.effective_from IS NULL OR wa.effective_from<=current_date) AND (wa.effective_to IS NULL OR wa.effective_to>=current_date) AND EXISTS(SELECT 1 FROM candidates nc JOIN candidate_applications ca ON ca.candidate_id=nc.id AND ca.organization_id=nc.organization_id WHERE nc.id=wp.origin_candidate_id AND nc.organization_id=wa.organization_id AND ca.need_id=${current.needId}::uuid)
             )>=count_required THEN COALESCE(closed_at,now()) ELSE NULL END
             WHERE id=${current.needId}::uuid
           `;

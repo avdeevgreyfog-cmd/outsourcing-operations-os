@@ -71,7 +71,7 @@ export async function editWorkerLink(actor:Actor,objectId:string,workerId:string
     const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w
       WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${workerId}::uuid AND w.status='active'
         AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=w.organization_id AND a.worker_id=w.id AND a.object_id=${objectId}::uuid
-          AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)) FOR UPDATE OF w`;
+          AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)) FOR UPDATE OF w`;
     if(!worker)throw new EmployeePortalError("Сотрудник больше не работает на объекте");
     if(action==="copy"){
       const [existing]=await sql<Array<{ciphertext:string}>>`SELECT token_ciphertext ciphertext FROM worker_timesheet_links WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND status='active' ORDER BY created_at DESC LIMIT 1`;
@@ -117,7 +117,7 @@ export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;link
     WHERE l.id=${ref.linkId}::uuid AND l.organization_id=${ref.tenantId}::uuid AND l.token_hash=${tokenHash(token)}
       AND l.status='active' AND w.status='active'
       AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=l.organization_id AND a.worker_id=l.worker_id AND a.object_id=l.object_id
-        AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date))
+        AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date))
       AND NOT EXISTS(SELECT 1 FROM object_shift_reporting_settings s WHERE s.organization_id=l.organization_id AND s.object_id=l.object_id AND NOT s.reporting_enabled)
     FOR UPDATE OF l
   `;
@@ -138,7 +138,7 @@ export async function employeePortal(token:string,selectedMonth?:string){
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN objects o ON o.id=l.object_id
       JOIN worker_object_assignments a ON a.worker_id=w.id AND a.object_id=o.id
-        AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+        AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
       LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=w.id AND wa.object_id=o.id
       WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${tokenHash(token)} AND l.status='active'
@@ -177,7 +177,7 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
       COALESCE(s.timezone,'Europe/Moscow') timezone
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
-        AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+        AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       LEFT JOIN object_shift_reporting_settings s ON s.object_id=l.object_id
       LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
       WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active' AND COALESCE(s.reporting_enabled,true)

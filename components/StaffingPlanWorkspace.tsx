@@ -242,8 +242,13 @@ export function StaffingPlanWorkspace({
     setBusy("plan:"+key);setMessage("");
     try{
       if(!demo){
+        const existingResponse=await fetch(`/api/staffing-plan/targets?objectId=${encodeURIComponent(row.objectId)}`);
+        const existing=await existingResponse.json();if(!existingResponse.ok)throw Error(existing.error??"Не удалось загрузить план");
+        const targets=(existing.rows as Array<{id:string;specialtyId:string;shiftKind:string;effectiveFrom:string|null;effectiveTo:string|null;status:string}>).filter(item=>item.specialtyId===row.specialtyId&&item.status==='active'&&(!item.effectiveTo||item.effectiveTo>=today));
+        if(targets.length>1||targets.some(item=>item.shiftKind!=='mixed'))throw Error("План разделён по сменам или периодам. Измените строки в карточке объекта → Комплектация");
+        const target=targets[0];
         const response=await fetch("/api/staffing-plan/targets",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-          objectId:row.objectId,specialtyId:row.specialtyId,plannedCount:next,shiftKind:"mixed",effectiveFrom:today,
+          id:target?.id,objectId:row.objectId,specialtyId:row.specialtyId,plannedCount:next,shiftKind:"mixed",effectiveFrom:target?.effectiveFrom??null,effectiveTo:target?.effectiveTo??null,
           note:"Корректировка из общего плана комплектации",
         })});
         const json=await response.json().catch(()=>({}));
