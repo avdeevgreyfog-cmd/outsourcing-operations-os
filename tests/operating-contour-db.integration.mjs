@@ -34,6 +34,10 @@ try{
  await pg.exec('CREATE ROLE contour_runtime NOLOGIN NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO contour_runtime; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO contour_runtime; GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO contour_runtime; GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO contour_runtime;');
  const objectResult=await withTenant(org,user,s=>s`INSERT INTO objects(organization_id,name,code,status,created_by_user_id)VALUES(${org}::uuid,'Изолированный действующий объект','QA-CONTOUR','active',${user}::uuid)RETURNING id`),object=objectResult[0].id;
  const [specialty]=await withTenant(org,user,s=>s`INSERT INTO specialties(organization_id,name,code,active)VALUES(${org}::uuid,'Изолированная специальность','QA-CONTOUR',true)RETURNING id`);
+ const recruitingOptions=await compile('lib/recruiting/service.ts').getRecruitingOptions(actor);
+ const incompleteObject=recruitingOptions.objects.find(item=>item.id===object);
+ assert.ok(incompleteObject,'candidate/need selectors include existing objects without a region or need');
+ assert.equal(incompleteObject.regionId,'');assert.equal(incompleteObject.region,'');
  const staffing=compile('lib/operations/staffing-plan.ts'),conditions=compile('lib/operations/object-conditions.ts');
  const plan={objectId:object,specialtyId:specialty.id,plannedCount:3,shiftKind:'day',effectiveFrom:null,effectiveTo:null,status:'active',note:'Неизвестные исторические даты'};
  const saved=await staffing.setStaffingPlanTarget(actor,plan);assert.ok(saved.id);const rows=await staffing.listStaffingPlan(actor,object);const row=rows.find(r=>r.id===saved.id);assert.equal(row.effectiveFrom,null);assert.equal(row.effectiveTo,null);assert.equal(row.deficit,3);

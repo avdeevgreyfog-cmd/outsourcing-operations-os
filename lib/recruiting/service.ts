@@ -884,8 +884,8 @@ export async function getRecruitingOptions(actor: Actor): Promise<RecruitingOpti
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM specialties WHERE active ORDER BY name`,
       sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`,
       sql<Array<{id:string;name:string;regionId:string;region:string}>>`
-        SELECT DISTINCT o.id,o.name,o.region_id "regionId",r.name region
-        FROM objects o JOIN regions r ON r.id=o.region_id
+        SELECT DISTINCT o.id,o.name,COALESCE(o.region_id::text,'') "regionId",COALESCE(r.name,'') region
+        FROM objects o LEFT JOIN regions r ON r.id=o.region_id
         LEFT JOIN object_assignments oa ON oa.object_id=o.id AND oa.effective_to IS NULL
         LEFT JOIN needs n ON n.object_id=o.id
         LEFT JOIN need_assignments na ON na.need_id=n.id AND na.unassigned_at IS NULL
