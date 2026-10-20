@@ -85,10 +85,16 @@ async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
  ]);
  return {entries,shifts,proposals,changes,patterns,conditions};
 }
-export async function employeePlanning(token:string):Promise<EmployeePlanning>{
+export async function employeePlanning(token:string,selectedMonth?:string):Promise<EmployeePlanning>{
  const s=await scopeForToken(token);
  return withTenant(s.org,s.actor,async sql=>{
-  const from=addDays(s.today,-3),to=addDays(s.today,s.horizon);
+  // Include the whole visible month, not only the last three days, so monthly
+  // plan totals and rows have the same source of truth.
+  const validMonth=selectedMonth&&/^\d{4}-\d{2}$/.test(selectedMonth)&&selectedMonth<=s.today.slice(0,7)
+   &&selectedMonth>=addDays(s.today,-366).slice(0,7)?selectedMonth:null;
+  const monthFrom=(validMonth??s.today.slice(0,7))+"-01";
+  const from=monthFrom<addDays(s.today,-3)?monthFrom:addDays(s.today,-3);
+  const to=addDays(s.today,s.horizon);
   const records=await planningRows(sql,s,from,to);
   const entries=new Map(records.entries.map(e=>[e.date,e]));
   const shifts=new Map(records.shifts.map(e=>[e.date,e]));
