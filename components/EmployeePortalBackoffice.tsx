@@ -5,7 +5,9 @@ type SizeRequest={id:string;workerId:string;objectId:string;clothingSize:string|
 type Onboarding={workerId:string;objectId:string;stage:string;comment:string|null;showAfterCompleted:boolean};
 type Dispute={id:string;workerId:string;objectId:string;date:string;reason:string;comment:string;status:string};
 type Adjustment={id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string};
-export type EmployeeBackofficePayload={workers:Worker[];sizeRequests?:SizeRequest[];onboarding?:Onboarding[];hourDisputes?:Dispute[];adjustments?:Adjustment[];canManageAdjustments?:boolean};
+type AdjustmentQuestion={id:string;workerId:string;objectId:string;adjustmentId:string;question:string;status:string;createdAt:string};
+const adjustmentStatus:Record<string,string>={draft:"Черновик",review:"На проверке",accounted:"Учтено в расчёте",cancelled:"Отменено",confirmed:"Подтверждено менеджером"};
+export type EmployeeBackofficePayload={workers:Worker[];sizeRequests?:SizeRequest[];onboarding?:Onboarding[];hourDisputes?:Dispute[];adjustments?:Adjustment[];adjustmentQuestions?:AdjustmentQuestion[];canManageAdjustments?:boolean};
 const stages:[string,string][]=[["not_started","Не начато"],["requested","Документы запрошены"],["partial","Часть получена"],["review","На проверке"],["completed","Оформлен"],["correction","Требуется исправление"]];
 const documents:[string,string][]=[["passport","Паспорт"],["snils","СНИЛС"],["inn","ИНН"],["bank_details","Реквизиты"],["military","Военный билет"],["medical_book","Медкнижка"],["photo","Фото"],["application","Заявление"],["contract","Договор"]];
 export function EmployeePortalBackoffice({data,objectId,canEdit,onRefresh}:{data:EmployeeBackofficePayload;objectId:string;canEdit:boolean;onRefresh:()=>Promise<void>}){
@@ -59,13 +61,24 @@ export function EmployeePortalBackoffice({data,objectId,canEdit,onRefresh}:{data
     {canEdit&&<div className="worker-confirmation-actions"><button className="button" disabled={busy} onClick={()=>void action({action:"resolve_hours_dispute",objectId,workerId:worker.id,disputeId:x.id,status:"in_review"},"Обращение взято в работу")}>В работу</button><button className="button" disabled={busy} onClick={()=>void action({action:"resolve_hours_dispute",objectId,workerId:worker.id,disputeId:x.id,status:"resolved"},"Обращение закрыто")}>Решено</button></div>}
    </div>)}
    {data.canManageAdjustments&&<div className="worker-confirmation-configuration"><h3>Удержания и корректировки</h3><p className="worker-confirmation-note">Только информационная запись. Она не создаёт начислений и не изменяет утверждённые табели.</p>
-    {(data.adjustments??[]).filter(x=>x.workerId===worker.id&&x.objectId===objectId).map(x=><p key={x.id}>{x.periodStart} — {x.periodEnd} · {x.amount.toLocaleString("ru-RU")} ₽ · {x.reason} · {x.status}</p>)}
+    {(data.adjustments??[]).filter(x=>x.workerId===worker.id&&x.objectId===objectId).map(x=><div key={x.id} className="worker-confirmation-configuration" style={{marginBottom:8}}>
+      <p><strong>{x.periodStart} — {x.periodEnd}</strong> · {x.amount.toLocaleString("ru-RU")} ₽</p><p>{x.description}</p>
+      <p className="worker-confirmation-note">Основание: {x.reason}. Статус: {adjustmentStatus[x.status]??"Не определён"}</p>
+      {canEdit&&<div className="worker-confirmation-actions">
+       {(["draft","review","accounted","cancelled"] as const).filter(status=>status!==x.status).map(status=><button key={status} type="button" className="button" disabled={busy} onClick={()=>void action({action:"update_adjustment_status",objectId,workerId:worker.id,adjustmentId:x.id,status},"Статус корректировки обновлён")}>{adjustmentStatus[status]}</button>)}
+      </div>}
+     </div>)}
+    {(data.adjustmentQuestions??[]).filter(x=>x.workerId===worker.id&&x.objectId===objectId).map(x=><div key={x.id} className="worker-confirmation-configuration" style={{marginBottom:8}}>
+      <h4>Вопрос сотрудника по корректировке</h4><p>{x.question}</p>
+      <p className="worker-confirmation-note">{new Date(x.createdAt).toLocaleString("ru-RU")}</p>
+      {canEdit&&<button className="button" disabled={busy} onClick={()=>void action({action:"answer_adjustment_question",objectId,workerId:worker.id,questionId:x.id},"Вопрос отмечен обработанным")}>Отметить обработанным</button>}
+     </div>)}
     <div className="worker-confirmation-toolbar">
      <label>Начало периода <input type="date" value={periodStart} onChange={e=>setPeriodStart(e.target.value)}/></label><label>Конец периода <input type="date" value={periodEnd} onChange={e=>setPeriodEnd(e.target.value)}/></label>
      <label>Тип <select value={adjType} onChange={e=>setAdjType(e.target.value as typeof adjType)}><option value="deduction">Удержание</option><option value="damage">Компенсация ущерба</option><option value="advance">Аванс</option><option value="other">Иная корректировка</option></select></label>
      <label>Сумма, ₽ <input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></label>
     </div><div className="worker-confirmation-toolbar"><label>Основание <input maxLength={1200} value={reason} onChange={e=>setReason(e.target.value)}/></label><label>Описание сотруднику <input maxLength={1200} value={description} onChange={e=>setDescription(e.target.value)}/></label></div>
-    <button className="button" disabled={busy||!periodStart||!periodEnd||!amount||!reason.trim()||!description.trim()} onClick={()=>void action({action:"upsert_adjustment",objectId,workerId:worker.id,periodStart,periodEnd,amount:Number(amount),adjustmentType:adjType,reason,description,status:"review"},"Корректировка создана на проверке")}>Создать корректировку</button>
+    <button className="button" disabled={busy||!periodStart||!periodEnd||!amount||!reason.trim()||!description.trim()} onClick={()=>void action({action:"upsert_adjustment",objectId,workerId:worker.id,periodStart,periodEnd,amount:Number(amount),adjustmentType:adjType,reason,description,status:"draft"},"Корректировка сохранена как черновик")}>Сохранить черновик</button>
    </div>}
   </>}
  </section>;
