@@ -36,13 +36,17 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
     timeChanges:sections.scheduleChanges?details.timeChanges:[],
     visibility:{documents:sections.documents,workwear:sections.workwear,employment:sections.employment,contacts:sections.contacts}
    }:null;
+  const localDay=new Date(data.today+"T00:00:00Z");
+  const previousDay=new Date(localDay.getTime()-3*86400000).toISOString().slice(0,10);
+  const nextDay=new Date(localDay.getTime()+86400000).toISOString().slice(0,10);
+  const safePlanning=planning&&sections.shifts?planning:planning?{...planning,days:planning.days.filter(d=>d.date>=previousDay&&d.date<=nextDay)}:null;
   const exposedConfig={sections:data.config.sections,instruction:data.config.sections.objectInfo?data.config.instruction:""};
   const {configuration:unusedInternalSnapshot,...safeData}=data;
   void unusedInternalSnapshot;
   return NextResponse.json({...safeData,config:exposedConfig,
     reports:sections.shifts||sections.timesheet?data.reports:[],
     plans:sections.timesheet?data.plans:[],
-    planning:planning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
+    planning:safePlanning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
     details:safeDetails
   },{headers:noStore});
  }catch(error){if(error instanceof EmployeePortalError)return NextResponse.json({error:"Ссылка недействительна или заблокирована"},{status:404,headers:noStore});console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
