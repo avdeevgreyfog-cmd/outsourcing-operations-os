@@ -107,8 +107,8 @@ jobs:
             echo "::error::Production database identity was not verified."
             exit 1
           fi
-          test -n "$STAGING_IDENTITY" || { echo "::error::Staging database identity is empty."; exit 1; }
-          test -n "$PRODUCTION_IDENTITY" || { echo "::error::Production database identity is empty."; exit 1; }
+          [[ "$STAGING_IDENTITY" =~ ^[a-f0-9]{16}$ ]] || { echo "::error::Staging database identity is malformed."; exit 1; }
+          [[ "$PRODUCTION_IDENTITY" =~ ^[a-f0-9]{16}$ ]] || { echo "::error::Production database identity is malformed."; exit 1; }
           if [ "$STAGING_IDENTITY" = "$PRODUCTION_IDENTITY" ]; then
             echo "::error::Staging and production resolve to the same PostgreSQL database."
             exit 1
