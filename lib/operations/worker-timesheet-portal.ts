@@ -191,7 +191,7 @@ export async function employeePortal(token:string,selectedMonth?:string){
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
     const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"worker";deadline:string;timezone:string;today:string;reportingEnabled:boolean;configuration:PortalConfigurationPatch;linkOverride:PortalConfigurationPatch}>>`
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
-      COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
+      a.paid_hours_per_shift::float8 "paidHours",
       COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
       COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
@@ -217,19 +217,32 @@ export async function employeePortal(token:string,selectedMonth?:string){
      const monthFrom=month+"-01";const monthTo=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5,7)),0)).toISOString().slice(0,10);
      const rangeFrom=monthFrom;
      const rangeTo=monthTo;
-     const [reports,plans]=await Promise.all([
-      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null;needsReconfirmation:boolean}>>`
-        SELECT work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation"
-        FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-          AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31))) ORDER BY work_date`,
+     const [reports,plans,disputes,period]=await Promise.all([
+      sql<Array<{date:string;shiftKind:string|null;response:string;reason:string|null;hours:number|null;reconciledAt:string|null;needsReconfirmation:boolean;reviewStatus:string;approvedHours:number|null;reviewedAt:string|null;updatedAt:string;employeeRespondedAt:string|null;reviewedBy:string|null}>>`
+        SELECT r.work_date::text date,r.shift_kind "shiftKind",r.response,r.reason,r.reported_hours::float8 hours,r.hours_reconciled_at::text "reconciledAt",
+         (r.confirmed_at IS NULL AND r.reported_hours IS NULL AND r.hours_reconciled_at IS NULL) "needsReconfirmation",
+         r.review_status "reviewStatus",r.approved_hours::float8 "approvedHours",r.reviewed_at::text "reviewedAt",r.updated_at::text "updatedAt",
+         GREATEST(r.confirmed_at,r.hours_submitted_at)::text "employeeRespondedAt",reviewer.display_name "reviewedBy"
+        FROM worker_shift_reports r LEFT JOIN app_users reviewer ON reviewer.id=r.reviewed_by_user_id
+        WHERE r.worker_id=${link.workerId}::uuid AND r.object_id=${link.objectId}::uuid
+          AND ((r.work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (r.work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31))) ORDER BY r.work_date`,
       sql<Array<{date:string;kind:string;timeCode:string;hours:number;source:string}>>`
         SELECT DISTINCT ON(work_date) work_date::text date,COALESCE(planned_shift_kind,'day') kind,time_code "timeCode",fact_hours::float8 hours,source
         FROM time_entries WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
           AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31)))
           ORDER BY work_date,updated_at DESC`,
+      sql<Array<{date:string;status:string;reason:string;comment:string;createdAt:string}>>`
+       SELECT work_date::text date,status,reason,comment,created_at::text "createdAt" FROM worker_hours_disputes
+       WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+       AND work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date ORDER BY created_at DESC`,
+      sql<Array<{status:string;closedAt:string|null}>>`
+       SELECT status,closed_at::text "closedAt" FROM timesheet_snapshots
+       WHERE object_id=${link.objectId}::uuid AND view_type='internal'
+         AND period_start<=${monthFrom}::date AND period_end>=${monthTo}::date
+       ORDER BY version DESC LIMIT 1`,
     ]);
     const activeConfig=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
-    return {...link,config:activeConfig,reports,plans,selectedMonth:month};
+    return {...link,config:activeConfig,reports,plans,disputes,periodStatus:period[0]?.status??null,periodClosedAt:period[0]?.closedAt??null,selectedMonth:month};
   });
 }
 
@@ -455,4 +468,48 @@ export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDat
       'Промежуточная сверка табеля с заказчиком',${sql.json({fromDate,toDate,workerReportsAccepted:reviewed.length})})`;
     return {ok:true,accepted:reviewed.length};
   });
+}
+
+
+export async function submitEmployeeHoursDispute(token:string,input:{date:string;reason:"hours"|"missing_shift"|"wrong_shift"|"other";comment:string}){
+ const ref=await resolveToken(token);
+ if(!ref)throw new EmployeePortalAccessError("Ссылка недействительна");
+ const comment=input.comment.trim();
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date)||!comment||comment.length>500)throw new EmployeePortalError("Укажите дату и причину обращения");
+ return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
+  await assertEmployeeLinkActive(sql,ref,token);
+  const [link]=await sql<Array<{workerId:string;objectId:string;linkOverride:PortalConfigurationPatch}>>`
+    SELECT worker_id "workerId",object_id "objectId",link_config_override "linkOverride" FROM worker_timesheet_links WHERE id=${ref.linkId}::uuid`;
+  if(!link)throw new EmployeePortalAccessError("Ссылка недействительна");
+  const config=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
+  if(!config.sections.timesheet)throw new EmployeePortalAccessError("Табель недоступен");
+  const [duplicate]=await sql`SELECT id FROM worker_hours_disputes WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+    AND work_date=${input.date}::date AND status IN ('open','in_review') LIMIT 1`;
+  if(duplicate)throw new EmployeePortalError("По этому дню уже есть открытое обращение");
+  await sql`INSERT INTO worker_hours_disputes(organization_id,worker_id,object_id,work_date,source_link_id,reason,comment)
+    VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${input.date}::date,${ref.linkId}::uuid,${input.reason},${comment})`;
+  return {ok:true};
+ });
+}
+
+export async function submitEmployeeAdjustmentQuestion(token:string,input:{adjustmentId:string;question:string}){
+ const ref=await resolveToken(token);
+ if(!ref)throw new EmployeePortalAccessError("Ссылка недействительна");
+ const question=input.question.trim();
+ if(!/^[a-f0-9-]{36}$/i.test(input.adjustmentId)||!question||question.length>500)throw new EmployeePortalError("Некорректный вопрос");
+ return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
+  await assertEmployeeLinkActive(sql,ref,token);
+  const [link]=await sql<Array<{workerId:string;objectId:string;linkOverride:PortalConfigurationPatch}>>`
+    SELECT worker_id "workerId",object_id "objectId",link_config_override "linkOverride" FROM worker_timesheet_links WHERE id=${ref.linkId}::uuid`;
+  if(!link)throw new EmployeePortalAccessError("Ссылка недействительна");
+  const cfg=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
+  if(!cfg.sections.payAdjustments)throw new EmployeePortalAccessError("Раздел недоступен");
+  const [adjustment]=await sql`SELECT id FROM worker_pay_adjustments
+    WHERE id=${input.adjustmentId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+    AND status IN ('review','confirmed','accounted')`;
+  if(!adjustment)throw new EmployeePortalError("Корректировка недоступна");
+  await sql`INSERT INTO worker_pay_adjustment_questions(organization_id,adjustment_id,worker_id,source_link_id,question)
+    VALUES(${ref.tenantId}::uuid,${input.adjustmentId}::uuid,${link.workerId}::uuid,${ref.linkId}::uuid,${question})`;
+  return {ok:true};
+ });
 }
