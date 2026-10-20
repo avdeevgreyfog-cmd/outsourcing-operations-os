@@ -51,6 +51,21 @@ FROM objects o LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
 WHERE l.object_id=o.id AND l.portal_config_snapshot='{}'::jsonb;
 
 ALTER TABLE worker_shift_reports
+ ADD COLUMN IF NOT EXISTS shift_id uuid REFERENCES shifts(id);
+
+-- Preserve legacy daily reports; associate an exact shift only when unambiguous.
+UPDATE worker_shift_reports r SET shift_id=(
+ SELECT sa.shift_id FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
+ WHERE sa.worker_id=r.worker_id AND sh.object_id=r.object_id AND sh.shift_date=r.work_date
+   AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+ LIMIT 1)
+ WHERE r.shift_id IS NULL AND 1=(
+ SELECT count(*) FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
+ WHERE sa.worker_id=r.worker_id AND sh.object_id=r.object_id AND sh.shift_date=r.work_date
+   AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+);
+
+ALTER TABLE worker_shift_reports
  ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'pending'
  CHECK(review_status IN ('pending','approved','rejected')),
  ADD COLUMN IF NOT EXISTS reviewed_at timestamptz,
