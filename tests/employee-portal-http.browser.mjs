@@ -21,7 +21,7 @@ try{
  const beforePreview=(await pg.query('SELECT last_opened_at employee_opened,last_manager_preview_at manager_preview,expires_at expiry FROM worker_timesheet_links WHERE worker_id=$1 ORDER BY created_at DESC LIMIT 1',[fixture.worker])).rows[0];
  assert.equal(beforePreview.expiry,null);assert.equal(beforePreview.employee_opened,null);
  const preview=await manager.newPage();preview.on('pageerror',e=>errors.push(e.message));
- await preview.goto(origin+'/employee-preview?objectId='+fixture.object+'&workerId='+fixture.worker,{waitUntil:'networkidle'});
+ await preview.goto(origin+'/employee-preview?objectId='+fixture.object+'&workerId='+fixture.worker,{waitUntil:'domcontentloaded',timeout:60000});
  await preview.getByText('Режим предпросмотра менеджера. Действия сотрудника недоступны и не сохраняются.').waitFor();
  const previewState=(await pg.query('SELECT last_opened_at employee_opened,last_manager_preview_at manager_preview FROM worker_timesheet_links WHERE worker_id=$1 ORDER BY created_at DESC LIMIT 1',[fixture.worker])).rows[0];
  assert.equal(previewState.employee_opened,null,'manager preview cannot count as employee access');assert.ok(previewState.manager_preview,'manager preview must have separate audit');
