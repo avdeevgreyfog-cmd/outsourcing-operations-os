@@ -40,7 +40,7 @@ try{
  assert.equal(entries[0].hours,10);assert.equal(entries[0].source,'manual');
  const lockedReply=await employee.request.post(publicUrl,{data:{date:dates.yesterday,hours:12,reason:'Поздняя корректировка'}});assert.equal(lockedReply.status(),400);assert.match((await lockedReply.json()).error,/согласована/);console.log('Manager-approved hours persisted and protected');
  await post('/api/operations/worker-confirmations',{action:'pause',objectId:fixture.object,workerId:fixture.worker});assert.equal((await employee.request.get(publicUrl)).status(),404);assert.equal((await employee.request.post(publicUrl,{data:{date:dates.tomorrow,response:'working',kind:'day'}})).status(),403);await mobile.reload({waitUntil:'networkidle'});await mobile.getByText('Ссылка недействительна или приостановлена',{exact:false}).waitFor();await post('/api/operations/worker-confirmations',{action:'resume',objectId:fixture.object,workerId:fixture.worker});assert.equal((await employee.request.get(publicUrl)).status(),200);
- const rotated=await post('/api/operations/worker-confirmations',{action:'rotate',objectId:fixture.object,workerId:fixture.worker,config:{sections:{documents:false,workwear:false,contacts:false,timesheet:false}}});assert.notEqual(rotated.path,link.path);assert.equal((await employee.request.get(publicUrl)).status(),404);const newPublicUrl=origin+'/api/public/worker-timesheet/'+rotated.path.split('/').at(-1);assert.equal((await employee.request.get(newPublicUrl)).status(),200);
+ const rotated=await post('/api/operations/worker-confirmations',{action:'rotate',objectId:fixture.object,workerId:fixture.worker,config:{sections:{documents:false,workwear:false,contacts:false,timesheet:false}}});assert.notEqual(rotated.path,link.path);assert.equal((await employee.request.get(publicUrl)).status(),404);let newPublicUrl=origin+'/api/public/worker-timesheet/'+rotated.path.split('/').at(-1);assert.equal((await employee.request.get(newPublicUrl)).status(),200);
  const protectedData=await (await employee.request.get(newPublicUrl)).json();
  assert.equal(protectedData.configuration,undefined,'raw link snapshot must not be exposed');
  assert.equal(protectedData.config.managerPhone,undefined,'hidden contacts must not leak through configuration');
@@ -56,6 +56,40 @@ try{
  await hiddenMenu.getByRole('button',{name:'Ещё'}).last().click();
  assert.equal(await hiddenMenu.getByRole('button',{name:/Документы/}).count(),0,'hidden documents removed from navigation');
  console.log('Per-link hidden documents, PPE, contacts and timesheet protected in UI and API');
+ const sectionCases=[
+   ['shifts',null],['confirm',{date:dates.tomorrow,response:'working',kind:'night'}],
+   ['decline',{date:dates.tomorrow,response:'cannot_work',reason:'Не смогу выйти'}],
+   ['scheduleChanges',{action:'plan_day',date:dates.tomorrow,kind:'off'}],
+   ['hours',{date:dates.yesterday,hours:10}],
+   ['timesheet',null],['documents',{action:'document',code:'passport',reported:true}],
+   ['employment',null],['workwear',{action:'sizes',clothingSize:'52',shoeSize:'43'}],
+   ['contacts',null],['objectInfo',null]
+ ];
+ for(const [section,request] of sectionCases){
+   const previousUrl=newPublicUrl;
+   const nextLink=await post('/api/operations/worker-confirmations',{
+     action:'rotate',objectId:fixture.object,workerId:fixture.worker,config:{sections:{[section]:false}}
+   });
+   newPublicUrl=origin+'/api/public/worker-timesheet/'+nextLink.path.split('/').at(-1);
+   assert.equal((await employee.request.get(previousUrl)).status(),404,'rotated link must be invalid');
+   const response=await employee.request.get(newPublicUrl);assert.equal(response.status(),200);
+   const payload=await response.json();
+   assert.equal(payload.config.sections[section],false,'hidden section must remain hidden');
+   assert.equal(payload.configuration,undefined,'internal link snapshot never public');
+   if(section==='shifts')assert.ok(payload.planning.days.length<=5,'calendar must be limited to immediate actions');
+   if(section==='timesheet')assert.deepEqual(payload.plans,[]);
+   if(section==='documents')assert.deepEqual(payload.details.documents,[]);
+   if(section==='workwear')assert.deepEqual(payload.details.workwear,[]);
+   if(section==='contacts')assert.equal(payload.details.managerPhone,null);
+   if(section==='employment')assert.equal(payload.details.employment,'hidden');
+   if(section==='objectInfo')assert.equal(payload.config.instruction,'');
+   if(request){
+     const forbidden=await employee.request.post(newPublicUrl,{data:request});
+     assert.equal(forbidden.status(),403,'disabled action '+section+' must not reach service');
+   }
+ }
+ console.log('Every employee section checked through isolated real HTTP permissions');
+
  const denied=await manager.request.post(origin+'/api/workers/'+fixture.worker+'/exit',{data:{action:'plan',effectiveDate:dates.today,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false}});assert.equal(denied.status(),403,'manager cannot bypass offboarding permission');
  const director=(await pg.query(`SELECT u.id,u.email::text email FROM app_users u JOIN organization_memberships m ON m.user_id=u.id JOIN role_templates r ON r.id=m.role_template_id JOIN organizations o ON o.id=m.organization_id WHERE r.code='director' AND o.slug=$1 LIMIT 1`,[fixture.organization])).rows[0];assert.ok(director);await pg.query(`UPDATE app_users SET password_hash=crypt($1,gen_salt('bf')) WHERE id=$2`,['isolated-http-fixture-password',director.id]);
  const directorLogin=await manager.request.post(origin+'/api/session/login',{data:{organization:fixture.organization,email:director.email,password:'isolated-http-fixture-password'}});assert.equal(directorLogin.status(),200,await directorLogin.text());
