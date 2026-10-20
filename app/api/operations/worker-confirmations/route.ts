@@ -2,11 +2,25 @@ import {NextResponse} from "next/server";
 import {AccessDeniedError} from "@/lib/access/server";
 import {z} from "zod";
 import {getCurrentActor} from "@/lib/auth/server";
-import {managerPortalData,editWorkerLink,reconcileEmployeeHours,EmployeePortalError} from "@/lib/operations/worker-timesheet-portal";
+import {managerPortalData,editWorkerLink,savePortalConfiguration,reviewEmployeeHours,reconcileEmployeeHours,EmployeePortalError} from "@/lib/operations/worker-timesheet-portal";
 import {employeeDetailManagerList,managerEmployeeDetailAction} from "@/lib/operations/employee-self-service";
 import {managerSetScheduleOwner,managerEmployeePlanningChanges,managerReviewEmployeePlan,managerSetWorkerPattern,managerReviewPattern} from "@/lib/operations/employee-planning";
+const portalConfigSchema=z.object({
+ managerName:z.string().max(120).nullable().optional(),managerPhone:z.string().max(50).nullable().optional(),
+ contactMethod:z.string().max(120).nullable().optional(),instruction:z.string().max(2000).optional(),
+ timezone:z.string().max(80).optional(),validDays:z.number().int().min(1).max(365).optional(),
+ autoRevokeOnExit:z.boolean().optional(),sections:z.object({
+  shifts:z.boolean().optional(),confirm:z.boolean().optional(),decline:z.boolean().optional(),scheduleChanges:z.boolean().optional(),
+  hours:z.boolean().optional(),timesheet:z.boolean().optional(),documents:z.boolean().optional(),employment:z.boolean().optional(),
+  workwear:z.boolean().optional(),contacts:z.boolean().optional(),objectInfo:z.boolean().optional()
+ }).strict().optional()
+}).strict();
 const actions=z.discriminatedUnion("action",[
- z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid()}),
+ z.object({action:z.enum(["create","rotate","copy","pause","resume","revoke"]),objectId:z.string().uuid(),workerId:z.string().uuid(),
+ config:portalConfigSchema.optional(),expiresAt:z.string().datetime({offset:true}).optional(),autoRevokeAt:z.string().datetime({offset:true}).optional()}),
+ z.object({action:z.literal("save_portal_configuration"),scope:z.enum(["organization","object","worker"]),scopeId:z.string().uuid(),objectId:z.string().uuid().optional(),config:portalConfigSchema}),
+ z.object({action:z.literal("review_hours"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean(),
+ approvedHours:z.number().positive().max(24).optional(),comment:z.string().max(500).optional()}),
  z.object({action:z.literal("settings"),objectId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"]),horizon:z.number().int().min(2).max(31).optional()}),
  z.object({action:z.literal("reconcile"),objectId:z.string().uuid(),fromDate:z.string().date(),toDate:z.string().date()}),
  z.object({action:z.literal("portal_sections"),objectId:z.string().uuid(),documents:z.boolean(),workwear:z.boolean()}),
@@ -32,7 +46,11 @@ export async function POST(request:Request){
  try{
   const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Требуется авторизация"},{status:401});
   const body=actions.parse(await request.json());
-  const result=body.action==="set_worker_pattern"
+  const result=body.action==="save_portal_configuration"
+    ?await savePortalConfiguration(actor,body.scope,body.scopeId,body.config,body.objectId)
+    :body.action==="review_hours"
+    ?await reviewEmployeeHours(actor,body.objectId,body.workerId,body.date,body.approve,body.approvedHours,body.comment)
+    :body.action==="set_worker_pattern"
    ?await managerSetWorkerPattern(actor,body.objectId,body.workerId,{effectiveFrom:body.effectiveFrom,workDays:body.workDays,restDays:body.restDays,shiftKind:body.shiftKind,floatingDaysOff:body.floatingDaysOff})
    :body.action==="review_pattern"
    ?await managerReviewPattern(actor,body.objectId,body.workerId,body.date,body.approve)
@@ -46,7 +64,7 @@ export async function POST(request:Request){
    ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
    :body.action==="settings"
    ?await managerSetScheduleOwner(actor,body.objectId,body.scheduleOwner,undefined,body.horizon)
-   :await editWorkerLink(actor,body.objectId,body.workerId,body.action);
+   :await editWorkerLink(actor,body.objectId,body.workerId,body.action,body.config,body.expiresAt,body.autoRevokeAt);
   return NextResponse.json(result);
  }catch(error){
   if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные"},{status:400});

@@ -60,27 +60,56 @@ try{
  await changePlan('day');await portal.submitEmployeeReply(token,{date:dates.tomorrow,response:'working',kind:'day'});
  console.log('PASS plan changes: same shift, day/night reconfirmation, local night clock, off, reserve');
  await portal.submitEmployeeReply(token,{date:dates.yesterday,response:'working',kind:'day'});
- await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='night' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10}),/План смены изменён/);
+ await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='night' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10,reason:'Фактическая продолжительность 10 часов'}),/План смены изменён/);
  await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='day' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);
- await withTenant(org,director,sql=>sql`UPDATE shift_assignments SET is_reserve=true WHERE worker_id=${fixture.worker}::uuid AND shift_id IN(SELECT id FROM shifts WHERE shift_date=${dates.yesterday}::date)`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10}),/Вы в резерве/);
+ await withTenant(org,director,sql=>sql`UPDATE shift_assignments SET is_reserve=true WHERE worker_id=${fixture.worker}::uuid AND shift_id IN(SELECT id FROM shifts WHERE shift_date=${dates.yesterday}::date)`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10,reason:'Фактическая продолжительность 10 часов'}),/Вы в резерве/);
  await withTenant(org,director,sql=>sql`UPDATE shift_assignments SET is_reserve=false WHERE worker_id=${fixture.worker}::uuid AND shift_id IN(SELECT id FROM shifts WHERE shift_date=${dates.yesterday}::date)`);
- await portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10});
- let entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours,source FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);assert.equal(entries[0].hours,10);assert.equal(entries[0].source,'worker_report');const managerData=await portal.managerPortalData(manager,fixture.object);assert.equal(managerData.reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).hours,10);
- await portal.submitEmployeeReply(token,{date:dates.yesterday,response:'working',kind:'day'});assert.equal((await portal.employeePortal(token)).reports.find(r=>r.date===dates.yesterday).hours,10);
- await withTenant(org,director,sql=>sql`UPDATE time_entries SET source='manual',fact_hours=9,day_hours=9 WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
- await portal.submitEmployeeReply(token,{date:dates.yesterday,hours:11});entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);assert.equal(entries[0].hours,9);
+ await portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10,reason:'Фактическая продолжительность 10 часов'});
+ let entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours,source FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
+ assert.equal(entries.some(e=>e.source==='worker_report'),false,'employee hours must not become time entry');
+ let managerData=await portal.managerPortalData(manager,fixture.object);
+ assert.equal(managerData.reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).hours,10);
+ assert.equal(managerData.reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).reviewStatus,'pending');
+ await portal.submitEmployeeReply(token,{date:dates.yesterday,response:'working',kind:'day'});
+ assert.equal((await portal.employeePortal(token)).reports.find(r=>r.date===dates.yesterday).hours,10);
+ await withTenant(org,director,sql=>sql`UPDATE time_entries SET source='manual',time_code='WORK',fact_hours=9,day_hours=9 WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
+ await portal.submitEmployeeReply(token,{date:dates.yesterday,hours:11,reason:'Корректировка сотрудника'});
+ await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='night' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);
+ await assert.rejects(()=>portal.reviewEmployeeHours(actor,fixture.object,fixture.worker,dates.yesterday,true,11),/Назначение смены изменилось/);
+ await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='day' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);
+
+ entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
+ assert.equal(entries[0].hours,9,'existing manager fact must not change on employee resubmission');
+ await assert.rejects(()=>portal.reviewEmployeeHours(actor,fixture.object,fixture.worker,dates.yesterday,true,11),/уже внесены менеджером/);
+ const employeeTimestamp=(await portal.managerPortalData(manager,fixture.object)).reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).employeeRespondedAt;
+ assert.ok(employeeTimestamp,'employee reply timestamp must be recorded');
+ await portal.reviewEmployeeHours(actor,fixture.object,fixture.worker,dates.yesterday,true,9,'Сверено по данным объекта');
+ assert.equal((await portal.managerPortalData(manager,fixture.object)).reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).employeeRespondedAt,employeeTimestamp,
+   'manager review must not change the employee reply timestamp');
+ entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours,source FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
+ assert.equal(entries[0].hours,9);assert.equal(entries[0].source,'manual');
+ const [approvedReport]=await withTenant(org,director,sql=>sql`SELECT approved_hours::float8 hours,review_status status FROM worker_shift_reports WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
+ assert.equal(approvedReport.status,'approved');assert.equal(approvedReport.hours,9);
+ const [shiftBinding]=await withTenant(org,director,sql=>sql`
+   SELECT r.shift_id "reportShift",t.shift_id "timesheetShift" FROM worker_shift_reports r
+   JOIN time_entries t ON t.organization_id=r.organization_id AND t.worker_id=r.worker_id AND t.object_id=r.object_id AND t.work_date=r.work_date
+   WHERE r.worker_id=${fixture.worker}::uuid AND r.work_date=${dates.yesterday}::date LIMIT 1`);
+ assert.ok(shiftBinding.reportShift,'employee report must reference specific shift');
+ assert.equal(shiftBinding.timesheetShift,shiftBinding.reportShift,'manager-approved time entry must retain shift reference');
+
+ await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:12,reason:'Повторное уточнение'}),/согласована/);
  const deniedBatch=await shiftRoute.POST(new Request('http://isolated.test/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'set_cells',cells:[{workerId:fixture.worker,date:dates.tomorrow,kind:'night'},{workerId:fixture.worker,date:dates.yesterday,kind:'clear'}]})}),{params:Promise.resolve({id:fixture.object})});assert.equal(deniedBatch.status,500);assert.match((await deniedBatch.json()).error,/факт/);assert.equal((await planning.employeePlanning(token)).days.find(d=>d.date===dates.tomorrow).kind,'day','failed batch rolls back earlier cell');assert.equal((await portal.managerPortalData(manager,fixture.object)).reports.find(r=>r.workerId===fixture.worker&&r.date===dates.tomorrow).needsReconfirmation,false,'failed batch keeps prior confirmation');
  const [snapshot]=await withTenant(org,director,sql=>sql`INSERT INTO timesheet_snapshots(organization_id,object_id,view_type,period_type,period_start,period_end,status,snapshot_json) VALUES(${org}::uuid,${fixture.object}::uuid,'internal','month',date_trunc('month',${dates.tomorrow}::date)::date,(date_trunc('month',${dates.tomorrow}::date)+interval '1 month'-interval '1 day')::date,'fixed','{}'::jsonb) RETURNING id`);assert.ok(snapshot);
  const lockedPlan=await shiftRoute.POST(new Request('http://isolated.test/plan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'set_cell',workerId:fixture.worker,date:dates.tomorrow,kind:'off'})}),{params:Promise.resolve({id:fixture.object})});assert.equal(lockedPlan.status,500);assert.match((await lockedPlan.json()).error,/зафиксирован/);await withTenant(org,director,sql=>sql`UPDATE timesheet_snapshots SET status='draft' WHERE id=${snapshot.id}::uuid`);
  console.log('PASS protected plan: recorded fact, fixed period and atomic batch rollback');
- const reconciled=await portal.reconcileEmployeeHours(actor,fixture.object,dates.yesterday,dates.yesterday);assert.ok(reconciled.accepted>=1);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:12}),/согласована/);
+ const reconciled=await portal.reconcileEmployeeHours(actor,fixture.object,dates.yesterday,dates.yesterday);assert.equal(reconciled.accepted,0);
  await portal.editWorkerLink(actor,fixture.object,fixture.worker,'pause');assert.equal(await portal.employeePortal(token),null);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.tomorrow,response:'working',kind:'day'}));
  await portal.editWorkerLink(actor,fixture.object,fixture.worker,'resume');assert.ok(await portal.employeePortal(token));
  const rotated=await portal.editWorkerLink(actor,fixture.object,fixture.worker,'rotate');let newToken=rotated.path.split('/').at(-1);assert.equal(await portal.employeePortal(token),null);assert.ok(await portal.employeePortal(newToken));
  const other={...actor,userId:'10000000-0000-4000-8000-000000000002',access:{...actor.access,scopes:Object.fromEntries(caps.map(c=>[c,[{type:'assigned_to_me'}]]))}};await assert.rejects(()=>portal.editWorkerLink(other,fixture.object,fixture.worker,'copy'),AccessDeniedError);
  const foreignOrg='00000000-0000-4000-8000-000000000099';assert.equal((await withTenant(foreignOrg,director,sql=>sql`SELECT id FROM worker_timesheet_links WHERE worker_id=${fixture.worker}::uuid`)).length,0);
  await assert.rejects(()=>withTenant(org,director,async sql=>{await sql`UPDATE worker_timesheet_links SET status='paused' WHERE worker_id=${fixture.worker}::uuid AND status='active'`;throw Error('rollback probe');}),/rollback probe/);assert.ok(await portal.employeePortal(newToken));
- await portal.editWorkerLink(actor,fixture.object,fixture.worker,'revoke');await portal.editWorkerLink(actor,fixture.object,fixture.worker,'resume');assert.equal(await portal.employeePortal(newToken),null);newToken=(await issue()).path.split('/').at(-1);assert.ok(await portal.employeePortal(newToken));
+ await portal.editWorkerLink(actor,fixture.object,fixture.worker,'revoke');await assert.rejects(()=>portal.editWorkerLink(actor,fixture.object,fixture.worker,'resume'),/ссылка не найдена/);assert.equal(await portal.employeePortal(newToken),null);newToken=(await issue()).path.split('/').at(-1);assert.ok(await portal.employeePortal(newToken));
  deps['@/lib/auth/server']={getCurrentActor:async()=>actor};const exit=compile('app/api/workers/[id]/exit/route.ts');
  const callExit=body=>exit.POST(new Request('http://isolated.test/exit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({id:fixture.worker})});
  const plannedExit=await callExit({action:'plan',effectiveDate:dates.tomorrow,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false});assert.equal(plannedExit.status,201,await plannedExit.text());assert.ok(await portal.employeePortal(newToken));

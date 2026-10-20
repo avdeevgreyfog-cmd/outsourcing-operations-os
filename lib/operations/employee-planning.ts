@@ -35,8 +35,8 @@ async function scopeForToken(token:string):Promise<TenantScope>{
  return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
   const [row]=await sql<Array<Omit<TenantScope,"org"|"actor"|"link">>>`SELECT
    l.worker_id worker,l.object_id object,a.specialty_id "specialtyId",
-   (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
-   COALESCE(s.timezone,'Europe/Moscow') timezone,
+   (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text today,
+   COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
    COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
    COALESCE(s.planning_horizon_days,14)::int horizon,
    a.schedule_work_days::int "workDays",a.schedule_rest_days::int "restDays",
@@ -47,7 +47,7 @@ async function scopeForToken(token:string):Promise<TenantScope>{
      AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
    LEFT JOIN object_shift_reporting_settings s ON s.object_id=l.object_id
    LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
-   WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active'
+   WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active'
      AND COALESCE(s.reporting_enabled,true)
    ORDER BY a.effective_from DESC LIMIT 1`;
   if(!row)throw new EmployeePortalAccessError("Персональный доступ закрыт");
