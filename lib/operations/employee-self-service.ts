@@ -108,7 +108,7 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
   const names=new Set(issueRows.map(x=>x.name));
   const workwear=[...issueRows.map(x=>({...x,state:"issued" as const})),...normRows.filter(x=>!names.has(x.name)).map(x=>({name:x.name,variant:null,state:"needed" as const}))];
   return {clothingSize:profile[0]?.clothingSize??null,shoeSize:profile[0]?.shoeSize??null,
-    employment:link.employment,managerName:link.managerName??profile[0]?.managerName??null,managerPhone:link.managerPhone??profile[0]?.managerPhone??null,
+    employment:link.employment,managerName:link.managerName,managerPhone:link.managerPhone,
     documents:link.showDocuments?codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false})):[],
     workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear,employment:link.showEmployment,contacts:link.showContacts},shiftWindows,timeChanges:link.scheduleChanges?timeChanges:[]};
  });
