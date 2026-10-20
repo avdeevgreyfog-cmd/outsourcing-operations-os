@@ -5,6 +5,7 @@ import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {db,withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
+import {defaultPortalConfiguration,effectivePortalConfiguration,loadPortalOverrides,normalizePortalPatch,type PortalConfigurationPatch,type PortalConfiguration} from "@/lib/operations/employee-portal-config";
 
 export class EmployeePortalError extends Error {}
 export class EmployeePortalAccessError extends EmployeePortalError {}
@@ -12,32 +13,33 @@ const tokenHash=(token:string)=>createHash("sha256").update(token).digest("hex")
 function tokenCipherKey(){const secret=process.env.SESSION_SECRET;if(!secret)throw new Error("SESSION_SECRET не задан");return createHash("sha256").update(secret).digest()}
 function encryptToken(raw:string){const iv=randomBytes(12),cipher=createCipheriv("aes-256-gcm",tokenCipherKey(),iv);const encrypted=Buffer.concat([cipher.update(raw,"utf8"),cipher.final()]);return [iv,cipher.getAuthTag(),encrypted].map(x=>x.toString("base64url")).join(".")}
 function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".").map(x=>Buffer.from(x,"base64url"));const cipher=createDecipheriv("aes-256-gcm",tokenCipherKey(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(blob),cipher.final()]).toString("utf8")}
-export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null;needsReconfirmation?:boolean};
-export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
+export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:"pending"|"approved"|"rejected";approvedHours?:number|null;reviewComment?:string|null;reviewedAt?:string|null};
+export type EmployeeLink={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked"|"expired"|"rotated";lastOpenedAt:string|null;createdAt:string;expiresAt?:string|null;autoRevokeAt?:string|null;createdBy?:string|null;changedBy?:string|null};
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number;showEmployeeDocuments:boolean;showEmployeeWorkwear:boolean};
 
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
-  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[]};
-  if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[]};
+  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration};
+  if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration};
   const objects=new Set(visible.map(w=>w.objectId!));
   const ids=visible.map(w=>w.id);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-    const [reports,links,settings,plans]=await Promise.all([
-      sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt",hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation"
+    const [reports,links,settings,plans,portalOverrides]=await Promise.all([
+      sql<Array<EmployeeReply>>`SELECT worker_id "workerId",object_id "objectId",work_date::text date,shift_kind "shiftKind",response,reason,reported_hours::float8 hours,updated_at::text "updatedAt",hours_reconciled_at::text "reconciledAt",(confirmed_at IS NULL AND reported_hours IS NULL AND hours_reconciled_at IS NULL) "needsReconfirmation",review_status "reviewStatus",approved_hours::float8 "approvedHours",review_comment "reviewComment",reviewed_at::text "reviewedAt"
         FROM worker_shift_reports WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND work_date BETWEEN current_date-interval '4 days' AND current_date+interval '7 days'`,
-      sql<Array<EmployeeLink>>`SELECT DISTINCT ON(worker_id,object_id) id,worker_id "workerId",object_id "objectId",status,last_opened_at::text "lastOpenedAt",created_at::text "createdAt"
-        FROM worker_timesheet_links WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY worker_id,object_id,created_at DESC`,
+      sql<Array<EmployeeLink>>`SELECT DISTINCT ON(l.worker_id,l.object_id) l.id,l.worker_id "workerId",l.object_id "objectId",CASE WHEN l.status='revoked' AND l.replaced_by_link_id IS NOT NULL THEN 'rotated' WHEN l.status IN ('active','paused') AND (l.expires_at<=now() OR l.auto_revoke_at<=now()) THEN 'expired' ELSE l.status END status,l.last_opened_at::text "lastOpenedAt",l.created_at::text "createdAt",l.expires_at::text "expiresAt",l.auto_revoke_at::text "autoRevokeAt",creator.display_name "createdBy",changer.display_name "changedBy"
+        FROM worker_timesheet_links l LEFT JOIN app_users creator ON creator.id=l.created_by_user_id LEFT JOIN app_users changer ON changer.id=l.changed_by_user_id WHERE l.worker_id=ANY(${ids}::uuid[]) AND l.object_id=ANY(${[...objects]}::uuid[]) ORDER BY l.worker_id,l.object_id,l.created_at DESC`,
       sql<Array<PortalConfig>>`SELECT object_id "objectId",COALESCE(schedule_authority,CASE WHEN schedule_owner='client' THEN 'worker' ELSE schedule_owner END) "scheduleOwner",confirmation_deadline::text "confirmationDeadline",timezone,reporting_enabled "reportingEnabled",manager_phone "managerPhone",COALESCE(planning_horizon_days,14)::int "planningHorizonDays",show_employee_documents "showEmployeeDocuments",show_employee_workwear "showEmployeeWorkwear"
         FROM object_shift_reporting_settings WHERE object_id=ANY(${[...objects]}::uuid[])`,
       sql<Array<EmployeePlan>>`SELECT DISTINCT ON(worker_id,object_id,work_date) worker_id "workerId",object_id "objectId",work_date::text date,time_code "timeCode",planned_shift_kind kind
         FROM time_entries WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[])
           AND work_date BETWEEN current_date-interval '2 days' AND current_date+interval '7 days'
         ORDER BY worker_id,object_id,work_date,(shift_id IS NULL) DESC,updated_at DESC`,
+       sql<Array<{scope:"organization"|"object"|"worker";scopeId:string;config:PortalConfigurationPatch}>>`SELECT scope,scope_id "scopeId",config FROM employee_portal_config_overrides WHERE organization_id=${actor.organizationId}::uuid AND (scope='organization' OR (scope='object' AND scope_id=ANY(${[...objects]}::uuid[])) OR (scope='worker' AND scope_id=ANY(${ids}::uuid[])))`,
     ]);
-    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11),workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans};
+    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11),workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,defaultPortalConfiguration};
   });
 }
 
@@ -51,6 +53,25 @@ async function assertManage(actor:Actor,objectId:string,workerId?:string){
     if(!workers.some(w=>w.id===workerId&&w.objectId===objectId&&w.status==="active"))throw new EmployeePortalError("Сотрудник не назначен на объект");
   }
   return object;
+}
+
+export async function savePortalConfiguration(actor:Actor,scope:"organization"|"object"|"worker",scopeId:string,config:PortalConfigurationPatch,objectId?:string){
+  if(actor.demo)throw new EmployeePortalError("Изменение настроек недоступно в демонстрации");
+  const patch=normalizePortalPatch(config);
+  if(scope==="organization"){
+    requireCapability(actor,"organization.manage");
+    if(scopeId!==actor.organizationId)throw new AccessDeniedError("organization.manage");
+  }else{
+    if(!objectId)throw new EmployeePortalError("Не указан объект");
+    await assertManage(actor,objectId,scope==="worker"?scopeId:undefined);
+    if(scope==="object"&&scopeId!==objectId)throw new EmployeePortalError("Некорректный объект");
+  }
+  return withTenant(actor.organizationId,actor.userId,async(sql)=>{
+    await sql`INSERT INTO employee_portal_config_overrides(organization_id,scope,scope_id,config,updated_by_user_id)
+      VALUES(${actor.organizationId}::uuid,${scope},${scopeId}::uuid,${sql.json(patch)},${actor.userId}::uuid)
+      ON CONFLICT(organization_id,scope,scope_id) DO UPDATE SET config=EXCLUDED.config,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
+    return {ok:true};
+  });
 }
 
 export async function editPortalSettings(actor:Actor,objectId:string,owner:"manager"|"worker"){
