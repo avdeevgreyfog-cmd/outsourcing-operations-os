@@ -25,7 +25,7 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
   const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
   if(!data)return NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
   const sections=data.config.sections;
-  const [details,planning]=await Promise.all([employeePortalDetails(token),sections.shifts||sections.confirm||sections.decline||sections.scheduleChanges||sections.hours?employeePlanning(token):Promise.resolve(null)]);
+  const [details,planning]=await Promise.all([employeePortalDetails(token),sections.shifts||sections.confirm||sections.decline||sections.scheduleChanges||sections.hours||sections.timesheet?employeePlanning(token,new URL(request.url).searchParams.get("month")??undefined):Promise.resolve(null)]);
   const safeDetails=details?{...details,
     managerName:sections.contacts?details.managerName:null,
     managerPhone:sections.contacts?details.managerPhone:null,
