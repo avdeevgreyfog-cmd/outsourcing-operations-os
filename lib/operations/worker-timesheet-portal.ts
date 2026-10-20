@@ -222,6 +222,11 @@ export async function employeePortal(token:string,selectedMonth?:string){
         AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now())
         AND w.status='active' ORDER BY a.effective_from DESC LIMIT 1`;
     if(!link||!link.reportingEnabled)return null;
+    const activeConfig=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
+    const local=new Intl.DateTimeFormat("en-GB",{timeZone:activeConfig.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+    const dateParts=Object.fromEntries(local.map(part=>[part.type,part.value]));
+    link.today=`${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+    link.timezone=activeConfig.timezone;
     const touched=await sql`UPDATE worker_timesheet_links SET last_opened_at=now()
       WHERE id=${link.id}::uuid AND (last_opened_at IS NULL OR last_opened_at<now()-interval '15 minutes') RETURNING id`;
     if(touched.length)await sql`INSERT INTO worker_portal_events(organization_id,worker_id,object_id,link_id,event_type)
@@ -255,7 +260,6 @@ export async function employeePortal(token:string,selectedMonth?:string){
          AND period_start<=${monthFrom}::date AND period_end>=${monthTo}::date
        ORDER BY version DESC LIMIT 1`,
     ]);
-    const activeConfig=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
     return {...link,config:activeConfig,reports,plans,disputes,periodStatus:period[0]?.status??null,periodClosedAt:period[0]?.closedAt??null,selectedMonth:month};
   });
 }
