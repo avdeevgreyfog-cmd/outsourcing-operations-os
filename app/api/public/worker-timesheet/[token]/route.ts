@@ -44,7 +44,7 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
   const {configuration:unusedInternalSnapshot,...safeData}=data;
   void unusedInternalSnapshot;
   return NextResponse.json({...safeData,config:exposedConfig,
-    reports:sections.shifts||sections.timesheet?data.reports:[],
+    reports:sections.shifts||sections.timesheet||sections.confirm||sections.decline||sections.hours?data.reports:[],
     plans:sections.timesheet?data.plans:[],
     planning:safePlanning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
     details:safeDetails
