@@ -23,6 +23,7 @@ try{
  const preview=await manager.newPage();preview.on('pageerror',e=>errors.push(e.message));
  await preview.goto(origin+'/employee-preview?objectId='+fixture.object+'&workerId='+fixture.worker,{waitUntil:'domcontentloaded',timeout:60000});
  await preview.getByText('Режим предпросмотра менеджера. Действия сотрудника недоступны и не сохраняются.').waitFor();
+ await preview.getByText('Рабочая информация',{exact:true}).waitFor({timeout:20000});
  const previewState=(await pg.query('SELECT last_opened_at employee_opened,last_manager_preview_at manager_preview FROM worker_timesheet_links WHERE worker_id=$1 ORDER BY created_at DESC LIMIT 1',[fixture.worker])).rows[0];
  assert.equal(previewState.employee_opened,null,'manager preview cannot count as employee access');assert.ok(previewState.manager_preview,'manager preview must have separate audit');
  assert.equal(await preview.getByRole('button',{name:'Подтвердить выход'}).count(),0);
