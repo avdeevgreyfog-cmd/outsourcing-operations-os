@@ -10,7 +10,7 @@ const responseSchema=z.object({
  reason:z.string().trim().max(250).optional()
 });
 const detailsSchema=z.discriminatedUnion("action",[
- z.object({action:z.literal("sizes"),clothingSize:z.string().trim().max(40).nullable(),shoeSize:z.string().trim().max(40).nullable()}),
+ z.object({action:z.literal("sizes"),clothingSize:z.string().trim().max(40).nullable(),shoeSize:z.string().trim().max(40).nullable(),gloveSize:z.string().trim().max(40).nullable().optional(),comment:z.string().trim().max(500).nullable().optional()}),
  z.object({action:z.literal("document"),code:z.string().max(40),reported:z.boolean()}),
  z.object({action:z.literal("shift_time"),date:z.string().date(),kind:z.enum(["day","night"]).optional(),startTime:z.string().regex(/^\d{2}:\d{2}$/),endTime:z.string().regex(/^\d{2}:\d{2}$/),endsNextDay:z.boolean(),appliesTo:z.enum(["single","regular"])})
 ]);
