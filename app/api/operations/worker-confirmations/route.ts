@@ -26,6 +26,11 @@ const actions=z.discriminatedUnion("action",[
  z.object({action:z.literal("portal_sections"),objectId:z.string().uuid(),documents:z.boolean(),workwear:z.boolean()}),
  z.object({action:z.literal("manager_phone"),objectId:z.string().uuid(),phone:z.string().max(50).nullable()}),
  z.object({action:z.literal("verify_document"),objectId:z.string().uuid(),workerId:z.string().uuid(),code:z.string().max(40),verified:z.boolean()}),
+ z.object({action:z.literal("review_sizes"),objectId:z.string().uuid(),workerId:z.string().uuid(),requestId:z.string().uuid(),approve:z.boolean()}),
+ z.object({action:z.literal("set_onboarding"),objectId:z.string().uuid(),workerId:z.string().uuid(),stage:z.enum(["not_started","requested","partial","review","completed","correction"]),comment:z.string().trim().max(1200).nullable(),showAfterCompleted:z.boolean()}),
+ z.object({action:z.literal("set_document_status"),objectId:z.string().uuid(),workerId:z.string().uuid(),code:z.string().max(40),status:z.enum(["not_requested","awaiting","received","accepted","resubmit"])}),
+ z.object({action:z.literal("resolve_hours_dispute"),objectId:z.string().uuid(),workerId:z.string().uuid(),disputeId:z.string().uuid(),status:z.enum(["in_review","resolved","rejected"])}),
+ z.object({action:z.literal("upsert_adjustment"),objectId:z.string().uuid(),workerId:z.string().uuid(),periodStart:z.string().date(),periodEnd:z.string().date(),amount:z.number().nonnegative().max(1e9),adjustmentType:z.enum(["deduction","damage","advance","other"]),reason:z.string().trim().min(1).max(1200),description:z.string().trim().min(1).max(1200),status:z.enum(["draft","review","confirmed","cancelled"])}),
  z.object({action:z.literal("review_shift_time"),objectId:z.string().uuid(),workerId:z.string().uuid(),date:z.string().date(),approve:z.boolean()}),
  z.object({action:z.literal("document_requirement"),objectId:z.string().uuid(),relationType:z.enum(["employment","gph","npd","custom"]),code:z.string().max(40),required:z.boolean()}),
  z.object({action:z.literal("worker_schedule_owner"),objectId:z.string().uuid(),workerId:z.string().uuid(),scheduleOwner:z.enum(["manager","worker"]).nullable()}),
@@ -58,7 +63,7 @@ export async function POST(request:Request){
    ?await managerSetScheduleOwner(actor,body.objectId,body.scheduleOwner,body.workerId)
    :body.action==="review_plan"
    ?await managerReviewEmployeePlan(actor,body.objectId,body.workerId,body.date,body.approve)
-   :body.action==="portal_sections"||body.action==="manager_phone"||body.action==="verify_document"||body.action==="review_shift_time"||body.action==="document_requirement"
+   :body.action==="portal_sections"||body.action==="manager_phone"||body.action==="verify_document"||body.action==="review_shift_time"||body.action==="document_requirement"||body.action==="review_sizes"||body.action==="set_onboarding"||body.action==="set_document_status"||body.action==="resolve_hours_dispute"||body.action==="upsert_adjustment"
    ?await managerEmployeeDetailAction(actor,body as Parameters<typeof managerEmployeeDetailAction>[1])
    :body.action==="reconcile"
    ?await reconcileEmployeeHours(actor,body.objectId,body.fromDate,body.toDate)
