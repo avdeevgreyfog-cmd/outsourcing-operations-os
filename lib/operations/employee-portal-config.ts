@@ -14,7 +14,7 @@ export const defaultPortalConfiguration:PortalConfiguration={
  instruction:"",showWorkInstruction:false,
  timezone:"Europe/Moscow",validDays:30,autoRevokeOnExit:true,
  sections:{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,
-   documents:false,employment:true,workwear:true,contacts:true,objectInfo:false,payAdjustments:false,suggestDaysOff:false}
+   documents:true,employment:true,workwear:true,contacts:true,objectInfo:false,payAdjustments:false,suggestDaysOff:false}
 };
 export function normalizePortalPatch(value:unknown):PortalConfigurationPatch{
  if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("Некорректные настройки кабинета");
