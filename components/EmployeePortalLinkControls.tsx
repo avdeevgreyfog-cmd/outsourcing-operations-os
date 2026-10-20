@@ -1,5 +1,5 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
+import {useMemo,useState} from "react";
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 
@@ -40,7 +40,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
  const [objectChoice,setObjectChoice]=useState(objectId??"");
  const [scope,setScope]=useState<"organization"|"object"|"worker">("object");
  const [workerChoice,setWorkerChoice]=useState("");
- const [editor,setEditor]=useState<Patch>({});
+ const [editorDraft,setEditorDraft]=useState<{key:string;value:Patch}|null>(null);
  const [issueWorker,setIssueWorker]=useState<Worker|null>(null);
  const [replace,setReplace]=useState(false);
  const [issueConfig,setIssueConfig]=useState<PortalConfig>(defaults);
@@ -57,6 +57,9 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
  const orgId=data.organizationId??"";
  const currentScopeId=scope==="organization"?orgId:scope==="object"?selectedObject:workerChoice;
  const override=(kind:Override["scope"],id:string)=>data.portalOverrides?.find(x=>x.scope===kind&&x.scopeId===id)?.config;
+ const editorKey=scope+":"+currentScopeId;
+ const editor=editorDraft?.key===editorKey?editorDraft.value:override(scope,currentScopeId)??{};
+ const setEditor=(next:Patch|((previous:Patch)=>Patch))=>setEditorDraft({key:editorKey,value:typeof next==="function"?next(editor):next});
  const objectSettings=(id:string)=>data.settings.find(x=>x.objectId===id);
  const effective=(w?:Worker,object?:string)=>{
    const obj=object??w?.objectId??selectedObject,legacy=objectSettings(obj??"");
@@ -73,7 +76,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
    scope==="object"?merged(merged(data.defaultPortalConfiguration??defaults,override("organization",orgId)),{
        managerPhone:objectSettings(selectedObject)?.managerPhone??undefined,timezone:objectSettings(selectedObject)?.timezone
    }):effective(editorWorker);
- useEffect(()=>{setEditor(override(scope,currentScopeId)??{});},[scope,currentScopeId,data.portalOverrides]);
+
  async function post(body:Record<string,unknown>){
    if(demo)throw new Error("В демонстрации серверные изменения отключены");
    const res=await fetch("/api/operations/worker-confirmations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
