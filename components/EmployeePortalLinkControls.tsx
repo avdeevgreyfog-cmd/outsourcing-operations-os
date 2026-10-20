@@ -1,6 +1,7 @@
 "use client";
 import {useMemo,useState} from "react";
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
+import {EmployeePortalBackoffice,type EmployeeBackofficePayload} from "@/components/EmployeePortalBackoffice";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 
 export type PortalSection="shifts"|"confirm"|"decline"|"scheduleChanges"|"hours"|"timesheet"|"documents"|"employment"|"workwear"|"contacts"|"objectInfo"|"payAdjustments"|"suggestDaysOff";
@@ -9,11 +10,11 @@ export type PortalConfig={
  timezone:string;validDays:number;autoRevokeOnExit:boolean;sections:Record<PortalSection,boolean>;
 };
 type Patch=Partial<Omit<PortalConfig,"sections">>&{sections?:Partial<PortalConfig["sections"]>};
-type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number};
+type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number|null};
 type Link={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked"|"expired"|"rotated";lastOpenedAt:string|null;lastManagerPreviewAt?:string|null;blockReason?:string|null;createdAt:string;expiresAt?:string|null;autoRevokeAt?:string|null;createdBy?:string|null;changedBy?:string|null};
 type Setting={objectId:string;timezone?:string;managerPhone?:string|null;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
 type Override={scope:"organization"|"object"|"worker";scopeId:string;config:Patch};
-export type LinkPayload={
+export type LinkPayload=EmployeeBackofficePayload&{
  organizationId?:string;workers:Worker[];links:Link[];settings:Setting[];objectOptions?:{id:string;name:string}[];
  portalOverrides?:Override[];defaultPortalConfiguration?:PortalConfig;
 };
@@ -132,6 +133,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
            {canEdit&&["active","paused"].includes(l?.status??"")&&<><button type="button" className="button" disabled={pending} onClick={()=>startIssue(w,true)}><RefreshCw size={13}/> Перевыпустить</button>
              <button type="button" className="button" disabled={pending} onClick={()=>{if(window.confirm("Отозвать персональную ссылку без возможности возобновления?"))void run({action:"revoke",workerId:w.id,objectId:w.objectId},"Ссылка отозвана")}}><ShieldOff size={13}/> Отозвать</button></>}
          </div></td></tr>})}</tbody></table>{!relevant.length&&<div className="empty-inline">Для выбранного объекта сотрудники не найдены</div>}</div>
+   <EmployeePortalBackoffice data={data} objectId={selectedObject} canEdit={canEdit} onRefresh={onRefresh}/>
    <section className="worker-confirmation-settings"><div className="section-head"><div><h2>Базовые настройки кабинета</h2><p>Организация → объект → сотрудник → отдельная выпущенная ссылка. Изменения наследуются действующими ссылками, если для ссылки нет индивидуального исключения.</p></div></div>
      <div className="worker-confirmation-toolbar">
        <label>Уровень <select value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="organization">Организация</option><option value="object">Объект</option><option value="worker">Сотрудник</option></select></label>
