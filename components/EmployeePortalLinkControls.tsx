@@ -96,7 +96,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
  async function issue(){
    if(!issueWorker?.objectId)return;
    const resp=await run({action:replace?"rotate":"create",objectId:issueWorker.objectId,workerId:issueWorker.id,
-    config:issueConfig,expiresAt:expiry?new Date(expiry+"T23:59:59").toISOString():undefined,
+    config:{...issueConfig,managerName:issueConfig.managerName||undefined,managerPhone:issueConfig.managerPhone||undefined},expiresAt:expiry?new Date(expiry+"T23:59:59").toISOString():undefined,
     autoRevokeAt:autoRevoke?new Date(autoRevoke+"T23:59:59").toISOString():undefined},
     "Ссылка выпущена. Она ещё не отправлена сотруднику.");
    if(resp?.path)setIssuedUrl(window.location.origin+resp.path);
@@ -126,6 +126,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
          <td><div className="worker-confirmation-actions">
            {canEdit&&(!l||["revoked","expired","rotated"].includes(l.status))&&<button type="button" className="button" disabled={pending} onClick={()=>startIssue(w)}><Link2 size={13}/> Создать ссылку</button>}
            {canEdit&&l?.status==="active"&&<><button type="button" className="button" disabled={pending} onClick={()=>void copyActive(w)}><Copy size={13}/> Скопировать</button>
+             <button type="button" className="button" disabled={pending} onClick={()=>void copyActive(w,"open")}><ExternalLink size={13}/> Предпросмотр</button>
              <button type="button" className="button" disabled={pending} onClick={()=>void run({action:"pause",workerId:w.id,objectId:w.objectId},"Ссылка приостановлена")}>Приостановить</button></>}
            {canEdit&&l?.status==="paused"&&<button type="button" className="button" disabled={pending} onClick={()=>void run({action:"resume",workerId:w.id,objectId:w.objectId},"Доступ возобновлён")}>Возобновить</button>}
            {canEdit&&["active","paused"].includes(l?.status??"")&&<><button type="button" className="button" disabled={pending} onClick={()=>startIssue(w,true)}><RefreshCw size={13}/> Перевыпустить</button>
