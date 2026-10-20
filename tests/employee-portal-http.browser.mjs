@@ -20,6 +20,15 @@ try{
  const link=await post('/api/operations/worker-confirmations',{action:'create',objectId:fixture.object,workerId:fixture.worker});assert.ok(link.path);assert.equal(link.expiresAt,null,'full-time employee link has no implicit 30-day expiry');
  const beforePreview=(await pg.query('SELECT last_opened_at employee_opened,last_manager_preview_at manager_preview,expires_at expiry FROM worker_timesheet_links WHERE worker_id=$1 ORDER BY created_at DESC LIMIT 1',[fixture.worker])).rows[0];
  assert.equal(beforePreview.expiry,null);assert.equal(beforePreview.employee_opened,null);
+ // Mimic an old automatically generated 30-day expiry, then execute the actual migration
+ // against disposable PostgreSQL only. The bearer token and link ID must survive unchanged.
+ await pg.query("UPDATE worker_timesheet_links SET expires_at=created_at+interval '30 days' WHERE worker_id=$1 AND status='active'",[fixture.worker]);
+ const legacySql=fs.readFileSync('migrations/0082_employee_portal_legacy_expiration.sql','utf8');
+ await pg.query(legacySql);
+ const legacyAfter=(await pg.query("SELECT expires_at expiry FROM worker_timesheet_links WHERE worker_id=$1 AND status='active'",[fixture.worker])).rows[0];
+ assert.equal(legacyAfter.expiry,null,'legacy generated 30-day expiry is removed without rotating token');
+ assert.equal((await employee.request.get(origin+link.path)).status(),200,'original bearer token remains valid');
+
  const preview=await manager.newPage();preview.on('pageerror',e=>errors.push(e.message));
  await preview.goto(origin+'/employee-preview?objectId='+fixture.object+'&workerId='+fixture.worker,{waitUntil:'domcontentloaded',timeout:60000});
  await preview.getByText('Режим предпросмотра менеджера. Действия сотрудника недоступны и не сохраняются.').waitFor();
