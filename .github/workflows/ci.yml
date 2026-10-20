@@ -54,6 +54,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/operations_os_test
+      # The database is ephemeral and empty; production migration policy remains unchanged.
+      ALLOW_DESTRUCTIVE_MIGRATION: "1"
       DEMO_MODE: "true"
       SESSION_SECRET: "ci-postgres-workspace-smoke"
     steps:
