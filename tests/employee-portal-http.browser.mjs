@@ -4,7 +4,7 @@ import {PGlite} from '@electric-sql/pglite';import {citext} from '@electric-sql/
 const pg=new PGlite({extensions:{citext,pgcrypto,btree_gist}});let socket,server,browser,tls;let serverLog='';const origin='https://localhost:3220',backend='http://127.0.0.1:3218';const certDir=fs.mkdtempSync('/tmp/operis-http-tls-');
 try{
  for(const name of fs.readdirSync('migrations').filter(n=>/^\d{4}_.+\.sql$/.test(n)).sort())await pg.exec(fs.readFileSync('migrations/'+name,'utf8'));
- const fixture=(await pg.query(`SELECT w.id worker,a.object_id object,o.owner_user_id manager,u.email::text email,org.slug organization FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id JOIN objects o ON o.id=a.object_id JOIN app_users u ON u.id=o.owner_user_id JOIN organizations org ON org.id=o.organization_id WHERE w.status='active' AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.id LIMIT 1`)).rows[0];assert.ok(fixture);
+ const fixture=(await pg.query(`SELECT w.id worker,a.object_id object,o.owner_user_id manager,u.email::text email,org.slug organization FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id JOIN objects o ON o.id=a.object_id JOIN app_users u ON u.id=o.owner_user_id JOIN organizations org ON org.id=o.organization_id WHERE w.status='active' AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.id LIMIT 1`)).rows[0];assert.ok(fixture);const qaOrganizationId=(await pg.query('SELECT id FROM organizations WHERE slug=$1',[fixture.organization])).rows[0].id;
  await pg.query(`UPDATE app_users SET password_hash=crypt($1,gen_salt('bf')) WHERE id=$2`,['isolated-http-fixture-password',fixture.manager]);
  const dates=(await pg.query(`SELECT (now() AT TIME ZONE 'Europe/Moscow')::date::text today,((now() AT TIME ZONE 'Europe/Moscow')::date-1)::text yesterday,((now() AT TIME ZONE 'Europe/Moscow')::date+1)::text tomorrow`)).rows[0];
  await pg.query(`DELETE FROM time_entries WHERE worker_id=$1 AND work_date BETWEEN $2::date AND $3::date`,[fixture.worker,dates.yesterday,dates.tomorrow]);await pg.query(`UPDATE timesheet_snapshots SET status='draft' WHERE object_id=$1`,[fixture.object]);
@@ -47,6 +47,17 @@ try{
  await desktop.goto(origin+link.path+'?layout=desktop',{waitUntil:'networkidle'});
  assert.ok(await desktop.locator('.worker-self-frame').isVisible(),'desktop employee cabinet rendered');
  console.log('Employee mobile and desktop cabinets rendered');
+ const demoCabinet=await employee.newPage();demoCabinet.on('pageerror',e=>errors.push(e.message));
+ await demoCabinet.goto(origin+'/employee-timesheet/demo',{waitUntil:'networkidle'});
+ await demoCabinet.getByRole('button',{name:'Табель'}).last().click();
+ const demoTotals=await demoCabinet.locator('.worker-self-totals').innerText();
+ assert.match(demoTotals,/План/);assert.match(demoTotals,/Передано сотрудником\s*0 ч/);
+ assert.match(demoTotals,/Согласовано менеджером\s*0 ч/);
+ assert.match(demoTotals,/Принято в расчёт\s*0 ч/);
+ assert.ok((await demoCabinet.getByText('План: 11 ч').count())>0,'demo should show planned hours as plan instead of worked');
+ assert.equal(await demoCabinet.getByText('Фактически отработанные часы сотрудником пока не переданы.',{exact:false}).count()>0,true);
+ await demoCabinet.close();
+ console.log('Demo month renders 11-hour plan and zero confirmed/submitted hours consistently');
  const token=link.path.split('/').at(-1);const publicUrl=origin+'/api/public/worker-timesheet/'+token;
  const futureReply=await employee.request.post(publicUrl,{data:{date:dates.tomorrow,response:'working',kind:'day'}});assert.equal(futureReply.status(),200,await futureReply.text());
  await post('/api/objects/'+fixture.object+'/shift-plan',{action:'set_cell',workerId:fixture.worker,date:dates.tomorrow,kind:'night'});
@@ -79,12 +90,21 @@ try{
  assert.equal(onboardingData.details.onboarding.stage,'requested');
  assert.equal(onboardingData.config.sections.documents,true);
  assert.ok(onboardingData.details.documents.length>0);
+ const reportedDocument=await employee.request.post(publicUrl,{data:{action:'document',code:'snils',reported:true}});
+ assert.equal(reportedDocument.status(),200,await reportedDocument.text());
+ const unverified=(await (await employee.request.get(publicUrl)).json()).details.documents.find(d=>d.code==='snils');
+ assert.equal(unverified.managerVerified,false,'employee mark-as-sent is not manager approval');
  await post('/api/operations/worker-confirmations',{action:'set_document_status',objectId:fixture.object,workerId:fixture.worker,code:'snils',status:'received'});
  assert.equal((await (await employee.request.get(publicUrl)).json()).details.documents.find(d=>d.code==='snils').status,'received');
  await post('/api/operations/worker-confirmations',{action:'set_onboarding',objectId:fixture.object,workerId:fixture.worker,stage:'completed',comment:null,showAfterCompleted:false});
  const completedData=await (await employee.request.get(publicUrl)).json();
  assert.equal(completedData.config.sections.documents,false);
  assert.deepEqual(completedData.details.documents,[]);
+ await post('/api/operations/worker-confirmations',{action:'set_onboarding',objectId:fixture.object,workerId:fixture.worker,stage:'completed',comment:'Нужно обновить СНИЛС',showAfterCompleted:true});
+ const manualDocuments=await (await employee.request.get(publicUrl)).json();
+ assert.equal(manualDocuments.config.sections.documents,true,'manager can explicitly restore document checklist after onboarding');
+ assert.ok(manualDocuments.details.documents.length>0);
+ await post('/api/operations/worker-confirmations',{action:'set_onboarding',objectId:fixture.object,workerId:fixture.worker,stage:'completed',comment:null,showAfterCompleted:false});
  console.log('Onboarding and document state visibility independently verified');
  const sizes=await employee.request.post(publicUrl,{data:{action:'sizes',clothingSize:'54',shoeSize:'43',gloveSize:'9',comment:'Нужна куртка посвободнее'}});
  assert.equal(sizes.status(),200,await sizes.text());
@@ -104,7 +124,17 @@ try{
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'worker',scopeId:fixture.worker,objectId:fixture.object,config:{sections:{}}});
  console.log('Existing link inherits object and worker overrides without being reissued');
- const qaOrg=(await pg.query('SELECT id FROM organizations WHERE slug=$1',[fixture.organization])).rows[0].id;
+ await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{managerPhone:'+79990000001',sections:{contacts:true}}});
+ const contactEnabled=await (await employee.request.get(publicUrl)).json();assert.equal(contactEnabled.config.sections.contacts,true);assert.equal(contactEnabled.details.managerPhone,'+79990000001');
+ await mobile.reload({waitUntil:'networkidle'});assert.equal(await mobile.getByRole('link',{name:'Позвонить менеджеру'}).count(),1);
+ assert.equal(await mobile.getByText('Важные контакты',{exact:true}).count(),0);
+ await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{contacts:false}}});
+ assert.equal((await (await employee.request.get(publicUrl)).json()).config.sections.contacts,false);
+ await mobile.reload({waitUntil:'networkidle'});assert.equal(await mobile.getByRole('link',{name:'Позвонить менеджеру'}).count(),0);
+ await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
+ 
+ console.log('Contact button obeys inherited visibility and is not duplicated in Profile');
+ const qaOrg=qaOrganizationId;
  const adjustmentId=(await pg.query(`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
  VALUES($1,$2,$3,$4::date,$5::date,123.45,'deduction','Проверяемая корректировка','Тестовое удержание только для QA','review',$6) RETURNING id`,
  [qaOrg,fixture.worker,fixture.object,dates.yesterday,dates.today,fixture.manager])).rows[0].id;
@@ -173,13 +203,29 @@ try{
  const denied=await manager.request.post(origin+'/api/workers/'+fixture.worker+'/exit',{data:{action:'plan',effectiveDate:dates.today,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false}});assert.equal(denied.status(),403,'manager cannot bypass offboarding permission');
  const director=(await pg.query(`SELECT u.id,u.email::text email FROM app_users u JOIN organization_memberships m ON m.user_id=u.id JOIN role_templates r ON r.id=m.role_template_id JOIN organizations o ON o.id=m.organization_id WHERE r.code='director' AND o.slug=$1 LIMIT 1`,[fixture.organization])).rows[0];assert.ok(director);await pg.query(`UPDATE app_users SET password_hash=crypt($1,gen_salt('bf')) WHERE id=$2`,['isolated-http-fixture-password',director.id]);
  const directorLogin=await manager.request.post(origin+'/api/session/login',{data:{organization:fixture.organization,email:director.email,password:'isolated-http-fixture-password'}});assert.equal(directorLogin.status(),200,await directorLogin.text());
+ const questionId=(await pg.query('SELECT id FROM worker_pay_adjustment_questions WHERE adjustment_id=$1 LIMIT 1',[adjustmentId])).rows[0].id;
+ await post('/api/operations/worker-confirmations',{action:'update_adjustment_status',objectId:fixture.object,workerId:fixture.worker,adjustmentId,status:'accounted'});
+ assert.equal((await pg.query('SELECT status FROM worker_pay_adjustments WHERE id=$1',[adjustmentId])).rows[0].status,'accounted');
+ await post('/api/operations/worker-confirmations',{action:'answer_adjustment_question',objectId:fixture.object,workerId:fixture.worker,questionId});
+ assert.equal((await pg.query('SELECT status FROM worker_pay_adjustment_questions WHERE id=$1',[questionId])).rows[0].status,'answered');
+ assert.equal((await pg.query('SELECT count(*)::int count FROM worker_accruals WHERE worker_id=$1 AND period_start=$2::date',[fixture.worker,dates.yesterday])).rows[0].count,0,'manager record status is never an automatic payroll posting');
+ console.log('Finance-authorized director updated correction and resolved question without payroll mutations');
+
  await post('/api/workers/'+fixture.worker+'/exit',{action:'plan',effectiveDate:dates.today,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false});assert.equal((await employee.request.get(newPublicUrl)).status(),404,'link must block on effective dismissal date even before manual completion');
+ const materialized=(await pg.query("SELECT status,block_reason FROM worker_timesheet_links WHERE worker_id=$1 AND status='revoked' ORDER BY revoked_at DESC LIMIT 1",[fixture.worker])).rows[0];
+ assert.equal(materialized.block_reason,'dismissal');assert.equal(materialized.status,'revoked');
+ const systemEvent=(await pg.query("SELECT actor_user_id,details->>'initiator' initiator FROM worker_portal_events WHERE worker_id=$1 AND event_type='blocked_on_exit' AND actor_user_id IS NULL ORDER BY created_at DESC LIMIT 1",[fixture.worker])).rows[0];
+ assert.ok(systemEvent);assert.equal(systemEvent.initiator,'system');
  await post('/api/workers/'+fixture.worker+'/exit',{action:'complete',effectiveDate:dates.today,reasonCode:'employee_request',returnToRecruiting:false});assert.equal((await employee.request.get(newPublicUrl)).status(),404);
  const exitAudit=(await pg.query("SELECT count(*)::int count FROM worker_portal_events WHERE worker_id=$1 AND event_type='blocked_on_exit'",[fixture.worker])).rows[0].count;
  assert.ok(exitAudit>=1,'completed offboarding records the automatic revocation event');
  const exitReason=(await pg.query("SELECT block_reason reason,status FROM worker_timesheet_links WHERE worker_id=$1 AND token_hash=encode(digest($2,'sha256'),'hex') LIMIT 1",[fixture.worker,newPublicUrl.split('/').at(-1)])).rows[0];
  if(exitReason)assert.equal(exitReason.reason,'dismissal');
 assert.equal((await employee.request.post(newPublicUrl,{data:{date:dates.tomorrow,response:'working',kind:'day'}})).status(),403);
+ await pg.query("UPDATE worker_profiles SET status='active' WHERE id=$1",[fixture.worker]);
+ assert.equal((await employee.request.get(newPublicUrl)).status(),404,'rehiring does not revive an automatically revoked token');
+ assert.equal((await pg.query("SELECT status FROM worker_timesheet_links WHERE worker_id=$1 AND block_reason='dismissal' ORDER BY revoked_at DESC LIMIT 1",[fixture.worker])).rows[0].status,'revoked');
+
  assert.deepEqual(errors,[]);console.log('PASS HTTP session / manager plan / employee mobile / timesheet / reconcile / pause+resume / rotation / dismissal read+write guards');
  fs.writeFileSync('/tmp/employee-portal-http-server.log',serverLog);
 }catch(error){console.error(error);throw error;}finally{fs.writeFileSync('/tmp/employee-portal-http-server.log',serverLog);await browser?.close();server?.kill();await new Promise(r=>tls?tls.close(r):r());fs.rmSync(certDir,{recursive:true,force:true});await socket?.stop();await pg.close();}

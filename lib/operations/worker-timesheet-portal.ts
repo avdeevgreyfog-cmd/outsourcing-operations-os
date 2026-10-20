@@ -18,12 +18,42 @@ export type EmployeeLink={id:string;workerId:string;objectId:string;status:"acti
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number;showEmployeeDocuments:boolean;showEmployeeWorkwear:boolean};
 
+/** Persist scheduled dismissals on first safe runtime access, with system-only audit.
+ * Access checks deny links by effective date independently of this materialization. */
+async function blockDueEmployeeLinks(organizationId:string,actorUserId:string,onlyLinkId?:string){
+ return withTenant(organizationId,actorUserId,async sql=>{
+  const revoked=await sql<Array<{id:string;workerId:string;objectId:string;effectiveDate:string}>>`
+    WITH due AS (
+      SELECT l.id,l.worker_id,l.object_id,e.effective_date
+      FROM worker_timesheet_links l
+      JOIN worker_exit_processes e ON e.organization_id=l.organization_id AND e.worker_id=l.worker_id
+      WHERE l.organization_id=${organizationId}::uuid AND l.status IN ('active','paused')
+        AND (${onlyLinkId??null}::uuid IS NULL OR l.id=${onlyLinkId??null}::uuid)
+        AND e.status IN ('planned','completed')
+        AND e.effective_date<=(now() AT TIME ZONE COALESCE(
+          (SELECT timezone FROM object_shift_reporting_settings WHERE object_id=l.object_id),'Europe/Moscow'))::date
+      FOR UPDATE OF l SKIP LOCKED
+    ), changed AS (
+      UPDATE worker_timesheet_links l SET status='revoked',revoked_at=now(),block_reason='dismissal',changed_at=now()
+      FROM due WHERE l.id=due.id
+      RETURNING l.id,l.worker_id "workerId",l.object_id "objectId",due.effective_date::text "effectiveDate"
+    ) SELECT * FROM changed`;
+  for(const item of revoked){
+   await sql`INSERT INTO worker_portal_events(organization_id,worker_id,object_id,link_id,actor_user_id,event_type,details)
+     VALUES(${organizationId}::uuid,${item.workerId}::uuid,${item.objectId}::uuid,${item.id}::uuid,
+       NULL,'blocked_on_exit',jsonb_build_object('initiator','system','reason','dismissal','effectiveDate',${item.effectiveDate}::date))`;
+  }
+  return revoked.length;
+ });
+}
+
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
+  if(!actor.demo)await blockDueEmployeeLinks(actor.organizationId,actor.userId);
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
   const availableObjects=(await listObjects(actor)).filter(row=>canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.id===objectId));
   const objectOptions=availableObjects.map(o=>({id:o.id,name:o.name??"Объект"}));
-  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],sizeRequests:[],onboarding:[],hourDisputes:[],adjustments:[],canManageAdjustments:false,defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
+  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],sizeRequests:[],onboarding:[],hourDisputes:[],adjustments:[],adjustmentQuestions:[],canManageAdjustments:false,defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
   if(!visible.length&&!availableObjects.length)return {workers:[],reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
   const objects=new Set([...availableObjects.map(o=>o.id),...visible.map(w=>w.objectId!)]);
   const ids=visible.map(w=>w.id);
@@ -47,7 +77,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
         ORDER BY worker_id,object_id,work_date,(shift_id IS NULL) DESC,updated_at DESC`,
        sql<Array<{scope:"organization"|"object"|"worker";scopeId:string;config:PortalConfigurationPatch}>>`SELECT scope,scope_id "scopeId",config FROM employee_portal_config_overrides WHERE organization_id=${actor.organizationId}::uuid AND (scope='organization' OR (scope='object' AND scope_id=ANY(${[...objects]}::uuid[])) OR (scope='worker' AND scope_id=ANY(${ids}::uuid[])))`,
     ]);
-    const [sizeRequests,onboarding,hourDisputes,adjustments]=await Promise.all([
+    const [sizeRequests,onboarding,hourDisputes,adjustments,adjustmentQuestions]=await Promise.all([
       sql<Array<{id:string;workerId:string;objectId:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null;status:string;createdAt:string}>>`
        SELECT id,worker_id "workerId",object_id "objectId",clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment,status,created_at::text "createdAt" FROM worker_ppe_size_requests
        WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND status='pending' ORDER BY created_at DESC`,
@@ -59,9 +89,14 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
        WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND status IN ('open','in_review') ORDER BY created_at DESC`,
       (hasCapability(actor.access,"finance.worker_accrual.read")?sql<Array<{id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string}>>`
        SELECT id,worker_id "workerId",object_id "objectId",amount::float8 amount,period_start::text "periodStart",period_end::text "periodEnd",status,reason,employee_description description
-       FROM worker_pay_adjustments WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY created_at DESC LIMIT 100`:Promise.resolve([] as Array<{id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string}>))
+       FROM worker_pay_adjustments WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY created_at DESC LIMIT 100`:Promise.resolve([] as Array<{id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string}>)),
+      (hasCapability(actor.access,"finance.worker_accrual.read")?sql<Array<{id:string;workerId:string;objectId:string;adjustmentId:string;question:string;status:string;createdAt:string}>>`
+       SELECT q.id,q.worker_id "workerId",a.object_id "objectId",q.adjustment_id "adjustmentId",q.question,q.status,q.created_at::text "createdAt"
+       FROM worker_pay_adjustment_questions q JOIN worker_pay_adjustments a ON a.id=q.adjustment_id AND a.organization_id=q.organization_id
+       WHERE q.worker_id=ANY(${ids}::uuid[]) AND a.object_id=ANY(${[...objects]}::uuid[]) AND q.status='open'
+       ORDER BY q.created_at DESC LIMIT 100`:Promise.resolve([] as Array<{id:string;workerId:string;objectId:string;adjustmentId:string;question:string;status:string;createdAt:string}>))
     ]);
-    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??null,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,sizeRequests,onboarding,hourDisputes,adjustments,canManageAdjustments:hasCapability(actor.access,"finance.worker_accrual.edit"),defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
+    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??null,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,sizeRequests,onboarding,hourDisputes,adjustments,adjustmentQuestions,canManageAdjustments:hasCapability(actor.access,"finance.worker_accrual.edit"),defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
   });
 }
 
@@ -173,12 +208,14 @@ type TokenContext={tenantId:string;actorUserId:string;linkId:string};
 export async function resolveToken(token:string):Promise<TokenContext|null>{
   if(!/^[A-Za-z0-9_-]{30,100}$/.test(token))return null;
   const hashed=tokenHash(token);
-  return db().begin(async tx=>{
+  const found=await db().begin(async tx=>{
     await tx`SELECT set_config('app.worker_token_hash',${hashed},true)`;
     const [row]=await tx<Array<TokenContext>>`SELECT tenant_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
       FROM public_worker_timesheet_tokens WHERE token_hash=${hashed} LIMIT 1`;
     return row??null;
   });
+  if(found)await blockDueEmployeeLinks(found.tenantId,found.actorUserId,found.linkId);
+  return found;
 }
 export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;linkId:string},token:string){
   const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w JOIN worker_timesheet_links l ON l.worker_id=w.id AND l.organization_id=w.organization_id
@@ -542,7 +579,7 @@ export async function submitEmployeeAdjustmentQuestion(token:string,input:{adjus
   if(!cfg.sections.payAdjustments)throw new EmployeePortalAccessError("Раздел недоступен");
   const [adjustment]=await sql`SELECT id FROM worker_pay_adjustments
     WHERE id=${input.adjustmentId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-    AND status IN ('review','confirmed','accounted')`;
+    AND status IN ('draft','review','confirmed','accounted','cancelled')`;
   if(!adjustment)throw new EmployeePortalError("Корректировка недоступна");
   await sql`INSERT INTO worker_pay_adjustment_questions(organization_id,adjustment_id,worker_id,source_link_id,question)
     VALUES(${ref.tenantId}::uuid,${input.adjustmentId}::uuid,${link.workerId}::uuid,${ref.linkId}::uuid,${question})`;

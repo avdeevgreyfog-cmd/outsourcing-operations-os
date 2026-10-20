@@ -24,7 +24,7 @@ export type PortalDetails={
  clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;sizeRequest:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
  documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean;status:string}>;
  onboarding:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;
- adjustments:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;
+ adjustments:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string;createdAt:string}>;
  workwear:Array<{name:string;state:"issued"|"needed";variant:string|null}>;
  visibility:{documents:boolean;workwear:boolean;employment:boolean;contacts:boolean};
  shiftWindows:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean}>;
@@ -58,9 +58,11 @@ async function authorizedEmployee(token:string){
  });
 }
 function createHashToken(raw:string){return createHash("sha256").update(raw).digest("hex")}
-export async function employeePortalDetails(token:string):Promise<PortalDetails|null>{
+export async function employeePortalDetails(token:string,selectedMonth?:string):Promise<PortalDetails|null>{
  const scope=await authorizedEmployee(token);if(!scope)return null;
  const {ref,link}=scope;
+ const period=selectedMonth&&/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)?selectedMonth:null;
+ const from=period?period+"-01":new Date().toISOString().slice(0,7)+"-01";
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
   const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges,onboarding,adjustments,sizeRequests]=await Promise.all([
    sql<Array<{clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;managerName:string|null;managerPhone:string|null}>>`
@@ -107,11 +109,12 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
    sql<Array<{stage:string;comment:string|null;showAfterCompleted:boolean}>>`
     SELECT stage,employee_comment comment,show_after_completed "showAfterCompleted" FROM worker_onboarding_status
     WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid LIMIT 1`,
-   sql<Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>>`
+   sql<Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string;createdAt:string}>>`
     SELECT id,period_start::text "periodStart",period_end::text "periodEnd",amount::float8 amount,adjustment_type "adjustmentType",
-      reason,employee_description description,status FROM worker_pay_adjustments
+      reason,employee_description description,status,created_at::text "createdAt" FROM worker_pay_adjustments
     WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-      AND status IN ('review','confirmed','accounted') ORDER BY period_start DESC LIMIT 25`,
+      AND period_start < (${from}::date+interval '1 month') AND period_end>=${from}::date
+      ORDER BY period_start DESC,created_at DESC LIMIT 100`,
     sql<Array<{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}>>`
       SELECT status,clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment FROM worker_ppe_size_requests
       WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
@@ -209,10 +212,12 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
  |{action:"set_onboarding";objectId:string;workerId:string;stage:"not_started"|"requested"|"partial"|"review"|"completed"|"correction";comment:string|null;showAfterCompleted:boolean}
  |{action:"set_document_status";objectId:string;workerId:string;code:string;status:"not_requested"|"awaiting"|"received"|"accepted"|"resubmit"}
  |{action:"resolve_hours_dispute";objectId:string;workerId:string;disputeId:string;status:"in_review"|"resolved"|"rejected"}
- |{action:"upsert_adjustment";objectId:string;workerId:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:"deduction"|"damage"|"advance"|"other";reason:string;description:string;status:"draft"|"review"|"confirmed"|"cancelled"}){
+ |{action:"upsert_adjustment";objectId:string;workerId:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:"deduction"|"damage"|"advance"|"other";reason:string;description:string;status:"draft"|"review"|"accounted"|"cancelled"}
+ |{action:"update_adjustment_status";objectId:string;workerId:string;adjustmentId:string;status:"draft"|"review"|"accounted"|"cancelled"}
+ |{action:"answer_adjustment_question";objectId:string;workerId:string;questionId:string}){
 
  requireCapability(actor,"operations.shift.edit");
- if(change.action==="upsert_adjustment")requireCapability(actor,"finance.worker_accrual.edit");
+ if(["upsert_adjustment","update_adjustment_status","answer_adjustment_question"].includes(change.action))requireCapability(actor,"finance.worker_accrual.edit");
  if(actor.demo)throw new EmployeePortalError("Действие недоступно в демонстрации");
  const objects=await listObjects(actor);
  const obj=objects.find(x=>x.id===change.objectId);
@@ -269,6 +274,18 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
      resolved_by_user_id=CASE WHEN ${change.status}='in_review' THEN NULL ELSE ${actor.userId}::uuid END
      WHERE id=${change.disputeId}::uuid AND worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND status IN ('open','in_review') RETURNING id`;
    if(!updated.length)throw new EmployeePortalError("Обращение уже обработано");
+  }else if(change.action==="update_adjustment_status"){
+   const changed=await sql`UPDATE worker_pay_adjustments SET status=${change.status},updated_at=now()
+     WHERE organization_id=${actor.organizationId}::uuid AND object_id=${change.objectId}::uuid
+       AND worker_id=${change.workerId}::uuid AND id=${change.adjustmentId}::uuid RETURNING id`;
+   if(!changed.length)throw new EmployeePortalError("Корректировка не найдена");
+  }else if(change.action==="answer_adjustment_question"){
+   const changed=await sql`UPDATE worker_pay_adjustment_questions q SET status='answered'
+     FROM worker_pay_adjustments a WHERE q.id=${change.questionId}::uuid
+       AND q.adjustment_id=a.id AND a.organization_id=${actor.organizationId}::uuid
+       AND a.object_id=${change.objectId}::uuid AND q.worker_id=${change.workerId}::uuid AND q.status='open'
+       RETURNING q.id`;
+   if(!changed.length)throw new EmployeePortalError("Обращение уже обработано");
   }else if(change.action==="upsert_adjustment"){
    if(change.periodEnd<change.periodStart)throw new EmployeePortalError("Период указан неверно");
    await sql`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)

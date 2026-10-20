@@ -191,3 +191,18 @@ body:has(.worker-self){min-width:0!important}
  .worker-self-schedule-attributes{gap:13px}
  .worker-self-ledger-date{gap:12px}
 }
+
+/* Monthly timesheet: four distinct accounting stages, dense desktop and readable mobile. */
+.worker-self-totals{grid-template-columns:repeat(4,minmax(0,1fr))}
+.worker-self-totals>div{min-width:0;padding:12px 13px;align-content:start}
+.worker-self-totals>div strong{font-size:19px;font-variant-numeric:tabular-nums;white-space:normal}
+.worker-self-totals>div small{line-height:1.35}
+.worker-self-ledger-result{min-width:0;max-width:58%;text-align:right}
+.worker-self-ledger-result strong,.worker-self-ledger-result small{overflow-wrap:anywhere}
+@media(max-width:820px){
+ .worker-self-totals{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .worker-self-totals>div{padding:12px}
+ .worker-self-totals>div:nth-child(odd){border-left:0}
+ .worker-self-totals>div:nth-child(n+3){border-top:1px solid var(--border)}
+ .worker-self-totals>div strong{font-size:18px}
+}
