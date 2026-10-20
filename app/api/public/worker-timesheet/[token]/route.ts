@@ -23,12 +23,24 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
   const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
   if(!data)return NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
   const sections=data.config.sections;
-  const [details,planning]=await Promise.all([employeePortalDetails(token),sections.shifts?employeePlanning(token):Promise.resolve(null)]);
+  const [details,planning]=await Promise.all([employeePortalDetails(token),sections.shifts||sections.confirm||sections.decline||sections.scheduleChanges||sections.hours?employeePlanning(token):Promise.resolve(null)]);
+  const safeDetails=details?{...details,
+    managerName:sections.contacts?details.managerName:null,
+    managerPhone:sections.contacts?details.managerPhone:null,
+    employment:sections.employment?details.employment:"hidden",
+    clothingSize:sections.workwear?details.clothingSize:null,
+    shoeSize:sections.workwear?details.shoeSize:null,
+    documents:sections.documents?details.documents:[],
+    workwear:sections.workwear?details.workwear:[],
+    shiftWindows:sections.shifts?details.shiftWindows:[],
+    timeChanges:sections.scheduleChanges?details.timeChanges:[],
+    visibility:{documents:sections.documents,workwear:sections.workwear,employment:sections.employment,contacts:sections.contacts}
+   }:null;
   return NextResponse.json({...data,
     reports:sections.shifts||sections.timesheet?data.reports:[],
     plans:sections.timesheet?data.plans:[],
     planning:planning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
-    details
+    details:safeDetails
   },{headers:noStore});
  }catch(error){if(error instanceof EmployeePortalError)return NextResponse.json({error:"Ссылка недействительна или заблокирована"},{status:404,headers:noStore});console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
 }
