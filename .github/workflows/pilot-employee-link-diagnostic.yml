@@ -22,9 +22,9 @@ jobs:
             if [ "$code" = "200" ]; then
               if node - <<'NODE'
           const status=require('/tmp/pilot-status.json');
-          console.log(JSON.stringify({deployedSha:status.deploymentSha,schemaVersion:status.schemaVersion,dbAvailable:status.databaseConfigured,cryptoAvailable:status.employeeLinkEncryptionConfigured}));
-          if(status.ok!==true||status.schemaVersion!=='0079_employee_portal_link_control.sql')process.exit(1);
-          if(!status.deploymentSha)process.exit(1);
+          console.log(JSON.stringify({deployedSha:status.deploymentSha,schemaVersion:status.schemaVersion,dbAvailable:status.databaseConfigured,cryptoAvailable:status.employeeLinkEncryptionConfigured,employeePortalRelease:status.employeePortalRelease}));
+          if(status.ok!==true||status.schemaVersion!=='0082_employee_portal_legacy_expiration.sql'||status.employeePortalRelease!=='v2-live-20261020'||status.databaseConfigured!==true)process.exit(1);
+          if(status.deploymentSha!==process.env.GITHUB_SHA)process.exit(1);
           if(status.employeeLinkEncryptionConfigured!==true)process.exit(2);
           NODE
               then exit 0
@@ -32,7 +32,7 @@ jobs:
             fi
             sleep 10
           done
-          echo "::error::Personal portal live runtime did not reach a usable deployment with an encryption key."
+          echo "::error::Personal portal did not deploy the exact reviewed commit with schema 0082 and encryption key."
           exit 1
 
       - name: Verify unauthenticated employee portal API reaches the app
