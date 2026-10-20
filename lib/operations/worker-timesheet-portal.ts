@@ -547,7 +547,7 @@ export async function submitEmployeeAdjustmentQuestion(token:string,input:{adjus
   if(!cfg.sections.payAdjustments)throw new EmployeePortalAccessError("Раздел недоступен");
   const [adjustment]=await sql`SELECT id FROM worker_pay_adjustments
     WHERE id=${input.adjustmentId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-    AND status IN ('review','confirmed','accounted')`;
+    AND status IN ('draft','review','confirmed','accounted','cancelled')`;
   if(!adjustment)throw new EmployeePortalError("Корректировка недоступна");
   await sql`INSERT INTO worker_pay_adjustment_questions(organization_id,adjustment_id,worker_id,source_link_id,question)
     VALUES(${ref.tenantId}::uuid,${input.adjustmentId}::uuid,${link.workerId}::uuid,${ref.linkId}::uuid,${question})`;
