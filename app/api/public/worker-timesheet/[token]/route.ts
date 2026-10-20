@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
-import {employeePortal,submitEmployeeReply,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
+import {employeePortal,submitEmployeeReply,assertPortalSectionAllowed,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
 import {employeePortalDetails,updateEmployeePortalDetails} from "@/lib/operations/employee-self-service";
 import {employeePlanning,submitEmployeePlan,submitEmployeeWeek,submitEmployeePattern} from "@/lib/operations/employee-planning";
 const responseSchema=z.object({
@@ -21,12 +21,22 @@ const noStore={"Cache-Control":"no-store, private"};
 export async function GET(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
   const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
-  return data?NextResponse.json({...data,...await (async()=>{const [details,planning]=await Promise.all([employeePortalDetails(token),employeePlanning(token)]);return {details,planning}})()},{headers:noStore}):NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
+  if(!data)return NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
+  const sections=data.config.sections;
+  const [details,planning]=await Promise.all([employeePortalDetails(token),sections.shifts?employeePlanning(token):Promise.resolve(null)]);
+  return NextResponse.json({...data,
+    reports:sections.shifts||sections.timesheet?data.reports:[],
+    plans:sections.timesheet?data.plans:[],
+    planning:planning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
+    details
+  },{headers:noStore});
  }catch(error){if(error instanceof EmployeePortalError)return NextResponse.json({error:"Ссылка недействительна или заблокирована"},{status:404,headers:noStore});console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
 }
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
   const {token}=await params;const raw=await request.json();
+  const section=raw?.action==="document"?"documents":raw?.action==="sizes"?"workwear":raw?.action==="shift_time"||raw?.action==="plan_day"||raw?.action==="plan_week"||raw?.action==="pattern_change"?"scheduleChanges":raw?.hours!==undefined?"hours":raw?.response==="cannot_work"?"decline":raw?.response==="day_off"?"scheduleChanges":"confirm";
+  await assertPortalSectionAllowed(token,section);
   const result=raw&&typeof raw==="object"&&"action" in raw
     ?raw.action==="plan_week"
       ?await (async()=>{const input=weekSchema.parse(raw);return submitEmployeeWeek(token,input.weekStart,input.offDates)})()
