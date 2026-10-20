@@ -285,7 +285,7 @@ export async function submitEmployeeWeek(token:string,weekStart:string,offDates:
   for(const date of dates){
    await ensureNotLocked(sql,s,date);
    const kind:PlannedKind=offDates.includes(date)?"off":p?.kind??s.defaultKind??"day";
-   if(status==="accepted")await writePlan(sql,s,date,kind);
+   // A floating-day request is never an approved shift until the manager reviews it.
    await sql`INSERT INTO worker_shift_plan_changes(organization_id,object_id,worker_id,work_date,requested_kind,status,requested_by_link_id)
     VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${date}::date,${kind},${status},${s.link}::uuid)
     ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET requested_kind=EXCLUDED.requested_kind,status=EXCLUDED.status,
