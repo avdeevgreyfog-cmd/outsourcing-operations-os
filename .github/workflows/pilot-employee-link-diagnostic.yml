@@ -13,6 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Verify live personal runtime readiness without exposing secrets
         shell: bash
         run: |
@@ -24,10 +28,22 @@ jobs:
           const status=require('/tmp/pilot-status.json');
           console.log(JSON.stringify({deployedSha:status.deploymentSha,schemaVersion:status.schemaVersion,dbAvailable:status.databaseConfigured,cryptoAvailable:status.employeeLinkEncryptionConfigured,employeePortalRelease:status.employeePortalRelease}));
           if(status.ok!==true||status.schemaVersion!=='0082_employee_portal_legacy_expiration.sql'||status.employeePortalRelease!=='v2-live-20261020'||status.databaseConfigured!==true||!status.databaseIdentity||status.demoAvailable!==true)process.exit(1);
-          if(status.deploymentSha!==process.env.GITHUB_SHA)process.exit(1);
+          if(!status.deploymentSha)process.exit(1);
+          require('fs').writeFileSync('/tmp/pilot-deployed-sha',status.deploymentSha);
           if(status.employeeLinkEncryptionConfigured!==true)process.exit(2);
           NODE
-              then exit 0
+              then
+                deployed_sha="$(cat /tmp/pilot-deployed-sha)"
+                if [ "$deployed_sha" = "$GITHUB_SHA" ]; then
+                  echo "Live runtime serves the current commit."; exit 0
+                fi
+                if [[ ! "$deployed_sha" =~ ^[[:xdigit:]]{40}$ ]] || ! git cat-file -e "$deployed_sha^{commit}" 2>/dev/null; then
+                  echo "Unexpected live commit SHA; awaiting deployment."
+                elif [ -z "$(git diff --name-only "$deployed_sha" "$GITHUB_SHA" -- . ':(exclude).github/workflows/**')" ]; then
+                  echo "Live application source is byte-identical; only GitHub workflow files differ."; exit 0
+                else
+                  echo "Application changes still awaiting Vercel deployment."
+                fi
               fi
             fi
             sleep 10
