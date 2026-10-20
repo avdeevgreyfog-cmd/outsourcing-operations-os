@@ -59,7 +59,7 @@ test('hours-only submission rejects a changed manager shift or reserve assignmen
  process.env.SESSION_SECRET='isolated-test-key';const date=new Date(Date.now()-2*86400000).toISOString().slice(0,10);
  for(const assigned of [{kind:'day',reserve:false},{kind:'night',reserve:true}]){
   const h=harness({assigned});const {path}=await h.run('create');const token=path.split('/').at(-1);
-  await assert.rejects(()=>h.service.submitEmployeeReply(token,{date,hours:10}),/План смены изменён|Вы в резерве/);
+  await assert.rejects(()=>h.service.submitEmployeeReply(token,{date,hours:10,reason:'Изменено фактическое время'}),/План смены изменён|Вы в резерве/);
   assert.ok(!h.queries.some(q=>q.includes('UPDATE worker_shift_reports SET reported_hours=')));
  }
 });
