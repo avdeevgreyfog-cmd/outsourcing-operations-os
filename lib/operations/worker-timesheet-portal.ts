@@ -274,7 +274,7 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
       (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text "localToday",
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
       COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
-      COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",l.portal_config_snapshot configuration
+      a.paid_hours_per_shift::float8 "paidHours",l.link_config_override "linkOverride"
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
         AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
@@ -283,7 +283,7 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
       WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active' AND COALESCE(s.reporting_enabled,true)
       LIMIT 1`;
     if(!link)throw new EmployeePortalAccessError("Доступ закрыт");
-    const sections=applyPortalPatch(defaultPortalConfiguration,link.configuration??{}).sections;
+    const sections=(await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride)).sections;
     if(payload.hours!==undefined&&!sections.hours)throw new EmployeePortalError("Ввод часов отключён для этой ссылки");
     if(payload.response==="working"&&!sections.confirm)throw new EmployeePortalError("Подтверждение выхода недоступно");
     if(payload.response==="cannot_work"&&!sections.decline)throw new EmployeePortalError("Сообщение о невыходе недоступно");
