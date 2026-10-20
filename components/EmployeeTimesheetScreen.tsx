@@ -8,7 +8,7 @@ type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot
 type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean;status?:string};
-type Details={clothingSize:string|null;shoeSize:string|null;gloveSize?:string|null;ppeSizeComment?:string|null;sizeRequest?:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:string;managerName:string|null;managerPhone:string|null;onboarding?:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;adjustments?:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
+type Details={clothingSize:string|null;shoeSize:string|null;gloveSize?:string|null;ppeSizeComment?:string|null;sizeRequest?:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:string;managerName:string|null;managerPhone:string|null;onboarding?:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;adjustments?:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string;createdAt?:string}>;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
 type Portal={name:string;objectName:string;paidHours:number|null;deadline:string;today:string;timezone:string;periodStatus?:string|null;periodClosedAt?:string|null;disputes?:Array<{date:string;status:string;reason:string;comment:string;createdAt:string}>;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
 type Tab="shifts"|"timesheet"|"more";
 type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo"|"adjustments";
@@ -87,14 +87,26 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const adjacentMonth=(offset:number)=>new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5))-1+offset,1)).toISOString().slice(0,7);
  const currentEnd=currentMonth===today.slice(0,7)?Number(today.slice(8)):new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5)),0)).getUTCDate();
  const dateRows=Array.from({length:currentEnd},(_,i)=>currentMonth+"-"+String(i+1).padStart(2,"0")).reverse();
- const counted=(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
-   for(const date of new Set([...dayEntries.keys(),...answers.keys()])){
-    if(!date.startsWith(currentMonth)||date>today||distinct.has(date))continue;
-    const entry=dayEntries.get(date),reply=answers.get(date);
-    const worked=reply?.reconciledAt?entry?.hours??reply?.hours:(entry?.source==="manual"?entry.hours:null);
-    if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
-   }return{total,shifts}})();
- 
+ // Planned hours, employee-reported hours, approved hours and accounting acceptance
+ // are independent states. Never count a plan-only time entry as work performed.
+ const monthReplies=(data?.reports??[]).filter(r=>r.date.startsWith(currentMonth));
+ const monthPlans=(data?.planning?.days??[]).filter(p=>p.date.startsWith(currentMonth)&&(p.kind==="day"||p.kind==="night"));
+ const planHours=data?.paidHours==null?null:monthPlans.length*data.paidHours;
+ const submitted=monthReplies.filter(r=>r.hours!=null&&r.hours>0);
+ const approved=monthReplies.filter(r=>(r.reviewStatus==="approved"||r.reconciledAt)&&r.reviewStatus!=="rejected");
+ const totalHours=(rows:Reply[],approvedOnly=false)=>rows.reduce((sum,r)=>sum+(approvedOnly?(r.approvedHours??r.hours??0):(r.hours??0)),0);
+ const agreementHours=totalHours(approved,true);
+ const periodReplies=monthReplies.filter(r=>r.hours!=null);
+ const periodDisputes=(data?.disputes??[]).filter(d=>d.date.startsWith(currentMonth)&&(d.status==="open"||d.status==="in_review"));
+ const acceptedHours=data?.periodClosedAt?agreementHours:0;
+ const acceptedShifts=data?.periodClosedAt?approved.filter(r=>(r.approvedHours??r.hours??0)>0).length:0;
+ const summary={
+  planned:{hours:planHours,shifts:monthPlans.length},
+  submitted:{hours:totalHours(submitted),shifts:submitted.length},
+  approved:{hours:agreementHours,shifts:approved.filter(r=>(r.approvedHours??r.hours??0)>0).length},
+  accounted:{hours:acceptedHours,shifts:acceptedShifts}
+ };
+
  const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточнит менеджер";
  async function save(payload:Record<string,unknown>,message:string){
   if(!data||busy)return false;setError("");setNotice("");setBusy(true);
@@ -139,16 +151,18 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},"Предложение по выходным отправлено менеджеру"))setWeekEditing(false)}
  function openSettings(){setTab("more");setMore("settings");setSettingsEditing(false);setWorkPattern((data?.planning.workDays??5)+"/"+(data?.planning.restDays??2));setPatternFloating(Boolean(data?.planning.floatingDaysOff));setEffectiveFrom(tomorrow);setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??(d?.kind==="day"?"08:00":"20:00"));setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
  const managerCall=sections.contacts?data?.details?.managerPhone?.replace(/[^+\d]/g,""):undefined;
- const activeDisputes=new Set((data?.disputes??[]).filter(x=>x.status==="open"||x.status==="in_review").map(x=>x.date));
+ const activeDisputes=new Set(periodDisputes.map(x=>x.date));
  const dayStatus=(date:string,reply:Reply|undefined,hasPlan:boolean)=>{
   if(activeDisputes.has(date)||reply?.reviewStatus==="rejected")return "Есть расхождение";
-  if(data?.periodClosedAt&&(reply?.reviewStatus==="approved"||reply?.reconciledAt))return "Закрыто для расчёта";
-  if(reply?.reviewStatus==="approved"||reply?.reconciledAt)return "Согласовано";
-  if(reply?.hours!=null)return "Проверяется менеджером";
+  if(reply?.reviewStatus==="approved"||reply?.reconciledAt){
+    if(reply?.reviewedAt&&reply?.updatedAt&&Date.parse(reply.updatedAt)>Date.parse(reply.reviewedAt)+1000)return "Исправлено после согласования";
+    return data?.periodClosedAt?"Закрыто для расчёта":"Согласовано";
+  }
+  if(reply?.hours!=null)return reply.reviewStatus==="pending"?"Проверяется менеджером":"Часы переданы сотрудником";
   if(reply?.response)return "Ожидается ответ сотрудника";
   return hasPlan?"Черновик менеджера":"Нет смены";
  };
- const periodStatus=activeDisputes.size?"Есть расхождения":data?.periodClosedAt?"Закрыт для расчёта":(data?.reports??[]).some(x=>x.reviewStatus==="pending"&&x.hours!=null)?"Проверяется":(data?.reports??[]).some(x=>x.reviewStatus==="approved")?"Согласован":(data?.reports??[]).some(x=>x.hours!=null)?"Передан сотрудником":"Табель формируется";
+ const periodStatus=periodDisputes.length?"Есть расхождения":data?.periodClosedAt?"Закрыт для расчёта":approved.length&&approved.length===periodReplies.length?"Согласован":periodReplies.length?"Проверяется":"Табель формируется";
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
  if(!data)return <main className="worker-self"><div className="worker-self-loading"><LockKeyhole/> Кабинет недоступен. {error}</div></main>;
  return <main className={"worker-self "+(previewLayout==="phone"?"worker-self-phone":"")+(previewLayout==="desktop"?" worker-self-desktop":"")}>
@@ -239,34 +253,40 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        <strong>{monthLabel}</strong>
        <button aria-label="Следующий месяц" onClick={()=>setMonthOverride(adjacentMonth(1))} disabled={currentMonth>=today.slice(0,7)}><ChevronRight size={18}/></button>
       </div>
-      <div className="worker-self-totals"><div><small>Часы</small><strong>{counted.total}</strong></div><div><small>Смены</small><strong>{counted.shifts}</strong></div></div>
+      <div className="worker-self-totals">
+       {([{title:"План",value:summary.planned},{title:"Передано сотрудником",value:summary.submitted},{title:"Согласовано менеджером",value:summary.approved},{title:"Принято в расчёт",value:summary.accounted}] as const).map(item=><div key={item.title}><small>{item.title}</small><strong>{item.value.hours===null?"Норма уточняется":item.value.hours+" ч"}</strong><small>{item.value.shifts} смен</small></div>)}
+      </div>
       <p className="worker-self-muted">Статус периода: <strong>{periodStatus}</strong>. {data.periodClosedAt&&periodStatus==="Закрыт для расчёта"?"Часы за период согласованы и приняты в расчёт. Это не означает выплату.":""}</p>
       <section className="worker-self-panel worker-self-timesheet-panel">
        <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> {monthLabel}</span></div>
        <div className="worker-self-ledger-header"><span>Дата</span><span>Часы</span></div>
        {dateRows.map((date,i)=>{
-        const reply=answers.get(date),fact=data.plans.find(x=>x.date===date&&x.timeCode==="WORK"&&Number(x.hours)>0);
-        const approved=Boolean(reply?.reconciledAt);
-        const h=approved?fact?.hours??reply?.hours??null:reply?.hours??fact?.hours??null;
+        const reply=answers.get(date),entry=data.plans.find(x=>x.date===date&&x.timeCode==="WORK"&&Number(x.hours)>0);
+        const isApproved=reply?.reviewStatus==="approved"||Boolean(reply?.reconciledAt);
+        const submittedHours=reply?.hours??null;
+        const verifiedHours=isApproved?(reply?.approvedHours??entry?.hours??submittedHours):null;
         const plan=records.get(date),off=plan?.kind==="off";
+        const hasScheduledShift=plan?.kind==="day"||plan?.kind==="night";
+        const plannedLabel=hasScheduledShift?(data.paidHours!=null?"План: "+data.paidHours+" ч":"План: часы уточняются"):null;
         return <div key={date}>
          {i>0&&new Date(date+"T00:00:00Z").getUTCDay()===0&&<div className="worker-self-ledger-separator"/>}
          <div className="worker-self-ledger-row">
-          <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"||fact?.kind==="night"?"Ночная смена":plan?.kind==="day"||fact?.kind==="day"?"Дневная смена":off?"Выходной":"—"}</small></div>
+          <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"||entry?.kind==="night"?"Ночная смена":plan?.kind==="day"||entry?.kind==="day"?"Дневная смена":off?"Выходной":"—"}</small></div>
           <div className="worker-self-ledger-result">
-           <strong className={h!=null&&Number(h)>0?"actual":""}>{h!=null&&Number(h)>0?String(h)+" ч":off?"Выходной":"—"}</strong>
-           {(h!=null||reply?.response||plan?.kind)&&<small className={approved?"worker-self-agreed":""}>{dayStatus(date,reply,Boolean(plan?.kind||fact))}</small>}
+           <strong className={verifiedHours!=null?"actual":""}>{verifiedHours!=null?"Согласовано: "+verifiedHours+" ч":submittedHours!=null?"Передано: "+submittedHours+" ч":plannedLabel??(off?"Выходной":"—")}</strong>
+           {verifiedHours!=null&&plannedLabel&&<small>{plannedLabel}</small>}
+           {(hasScheduledShift||submittedHours!=null||reply?.response||off)&&<small className={isApproved?"worker-self-agreed":""}>{dayStatus(date,reply,Boolean(hasScheduledShift||entry))}</small>}
            {(reply?.updatedAt||reply?.reviewedAt)&&<small>Обновлено: {new Date(reply.reviewedAt??reply.updatedAt??"").toLocaleString("ru-RU")}</small>}
            {reply?.reviewedAt&&<small>Проверил: {reply.reviewedBy??"менеджер"}</small>}
           </div>
          </div>
-         {h!=null&&Number(h)>0&&<div className="worker-self-ledger-dispute">
+         {(submittedHours!=null||verifiedHours!=null)&&<div className="worker-self-ledger-dispute">
            {activeDisputes.has(date)?<small>Обращение по часам передано менеджеру.</small>:<button className="worker-self-quiet" onClick={()=>{setDisputeDate(disputeDate===date?null:date);setDisputeComment("")}}>Не согласен с часами</button>}
            {disputeDate===date&&<div className="worker-self-edit"><label>Причина<select value={disputeReason} onChange={e=>setDisputeReason(e.target.value as typeof disputeReason)}><option value="hours">Неверное количество часов</option><option value="missing_shift">Не учтена смена</option><option value="wrong_shift">Другая смена</option><option value="other">Другое</option></select></label><label>Комментарий<textarea value={disputeComment} onChange={e=>setDisputeComment(e.target.value)} maxLength={500} rows={2} placeholder="Укажите, в чём расхождение"/></label><button className="worker-self-main-button" disabled={busy||!disputeComment.trim()} onClick={async()=>{if(await save({action:"dispute_hours",date,reason:disputeReason,comment:disputeComment},"Обращение передано менеджеру"))setDisputeDate(null)}}>Отправить обращение</button></div>}
          </div>}
         </div>;
        })}
-       {counted.shifts===0&&<p className="worker-self-muted">За этот месяц пока нет отработанных смен.</p>}
+       {summary.submitted.shifts===0&&summary.approved.shifts===0&&<p className="worker-self-muted">Фактически отработанные часы сотрудником пока не переданы. Плановые смены не считаются отработанными.</p>}
       </section>
      </>}
      {activeTab==="more"&&<>
