@@ -83,6 +83,16 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
    const res=await fetch("/api/operations/worker-confirmations",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
    const json=await res.json();if(!res.ok)throw new Error(json.error??"Ошибка сохранения");return json;
  }
+
+ // A date-only field is interpreted in the employee's configured timezone, not the manager's browser timezone.
+ function endOfDayInZone(date:string,timezone:string){
+   const desired=Date.parse(date+"T23:59:59Z");
+   if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)||!Number.isFinite(desired))throw new Error("Некорректная дата окончания");
+   const formatted=new Intl.DateTimeFormat("en-GB",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(new Date(desired));
+   const parts=Object.fromEntries(formatted.map(v=>[v.type,v.value]));
+   const asUtc=Date.UTC(Number(parts.year),Number(parts.month)-1,Number(parts.day),Number(parts.hour),Number(parts.minute),Number(parts.second));
+   return new Date(desired-(asUtc-desired)).toISOString();
+ }
  async function run(body:Record<string,unknown>,success:string){
    if(pending)return;setPending(true);setError("");setMessage("");
    try{const response=await post(body);setMessage(success);await onRefresh();return response as {path?:string}}catch(e){setError(e instanceof Error?e.message:"Ошибка");return null}finally{setPending(false)}
@@ -97,8 +107,8 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
  async function issue(){
    if(!issueWorker?.objectId)return;
    const resp=await run({action:replace?"rotate":"create",objectId:issueWorker.objectId,workerId:issueWorker.id,
-    config:{...issueConfig,managerName:issueConfig.managerName||undefined,managerPhone:issueConfig.managerPhone||undefined},expiresAt:expiry?new Date(expiry+"T23:59:59").toISOString():undefined,
-    autoRevokeAt:autoRevoke?new Date(autoRevoke+"T23:59:59").toISOString():undefined},
+    config:{...issueConfig,managerName:issueConfig.managerName||undefined,managerPhone:issueConfig.managerPhone||undefined},expiresAt:expiry?endOfDayInZone(expiry,issueConfig.timezone):undefined,
+    autoRevokeAt:autoRevoke?endOfDayInZone(autoRevoke,issueConfig.timezone):undefined},
     "Ссылка выпущена. Она ещё не отправлена сотруднику.");
    if(resp?.path)setIssuedUrl(window.location.origin+resp.path);
  }
@@ -110,6 +120,10 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
    setShareUrl(url);setIssueWorker(w);setIssuedUrl("");setReplace(false);
    try{await navigator.clipboard.writeText(url);setMessage("Ссылка скопирована. Отправьте её сотруднику.")}catch{setMessage("Скопируйте ссылку из поля ниже.")}
  }
+ const visibleImpact=data.links.filter(link=>link.status==="active"&&(
+   scope==="organization" || (link.objectId===selectedObject&&(scope==="object"||link.workerId===workerChoice))
+ )).length;
+ const impactScope=scope==="organization"?"организации":scope==="object"?"объекта":"сотрудника";
  const relevant=data.workers.filter(w=>(!selectedObject||w.objectId===selectedObject));
  return <div className="employee-portal-link-workspace">
    <div className="worker-confirmation-summary"><span>Персональные ссылки сотрудников</span><span>Активных: <b>{data.links.filter(x=>x.status==="active").length}</b></span></div>
@@ -142,6 +156,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
      </div>
      {currentScopeId?<div className="worker-confirmation-configuration">
        <p className="worker-confirmation-note">Пустое поле или «По умолчанию» использует настройки предыдущего уровня. Изменения автоматически применяются и к действующим ссылкам.</p>
+       <p className="worker-confirmation-note">Затронет как минимум {visibleImpact} действующих ссылок среди доступных вам сотрудников. Перед сохранением потребуется подтверждение. Дополнительные ссылки вне вашей области видимости здесь не учитываются.</p>
        <div className="worker-confirmation-toolbar">
          {([["managerName","Имя или роль менеджера"],["managerPhone","Рабочий телефон"],["contactMethod","Мессенджер или способ связи"],["instruction","Инструкция сотруднику"],["timezone","Часовой пояс"]] as const).map(([key,label])=>
            <label key={key}>{label} <input value={(editor[key]??"") as string} placeholder={String(inherited[key]??"Не указано (по умолчанию)")} onChange={e=>editValue(key,e.target.value)} style={{minWidth:180}}/></label>)}
@@ -156,7 +171,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
          </select></label>)}
        </div>
        {scope==="object"&&!effective(undefined,selectedObject).managerPhone&&<p className="worker-confirmation-note">Телефон менеджера не заполнен. Укажите его здесь в поле «Рабочий телефон».</p>}
-       <div className="worker-confirmation-toolbar"><button type="button" className="button primary" disabled={!canEdit||pending||demo} onClick={()=>void run({action:"save_portal_configuration",scope,scopeId:currentScopeId,objectId:selectedObject||undefined,config:editor},"Настройки сохранены")}>Сохранить настройки</button>
+       <div className="worker-confirmation-toolbar"><button type="button" className="button primary" disabled={!canEdit||pending||demo} onClick={()=>{if(window.confirm(`Изменения настроек ${impactScope} применятся минимум к ${visibleImpact} действующим ссылкам доступных вам сотрудников. Продолжить?`))void run({action:"save_portal_configuration",scope,scopeId:currentScopeId,objectId:selectedObject||undefined,config:editor},"Настройки сохранены")}}>Сохранить настройки</button>
          <button type="button" className="button" onClick={()=>setEditor({})}>Сбросить исключения в форме</button>
        </div>
      </div>:<p className="worker-confirmation-note">Выберите объект или сотрудника для просмотра настроек. Настройки организации доступны независимо от наличия ссылки.</p>}
