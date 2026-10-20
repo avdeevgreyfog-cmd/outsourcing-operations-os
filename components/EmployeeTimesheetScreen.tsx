@@ -8,7 +8,7 @@ type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot
 type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean;status?:string};
-type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;onboarding?:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;adjustments?:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
+type Details={clothingSize:string|null;shoeSize:string|null;gloveSize?:string|null;ppeSizeComment?:string|null;sizeRequest?:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:string;managerName:string|null;managerPhone:string|null;onboarding?:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;adjustments?:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
 type Portal={name:string;objectName:string;paidHours:number|null;deadline:string;today:string;timezone:string;periodStatus?:string|null;periodClosedAt?:string|null;disputes?:Array<{date:string;status:string;reason:string;comment:string;createdAt:string}>;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
 type Tab="shifts"|"timesheet"|"more";
 type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo"|"adjustments";
@@ -48,6 +48,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [disputeDate,setDisputeDate]=useState<string|null>(null);const [disputeReason,setDisputeReason]=useState<"hours"|"missing_shift"|"wrong_shift"|"other">("hours");const [disputeComment,setDisputeComment]=useState("");
  const [adjustmentQuestionId,setAdjustmentQuestionId]=useState<string|null>(null);const [adjustmentQuestion,setAdjustmentQuestion]=useState("");
  const [clothingDraft,setClothingDraft]=useState<string|null>(null);const [shoeDraft,setShoeDraft]=useState<string|null>(null);
+ const [gloveDraft,setGloveDraft]=useState<string|null>(null);const [sizeComment,setSizeComment]=useState("");
  const [settingKind,setSettingKind]=useState<"day"|"night">("night");
  const [startTime,setStartTime]=useState("20:00");const [endTime,setEndTime]=useState("08:00");const [nextDay,setNextDay]=useState(true);
  
@@ -64,6 +65,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo||more==="adjustments"&&!sections.payAdjustments?"overview":more;
  const clothing=clothingDraft??data?.details?.clothingSize??"";
  const shoe=shoeDraft??data?.details?.shoeSize??"";
+ const glove=gloveDraft??data?.details?.gloveSize??"";
  const checkedAt=clockNow(data?.timezone??"Europe/Moscow");
  const today=data?.today??new Date().toISOString().slice(0,10),tomorrow=move(today,1);
  const records=useMemo(()=>new Map((data?.planning?.days??[]).map(x=>[x.date,x])),[data?.planning?.days]);
@@ -114,7 +116,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       hours:typeof payload.hours==="number"?payload.hours:("response" in payload?null:old?.hours??null)};
       return {...d,reports:[...d.reports.filter(x=>x.date!==date),r]};});
     }else if(payload.action==="sizes"){
-     setData(d=>d?.details?{...d,details:{...d.details,clothingSize:payload.clothingSize as string,shoeSize:payload.shoeSize as string}}:d);
+     setData(d=>d?.details?{...d,details:{...d.details,sizeRequest:{status:"pending",clothingSize:payload.clothingSize as string,shoeSize:payload.shoeSize as string,gloveSize:payload.gloveSize as string,comment:payload.comment as string}}}:d);
     }else if(payload.action==="document"){
      setData(d=>d?.details?{...d,details:{...d.details,documents:d.details.documents.map(x=>x.code===payload.code?{...x,employeeReported:Boolean(payload.reported)}:x)}}:d);
     }else if(payload.action==="shift_time"){setNotice("Изменение графика передано менеджеру (демонстрация)");}
@@ -283,7 +285,11 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </section>
        </>}
        {activeMore==="workwear"&&<><div className="worker-self-page-title"><div><h1>Спецодежда и СИЗ</h1><p>Укажите размеры и проверьте, что уже выдано на объекте.</p></div></div>
-        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label></div><button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null},"Размеры сохранены")}>Сохранить размеры</button></section>
+        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><p className="worker-self-muted">Подтверждённые менеджером размеры: одежда {data.details?.clothingSize??"не указано"}, обувь {data.details?.shoeSize??"не указано"}, перчатки {data.details?.gloveSize??"не указано"}.</p>
+         {data.details?.sizeRequest?.status==="pending"&&<p className="worker-self-warning">Предложенные размеры ожидают подтверждения менеджера: {data.details.sizeRequest.clothingSize??"—"} / {data.details.sizeRequest.shoeSize??"—"} / {data.details.sizeRequest.gloveSize??"—"}.</p>}
+         <div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label><label>Размер перчаток<input value={glove} onChange={e=>setGloveDraft(e.target.value)} maxLength={40} placeholder="При необходимости"/></label></div>
+         <label>Дополнительные размеры или комментарий<textarea rows={2} maxLength={500} value={sizeComment} onChange={e=>setSizeComment(e.target.value)} placeholder="Например, нужен другой размер куртки"/></label>
+         <button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null,gloveSize:glove.trim()||null,comment:sizeComment.trim()||null},"Размеры отправлены менеджеру на подтверждение")}>Запросить подтверждение размеров</button></section>
         <section className="worker-self-panel worker-self-additional"><div className="worker-self-panel-head"><span>Выдача по объекту</span></div>
          {(data.details?.workwear??[]).map((x,i)=><div className="worker-self-asset-row" key={i}><span><strong>{x.name}</strong>{x.variant&&<small>Размер: {x.variant}</small>}</span><span className={"worker-self-asset-tag "+(x.state==="issued"?"issued":"")}>{x.state==="issued"?"Выдано":"Не выдано"}</span></div>)}
          <p className="worker-self-muted">Если что-то не выдано, обратитесь к менеджеру.</p>
