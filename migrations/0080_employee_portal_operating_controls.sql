@@ -44,8 +44,7 @@ BEGIN
  RETURN COALESCE(NEW,OLD);
 END;
 $$;
-DROP TRIGGER IF EXISTS audit_worker_timesheet_links ON worker_timesheet_links;
-CREATE TRIGGER audit_worker_timesheet_links
+CREATE OR REPLACE TRIGGER audit_worker_timesheet_links
  AFTER INSERT OR UPDATE OR DELETE ON worker_timesheet_links FOR EACH ROW EXECUTE FUNCTION audit_worker_portal_links_redacted();
 
 -- Preserve existing status-trigger behavior; also record why access was blocked.
