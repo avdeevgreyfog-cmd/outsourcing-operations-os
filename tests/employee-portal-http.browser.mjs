@@ -95,8 +95,23 @@ try{
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'worker',scopeId:fixture.worker,objectId:fixture.object,config:{sections:{}}});
  console.log('Existing link inherits object and worker overrides without being reissued');
+ const qaOrg=(await pg.query('SELECT id FROM organizations WHERE slug=$1',[fixture.organization])).rows[0].id;
+ const adjustmentId=(await pg.query(`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
+ VALUES($1,$2,$3,$4::date,$5::date,123.45,'deduction','Проверяемая корректировка','Тестовое удержание только для QA','review',$6) RETURNING id`,
+ [qaOrg,fixture.worker,fixture.object,dates.yesterday,dates.today,fixture.manager])).rows[0].id;
+ await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{payAdjustments:true}}});
+ const adjustmentView=await (await employee.request.get(publicUrl)).json();
+ assert.equal(adjustmentView.details.adjustments.find(x=>x.id===adjustmentId).status,'review');
+ const question=await employee.request.post(publicUrl,{data:{action:'question_adjustment',adjustmentId,question:'Почему указана эта корректировка?'}});
+ assert.equal(question.status(),200,await question.text());
+ const persistedQuestion=(await pg.query('SELECT count(*)::int count FROM worker_pay_adjustment_questions WHERE adjustment_id=$1',[adjustmentId])).rows[0].count;
+ assert.equal(persistedQuestion,1);
+ assert.equal((await pg.query('SELECT count(*)::int count FROM worker_accruals WHERE worker_id=$1 AND period_start=$2::date',[fixture.worker,dates.yesterday])).rows[0].count,0,'question must not create accruals');
+ await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
+ console.log('Opt-in adjustment visibility and employee question create no payroll postings');
  await post('/api/operations/worker-confirmations',{action:'pause',objectId:fixture.object,workerId:fixture.worker});assert.equal((await employee.request.get(publicUrl)).status(),404);assert.equal((await employee.request.post(publicUrl,{data:{date:dates.tomorrow,response:'working',kind:'day'}})).status(),403);await mobile.reload({waitUntil:'networkidle'});await mobile.getByText('Ссылка недействительна или приостановлена',{exact:false}).waitFor();await post('/api/operations/worker-confirmations',{action:'resume',objectId:fixture.object,workerId:fixture.worker});assert.equal((await employee.request.get(publicUrl)).status(),200);
- const rotated=await post('/api/operations/worker-confirmations',{action:'rotate',objectId:fixture.object,workerId:fixture.worker,config:{sections:{documents:false,workwear:false,contacts:false,timesheet:false}}});assert.notEqual(rotated.path,link.path);assert.equal((await employee.request.get(publicUrl)).status(),404);let newPublicUrl=origin+'/api/public/worker-timesheet/'+rotated.path.split('/').at(-1);assert.equal((await employee.request.get(newPublicUrl)).status(),200);
+ const twoDaysExpiry=new Date(Date.now()+2*86400000).toISOString();
+ const rotated=await post('/api/operations/worker-confirmations',{action:'rotate',objectId:fixture.object,workerId:fixture.worker,expiresAt:twoDaysExpiry,config:{sections:{documents:false,workwear:false,contacts:false,timesheet:false}}});assert.equal(rotated.expiresAt,twoDaysExpiry,'temporary link expiry explicitly set by manager');assert.notEqual(rotated.path,link.path);assert.equal((await employee.request.get(publicUrl)).status(),404);let newPublicUrl=origin+'/api/public/worker-timesheet/'+rotated.path.split('/').at(-1);assert.equal((await employee.request.get(newPublicUrl)).status(),200);
  const protectedData=await (await employee.request.get(newPublicUrl)).json();
  assert.equal(protectedData.configuration,undefined,'raw link snapshot must not be exposed');
  assert.equal(protectedData.config.managerPhone,undefined,'hidden contacts must not leak through configuration');
