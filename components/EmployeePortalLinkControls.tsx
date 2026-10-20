@@ -14,7 +14,7 @@ type Worker={id:string;name:string;objectId:string|null;object:string|null;speci
 type Link={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked"|"expired"|"rotated";lastOpenedAt:string|null;lastManagerPreviewAt?:string|null;blockReason?:string|null;createdAt:string;expiresAt?:string|null;autoRevokeAt?:string|null;createdBy?:string|null;changedBy?:string|null};
 type Setting={objectId:string;timezone?:string;managerPhone?:string|null;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
 type Override={scope:"organization"|"object"|"worker";scopeId:string;config:Patch};
-export type LinkPayload=EmployeeBackofficePayload&{
+export type LinkPayload=Omit<EmployeeBackofficePayload,"workers">&{
  organizationId?:string;workers:Worker[];links:Link[];settings:Setting[];objectOptions?:{id:string;name:string}[];
  portalOverrides?:Override[];defaultPortalConfiguration?:PortalConfig;
 };
