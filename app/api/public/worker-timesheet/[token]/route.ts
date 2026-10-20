@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
-import {employeePortal,submitEmployeeReply,assertPortalSectionAllowed,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
+import {employeePortal,submitEmployeeReply,assertPortalSectionAllowed,submitEmployeeHoursDispute,submitEmployeeAdjustmentQuestion,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
 import {employeePortalDetails,updateEmployeePortalDetails} from "@/lib/operations/employee-self-service";
 import {employeePlanning,submitEmployeePlan,submitEmployeeWeek,submitEmployeePattern} from "@/lib/operations/employee-planning";
 const responseSchema=z.object({
@@ -14,6 +14,8 @@ const detailsSchema=z.discriminatedUnion("action",[
  z.object({action:z.literal("document"),code:z.string().max(40),reported:z.boolean()}),
  z.object({action:z.literal("shift_time"),date:z.string().date(),kind:z.enum(["day","night"]).optional(),startTime:z.string().regex(/^\d{2}:\d{2}$/),endTime:z.string().regex(/^\d{2}:\d{2}$/),endsNextDay:z.boolean(),appliesTo:z.enum(["single","regular"])})
 ]);
+const disputeSchema=z.object({action:z.literal("dispute_hours"),date:z.string().date(),reason:z.enum(["hours","missing_shift","wrong_shift","other"]),comment:z.string().trim().min(1).max(500)});
+const questionSchema=z.object({action:z.literal("question_adjustment"),adjustmentId:z.string().uuid(),question:z.string().trim().min(1).max(500)});
 const planningSchema=z.object({action:z.literal("plan_day"),date:z.string().date(),kind:z.enum(["day","night","off"])});
 const weekSchema=z.object({action:z.literal("plan_week"),weekStart:z.string().date(),offDates:z.array(z.string().date()).max(2)});
 const patternSchema=z.object({action:z.literal("pattern_change"),effectiveFrom:z.string().date(),workDays:z.number().int().min(1).max(30),restDays:z.number().int().min(0).max(30),shiftKind:z.enum(["day","night"]),floatingDaysOff:z.boolean()});
@@ -30,7 +32,9 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
     employment:sections.employment?details.employment:"hidden",
     clothingSize:sections.workwear?details.clothingSize:null,
     shoeSize:sections.workwear?details.shoeSize:null,
-    documents:sections.documents?details.documents:[],
+    documents:sections.documents&&(details.onboarding?.stage!=="completed"||details.onboarding?.showAfterCompleted)?details.documents:[],
+    onboarding:sections.documents?details.onboarding:null,
+    adjustments:sections.payAdjustments?details.adjustments:[],
     workwear:sections.workwear?details.workwear:[],
     shiftWindows:sections.shifts?details.shiftWindows:[],
     timeChanges:sections.scheduleChanges?details.timeChanges:[],
@@ -40,7 +44,9 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
   const previousDay=new Date(localDay.getTime()-3*86400000).toISOString().slice(0,10);
   const nextDay=new Date(localDay.getTime()+86400000).toISOString().slice(0,10);
   const safePlanning=planning&&sections.shifts?planning:planning?{...planning,days:planning.days.filter(d=>d.date>=previousDay&&d.date<=nextDay)}:null;
-  const exposedConfig={sections:data.config.sections,instruction:data.config.sections.objectInfo?data.config.instruction:""};
+  const showOnboarding=Boolean(sections.documents&&details?.onboarding&&(details.onboarding.stage!=="completed"||details.onboarding.showAfterCompleted));
+  const visibleSections={...sections,documents:showOnboarding,objectInfo:Boolean(sections.objectInfo&&data.config.showWorkInstruction&&data.config.instruction?.trim())};
+  const exposedConfig={sections:visibleSections,instruction:visibleSections.objectInfo?data.config.instruction:"",showWorkInstruction:visibleSections.objectInfo};
   const {configuration:unusedInternalSnapshot,...safeData}=data;
   void unusedInternalSnapshot;
   return NextResponse.json({...safeData,config:exposedConfig,
@@ -54,10 +60,14 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
   const {token}=await params;const raw=await request.json();
-  const section=raw?.action==="document"?"documents":raw?.action==="sizes"?"workwear":raw?.action==="shift_time"||raw?.action==="plan_day"||raw?.action==="plan_week"||raw?.action==="pattern_change"?"scheduleChanges":raw?.hours!==undefined?"hours":raw?.response==="cannot_work"?"decline":raw?.response==="day_off"?"scheduleChanges":"confirm";
+  const section=raw?.action==="dispute_hours"?"timesheet":raw?.action==="question_adjustment"?"payAdjustments":raw?.action==="document"?"documents":raw?.action==="sizes"?"workwear":raw?.action==="shift_time"||raw?.action==="plan_day"||raw?.action==="plan_week"||raw?.action==="pattern_change"?"scheduleChanges":raw?.hours!==undefined?"hours":raw?.response==="cannot_work"?"decline":raw?.response==="day_off"?"scheduleChanges":"confirm";
   await assertPortalSectionAllowed(token,section);
   const result=raw&&typeof raw==="object"&&"action" in raw
-    ?raw.action==="plan_week"
+    ?raw.action==="dispute_hours"
+      ?await (async()=>{const input=disputeSchema.parse(raw);return submitEmployeeHoursDispute(token,input)})()
+      :raw.action==="question_adjustment"
+      ?await (async()=>{const input=questionSchema.parse(raw);return submitEmployeeAdjustmentQuestion(token,input)})()
+      :raw.action==="plan_week"
       ?await (async()=>{const input=weekSchema.parse(raw);return submitEmployeeWeek(token,input.weekStart,input.offDates)})()
       :raw.action==="pattern_change"
       ?await (async()=>{const input=patternSchema.parse(raw);return submitEmployeePattern(token,input)})()
