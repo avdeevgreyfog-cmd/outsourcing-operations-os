@@ -207,7 +207,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       // Retain old token registrations and histories; never restore an old token after rehiring.
       await tx`INSERT INTO worker_portal_events(organization_id,worker_id,object_id,link_id,actor_user_id,event_type,details)
         SELECT l.organization_id,l.worker_id,l.object_id,l.id,${actor.userId}::uuid,'blocked_on_exit',
-               jsonb_build_object('effectiveDate',${body.effectiveDate},'source','offboarding')
+               jsonb_build_object('effectiveDate',${body.effectiveDate}::date,'source','offboarding')
         FROM worker_timesheet_links l
         WHERE l.organization_id=${actor.organizationId}::uuid AND l.worker_id=${id}::uuid
           AND l.status IN ('active','paused')`;
