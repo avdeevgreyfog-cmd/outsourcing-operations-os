@@ -367,15 +367,15 @@ export async function reviewEmployeeHours(actor:Actor,objectId:string,workerId:s
        // Existing manager fact matches the approved hours and must not be overwritten.
      }else if(entries.length){
        const entry=entries[0];
-       await sql`UPDATE time_entries SET planned=true,time_code='WORK',fact_hours=${finalHours},
+       await sql`UPDATE time_entries SET planned=true,time_code='WORK',fact_hours=${finalHours},shift_id=COALESCE(shift_id,${report.shiftId}::uuid),
           day_hours=${kind==="day"?finalHours:0},night_hours=${kind==="night"?finalHours:0},
           planned_shift_kind=${kind},source='manual',corrected_by_user_id=${actor.userId}::uuid,
           correction_reason=${comment?.trim()||"Часы подтверждены менеджером по ответу сотрудника"},updated_at=now()
           WHERE id=${entry.id}::uuid`;
      }else{
-       await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,
+       await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,shift_id,planned,time_code,fact_hours,
          day_hours,night_hours,planned_shift_kind,source,corrected_by_user_id,correction_reason)
-         VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${objectId}::uuid,${date}::date,true,'WORK',${finalHours},
+         VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${objectId}::uuid,${date}::date,${report.shiftId}::uuid,true,'WORK',${finalHours},
          ${kind==="day"?finalHours:0},${kind==="night"?finalHours:0},${kind},'manual',${actor.userId}::uuid,
          ${comment?.trim()||"Часы подтверждены менеджером по ответу сотрудника"})`;
      }
