@@ -67,5 +67,13 @@ export async function loadPortalOverrides(sql:Sql,organizationId:string,objectId
 }
 export async function effectivePortalConfiguration(sql:Sql,organizationId:string,objectId:string,workerId:string,issuePatch?:PortalConfigurationPatch){
  const overrides=await loadPortalOverrides(sql,organizationId,objectId,workerId);
- return resolvePortalConfiguration([overrides.organization,overrides.object,overrides.worker,issuePatch??{}]);
+ const [legacy]=await sql<Array<{timezone:string|null;managerPhone:string|null;documents:boolean;workwear:boolean}>>`
+ SELECT timezone,manager_phone "managerPhone",show_employee_documents documents,show_employee_workwear workwear
+ FROM object_shift_reporting_settings WHERE object_id=${objectId}::uuid`;
+ const fallback:PortalConfigurationPatch=legacy?{
+  ...(legacy.managerPhone?{managerPhone:legacy.managerPhone}:{}),
+  ...(legacy.timezone&&legacy.timezone!=="Europe/Moscow"?{timezone:legacy.timezone}:{}),
+  sections:{...(legacy.documents===false?{documents:false}:{}),...(legacy.workwear===false?{workwear:false}:{})}
+ }:{};
+ return resolvePortalConfiguration([overrides.organization,fallback,overrides.object,overrides.worker,issuePatch??{}]);
 }
