@@ -109,6 +109,8 @@ export async function editWorkerLink(actor:Actor,objectId:string,workerId:string
      WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${workerId}::uuid AND w.status='active'
      AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=w.organization_id AND a.worker_id=w.id AND a.object_id=${objectId}::uuid
        AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date))
+     AND NOT EXISTS(SELECT 1 FROM worker_exit_processes e WHERE e.organization_id=w.organization_id AND e.worker_id=w.id
+       AND e.status IN ('planned','completed') AND e.effective_date<=current_date)
      FOR UPDATE OF w`;
    if(!worker)throw new EmployeePortalError("Сотрудник больше не работает на объекте");
    const [current]=await sql<Array<{id:string;status:string;ciphertext:string;valid:boolean}>>`
@@ -182,6 +184,8 @@ export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;link
       AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active'
       AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=l.organization_id AND a.worker_id=l.worker_id AND a.object_id=l.object_id
         AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date))
+      AND NOT EXISTS(SELECT 1 FROM worker_exit_processes e WHERE e.organization_id=l.organization_id AND e.worker_id=l.worker_id
+        AND e.status IN ('planned','completed') AND e.effective_date<=current_date)
       AND NOT EXISTS(SELECT 1 FROM object_shift_reporting_settings s WHERE s.organization_id=l.organization_id AND s.object_id=l.object_id AND NOT s.reporting_enabled)
     FOR UPDATE OF l
   `;
@@ -220,7 +224,10 @@ export async function employeePortal(token:string,selectedMonth?:string){
       LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=w.id AND wa.object_id=o.id
       WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${tokenHash(token)} AND l.status='active'
         AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now())
-        AND w.status='active' ORDER BY a.effective_from DESC LIMIT 1`;
+        AND w.status='active'
+        AND NOT EXISTS(SELECT 1 FROM worker_exit_processes e WHERE e.organization_id=l.organization_id AND e.worker_id=l.worker_id
+          AND e.status IN ('planned','completed') AND e.effective_date<=current_date)
+      ORDER BY a.effective_from DESC LIMIT 1`;
     if(!link||!link.reportingEnabled)return null;
     const activeConfig=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
     const local=new Intl.DateTimeFormat("en-GB",{timeZone:activeConfig.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
