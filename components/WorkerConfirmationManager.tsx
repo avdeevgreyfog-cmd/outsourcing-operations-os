@@ -4,7 +4,7 @@ import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import {EmployeePortalLinkControls,type LinkPayload} from "@/components/EmployeePortalLinkControls";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number;workDays?:number|null;restDays?:number|null;shiftKind?:"day"|"night"|"mixed"|null};
-type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:"pending"|"approved"|"rejected";approvedHours?:number|null;reviewedAt?:string|null;reviewComment?:string|null};
+type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;employeeRespondedAt?:string|null;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:"pending"|"approved"|"rejected";approvedHours?:number|null;reviewedAt?:string|null;reviewComment?:string|null};
 type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 type Setting={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;managerPhone?:string|null;planningHorizonDays?:number;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
@@ -121,7 +121,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
      {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{(()=>{const p=plans.get(w.id+":"+w.objectId+":"+day);return !p?"Не запланировано":p.timeCode==="DAY_OFF"?"Выходной":p.kind==="night"?"Ночь":p.kind==="day"?"День":"Смена"})()}</td><td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}{r?.hours!=null&&w.paidHours!==r.hours&&<span className="cell-sub">Норма: {w.paidHours} ч · отклонение</span>}</td>
  <td>{r?.hours!=null?(r.reviewStatus==="approved"||r.reconciledAt?"Подтверждено менеджером":r.reviewStatus==="rejected"?"Отклонено":"Требует проверки"):"—"}{r?.approvedHours!=null&&<span className="cell-sub">Итог: {r.approvedHours} ч</span>}
  {r&&<span className="cell-sub">Сотрудник по персональной ссылке{r.reviewedAt?" · проверено "+new Date(r.reviewedAt).toLocaleString("ru-RU"):""}</span>}</td>
- <td>{r?.updatedAt?new Date(r.updatedAt).toLocaleString("ru-RU"):"—"}</td>
+ <td>{r?.employeeRespondedAt?new Date(r.employeeRespondedAt).toLocaleString("ru-RU"):"—"}</td>
  <td>{canReconcile&&r?.hours!=null&&r.reviewStatus!=="approved"&&!r.reconciledAt&&<button type="button" className="button" disabled={!!busy} onClick={()=>{setHoursReview({worker:w,report:r});setApprovedHours(String(r.hours));setReviewComment("");}}>Проверить часы</button>}</td></tr>})}
     </tbody></table>{!visible.length&&<div className="empty-inline">Нет сотрудников по выбранным условиям</div>}</div>
    </>:mode==="updates"?<>
@@ -162,7 +162,7 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
     <button className="button primary" disabled={!!busy||!approvedHours.trim()||!Number.isFinite(Number(approvedHours))||Number(approvedHours)<=0||Number(approvedHours)>24} onClick={()=>{const {worker,report}=hoursReview;setHoursReview(null);void action({action:"review_hours",objectId:report.objectId,workerId:worker.id,date:report.date,approve:true,approvedHours:Number(approvedHours),comment:reviewComment})}}>Подтвердить часы</button></>}>
    <p>{hoursReview.worker.name} · {dateLabel(hoursReview.report.date)} · {hoursReview.worker.object??"Объект"}</p>
    <p>Плановая норма: {hoursReview.worker.paidHours} ч · сообщил сотрудник: {hoursReview.report.hours} ч</p>
-   <p>Источник: сотрудник по персональной ссылке · {new Date(hoursReview.report.updatedAt).toLocaleString("ru-RU")}</p>
+   <p>Источник: сотрудник по персональной ссылке · {hoursReview.report.employeeRespondedAt?new Date(hoursReview.report.employeeRespondedAt).toLocaleString("ru-RU"):"время не указано"}</p>
    {hoursReview.report.reason&&<p>Причина отклонения: {hoursReview.report.reason}</p>}
    <label>Итоговые часы<input type="number" min={0.01} max={24} step={0.25} value={approvedHours} onChange={e=>setApprovedHours(e.target.value)}/></label>
    <label>Комментарий менеджера<textarea rows={3} maxLength={500} value={reviewComment} onChange={e=>setReviewComment(e.target.value)} placeholder="Причина исправления или отклонения"/></label>
