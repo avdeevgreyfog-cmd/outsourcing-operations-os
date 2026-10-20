@@ -308,6 +308,67 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
   });
 }
 
+export async function reviewEmployeeHours(actor:Actor,objectId:string,workerId:string,date:string,approved:boolean,approvedHours?:number,comment?:string){
+ requireCapability(actor,"time.time_entry.edit");
+ const object=await assertManage(actor,objectId,workerId);
+ if(!canReadRow(actor.access,"time.time_entry.edit",object,actor))throw new AccessDeniedError("time.time_entry.edit");
+ if(actor.demo)throw new EmployeePortalError("Сверка недоступна в демонстрации");
+ if(approvedHours!==undefined&&(!Number.isFinite(approvedHours)||approvedHours<=0||approvedHours>24))throw new EmployeePortalError("Укажите часы от 0,01 до 24");
+ if((comment?.length??0)>500)throw new EmployeePortalError("Комментарий слишком длинный");
+ return withTenant(actor.organizationId,actor.userId,async(sql)=>{
+   const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots
+     WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid
+       AND period_start<=${date}::date AND period_end>=${date}::date
+       AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
+   if(locked)throw new EmployeePortalError("Табель за эту дату уже зафиксирован");
+   const [report]=await sql<Array<{id:string;hours:number|null;response:string;kind:string|null;status:string;reason:string|null;linkId:string}>>`
+     SELECT id,reported_hours::float8 hours,response,shift_kind kind,review_status status,reason,source_link_id "linkId"
+     FROM worker_shift_reports WHERE organization_id=${actor.organizationId}::uuid
+       AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND work_date=${date}::date FOR UPDATE`;
+   if(!report||report.hours===null||report.response!=="working")throw new EmployeePortalError("Нет переданных сотрудником часов для проверки");
+   if(report.status==="approved")throw new EmployeePortalError("Часы уже подтверждены. Корректировку проводите через табель с записью в историю.");
+   if(!approved&&!comment?.trim())throw new EmployeePortalError("Для отклонения укажите причину");
+   const finalHours=approvedHours??report.hours;
+   if(approved&&(finalHours<=0||finalHours>24))throw new EmployeePortalError("Некорректные итоговые часы");
+   if(approved){
+     const entries=await sql<Array<{id:string;source:string;shiftId:string|null}>>`
+       SELECT id,source,shift_id "shiftId" FROM time_entries
+       WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid
+         AND worker_id=${workerId}::uuid AND work_date=${date}::date
+       ORDER BY (shift_id IS NULL) DESC,updated_at DESC FOR UPDATE`;
+     if(entries.filter(e=>e.shiftId!==null).length>1&&entries.every(e=>e.shiftId!==null))
+       throw new EmployeePortalError("На эту дату назначено несколько смен. Проверьте часы в табеле вручную.");
+     const kind=report.kind==="night"?"night":"day";
+     if(entries.length){
+       const entry=entries[0];
+       await sql`UPDATE time_entries SET planned=true,time_code='WORK',fact_hours=${finalHours},
+          day_hours=${kind==="day"?finalHours:0},night_hours=${kind==="night"?finalHours:0},
+          planned_shift_kind=${kind},source='manual',corrected_by_user_id=${actor.userId}::uuid,
+          correction_reason=${comment?.trim()||"Часы подтверждены менеджером по ответу сотрудника"},updated_at=now()
+          WHERE id=${entry.id}::uuid`;
+     }else{
+       await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,
+         day_hours,night_hours,planned_shift_kind,source,corrected_by_user_id,correction_reason)
+         VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${objectId}::uuid,${date}::date,true,'WORK',${finalHours},
+         ${kind==="day"?finalHours:0},${kind==="night"?finalHours:0},${kind},'manual',${actor.userId}::uuid,
+         ${comment?.trim()||"Часы подтверждены менеджером по ответу сотрудника"})`;
+     }
+   }
+   await sql`UPDATE worker_shift_reports SET review_status=${approved?"approved":"rejected"},
+      approved_hours=${approved?finalHours:null},review_comment=${comment?.trim()||null},
+      reviewed_at=now(),reviewed_by_user_id=${actor.userId}::uuid,
+      hours_reconciled_at=CASE WHEN ${approved} THEN now() ELSE NULL END,
+      hours_reconciled_by_user_id=CASE WHEN ${approved} THEN ${actor.userId}::uuid ELSE NULL END,updated_at=now()
+      WHERE id=${report.id}::uuid`;
+   await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
+      VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'worker',${workerId}::uuid,
+      ${approved?"employee_hours_approved":"employee_hours_rejected"},
+      ${approved?"Менеджер подтвердил часы сотрудника":"Менеджер отклонил часы сотрудника"},
+      ${sql.json({objectId,date,employeeHours:report.hours,approvedHours:approved?finalHours:null,comment:comment??null,sourceLinkId:report.linkId})})`;
+   return {ok:true,approvedHours:approved?finalHours:null};
+ });
+}
+
 export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDate:string,toDate:string){
   requireCapability(actor,"time.time_entry.edit");
   const object=await assertManage(actor,objectId);
