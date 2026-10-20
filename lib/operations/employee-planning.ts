@@ -271,7 +271,7 @@ export async function submitEmployeeWeek(token:string,weekStart:string,offDates:
  const s=await scopeForToken(token);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)||new Date(weekStart+"T00:00:00Z").getUTCDay()!==1)throw new EmployeePortalError("Выберите неделю, начиная с понедельника");
  const dates=Array.from({length:7},(_,i)=>addDays(weekStart,i));
- if(weekStart<s.today||dates[6]>addDays(s.today,s.horizon))throw new EmployeePortalError("Выберите полную будущую неделю в пределах горизонта планирования");
+ if(weekStart<=s.today||dates[6]>addDays(s.today,s.horizon))throw new EmployeePortalError("Выберите полную будущую неделю в пределах горизонта планирования");
  if(new Set(offDates).size!==offDates.length||offDates.some(d=>!dates.includes(d)))throw new EmployeePortalError("Проверьте выбранные выходные");
  return withTenant(s.org,s.actor,async sql=>{
   await assertEmployeeLinkActive(sql,{tenantId:s.org,linkId:s.link},token);
@@ -280,7 +280,8 @@ export async function submitEmployeeWeek(token:string,weekStart:string,offDates:
   const workDays=p?.workDays??s.workDays,restDays=p?.restDays??s.restDays;
   if(!p?.floating||!(workDays===5&&restDays===2||workDays===6&&restDays===1))throw new EmployeePortalError("Плавающие выходные не разрешены в текущем графике");
   if(offDates.length!==restDays)throw new EmployeePortalError(restDays===1?"На неделе должен быть один выходной":"На неделе должно быть два выходных");
-  const status=s.owner==="worker"?"accepted":"proposed";
+  // Proposed floating days off require manager approval even if the employee can plan other shifts.
+  const status="proposed" as const;
   for(const date of dates){
    await ensureNotLocked(sql,s,date);
    const kind:PlannedKind=offDates.includes(date)?"off":p?.kind??s.defaultKind??"day";
