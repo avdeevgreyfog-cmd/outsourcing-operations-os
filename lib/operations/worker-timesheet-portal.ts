@@ -164,6 +164,17 @@ export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;link
   if(!row)throw new EmployeePortalAccessError("Ссылка недействительна или заблокирована");
 }
 
+export async function assertPortalSectionAllowed(token:string,section:keyof PortalConfiguration["sections"]){
+ const ref=await resolveToken(token);
+ if(!ref)throw new EmployeePortalAccessError("Ссылка недействительна");
+ return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
+  await assertEmployeeLinkActive(sql,ref,token);
+  const [row]=await sql<Array<{snapshot:PortalConfigurationPatch}>>`SELECT portal_config_snapshot snapshot FROM worker_timesheet_links WHERE id=${ref.linkId}::uuid`;
+  if(!row||!applyPortalPatch(defaultPortalConfiguration,row.snapshot??{}).sections[section])
+   throw new EmployeePortalAccessError("Раздел недоступен по этой ссылке");
+ });
+}
+
 export async function employeePortal(token:string,selectedMonth?:string){
   const ref=await resolveToken(token);if(!ref)return null;
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
@@ -381,14 +392,15 @@ export async function reconcileEmployeeHours(actor:Actor,objectId:string,fromDat
       AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
     if(locked)throw new EmployeePortalError("В выбранном периоде есть зафиксированный табель");
     const reviewed=await sql<Array<{workerId:string;date:string}>>`UPDATE worker_shift_reports r
-      SET hours_reconciled_at=now(),hours_reconciled_by_user_id=${actor.userId}::uuid,updated_at=now()
+      SET hours_reconciled_at=now(),hours_reconciled_by_user_id=${actor.userId}::uuid,review_status='approved',approved_hours=r.reported_hours,reviewed_at=now(),reviewed_by_user_id=${actor.userId}::uuid,updated_at=now()
       FROM time_entries t WHERE t.worker_id=r.worker_id AND t.object_id=r.object_id AND t.work_date=r.work_date
         AND r.object_id=${objectId}::uuid AND r.work_date BETWEEN ${fromDate}::date AND ${toDate}::date
-        AND r.reported_hours IS NOT NULL AND r.hours_reconciled_at IS NULL AND t.time_code='WORK' AND t.fact_hours>0
+        AND r.reported_hours IS NOT NULL AND r.hours_reconciled_at IS NULL AND r.review_status='pending' AND t.source='worker_report' AND t.time_code='WORK' AND t.fact_hours>0 AND abs(t.fact_hours-r.reported_hours)<0.001
       RETURNING r.worker_id "workerId",r.work_date::text date`;
     await sql`UPDATE time_entries SET source='manual',corrected_by_user_id=${actor.userId}::uuid,
       correction_reason='Промежуточная сверка с заказчиком',updated_at=now()
       WHERE object_id=${objectId}::uuid AND work_date BETWEEN ${fromDate}::date AND ${toDate}::date AND source='worker_report'
+      AND EXISTS(SELECT 1 FROM worker_shift_reports r WHERE r.worker_id=time_entries.worker_id AND r.object_id=time_entries.object_id AND r.work_date=time_entries.work_date AND r.review_status='approved' AND r.hours_reconciled_by_user_id=${actor.userId}::uuid)
       RETURNING id`;
     await sql`INSERT INTO object_timesheet_reconciliations(organization_id,object_id,period_start,period_end,reconciled_by_user_id,checked_worker_reports)
       VALUES(${actor.organizationId}::uuid,${objectId}::uuid,${fromDate}::date,${toDate}::date,${actor.userId}::uuid,${reviewed.length})`;
