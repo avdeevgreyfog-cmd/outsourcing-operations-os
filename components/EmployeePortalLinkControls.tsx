@@ -134,7 +134,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
      <thead><tr><th>Сотрудник</th><th>Объект</th><th>Ссылка</th><th>Выпущена / кем</th><th>Действует до</th><th>Открыто сотрудником</th><th>Предпросмотр менеджера</th><th>Действия</th></tr></thead>
      <tbody>{relevant.map(w=>{const l=data.links.find(x=>x.workerId===w.id&&x.objectId===w.objectId);
        return <tr key={w.id}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>
-         <td>{w.object??"—"}</td><td>{l?labels[l.status]:"Не создана"}</td>
+         <td>{w.object??"—"}</td><td>{l?labels[l.status]:"Не создана"}{l?.blockReason&&<span className="cell-sub">{({dismissal:"Причина: увольнение",manual:"Причина: ручной отзыв",expired:"Причина: истечение срока",rotated:"Причина: перевыпуск"} as Record<string,string>)[l.blockReason]??""}</span>}{l?.status==="expired"&&!l.blockReason&&<span className="cell-sub">Причина: истёк установленный срок</span>}</td>
          <td>{when(l?.createdAt)}<span className="cell-sub">{l?.changedBy??l?.createdBy??"—"}</span></td>
          <td>{when(l?.expiresAt)}{l?.autoRevokeAt&&<span className="cell-sub">Автоотзыв: {when(l.autoRevokeAt)}</span>}</td>
          <td>{when(l?.lastOpenedAt)}</td><td>{when(l?.lastManagerPreviewAt)}</td>
