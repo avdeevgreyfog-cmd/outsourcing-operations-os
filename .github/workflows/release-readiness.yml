@@ -49,31 +49,41 @@ jobs:
       identity: ${{ steps.identity.outputs.identity }}
     env:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      PRODUCTION_BASE_URL: ${{ vars.PRODUCTION_BASE_URL }}
     steps:
-      - name: Require production database secret
-        shell: bash
-        run: |
-          test -n "$DATABASE_URL" || {
-            echo "::error::PRODUCTION_DATABASE_URL is not configured in the production environment."
-            exit 1
-          }
       - id: identity
-        name: Compute safe production database identity
+        name: Verify actual production PostgreSQL identity without leaking credentials
         shell: bash
         run: |
-          node - <<'NODE'
-          const crypto = require("node:crypto");
-          const raw = process.env.DATABASE_URL;
+          set -euo pipefail
+          if [ -n "$DATABASE_URL" ]; then
+            node - <<'NODE'
+          const crypto=require('node:crypto');
+          const raw=process.env.DATABASE_URL;
           let source;
-          try {
-            const url = new URL(raw);
-            source = `${url.hostname.toLowerCase()}:${url.port || "default"}${url.pathname}`;
-          } catch {
-            source = raw.replace(/\/\/[^@]+@/, "//");
-          }
-          const identity = crypto.createHash("sha256").update(source).digest("hex").slice(0,16);
-          require("node:fs").appendFileSync(process.env.GITHUB_OUTPUT, `identity=${identity}\n`);
+          try{const url=new URL(raw);source=`${url.hostname.toLowerCase()}:${url.port||'default'}${url.pathname}`;}
+          catch{source=raw.replace(/\\/\\/[^@]+@/,'//');}
+          const identity=crypto.createHash('sha256').update(source).digest('hex').slice(0,16);
+          require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT,`identity=${identity}\\n`);
           NODE
+          else
+            test -n "$PRODUCTION_BASE_URL" || { echo "::error::PRODUCTION_BASE_URL is required when PRODUCTION_DATABASE_URL is not configured."; exit 1; }
+            node - <<'NODE'
+          const u=new URL(process.env.PRODUCTION_BASE_URL);
+          if(u.protocol!=='https:'||u.hostname!=='outsourcing-operations-os-g942.vercel.app'||u.username||u.password||u.pathname!=='/'||u.search||u.hash)
+            throw new Error('Production status URL must be the verified canonical production origin');
+          NODE
+            curl --fail --silent --show-error --max-time 20 -o /tmp/operis-production-status.json "${PRODUCTION_BASE_URL%/}/api/system/status"
+            node - <<'NODE'
+          const crypto=require('node:crypto');
+          const fs=require('node:fs');
+          const p=JSON.parse(fs.readFileSync('/tmp/operis-production-status.json','utf8'));
+          if(p.ok!==true||p.environment!=='production'||p.databaseConfigured!==true||!/^[a-f0-9]{16}$/.test(p.databaseIdentity??''))
+            throw new Error('The production runtime did not prove its identity and PostgreSQL connection');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`identity=${p.databaseIdentity}\\n`);
+          console.log('Production database identity verified from the live production runtime');
+          NODE
+          fi
 
   verify-database-boundary:
     runs-on: ubuntu-latest
