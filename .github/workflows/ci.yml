@@ -92,6 +92,11 @@ jobs:
           CI_SMOKE_BASE_URL=http://127.0.0.1:3100 node scripts/verify-ci-workspace-smoke.mjs || { echo "----- OPERIS server log -----"; cat /tmp/operis-ci-server.log; exit 1; }
           CI_SMOKE_BASE_URL=http://127.0.0.1:3100 node scripts/verify-commercial-editability-smoke.mjs || { echo "----- OPERIS server log -----"; cat /tmp/operis-ci-server.log; exit 1; }
 
+      - name: Install isolated browser for employee portal E2E
+        run: npx playwright install --with-deps chromium
+      - name: Verify real employee portal HTTP on mobile and desktop
+        run: npm run test:employee-http
+
 
   pages-demo:
     runs-on: ubuntu-latest
