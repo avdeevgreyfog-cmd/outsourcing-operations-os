@@ -14,7 +14,7 @@ type Link={id:string;workerId:string;objectId:string;status:"active"|"paused"|"r
 type Setting={objectId:string;timezone?:string;managerPhone?:string|null;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
 type Override={scope:"organization"|"object"|"worker";scopeId:string;config:Patch};
 export type LinkPayload={
- organizationId?:string;workers:Worker[];links:Link[];settings:Setting[];
+ organizationId?:string;workers:Worker[];links:Link[];settings:Setting[];objectOptions?:{id:string;name:string}[];
  portalOverrides?:Override[];defaultPortalConfiguration?:PortalConfig;
 };
 const sections:[PortalSection,string][]=[
@@ -52,7 +52,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
  const selectedObject=objectId??objectChoice;
- const options=useMemo(()=>[...new Map(data.workers.filter(w=>w.objectId).map(w=>[w.objectId!,w.object??"Объект"])).entries()].sort((a,b)=>a[1].localeCompare(b[1],"ru")),[data.workers]);
+ const options=useMemo(()=>[...new Map([...(data.objectOptions??[]).map(o=>[o.id,o.name] as [string,string]),...data.workers.filter(w=>w.objectId).map(w=>[w.objectId!,w.object??"Объект"] as [string,string])]).entries()].sort((a,b)=>a[1].localeCompare(b[1],"ru")),[data.workers,data.objectOptions]);
  const people=data.workers.filter(w=>w.objectId===selectedObject);
  const orgId=data.organizationId??"";
  const currentScopeId=scope==="organization"?orgId:scope==="object"?selectedObject:workerChoice;
