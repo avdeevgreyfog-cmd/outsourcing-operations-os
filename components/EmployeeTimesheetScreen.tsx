@@ -136,7 +136,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    const ok=await save({date:completed.date,hours:submitted,reason:hoursComment.trim()||undefined},"Часы переданы для проверки менеджеру");if(ok){setHourEdit(false);setHoursComment("")}
  }
  async function planDay(date:string,kind:Kind){if(busy)return;const direct=data?.planning.owner==="worker"&&data?.planning.floatingDaysOff;const ok=await save({action:"plan_day",date,kind},direct?"График обновлён":"Предложение передано менеджеру");if(ok)setEditingDay(null)}
- async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},data.planning.owner==="worker"?"Выходные на неделю сохранены":"Предложение по выходным отправлено"))setWeekEditing(false)}
+ async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},"Предложение по выходным отправлено менеджеру"))setWeekEditing(false)}
  function openSettings(){setTab("more");setMore("settings");setSettingsEditing(false);setWorkPattern((data?.planning.workDays??5)+"/"+(data?.planning.restDays??2));setPatternFloating(Boolean(data?.planning.floatingDaysOff));setEffectiveFrom(tomorrow);setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??(d?.kind==="day"?"08:00":"20:00"));setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
  const managerCall=sections.contacts?data?.details?.managerPhone?.replace(/[^+\d]/g,""):undefined;
  const activeDisputes=new Set((data?.disputes??[]).filter(x=>x.status==="open"||x.status==="in_review").map(x=>x.date));
@@ -222,12 +222,12 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </div>)}
        </div>
        {sections.scheduleChanges&&canEditWeek&&<div className="worker-self-week-tool">
-        <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Выберите {(data.planning.restDays??0)===1?"один день отдыха":"два дня отдыха"} на следующую неделю. Рабочие смены выставятся автоматически.</p></div>
+        <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Предложите {(data.planning.restDays??0)===1?"один выходной":"два выходных"} на неделю {smallDate(fullWeek[0])}–{smallDate(fullWeek[6])}. До {smallDate(move(fullWeek[0],-1))} можно отправить пожелания. График изменится только после подтверждения менеджером.</p></div>
         <button className="worker-self-light-button" onClick={()=>{setWeekEditing(x=>!x);setRestDates(fullWeek.filter(d=>records.get(d)?.kind==="off"))}}>{weekEditing?"Свернуть":"Выбрать дни отдыха"}</button>
         {weekEditing&&<div className="worker-self-week-editor">
          <div className="worker-self-week-label">Неделя {smallDate(fullWeek[0])}–{smallDate(fullWeek[6])} · {restDates.length} из {data.planning.restDays??0} выходных</div>
          <div className="worker-self-week-grid">{fullWeek.map(date=><button key={date} className={restDates.includes(date)?"off":""} onClick={()=>setRestDates(old=>old.includes(date)?old.filter(x=>x!==date):old.length<(data.planning.restDays??0)?[...old,date]:old)}><strong>{new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}</strong><span>{date.slice(8)}</span>{restDates.includes(date)?"Вых.":"Раб."}</button>)}</div>
-         <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Сохранить неделю</button>
+         <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Отправить предложение</button>
         </div>}
        </div>}
       </section>}
