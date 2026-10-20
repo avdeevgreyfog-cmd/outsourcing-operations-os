@@ -24,7 +24,7 @@ export type PortalDetails={
  clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;sizeRequest:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
  documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean;status:string}>;
  onboarding:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;
- adjustments:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;
+ adjustments:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string;createdAt:string}>;
  workwear:Array<{name:string;state:"issued"|"needed";variant:string|null}>;
  visibility:{documents:boolean;workwear:boolean;employment:boolean;contacts:boolean};
  shiftWindows:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean}>;
@@ -58,9 +58,11 @@ async function authorizedEmployee(token:string){
  });
 }
 function createHashToken(raw:string){return createHash("sha256").update(raw).digest("hex")}
-export async function employeePortalDetails(token:string):Promise<PortalDetails|null>{
+export async function employeePortalDetails(token:string,selectedMonth?:string):Promise<PortalDetails|null>{
  const scope=await authorizedEmployee(token);if(!scope)return null;
  const {ref,link}=scope;
+ const period=selectedMonth&&/^\d{4}-(0[1-9]|1[0-2])$/.test(selectedMonth)?selectedMonth:null;
+ const from=period?period+"-01":new Date().toISOString().slice(0,7)+"-01";
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
   const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges,onboarding,adjustments,sizeRequests]=await Promise.all([
    sql<Array<{clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;managerName:string|null;managerPhone:string|null}>>`
@@ -107,11 +109,12 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
    sql<Array<{stage:string;comment:string|null;showAfterCompleted:boolean}>>`
     SELECT stage,employee_comment comment,show_after_completed "showAfterCompleted" FROM worker_onboarding_status
     WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid LIMIT 1`,
-   sql<Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>>`
+   sql<Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string;createdAt:string}>>`
     SELECT id,period_start::text "periodStart",period_end::text "periodEnd",amount::float8 amount,adjustment_type "adjustmentType",
-      reason,employee_description description,status FROM worker_pay_adjustments
+      reason,employee_description description,status,created_at::text "createdAt" FROM worker_pay_adjustments
     WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-      AND status IN ('review','confirmed','accounted') ORDER BY period_start DESC LIMIT 25`,
+      AND period_start < (${from}::date+interval '1 month') AND period_end>=${from}::date
+      ORDER BY period_start DESC,created_at DESC LIMIT 100`,
     sql<Array<{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}>>`
       SELECT status,clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment FROM worker_ppe_size_requests
       WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
