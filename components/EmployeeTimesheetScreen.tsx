@@ -18,7 +18,7 @@ function smallDate(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digi
 function clockNow(timezone:string){const f=new Intl.DateTimeFormat("en-GB",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date());const o=Object.fromEntries(f.map(x=>[x.type,x.value]));return `${o.year}-${o.month}-${o.day}T${o.hour}:${o.minute}`}
 function demo():Portal{
  const today=new Date().toISOString().slice(0,10);
- const days=Array.from({length:19},(_,i)=>{const date=move(today,i-7),weekday=new Date(date+"T00:00:00Z").getUTCDay(),kind:Kind=weekday===0||weekday===6?"off":"night";return{date,kind,source:"cycle" as const,proposal:null,proposalStatus:null,startTime:"20:00",endTime:"08:00",endsNextDay:true}});
+ const days=Array.from({length:50},(_,i)=>{const date=move(today,i-35),weekday=new Date(date+"T00:00:00Z").getUTCDay(),kind:Kind=weekday===0||weekday===6?"off":"night";return{date,kind,source:"cycle" as const,proposal:null,proposalStatus:null,startTime:"20:00",endTime:"08:00",endsNextDay:true}});
  return {name:"Иванов Иван",objectName:"Можайское · Комплектовщик",paidHours:11,deadline:"22:00",today,timezone:"Europe/Moscow",
   selectedMonth:today.slice(0,7),reports:[],plans:Array.from({length:42},(_,i)=>({date:move(today,-i-1),timeCode:"WORK",hours:i%7<5?11:0,kind:"night",source:"worker_report"})),planning:{owner:"worker",horizon:12,workDays:5,restDays:2,defaultKind:"night",floatingDaysOff:false,patternFrom:move(today,-30),days},
   details:{clothingSize:"52–54",shoeSize:"43",employment:"gph",managerName:"Менеджер объекта",managerPhone:null,visibility:{documents:true,workwear:true},
