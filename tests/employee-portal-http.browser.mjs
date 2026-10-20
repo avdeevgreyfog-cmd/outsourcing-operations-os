@@ -120,7 +120,7 @@ try{
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'worker',scopeId:fixture.worker,objectId:fixture.object,config:{sections:{}}});
  console.log('Existing link inherits object and worker overrides without being reissued');
- await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'organization',scopeId:qaOrganizationId,config:{managerPhone:'+79990000001',sections:{contacts:true}}});
+ await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{managerPhone:'+79990000001',sections:{contacts:true}}});
  const contactEnabled=await (await employee.request.get(publicUrl)).json();assert.equal(contactEnabled.config.sections.contacts,true);assert.equal(contactEnabled.details.managerPhone,'+79990000001');
  await mobile.reload({waitUntil:'networkidle'});assert.equal(await mobile.getByRole('link',{name:'Позвонить менеджеру'}).count(),1);
  assert.equal(await mobile.getByText('Важные контакты',{exact:true}).count(),0);
@@ -128,7 +128,7 @@ try{
  assert.equal((await (await employee.request.get(publicUrl)).json()).config.sections.contacts,false);
  await mobile.reload({waitUntil:'networkidle'});assert.equal(await mobile.getByRole('link',{name:'Позвонить менеджеру'}).count(),0);
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
- await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'organization',scopeId:qaOrganizationId,config:{sections:{},managerPhone:null}});
+ 
  console.log('Contact button obeys inherited visibility and is not duplicated in Profile');
  const qaOrg=qaOrganizationId;
  const adjustmentId=(await pg.query(`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
