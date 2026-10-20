@@ -8,11 +8,11 @@ import {managerSetScheduleOwner,managerEmployeePlanningChanges,managerReviewEmpl
 const portalConfigSchema=z.object({
  managerName:z.string().max(120).nullable().optional(),managerPhone:z.string().max(50).nullable().optional(),
  contactMethod:z.string().max(120).nullable().optional(),instruction:z.string().max(2000).optional(),
- timezone:z.string().max(80).optional(),validDays:z.number().int().min(1).max(365).optional(),
+ timezone:z.string().max(80).optional(),showWorkInstruction:z.boolean().optional(),validDays:z.number().int().min(1).max(365).optional(),
  autoRevokeOnExit:z.boolean().optional(),sections:z.object({
   shifts:z.boolean().optional(),confirm:z.boolean().optional(),decline:z.boolean().optional(),scheduleChanges:z.boolean().optional(),
   hours:z.boolean().optional(),timesheet:z.boolean().optional(),documents:z.boolean().optional(),employment:z.boolean().optional(),
-  workwear:z.boolean().optional(),contacts:z.boolean().optional(),objectInfo:z.boolean().optional()
+  workwear:z.boolean().optional(),contacts:z.boolean().optional(),objectInfo:z.boolean().optional(),payAdjustments:z.boolean().optional(),suggestDaysOff:z.boolean().optional()
  }).strict().optional()
 }).strict();
 const actions=z.discriminatedUnion("action",[
