@@ -72,3 +72,5 @@ jobs:
           if(!/Ссылка недействительна/.test(payload.error||''))throw Error('Unexpected response: public employee portal may be blocked by authentication or protection');
           console.log('Unauthenticated public API reached OPERIS and rejected an unknown employee token correctly.');
           NODE
+
+# Employee portal v2.2 live release: verify published app SHA and schema 0082 before handoff.
