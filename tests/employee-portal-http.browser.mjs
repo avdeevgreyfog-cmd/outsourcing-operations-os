@@ -90,6 +90,10 @@ try{
  assert.equal(onboardingData.details.onboarding.stage,'requested');
  assert.equal(onboardingData.config.sections.documents,true);
  assert.ok(onboardingData.details.documents.length>0);
+ const reportedDocument=await employee.request.post(publicUrl,{data:{action:'document',code:'snils',reported:true}});
+ assert.equal(reportedDocument.status(),200,await reportedDocument.text());
+ const unverified=(await (await employee.request.get(publicUrl)).json()).details.documents.find(d=>d.code==='snils');
+ assert.equal(unverified.managerVerified,false,'employee mark-as-sent is not manager approval');
  await post('/api/operations/worker-confirmations',{action:'set_document_status',objectId:fixture.object,workerId:fixture.worker,code:'snils',status:'received'});
  assert.equal((await (await employee.request.get(publicUrl)).json()).details.documents.find(d=>d.code==='snils').status,'received');
  await post('/api/operations/worker-confirmations',{action:'set_onboarding',objectId:fixture.object,workerId:fixture.worker,stage:'completed',comment:null,showAfterCompleted:false});
@@ -199,6 +203,14 @@ try{
  const denied=await manager.request.post(origin+'/api/workers/'+fixture.worker+'/exit',{data:{action:'plan',effectiveDate:dates.today,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false}});assert.equal(denied.status(),403,'manager cannot bypass offboarding permission');
  const director=(await pg.query(`SELECT u.id,u.email::text email FROM app_users u JOIN organization_memberships m ON m.user_id=u.id JOIN role_templates r ON r.id=m.role_template_id JOIN organizations o ON o.id=m.organization_id WHERE r.code='director' AND o.slug=$1 LIMIT 1`,[fixture.organization])).rows[0];assert.ok(director);await pg.query(`UPDATE app_users SET password_hash=crypt($1,gen_salt('bf')) WHERE id=$2`,['isolated-http-fixture-password',director.id]);
  const directorLogin=await manager.request.post(origin+'/api/session/login',{data:{organization:fixture.organization,email:director.email,password:'isolated-http-fixture-password'}});assert.equal(directorLogin.status(),200,await directorLogin.text());
+ const questionId=(await pg.query('SELECT id FROM worker_pay_adjustment_questions WHERE adjustment_id=$1 LIMIT 1',[adjustmentId])).rows[0].id;
+ await post('/api/operations/worker-confirmations',{action:'update_adjustment_status',objectId:fixture.object,workerId:fixture.worker,adjustmentId,status:'accounted'});
+ assert.equal((await pg.query('SELECT status FROM worker_pay_adjustments WHERE id=$1',[adjustmentId])).rows[0].status,'accounted');
+ await post('/api/operations/worker-confirmations',{action:'answer_adjustment_question',objectId:fixture.object,workerId:fixture.worker,questionId});
+ assert.equal((await pg.query('SELECT status FROM worker_pay_adjustment_questions WHERE id=$1',[questionId])).rows[0].status,'answered');
+ assert.equal((await pg.query('SELECT count(*)::int count FROM worker_accruals WHERE worker_id=$1 AND period_start=$2::date',[fixture.worker,dates.yesterday])).rows[0].count,0,'manager record status is never an automatic payroll posting');
+ console.log('Finance-authorized director updated correction and resolved question without payroll mutations');
+
  await post('/api/workers/'+fixture.worker+'/exit',{action:'plan',effectiveDate:dates.today,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false});assert.equal((await employee.request.get(newPublicUrl)).status(),404,'link must block on effective dismissal date even before manual completion');
  const materialized=(await pg.query("SELECT status,block_reason FROM worker_timesheet_links WHERE worker_id=$1 AND status='revoked' ORDER BY revoked_at DESC LIMIT 1",[fixture.worker])).rows[0];
  assert.equal(materialized.block_reason,'dismissal');assert.equal(materialized.status,'revoked');
@@ -210,6 +222,10 @@ try{
  const exitReason=(await pg.query("SELECT block_reason reason,status FROM worker_timesheet_links WHERE worker_id=$1 AND token_hash=encode(digest($2,'sha256'),'hex') LIMIT 1",[fixture.worker,newPublicUrl.split('/').at(-1)])).rows[0];
  if(exitReason)assert.equal(exitReason.reason,'dismissal');
 assert.equal((await employee.request.post(newPublicUrl,{data:{date:dates.tomorrow,response:'working',kind:'day'}})).status(),403);
+ await pg.query("UPDATE worker_profiles SET status='active' WHERE id=$1",[fixture.worker]);
+ assert.equal((await employee.request.get(newPublicUrl)).status(),404,'rehiring does not revive an automatically revoked token');
+ assert.equal((await pg.query("SELECT status FROM worker_timesheet_links WHERE worker_id=$1 AND block_reason='dismissal' ORDER BY revoked_at DESC LIMIT 1",[fixture.worker])).rows[0].status,'revoked');
+
  assert.deepEqual(errors,[]);console.log('PASS HTTP session / manager plan / employee mobile / timesheet / reconcile / pause+resume / rotation / dismissal read+write guards');
  fs.writeFileSync('/tmp/employee-portal-http-server.log',serverLog);
 }catch(error){console.error(error);throw error;}finally{fs.writeFileSync('/tmp/employee-portal-http-server.log',serverLog);await browser?.close();server?.kill();await new Promise(r=>tls?tls.close(r):r());fs.rmSync(certDir,{recursive:true,force:true});await socket?.stop();await pg.close();}
