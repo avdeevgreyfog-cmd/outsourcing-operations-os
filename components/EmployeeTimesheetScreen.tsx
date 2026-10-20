@@ -57,7 +57,8 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  useEffect(()=>{if(isDemo)return;let alive=true;void Promise.resolve().then(()=>reload()).catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
 
  const sections=data?.config?.sections??{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,documents:true,employment:true,workwear:true,contacts:true,objectInfo:true};
- const activeTab:Tab=tab==="shifts"&&!sections.shifts?(sections.timesheet?"timesheet":"more"):tab==="timesheet"&&!sections.timesheet?(sections.shifts?"shifts":"more"):tab;
+ const hasShiftActions=sections.shifts||sections.confirm||sections.decline||sections.hours;
+ const activeTab:Tab=tab==="shifts"&&!hasShiftActions?(sections.timesheet?"timesheet":"more"):tab==="timesheet"&&!sections.timesheet?(hasShiftActions?"shifts":"more"):tab;
  const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo?"overview":more;
  const clothing=clothingDraft??data?.details?.clothingSize??"";
  const shoe=shoeDraft??data?.details?.shoeSize??"";
@@ -139,13 +140,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     <div className="worker-self-brand"><span className="worker-self-logo">O</span><div><small>OPERIS · СОТРУДНИК</small><strong>Личный кабинет</strong></div></div>
     <div className="worker-self-identity"><strong>{data.name}</strong><span>{data.objectName}</span></div>
     <div className="worker-self-header-actions">
-      {managerCall?<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру"><Phone size={17}/></a>:<button className="worker-self-icon-button" onClick={()=>{setTab("more");setMore("contact")}} aria-label="Контакты менеджера"><Phone size={17}/></button>}
+      {sections.contacts&&(managerCall?<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру"><Phone size={17}/></a>:<button className="worker-self-icon-button" onClick={()=>{setTab("more");setMore("contact")}} aria-label="Контакты менеджера"><Phone size={17}/></button>)}
     </div>
    </header>
    <div className="worker-self-layout">
     <aside className="worker-self-sidebar">
      <p>РАБОЧЕЕ ПРОСТРАНСТВО</p>
-     {sections.shifts&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> Мои смены</button>}
+     {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> {sections.shifts?"Мои смены":"Мои действия"}</button>}
      {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>}
      <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Ещё</button>
      <div className="worker-self-sidebar-foot">{data.name}<small>{data.objectName}</small></div>
@@ -153,10 +154,10 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     <div className="worker-self-main">
      {error&&<div role="alert" className="worker-self-alert"><AlertTriangle size={16}/>{error}</div>}
      {notice&&<div role="status" className="worker-self-alert success"><CheckCircle2 size={16}/>{notice}{isDemo?" · демонстрация":""}</div>}
-     {activeTab==="shifts"&&sections.shifts&&<>
-      <div className="worker-self-page-title"><div><h1>Мои смены</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings} disabled={!sections.scheduleChanges}><Settings2 size={15}/> Мой график</button></div>
+     {activeTab==="shifts"&&hasShiftActions&&<>
+      <div className="worker-self-page-title"><div><h1>{sections.shifts?"Мои смены":"Мои действия"}</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings} disabled={!sections.scheduleChanges}><Settings2 size={15}/> Мой график</button></div>
       <div className="worker-self-primary-grid">
-       <section className="worker-self-panel worker-self-priority">
+       {(sections.shifts||sections.confirm||sections.decline)&&<section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
         <h2>{format(tomorrow)}</h2>
         <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{next?.reserveKind?"Резерв · "+kindShort(next.reserveKind):kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
@@ -172,7 +173,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          {sections.scheduleChanges&&<button className="worker-self-quiet" onClick={()=>setEditingDay(tomorrow)}>Предложить изменение графика</button>}
         </>}
         <div className="worker-self-deadline"><Clock3 size={13}/> Подтверждение до {format(today)}, {data.deadline.slice(0,5)}. О важных изменениях сообщайте сразу.</div>
-       </section>
+       </section>}
        {sections.hours&&<section className="worker-self-panel">
         <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> Последняя завершённая смена</span><span className={"worker-self-dot "+(completedAnswer?.hours!=null?"good":"")}>{completedAnswer?.hours!=null?"Часы переданы":"Не заполнено"}</span></div>
         {completed?<><h2>{format(completed.date)}</h2><p className="worker-self-shift"><ShiftIcon kind={completed.kind}/><strong>{kindLabel(completed.kind)}</strong><span>{timeText(completed)}</span></p>
@@ -185,7 +186,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </>:<p className="worker-self-muted">Нет завершённых смен за ближайшие дни.</p>}
        </section>}
       </div>
-      <section className="worker-self-panel worker-self-future">
+      {sections.shifts&&<section className="worker-self-panel worker-self-future">
        <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайшие дни</span><button className="worker-self-quiet" onClick={()=>setShowAll(x=>!x)}>{showAll?"Свернуть":"Весь график"} <ChevronDown size={14}/></button></div>
        <p className="worker-self-muted">Нажмите на дату, если ваши планы изменились.</p>
        <div className="worker-self-days">
@@ -211,7 +212,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Сохранить неделю</button>
         </div>}
        </div>}
-      </section>
+      </section>}
      </>}
      {activeTab==="timesheet"&&sections.timesheet&&<>
       <div className="worker-self-page-title"><div><h1>Мой табель</h1></div></div>
@@ -311,7 +312,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     </div>
    </div>
    <nav className="worker-self-bottom-nav" aria-label="Главная навигация">
-    {sections.shifts&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>Смены</button>}
+    {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>{sections.shifts?"Смены":"Действия"}</button>}
     {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>}
     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Ещё</button>
    </nav>
