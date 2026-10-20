@@ -21,8 +21,8 @@ export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confi
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
-  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration};
-  if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration};
+  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration,organizationId:actor.organizationId};
+  if(!visible.length)return {workers:[],reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration,organizationId:actor.organizationId};
   const objects=new Set(visible.map(w=>w.objectId!));
   const ids=visible.map(w=>w.id);
   return withTenant(actor.organizationId,actor.userId,async(sql)=>{
@@ -39,7 +39,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
         ORDER BY worker_id,object_id,work_date,(shift_id IS NULL) DESC,updated_at DESC`,
        sql<Array<{scope:"organization"|"object"|"worker";scopeId:string;config:PortalConfigurationPatch}>>`SELECT scope,scope_id "scopeId",config FROM employee_portal_config_overrides WHERE organization_id=${actor.organizationId}::uuid AND (scope='organization' OR (scope='object' AND scope_id=ANY(${[...objects]}::uuid[])) OR (scope='worker' AND scope_id=ANY(${ids}::uuid[])))`,
     ]);
-    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11),workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,defaultPortalConfiguration};
+    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:Number(w.paidHoursPerShift??11),workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,defaultPortalConfiguration,organizationId:actor.organizationId};
   });
 }
 
