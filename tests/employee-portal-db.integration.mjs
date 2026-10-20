@@ -60,11 +60,11 @@ try{
  await changePlan('day');await portal.submitEmployeeReply(token,{date:dates.tomorrow,response:'working',kind:'day'});
  console.log('PASS plan changes: same shift, day/night reconfirmation, local night clock, off, reserve');
  await portal.submitEmployeeReply(token,{date:dates.yesterday,response:'working',kind:'day'});
- await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='night' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10}),/План смены изменён/);
+ await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='night' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10,reason:'Фактическая продолжительность 10 часов'}),/План смены изменён/);
  await withTenant(org,director,sql=>sql`UPDATE shifts SET shift_kind='day' WHERE object_id=${fixture.object}::uuid AND shift_date=${dates.yesterday}::date`);
- await withTenant(org,director,sql=>sql`UPDATE shift_assignments SET is_reserve=true WHERE worker_id=${fixture.worker}::uuid AND shift_id IN(SELECT id FROM shifts WHERE shift_date=${dates.yesterday}::date)`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10}),/Вы в резерве/);
+ await withTenant(org,director,sql=>sql`UPDATE shift_assignments SET is_reserve=true WHERE worker_id=${fixture.worker}::uuid AND shift_id IN(SELECT id FROM shifts WHERE shift_date=${dates.yesterday}::date)`);await assert.rejects(()=>portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10,reason:'Фактическая продолжительность 10 часов'}),/Вы в резерве/);
  await withTenant(org,director,sql=>sql`UPDATE shift_assignments SET is_reserve=false WHERE worker_id=${fixture.worker}::uuid AND shift_id IN(SELECT id FROM shifts WHERE shift_date=${dates.yesterday}::date)`);
- await portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10});
+ await portal.submitEmployeeReply(token,{date:dates.yesterday,hours:10,reason:'Фактическая продолжительность 10 часов'});
  let entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours,source FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
  assert.equal(entries.some(e=>e.source==='worker_report'),false,'employee hours must not become time entry');
  let managerData=await portal.managerPortalData(manager,fixture.object);
