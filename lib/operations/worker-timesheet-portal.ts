@@ -5,7 +5,7 @@ import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {db,withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
-import {defaultPortalConfiguration,effectivePortalConfiguration,loadPortalOverrides,normalizePortalPatch,type PortalConfigurationPatch,type PortalConfiguration} from "@/lib/operations/employee-portal-config";
+import {defaultPortalConfiguration,applyPortalPatch,effectivePortalConfiguration,normalizePortalPatch,type PortalConfigurationPatch,type PortalConfiguration} from "@/lib/operations/employee-portal-config";
 
 export class EmployeePortalError extends Error {}
 export class EmployeePortalAccessError extends EmployeePortalError {}
@@ -155,7 +155,7 @@ export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;link
   const [row]=await sql<Array<{id:string}>>`
     SELECT l.id FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id AND w.organization_id=l.organization_id
     WHERE l.id=${ref.linkId}::uuid AND l.organization_id=${ref.tenantId}::uuid AND l.token_hash=${tokenHash(token)}
-      AND l.status='active' AND w.status='active'
+      AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active'
       AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=l.organization_id AND a.worker_id=l.worker_id AND a.object_id=l.object_id
         AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date))
       AND NOT EXISTS(SELECT 1 FROM object_shift_reporting_settings s WHERE s.organization_id=l.organization_id AND s.object_id=l.object_id AND NOT s.reporting_enabled)
@@ -167,13 +167,14 @@ export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;link
 export async function employeePortal(token:string,selectedMonth?:string){
   const ref=await resolveToken(token);if(!ref)return null;
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-    const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"worker";deadline:string;timezone:string;today:string;reportingEnabled:boolean}>>`
+    const [link]=await sql<Array<{id:string;workerId:string;objectId:string;name:string;objectName:string;paidHours:number;owner:"manager"|"worker";deadline:string;timezone:string;today:string;reportingEnabled:boolean;configuration:PortalConfigurationPatch}>>`
       SELECT l.id,w.id "workerId",l.object_id "objectId",w.full_name name,o.name "objectName",
       COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",
       COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
-      COALESCE(s.timezone,'Europe/Moscow') timezone,
-      (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text today,
+      COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
+      (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text today,
+      l.portal_config_snapshot configuration,
       COALESCE(s.reporting_enabled,true) "reportingEnabled"
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN objects o ON o.id=l.object_id
@@ -182,6 +183,7 @@ export async function employeePortal(token:string,selectedMonth?:string){
       LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
       LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=w.id AND wa.object_id=o.id
       WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${tokenHash(token)} AND l.status='active'
+        AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now())
         AND w.status='active' ORDER BY a.effective_from DESC LIMIT 1`;
     if(!link||!link.reportingEnabled)return null;
     await sql`UPDATE worker_timesheet_links SET last_opened_at=now() WHERE id=${link.id}::uuid`;
@@ -201,7 +203,7 @@ export async function employeePortal(token:string,selectedMonth?:string){
           AND ((work_date BETWEEN ${rangeFrom}::date AND ${rangeTo}::date) OR (work_date BETWEEN (${link.today}::date-3) AND (${link.today}::date+31)))
           ORDER BY work_date,updated_at DESC`,
     ]);
-    return {...link,reports,plans,selectedMonth:month};
+    return {...link,config:applyPortalPatch(defaultPortalConfiguration,link.configuration??{}),reports,plans,selectedMonth:month};
   });
 }
 
@@ -210,19 +212,26 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
   const ref=await resolveToken(token);if(!ref)throw new EmployeePortalAccessError("Недействительная ссылка");
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
     await assertEmployeeLinkActive(sql,ref,token);
-    const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string}>>`
+    const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string;paidHours:number;configuration:PortalConfigurationPatch}>>`
       SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
-      (now() AT TIME ZONE COALESCE(s.timezone,'Europe/Moscow'))::date::text "localToday",
+      (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text "localToday",
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
-      COALESCE(s.timezone,'Europe/Moscow') timezone
+      COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
+      COALESCE(a.paid_hours_per_shift,11)::float8 "paidHours",l.portal_config_snapshot configuration
       FROM worker_timesheet_links l JOIN worker_profiles w ON w.id=l.worker_id
       JOIN worker_object_assignments a ON a.worker_id=l.worker_id AND a.object_id=l.object_id
         AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)
       LEFT JOIN object_shift_reporting_settings s ON s.object_id=l.object_id
       LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
-      WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND w.status='active' AND COALESCE(s.reporting_enabled,true)
+      WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active' AND COALESCE(s.reporting_enabled,true)
       LIMIT 1`;
     if(!link)throw new EmployeePortalAccessError("Доступ закрыт");
+    const sections=applyPortalPatch(defaultPortalConfiguration,link.configuration??{}).sections;
+    if(payload.hours!==undefined&&!sections.hours)throw new EmployeePortalError("Ввод часов отключён для этой ссылки");
+    if(payload.response==="working"&&!sections.confirm)throw new EmployeePortalError("Подтверждение выхода недоступно");
+    if(payload.response==="cannot_work"&&!sections.decline)throw new EmployeePortalError("Сообщение о невыходе недоступно");
+    if(payload.response==="day_off"&&!sections.scheduleChanges)throw new EmployeePortalError("Изменение графика недоступно");
+    if(payload.hours!==undefined&&Math.abs(payload.hours-link.paidHours)>0.001&&!payload.reason?.trim())throw new EmployeePortalError("При отличии часов от нормы укажите причину");
     if(link.owner==='manager'&&payload.response==='working'){
       const [planned]=await sql<Array<{kind:string;reserve:boolean}>>`SELECT sh.shift_kind kind,sa.is_reserve reserve
         FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
@@ -285,45 +294,16 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
     if(payload.hours===undefined){
       await sql`INSERT INTO worker_shift_reports(organization_id,worker_id,object_id,work_date,shift_kind,response,reason,confirmed_at,source_link_id)
         VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${payload.date}::date,${payload.kind??old?.shiftKind??null},${payload.response!},${payload.reason??null},now(),${ref.linkId}::uuid)
-        ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET shift_kind=EXCLUDED.shift_kind,response=EXCLUDED.response,reason=EXCLUDED.reason,confirmed_at=now(),source_link_id=EXCLUDED.source_link_id,updated_at=now(),reported_hours=CASE WHEN worker_shift_reports.response=EXCLUDED.response AND worker_shift_reports.shift_kind IS NOT DISTINCT FROM EXCLUDED.shift_kind THEN worker_shift_reports.reported_hours ELSE NULL END,
+        ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET shift_kind=EXCLUDED.shift_kind,response=EXCLUDED.response,reason=EXCLUDED.reason,confirmed_at=now(),source_link_id=EXCLUDED.source_link_id,updated_at=now(),review_status='pending',reviewed_at=NULL,reviewed_by_user_id=NULL,approved_hours=NULL,review_comment=NULL,reported_hours=CASE WHEN worker_shift_reports.response=EXCLUDED.response AND worker_shift_reports.shift_kind IS NOT DISTINCT FROM EXCLUDED.shift_kind THEN worker_shift_reports.reported_hours ELSE NULL END,
           hours_submitted_at=CASE WHEN worker_shift_reports.response=EXCLUDED.response AND worker_shift_reports.shift_kind IS NOT DISTINCT FROM EXCLUDED.shift_kind THEN worker_shift_reports.hours_submitted_at ELSE NULL END`;
     }else{
-      await sql`UPDATE worker_shift_reports SET reported_hours=${payload.hours},hours_submitted_at=now(),updated_at=now() WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date`;
+      await sql`UPDATE worker_shift_reports SET reported_hours=${payload.hours},reason=COALESCE(${payload.reason??null},reason),source_link_id=${ref.linkId}::uuid,hours_submitted_at=now(),review_status='pending',reviewed_at=NULL,reviewed_by_user_id=NULL,approved_hours=NULL,review_comment=NULL,updated_at=now() WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date`;
     }
     if(payload.response)await sql`UPDATE shift_assignments sa SET confirmation_status=${payload.response==='working'?'confirmed':'declined'}
       FROM shifts sh WHERE sh.id=sa.shift_id AND sh.object_id=${link.objectId}::uuid AND sh.shift_date=${payload.date}::date
         AND sa.worker_id=${link.workerId}::uuid AND sa.confirmation_status<>'cancelled' AND sh.status<>'cancelled' AND NOT sa.is_reserve`;
-    // Mirror only provisional planning and self-reported hours into the existing
-    // time_entries model. Never overwrite a manager-entered fact or a locked period.
-    const [next]=await sql<Array<{response:string;shiftKind:string|null;hours:number|null}>>`SELECT response,shift_kind "shiftKind",reported_hours::float8 hours FROM worker_shift_reports WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date LIMIT 1`;
-    if(next?.response==="cannot_work"||(next?.response==="working"&&next.hours===null)){
-      await sql`UPDATE time_entries SET time_code='WORK_PENDING',fact_hours=0,day_hours=0,night_hours=0,source='schedule',
-        correction_reason='Сотрудник изменил подтверждение; часы требуют уточнения',updated_at=now()
-        WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date AND source='worker_report'`;
-    }
-    if(next&&next.response==="working"&&next.hours!==null){
-      const [entry]=await sql<Array<{id:string;source:string;factHours:number;timeCode:string}>>`
-        SELECT id,source,fact_hours::float8 "factHours",time_code "timeCode" FROM time_entries
-        WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND work_date=${payload.date}::date
-        ORDER BY (shift_id IS NULL) DESC,updated_at DESC LIMIT 1 FOR UPDATE`;
-      const nextCode="WORK";
-      const kind=next.shiftKind==="night"?"night":"day";
-      const h=Number(next.hours);
-      const mayReplace=!entry||((entry.source==="schedule"||entry.source==="worker_report")&&!(entry.source!=="worker_report"&&entry.factHours>0));
-      if(mayReplace){
-        if(entry){
-          await sql`UPDATE time_entries SET planned=true,time_code=${nextCode},fact_hours=${h},day_hours=${kind==="day"?h:0},night_hours=${kind==="night"?h:0},
-            planned_shift_kind=${kind},source='worker_report',correction_reason='Данные сотрудника, требуется сверка',updated_at=now()
-            WHERE id=${entry.id}::uuid`;
-        }else{
-          await sql`INSERT INTO time_entries(organization_id,worker_id,object_id,work_date,planned,time_code,fact_hours,day_hours,night_hours,planned_shift_kind,source,correction_reason)
-            VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${payload.date}::date,${true},${nextCode},${h},
-              ${kind==="day"?h:0},${kind==="night"?h:0},${kind},'worker_report',
-              'Данные сотрудника, требуется сверка')`;
-        }
-      }
-    }
-
+    // Employee-submitted hours stay in worker_shift_reports until manager review.
+    // No time_entries or accruals are modified by a public employee response.
     return {ok:true};
   });
 }
