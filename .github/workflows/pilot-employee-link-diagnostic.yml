@@ -34,3 +34,15 @@ jobs:
           done
           echo "::error::Personal portal live runtime did not reach a usable deployment with an encryption key."
           exit 1
+
+      - name: Verify unauthenticated employee portal API reaches the app
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --max-time 15 -sS -o /tmp/invalid-employee-token.json -w '%{http_code}' https://operis-workspace.vercel.app/api/public/worker-timesheet/invalid-public-test-token)"
+          test "$code" = "404" || { echo "::error::Employee public API returned HTTP $code instead of app-level invalid token 404"; exit 1; }
+          node - <<'NODE'
+          const payload=require('/tmp/invalid-employee-token.json');
+          if(!/Ссылка недействительна/.test(payload.error||''))throw Error('Unexpected response: public employee portal may be blocked by authentication or protection');
+          console.log('Unauthenticated public API reached OPERIS and rejected an unknown employee token correctly.');
+          NODE
