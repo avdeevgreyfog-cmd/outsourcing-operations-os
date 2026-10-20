@@ -28,7 +28,13 @@ ALTER TABLE worker_timesheet_links
 
 -- Freeze a safe snapshot of legacy links; never retroactively apply new preferences.
 UPDATE worker_timesheet_links l SET portal_config_snapshot=jsonb_build_object(
- 'managerName',NULL,
+ 'managerName',(SELECT u.display_name FROM app_users u WHERE u.id=COALESCE(
+   (SELECT a.manager_user_id FROM worker_object_assignments a
+    WHERE a.worker_id=l.worker_id AND a.object_id=o.id
+      AND (a.effective_from IS NULL OR a.effective_from<=current_date)
+      AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+    ORDER BY a.effective_from DESC LIMIT 1),
+   o.owner_user_id) LIMIT 1),
  'managerPhone',s.manager_phone,
  'contactMethod',NULL,
  'instruction','',
