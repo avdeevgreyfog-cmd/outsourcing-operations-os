@@ -4,14 +4,14 @@ import type {PortalConfig} from "@/components/EmployeePortalLinkControls";
 import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,ChevronRight,Phone,FileText,Shirt,Settings2,LockKeyhole,Moon,Sun,AlertTriangle,MoreHorizontal,ArrowLeft,Info} from "lucide-react";
 
 type Kind="day"|"night"|"off";
-type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null;needsReconfirmation?:boolean};
+type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:string;approvedHours?:number|null;reviewedAt?:string|null;updatedAt?:string;employeeRespondedAt?:string|null;reviewedBy?:string|null};
 type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
-type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
-type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
-type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
+type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean;status?:string};
+type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;onboarding?:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;adjustments?:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
+type Portal={name:string;objectName:string;paidHours:number|null;deadline:string;today:string;timezone:string;periodStatus?:string|null;periodClosedAt?:string|null;disputes?:Array<{date:string;status:string;reason:string;comment:string;createdAt:string}>;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
 type Tab="shifts"|"timesheet"|"more";
-type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo";
+type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo"|"adjustments";
 function move(d:string,n:number){const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
 function format(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",weekday:"long",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
 function smallDate(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
@@ -36,7 +36,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [more,setMore]=useState<More>("overview");
  const [error,setError]=useState("");const [notice,setNotice]=useState("");const [loading,setLoading]=useState(!isDemo);
  const [busy,setBusy]=useState(false);const [showReason,setShowReason]=useState(false);const [reason,setReason]=useState("");
- const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("11");const [hoursComment,setHoursComment]=useState("");
+ const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("");const [hoursComment,setHoursComment]=useState("");
  const [editingDay,setEditingDay]=useState<string|null>(null);const [kindChoice,setKindChoice]=useState<Kind>("night");
  const [showAll,setShowAll]=useState(false);
  const [weekEditing,setWeekEditing]=useState(false);
@@ -45,6 +45,8 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [effectiveFrom,setEffectiveFrom]=useState("");
  const [workPattern,setWorkPattern]=useState("5/2");
  const [patternFloating,setPatternFloating]=useState(false);
+ const [disputeDate,setDisputeDate]=useState<string|null>(null);const [disputeReason,setDisputeReason]=useState<"hours"|"missing_shift"|"wrong_shift"|"other">("hours");const [disputeComment,setDisputeComment]=useState("");
+ const [adjustmentQuestionId,setAdjustmentQuestionId]=useState<string|null>(null);const [adjustmentQuestion,setAdjustmentQuestion]=useState("");
  const [clothingDraft,setClothingDraft]=useState<string|null>(null);const [shoeDraft,setShoeDraft]=useState<string|null>(null);
  const [settingKind,setSettingKind]=useState<"day"|"night">("night");
  const [startTime,setStartTime]=useState("20:00");const [endTime,setEndTime]=useState("08:00");const [nextDay,setNextDay]=useState(true);
@@ -59,7 +61,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const sections=data?.config?.sections??{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,documents:true,employment:true,workwear:true,contacts:true,objectInfo:true};
  const hasShiftActions=sections.shifts||sections.confirm||sections.decline||sections.hours;
  const activeTab:Tab=tab==="shifts"&&!hasShiftActions?(sections.timesheet?"timesheet":"more"):tab==="timesheet"&&!sections.timesheet?(hasShiftActions?"shifts":"more"):tab;
- const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo?"overview":more;
+ const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo||more==="adjustments"&&!sections.payAdjustments?"overview":more;
  const clothing=clothingDraft??data?.details?.clothingSize??"";
  const shoe=shoeDraft??data?.details?.shoeSize??"";
  const checkedAt=clockNow(data?.timezone??"Europe/Moscow");
@@ -76,7 +78,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
  const nextMonday=move(today,((8-new Date(today+"T00:00:00Z").getUTCDay())%7)||7);
  const fullWeek=Array.from({length:7},(_,i)=>move(nextMonday,i));
- const canEditWeek=Boolean(data?.planning.floatingDaysOff&&fullWeek[6]<=move(today,data.planning.horizon));
+ const canEditWeek=Boolean(sections.suggestDaysOff&&data?.planning.floatingDaysOff&&fullWeek[6]<=move(today,data.planning.horizon));
  const currentMonth=monthOverride??data?.selectedMonth??today.slice(0,7);
  const dateMonth=new Date(currentMonth+"-01T00:00:00Z");
  const monthLabel=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(dateMonth);
@@ -91,7 +93,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
    }return{total,shifts}})();
  
- const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
+ const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточнит менеджер";
  async function save(payload:Record<string,unknown>,message:string){
   if(!data||busy)return false;setError("");setNotice("");setBusy(true);
   try{
@@ -124,14 +126,24 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  async function confirmExit(){const kind=next?.kind;if(!kind||kind==="off")return;const ok=await save({date:tomorrow,response:"working",kind},"Выход подтверждён");if(ok)setShowReason(false)}
  async function confirmHours(){if(!completed)return;
    if(completedAnswer?.response!=="working"||completedAnswer.needsReconfirmation){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
-   const submitted=hourEdit?Number(hours):data?.paidHours??11;
-   if(submitted!==data?.paidHours&&!hoursComment.trim()){setError("При отличии часов от нормы укажите причину");return}
+   const submitted=hourEdit||data?.paidHours==null?Number(hours):data.paidHours;
+   if(data?.paidHours!=null&&submitted!==data.paidHours&&!hoursComment.trim()){setError("При отличии часов от нормы укажите причину");return}
    const ok=await save({date:completed.date,hours:submitted,reason:hoursComment.trim()||undefined},"Часы переданы для проверки менеджеру");if(ok){setHourEdit(false);setHoursComment("")}
  }
  async function planDay(date:string,kind:Kind){if(busy)return;const direct=data?.planning.owner==="worker"&&data?.planning.floatingDaysOff;const ok=await save({action:"plan_day",date,kind},direct?"График обновлён":"Предложение передано менеджеру");if(ok)setEditingDay(null)}
  async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},data.planning.owner==="worker"?"Выходные на неделю сохранены":"Предложение по выходным отправлено"))setWeekEditing(false)}
  function openSettings(){setTab("more");setMore("settings");setSettingsEditing(false);setWorkPattern((data?.planning.workDays??5)+"/"+(data?.planning.restDays??2));setPatternFloating(Boolean(data?.planning.floatingDaysOff));setEffectiveFrom(tomorrow);setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??(d?.kind==="day"?"08:00":"20:00"));setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
  const managerCall=sections.contacts?data?.details?.managerPhone?.replace(/[^+\d]/g,""):undefined;
+ const activeDisputes=new Set((data?.disputes??[]).filter(x=>x.status==="open"||x.status==="in_review").map(x=>x.date));
+ const dayStatus=(date:string,reply:Reply|undefined,hasPlan:boolean)=>{
+  if(activeDisputes.has(date)||reply?.reviewStatus==="rejected")return "Есть расхождение";
+  if(data?.periodClosedAt&&(reply?.reviewStatus==="approved"||reply?.reconciledAt))return "Закрыто для расчёта";
+  if(reply?.reviewStatus==="approved"||reply?.reconciledAt)return "Согласовано";
+  if(reply?.hours!=null)return "Проверяется менеджером";
+  if(reply?.response)return "Ожидается ответ сотрудника";
+  return hasPlan?"Черновик менеджера":"Нет смены";
+ };
+ const periodStatus=activeDisputes.size?"Есть расхождения":data?.periodClosedAt?"Закрыт для расчёта":(data?.reports??[]).some(x=>x.reviewStatus==="pending"&&x.hours!=null)?"Проверяется":(data?.reports??[]).some(x=>x.reviewStatus==="approved")?"Согласован":(data?.reports??[]).some(x=>x.hours!=null)?"Передан сотрудником":"Табель формируется";
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
  if(!data)return <main className="worker-self"><div className="worker-self-loading"><LockKeyhole/> Кабинет недоступен. {error}</div></main>;
  return <main className={"worker-self "+(previewLayout==="phone"?"worker-self-phone":"")+(previewLayout==="desktop"?" worker-self-desktop":"")}>
