@@ -62,9 +62,9 @@ jobs:
           const raw=process.env.DATABASE_URL;
           let source;
           try{const url=new URL(raw);source=`${url.hostname.toLowerCase()}:${url.port||'default'}${url.pathname}`;}
-          catch{source=raw.replace(/\\/\\/[^@]+@/,'//');}
+          catch{source=raw.replace(new RegExp('//[^@]+@'),'//');}
           const identity=crypto.createHash('sha256').update(source).digest('hex').slice(0,16);
-          require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT,`identity=${identity}\\n`);
+          require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT,`identity=${identity}\n`);
           NODE
           else
             test -n "$PRODUCTION_BASE_URL" || { echo "::error::PRODUCTION_BASE_URL is required when PRODUCTION_DATABASE_URL is not configured."; exit 1; }
@@ -80,7 +80,7 @@ jobs:
           const p=JSON.parse(fs.readFileSync('/tmp/operis-production-status.json','utf8'));
           if(p.ok!==true||p.environment!=='production'||p.databaseConfigured!==true||!/^[a-f0-9]{16}$/.test(p.databaseIdentity??''))
             throw new Error('The production runtime did not prove its identity and PostgreSQL connection');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT,`identity=${p.databaseIdentity}\\n`);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`identity=${p.databaseIdentity}\n`);
           console.log('Production database identity verified from the live production runtime');
           NODE
           fi
