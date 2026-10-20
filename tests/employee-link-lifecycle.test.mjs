@@ -12,6 +12,7 @@ function harness({entry=null,assigned=null}={}){const links=[],directory=[],quer
  const report={response:'working',shiftKind:'night',hours:null};
  const sql=async(strings,...values)=>{const q=strings.join('?');queries.push(q);
   if(q.includes('set_config'))return [];
+  if(q.includes('INSERT INTO worker_portal_events'))return [];
   if(q.includes('FROM public_worker_timesheet_tokens'))return directory.filter(x=>x.hash===values[0]).map(x=>({tenantId:org,actorUserId:user,linkId:x.link}));
   if(q.includes('FROM worker_profiles w'))return employed?[{id:worker}]:[];
   if(q.includes('FROM employee_portal_config_overrides')||q.includes('FROM object_shift_reporting_settings WHERE')||q.includes('FROM objects o'))return [];
@@ -72,4 +73,11 @@ test('missing encryption key produces a safe actionable error and does not creat
   await assert.rejects(h.run('create'),err=>err instanceof h.service.EmployeePortalError && /ключ персональных ссылок/.test(err.message));
   assert.equal(h.links.length,0,'failed issuance must not leave a link');
  }finally{if(previous===undefined)delete process.env.SESSION_SECRET;else process.env.SESSION_SECRET=previous;}
+});
+
+test('employee link has no automatic thirty-day expiry',async()=>{
+ process.env.SESSION_SECRET='isolated-test-key';
+ const h=harness();const issued=await h.run('create');
+ assert.equal(issued.expiresAt,null);
+ assert.equal(issued.config.validDays,30,'legacy configured period is not an implicit expiry');
 });

@@ -4,14 +4,14 @@ import type {PortalConfig} from "@/components/EmployeePortalLinkControls";
 import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,ChevronRight,Phone,FileText,Shirt,Settings2,LockKeyhole,Moon,Sun,AlertTriangle,MoreHorizontal,ArrowLeft,Info} from "lucide-react";
 
 type Kind="day"|"night"|"off";
-type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null;needsReconfirmation?:boolean};
+type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:string;approvedHours?:number|null;reviewedAt?:string|null;updatedAt?:string;employeeRespondedAt?:string|null;reviewedBy?:string|null};
 type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
-type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
-type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
-type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
+type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean;status?:string};
+type Details={clothingSize:string|null;shoeSize:string|null;gloveSize?:string|null;ppeSizeComment?:string|null;sizeRequest?:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:string;managerName:string|null;managerPhone:string|null;onboarding?:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;adjustments?:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
+type Portal={name:string;objectName:string;paidHours:number|null;deadline:string;today:string;timezone:string;periodStatus?:string|null;periodClosedAt?:string|null;disputes?:Array<{date:string;status:string;reason:string;comment:string;createdAt:string}>;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
 type Tab="shifts"|"timesheet"|"more";
-type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo";
+type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo"|"adjustments";
 function move(d:string,n:number){const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
 function format(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",weekday:"long",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
 function smallDate(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
@@ -36,7 +36,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [more,setMore]=useState<More>("overview");
  const [error,setError]=useState("");const [notice,setNotice]=useState("");const [loading,setLoading]=useState(!isDemo);
  const [busy,setBusy]=useState(false);const [showReason,setShowReason]=useState(false);const [reason,setReason]=useState("");
- const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("11");const [hoursComment,setHoursComment]=useState("");
+ const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("");const [hoursComment,setHoursComment]=useState("");
  const [editingDay,setEditingDay]=useState<string|null>(null);const [kindChoice,setKindChoice]=useState<Kind>("night");
  const [showAll,setShowAll]=useState(false);
  const [weekEditing,setWeekEditing]=useState(false);
@@ -45,7 +45,10 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [effectiveFrom,setEffectiveFrom]=useState("");
  const [workPattern,setWorkPattern]=useState("5/2");
  const [patternFloating,setPatternFloating]=useState(false);
+ const [disputeDate,setDisputeDate]=useState<string|null>(null);const [disputeReason,setDisputeReason]=useState<"hours"|"missing_shift"|"wrong_shift"|"other">("hours");const [disputeComment,setDisputeComment]=useState("");
+ const [adjustmentQuestionId,setAdjustmentQuestionId]=useState<string|null>(null);const [adjustmentQuestion,setAdjustmentQuestion]=useState("");
  const [clothingDraft,setClothingDraft]=useState<string|null>(null);const [shoeDraft,setShoeDraft]=useState<string|null>(null);
+ const [gloveDraft,setGloveDraft]=useState<string|null>(null);const [sizeComment,setSizeComment]=useState("");
  const [settingKind,setSettingKind]=useState<"day"|"night">("night");
  const [startTime,setStartTime]=useState("20:00");const [endTime,setEndTime]=useState("08:00");const [nextDay,setNextDay]=useState(true);
  
@@ -56,12 +59,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  },[token,monthOverride]);
  useEffect(()=>{if(isDemo)return;let alive=true;void Promise.resolve().then(()=>reload()).catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
 
- const sections=data?.config?.sections??{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,documents:true,employment:true,workwear:true,contacts:true,objectInfo:true};
+ const sections=data?.config?.sections??{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,documents:true,employment:true,workwear:true,contacts:true,objectInfo:false,payAdjustments:false,suggestDaysOff:false};
  const hasShiftActions=sections.shifts||sections.confirm||sections.decline||sections.hours;
  const activeTab:Tab=tab==="shifts"&&!hasShiftActions?(sections.timesheet?"timesheet":"more"):tab==="timesheet"&&!sections.timesheet?(hasShiftActions?"shifts":"more"):tab;
- const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo?"overview":more;
+ const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo||more==="adjustments"&&!sections.payAdjustments?"overview":more;
  const clothing=clothingDraft??data?.details?.clothingSize??"";
  const shoe=shoeDraft??data?.details?.shoeSize??"";
+ const glove=gloveDraft??data?.details?.gloveSize??"";
  const checkedAt=clockNow(data?.timezone??"Europe/Moscow");
  const today=data?.today??new Date().toISOString().slice(0,10),tomorrow=move(today,1);
  const records=useMemo(()=>new Map((data?.planning?.days??[]).map(x=>[x.date,x])),[data?.planning?.days]);
@@ -76,7 +80,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
  const nextMonday=move(today,((8-new Date(today+"T00:00:00Z").getUTCDay())%7)||7);
  const fullWeek=Array.from({length:7},(_,i)=>move(nextMonday,i));
- const canEditWeek=Boolean(data?.planning.floatingDaysOff&&fullWeek[6]<=move(today,data.planning.horizon));
+ const canEditWeek=Boolean(sections.suggestDaysOff&&data?.planning.floatingDaysOff&&fullWeek[6]<=move(today,data.planning.horizon));
  const currentMonth=monthOverride??data?.selectedMonth??today.slice(0,7);
  const dateMonth=new Date(currentMonth+"-01T00:00:00Z");
  const monthLabel=new Intl.DateTimeFormat("ru-RU",{month:"long",year:"numeric",timeZone:"UTC"}).format(dateMonth);
@@ -91,7 +95,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
    }return{total,shifts}})();
  
- const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
+ const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточнит менеджер";
  async function save(payload:Record<string,unknown>,message:string){
   if(!data||busy)return false;setError("");setNotice("");setBusy(true);
   try{
@@ -100,6 +104,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     if(payload.action==="plan_week"){
       const off=new Set(payload.offDates as string[]),begin=String(payload.weekStart);
       setData(d=>d?{...d,planning:{...d.planning,days:d.planning.days.map(p=>p.date>=begin&&p.date<=move(begin,6)?{...p,kind:off.has(p.date)?"off":d.planning.defaultKind??"day",source:"worker" as const}:p)}}:d);
+     }else if(payload.action==="dispute_hours"){
+       setData(d=>d?{...d,disputes:[...(d.disputes??[]),{date,reason:String(payload.reason),comment:String(payload.comment),status:"open",createdAt:new Date().toISOString()}]}:d);
+     }else if(payload.action==="question_adjustment"){setNotice("Вопрос передан менеджеру (демонстрация)");
      }else if(payload.action==="pattern_change"){setNotice("Запрос на изменение постоянного графика отправлен");
      }else if(payload.action==="plan_day"){
      const newKind=payload.kind as Kind;setData(d=>{if(!d)return d;const direct=d.planning.owner==="worker"&&d.planning.floatingDaysOff;return {...d,planning:{...d.planning,days:d.planning.days.map(x=>x.date===date?{...x,kind:direct?newKind:x.kind,source:direct?"worker" as const:x.source,proposal:direct?null:newKind,proposalStatus:direct?null:"proposed" as const}:x)}}});
@@ -109,7 +116,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       hours:typeof payload.hours==="number"?payload.hours:("response" in payload?null:old?.hours??null)};
       return {...d,reports:[...d.reports.filter(x=>x.date!==date),r]};});
     }else if(payload.action==="sizes"){
-     setData(d=>d?.details?{...d,details:{...d.details,clothingSize:payload.clothingSize as string,shoeSize:payload.shoeSize as string}}:d);
+     setData(d=>d?.details?{...d,details:{...d.details,sizeRequest:{status:"pending",clothingSize:payload.clothingSize as string,shoeSize:payload.shoeSize as string,gloveSize:payload.gloveSize as string,comment:payload.comment as string}}}:d);
     }else if(payload.action==="document"){
      setData(d=>d?.details?{...d,details:{...d.details,documents:d.details.documents.map(x=>x.code===payload.code?{...x,employeeReported:Boolean(payload.reported)}:x)}}:d);
     }else if(payload.action==="shift_time"){setNotice("Изменение графика передано менеджеру (демонстрация)");}
@@ -124,14 +131,24 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  async function confirmExit(){const kind=next?.kind;if(!kind||kind==="off")return;const ok=await save({date:tomorrow,response:"working",kind},"Выход подтверждён");if(ok)setShowReason(false)}
  async function confirmHours(){if(!completed)return;
    if(completedAnswer?.response!=="working"||completedAnswer.needsReconfirmation){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
-   const submitted=hourEdit?Number(hours):data?.paidHours??11;
-   if(submitted!==data?.paidHours&&!hoursComment.trim()){setError("При отличии часов от нормы укажите причину");return}
+   const submitted=hourEdit||data?.paidHours==null?Number(hours):data.paidHours;
+   if(data?.paidHours!=null&&submitted!==data.paidHours&&!hoursComment.trim()){setError("При отличии часов от нормы укажите причину");return}
    const ok=await save({date:completed.date,hours:submitted,reason:hoursComment.trim()||undefined},"Часы переданы для проверки менеджеру");if(ok){setHourEdit(false);setHoursComment("")}
  }
  async function planDay(date:string,kind:Kind){if(busy)return;const direct=data?.planning.owner==="worker"&&data?.planning.floatingDaysOff;const ok=await save({action:"plan_day",date,kind},direct?"График обновлён":"Предложение передано менеджеру");if(ok)setEditingDay(null)}
- async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},data.planning.owner==="worker"?"Выходные на неделю сохранены":"Предложение по выходным отправлено"))setWeekEditing(false)}
+ async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},"Предложение по выходным отправлено менеджеру"))setWeekEditing(false)}
  function openSettings(){setTab("more");setMore("settings");setSettingsEditing(false);setWorkPattern((data?.planning.workDays??5)+"/"+(data?.planning.restDays??2));setPatternFloating(Boolean(data?.planning.floatingDaysOff));setEffectiveFrom(tomorrow);setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??(d?.kind==="day"?"08:00":"20:00"));setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
  const managerCall=sections.contacts?data?.details?.managerPhone?.replace(/[^+\d]/g,""):undefined;
+ const activeDisputes=new Set((data?.disputes??[]).filter(x=>x.status==="open"||x.status==="in_review").map(x=>x.date));
+ const dayStatus=(date:string,reply:Reply|undefined,hasPlan:boolean)=>{
+  if(activeDisputes.has(date)||reply?.reviewStatus==="rejected")return "Есть расхождение";
+  if(data?.periodClosedAt&&(reply?.reviewStatus==="approved"||reply?.reconciledAt))return "Закрыто для расчёта";
+  if(reply?.reviewStatus==="approved"||reply?.reconciledAt)return "Согласовано";
+  if(reply?.hours!=null)return "Проверяется менеджером";
+  if(reply?.response)return "Ожидается ответ сотрудника";
+  return hasPlan?"Черновик менеджера":"Нет смены";
+ };
+ const periodStatus=activeDisputes.size?"Есть расхождения":data?.periodClosedAt?"Закрыт для расчёта":(data?.reports??[]).some(x=>x.reviewStatus==="pending"&&x.hours!=null)?"Проверяется":(data?.reports??[]).some(x=>x.reviewStatus==="approved")?"Согласован":(data?.reports??[]).some(x=>x.hours!=null)?"Передан сотрудником":"Табель формируется";
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
  if(!data)return <main className="worker-self"><div className="worker-self-loading"><LockKeyhole/> Кабинет недоступен. {error}</div></main>;
  return <main className={"worker-self "+(previewLayout==="phone"?"worker-self-phone":"")+(previewLayout==="desktop"?" worker-self-desktop":"")}>
@@ -140,7 +157,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     <div className="worker-self-brand"><span className="worker-self-logo">O</span><div><small>OPERIS · СОТРУДНИК</small><strong>Личный кабинет</strong></div></div>
     <div className="worker-self-identity"><strong>{data.name}</strong><span>{data.objectName}</span></div>
     <div className="worker-self-header-actions">
-      {sections.contacts&&(managerCall?<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру"><Phone size={17}/></a>:<button className="worker-self-icon-button" onClick={()=>{setTab("more");setMore("contact")}} aria-label="Контакты менеджера"><Phone size={17}/></button>)}
+      {sections.contacts&&managerCall&&<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру" title="Позвонить менеджеру"><Phone size={17}/><span className="worker-self-call-label"> Позвонить менеджеру</span></a>}
     </div>
    </header>
    <div className="worker-self-layout">
@@ -148,19 +165,20 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
      <p>РАБОЧЕЕ ПРОСТРАНСТВО</p>
      {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> {sections.shifts?"Мои смены":"Мои действия"}</button>}
      {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>}
-     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Ещё</button>
+     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Профиль</button>
      <div className="worker-self-sidebar-foot">{data.name}<small>{data.objectName}</small></div>
     </aside>
     <div className="worker-self-main">
      {error&&<div role="alert" className="worker-self-alert"><AlertTriangle size={16}/>{error}</div>}
      {notice&&<div role="status" className="worker-self-alert success"><CheckCircle2 size={16}/>{notice}{isDemo?" · демонстрация":""}</div>}
      {activeTab==="shifts"&&hasShiftActions&&<>
-      <div className="worker-self-page-title"><div><h1>{sections.shifts?"Мои смены":"Мои действия"}</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings} disabled={!sections.scheduleChanges}><Settings2 size={15}/> Мой график</button></div>
+      <div className="worker-self-page-title"><div><h1>{sections.shifts?"Мои смены":"Мои действия"}</h1><p>{data.objectName}</p></div>{sections.scheduleChanges&&<button className="worker-self-quiet" onClick={openSettings}><Settings2 size={15}/> Мой график</button>}</div>
       <div className="worker-self-primary-grid">
        {(sections.shifts||sections.confirm||sections.decline)&&<section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
         <h2>{format(tomorrow)}</h2>
         <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{next?.reserveKind?"Резерв · "+kindShort(next.reserveKind):kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
+        {sections.objectInfo&&data.config?.instruction?.trim()&&<div className="worker-self-hint" style={{padding:12,borderLeft:"2px solid var(--border, #ccc)"}}><strong>Важно для работы</strong><p>{data.config.instruction}</p></div>}
         {next?.proposalStatus==="proposed"&&<p className="worker-self-hint">Запрошено изменение: {kindShort(next.proposal)}. Ожидается решение менеджера.</p>}
         {!next?.kind?<><p className="worker-self-muted">На завтра пока нет установленной смены. Укажите рабочий день или выходной.</p>{sections.scheduleChanges&&<button className="worker-self-main-button" onClick={()=>setEditingDay(tomorrow)}>Запланировать день</button>}</>:
         next.kind==="off"?<><p className="worker-self-muted">Выходной уже стоит в вашем графике. Подтверждать его не нужно.</p>{sections.scheduleChanges&&<button className="worker-self-light-button full" onClick={()=>setEditingDay(tomorrow)}>{data.planning.owner==="manager"?"Запросить рабочий день":"Изменить на рабочий день"}</button>}</>:
@@ -179,9 +197,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         {completed?<><h2>{format(completed.date)}</h2><p className="worker-self-shift"><ShiftIcon kind={completed.kind}/><strong>{kindLabel(completed.kind)}</strong><span>{timeText(completed)}</span></p>
          {completedAnswer?.hours!=null&&!hourEdit?<><div className="worker-self-done"><CheckCircle2 size={17}/> Вы указали {completedAnswer.hours} ч.</div>{!completedAnswer.reconciledAt&&<button className="worker-self-light-button full" onClick={()=>{setHourEdit(true);setHours(String(completedAnswer.hours))}}>Исправить часы</button>}</>:
           <><p className="worker-self-question">Сколько часов вы отработали?</p>{hourEdit&&<label className="worker-self-hours">Отработано часов<input type="number" min={0} max={24} step={0.5} inputMode="decimal" value={hours} onChange={e=>setHours(e.target.value)}/></label>}
-           {hourEdit&&Number(hours)!==(data.paidHours??11)&&<label className="worker-self-hours">Причина отличия от нормы<textarea rows={2} maxLength={250} value={hoursComment} onChange={e=>setHoursComment(e.target.value)} placeholder="Укажите причину расхождения"/></label>}
-            <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24||(Number(hours)!==data.paidHours&&!hoursComment.trim())))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":`${data.paidHours} ч — верно`}</button>
-           <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
+           {hourEdit&&data.paidHours!=null&&Number(hours)!==data.paidHours&&<label className="worker-self-hours">Причина отличия от нормы<textarea rows={2} maxLength={250} value={hoursComment} onChange={e=>setHoursComment(e.target.value)} placeholder="Укажите причину расхождения"/></label>}
+            <button className="worker-self-main-button" disabled={busy||((hourEdit||data.paidHours==null)&&(!hours.trim()||!Number.isFinite(Number(hours))||Number(hours)<0||Number(hours)>24||(data.paidHours!=null&&Number(hours)!==data.paidHours&&!hoursComment.trim())))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit||data.paidHours==null?"Передать часы":`${data.paidHours} ч — плановая норма верна`}</button>
+           <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours??""))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
          <div className="worker-self-deadline"><Info size={13}/> Ночная смена отмечается датой её начала.</div>
         </>:<p className="worker-self-muted">Нет завершённых смен за ближайшие дни.</p>}
        </section>}
@@ -204,12 +222,12 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         </div>)}
        </div>
        {sections.scheduleChanges&&canEditWeek&&<div className="worker-self-week-tool">
-        <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Выберите {(data.planning.restDays??0)===1?"один день отдыха":"два дня отдыха"} на следующую неделю. Рабочие смены выставятся автоматически.</p></div>
+        <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Предложите {(data.planning.restDays??0)===1?"один выходной":"два выходных"} на неделю {smallDate(fullWeek[0])}–{smallDate(fullWeek[6])}. До {smallDate(move(fullWeek[0],-1))} можно отправить пожелания. График изменится только после подтверждения менеджером.</p></div>
         <button className="worker-self-light-button" onClick={()=>{setWeekEditing(x=>!x);setRestDates(fullWeek.filter(d=>records.get(d)?.kind==="off"))}}>{weekEditing?"Свернуть":"Выбрать дни отдыха"}</button>
         {weekEditing&&<div className="worker-self-week-editor">
          <div className="worker-self-week-label">Неделя {smallDate(fullWeek[0])}–{smallDate(fullWeek[6])} · {restDates.length} из {data.planning.restDays??0} выходных</div>
          <div className="worker-self-week-grid">{fullWeek.map(date=><button key={date} className={restDates.includes(date)?"off":""} onClick={()=>setRestDates(old=>old.includes(date)?old.filter(x=>x!==date):old.length<(data.planning.restDays??0)?[...old,date]:old)}><strong>{new Intl.DateTimeFormat("ru-RU",{weekday:"short",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}</strong><span>{date.slice(8)}</span>{restDates.includes(date)?"Вых.":"Раб."}</button>)}</div>
-         <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Сохранить неделю</button>
+         <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Отправить предложение</button>
         </div>}
        </div>}
       </section>}
@@ -222,6 +240,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        <button aria-label="Следующий месяц" onClick={()=>setMonthOverride(adjacentMonth(1))} disabled={currentMonth>=today.slice(0,7)}><ChevronRight size={18}/></button>
       </div>
       <div className="worker-self-totals"><div><small>Часы</small><strong>{counted.total}</strong></div><div><small>Смены</small><strong>{counted.shifts}</strong></div></div>
+      <p className="worker-self-muted">Статус периода: <strong>{periodStatus}</strong>. {data.periodClosedAt&&periodStatus==="Закрыт для расчёта"?"Часы за период согласованы и приняты в расчёт. Это не означает выплату.":""}</p>
       <section className="worker-self-panel worker-self-timesheet-panel">
        <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> {monthLabel}</span></div>
        <div className="worker-self-ledger-header"><span>Дата</span><span>Часы</span></div>
@@ -236,30 +255,41 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
           <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"||fact?.kind==="night"?"Ночная смена":plan?.kind==="day"||fact?.kind==="day"?"Дневная смена":off?"Выходной":"—"}</small></div>
           <div className="worker-self-ledger-result">
            <strong className={h!=null&&Number(h)>0?"actual":""}>{h!=null&&Number(h)>0?String(h)+" ч":off?"Выходной":"—"}</strong>
-           {h!=null&&Number(h)>0&&<small className={approved?"worker-self-agreed":""}>{approved?"Согласовано":"Передано"}</small>}
+           {(h!=null||reply?.response||plan?.kind)&&<small className={approved?"worker-self-agreed":""}>{dayStatus(date,reply,Boolean(plan?.kind||fact))}</small>}
+           {(reply?.updatedAt||reply?.reviewedAt)&&<small>Обновлено: {new Date(reply.reviewedAt??reply.updatedAt??"").toLocaleString("ru-RU")}</small>}
+           {reply?.reviewedAt&&<small>Проверил: {reply.reviewedBy??"менеджер"}</small>}
           </div>
          </div>
+         {h!=null&&Number(h)>0&&<div className="worker-self-ledger-dispute">
+           {activeDisputes.has(date)?<small>Обращение по часам передано менеджеру.</small>:<button className="worker-self-quiet" onClick={()=>{setDisputeDate(disputeDate===date?null:date);setDisputeComment("")}}>Не согласен с часами</button>}
+           {disputeDate===date&&<div className="worker-self-edit"><label>Причина<select value={disputeReason} onChange={e=>setDisputeReason(e.target.value as typeof disputeReason)}><option value="hours">Неверное количество часов</option><option value="missing_shift">Не учтена смена</option><option value="wrong_shift">Другая смена</option><option value="other">Другое</option></select></label><label>Комментарий<textarea value={disputeComment} onChange={e=>setDisputeComment(e.target.value)} maxLength={500} rows={2} placeholder="Укажите, в чём расхождение"/></label><button className="worker-self-main-button" disabled={busy||!disputeComment.trim()} onClick={async()=>{if(await save({action:"dispute_hours",date,reason:disputeReason,comment:disputeComment},"Обращение передано менеджеру"))setDisputeDate(null)}}>Отправить обращение</button></div>}
+         </div>}
         </div>;
        })}
        {counted.shifts===0&&<p className="worker-self-muted">За этот месяц пока нет отработанных смен.</p>}
       </section>
      </>}
      {activeTab==="more"&&<>
-      {activeMore==="overview"?<><div className="worker-self-page-title"><div><h1>Дополнительно</h1><p>Рабочие документы, спецодежда и контакты.</p></div></div>
-       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"employment",label:"Статус оформления",sub:"Мой тип оформления",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"contact",label:"Важные контакты",sub:"Ваш менеджер объекта",icon:Phone},{key:"objectInfo",label:"Об объекте",sub:"Инструкция и информация",icon:Info},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2}] as const).filter(x=>x.key==="documents"?sections.documents:x.key==="workwear"?sections.workwear:x.key==="employment"?sections.employment:x.key==="contact"?sections.contacts:x.key==="objectInfo"?sections.objectInfo:sections.scheduleChanges).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
+      {activeMore==="overview"?<><div className="worker-self-page-title"><div><h1>Профиль</h1><p>Рабочие разделы, доступные вам.</p></div></div>
+       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"employment",label:"Статус оформления",sub:"Мой тип оформления",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2},{key:"adjustments",label:"Удержания и корректировки",sub:"Сумма, причина и статус",icon:FileText}] as const).filter(x=>x.key==="documents"?sections.documents:x.key==="workwear"?sections.workwear:x.key==="employment"?sections.employment:x.key==="adjustments"?sections.payAdjustments:sections.scheduleChanges).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
       </>:<>
        <button className="worker-self-back" onClick={()=>setMore("overview")}><ArrowLeft size={15}/> Все разделы</button>
-       {activeMore==="documents"&&<><div className="worker-self-page-title"><div><h1>Мои документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · Что требуется для работы на объекте.</p></div></div>
+       {activeMore==="documents"&&<><div className="worker-self-page-title"><div><h1>Оформление и документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · {({not_started:"Не начато",requested:"Документы запрошены",partial:"Часть получена",review:"На проверке",completed:"Оформлен",correction:"Требуется исправление"} as Record<string,string>)[data.details?.onboarding?.stage??""]??"Уточняется"}</p></div></div>
         <section className="worker-self-panel"><div className="worker-self-panel-head"><span><FileText size={17}/> Чек-лист документов</span></div><p className="worker-self-muted">Отметьте переданные документы. Менеджер проверит получение.</p>
+         {data.details?.onboarding?.comment&&<p className="worker-self-warning">{data.details.onboarding.comment}</p>}
          <div className="worker-self-doc-list">{(data.details?.documents??[]).map(d=><div className="worker-self-doc-row" key={d.code}>
           <span className={"worker-self-doc-icon "+(d.managerVerified?"verified":d.employeeReported?"reported":"")}><Check size={14}/></span>
-          <div><strong>{d.label}</strong><small>{d.managerVerified?"Получено менеджером":d.employeeReported?"Вы отметили передачу · ожидается проверка":"Требуется передать"}</small></div>
+          <div><strong>{d.label}</strong><small>{d.status==="resubmit"?"Требуется повторно":d.managerVerified||d.status==="accepted"?"Принят":d.status==="received"?"Получен, ожидает проверки":d.employeeReported?"Готов к передаче":"Требуется передать"}</small></div>
           {!d.managerVerified&&<button disabled={busy} onClick={()=>void save({action:"document",code:d.code,reported:!d.employeeReported},"Статус документа обновлён")}>{d.employeeReported?"Отменить":"Передал"}</button>}
          </div>)}</div>
         </section>
        </>}
        {activeMore==="workwear"&&<><div className="worker-self-page-title"><div><h1>Спецодежда и СИЗ</h1><p>Укажите размеры и проверьте, что уже выдано на объекте.</p></div></div>
-        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label></div><button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null},"Размеры сохранены")}>Сохранить размеры</button></section>
+        <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><p className="worker-self-muted">Подтверждённые менеджером размеры: одежда {data.details?.clothingSize??"не указано"}, обувь {data.details?.shoeSize??"не указано"}, перчатки {data.details?.gloveSize??"не указано"}.</p>
+         {data.details?.sizeRequest?.status==="pending"&&<p className="worker-self-warning">Предложенные размеры ожидают подтверждения менеджера: {data.details.sizeRequest.clothingSize??"—"} / {data.details.sizeRequest.shoeSize??"—"} / {data.details.sizeRequest.gloveSize??"—"}.</p>}
+         <div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label><label>Размер перчаток<input value={glove} onChange={e=>setGloveDraft(e.target.value)} maxLength={40} placeholder="При необходимости"/></label></div>
+         <label>Дополнительные размеры или комментарий<textarea rows={2} maxLength={500} value={sizeComment} onChange={e=>setSizeComment(e.target.value)} placeholder="Например, нужен другой размер куртки"/></label>
+         <button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null,gloveSize:glove.trim()||null,comment:sizeComment.trim()||null},"Размеры отправлены менеджеру на подтверждение")}>Запросить подтверждение размеров</button></section>
         <section className="worker-self-panel worker-self-additional"><div className="worker-self-panel-head"><span>Выдача по объекту</span></div>
          {(data.details?.workwear??[]).map((x,i)=><div className="worker-self-asset-row" key={i}><span><strong>{x.name}</strong>{x.variant&&<small>Размер: {x.variant}</small>}</span><span className={"worker-self-asset-tag "+(x.state==="issued"?"issued":"")}>{x.state==="issued"?"Выдано":"Не выдано"}</span></div>)}
          <p className="worker-self-muted">Если что-то не выдано, обратитесь к менеджеру.</p>
@@ -270,8 +300,11 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          {managerCall?<a className="worker-self-main-button" href={"tel:"+managerCall}><Phone size={17}/> Позвонить · {data.details?.managerPhone}</a>:<p className="worker-self-muted">Контактный телефон пока не указан. Менеджер добавит рабочий номер в настройках объекта.</p>}
         </section>
        </>}
-       {activeMore==="employment"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Статус оформления</span></div><p>{employmentLabel[data.details?.employment??""]??"Тип оформления уточняется"}</p><p className="worker-self-muted">Состояние передачи документов указано в чек-листе, если он доступен.</p></section>}
-       {activeMore==="objectInfo"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Информация об объекте</span></div><p>{data.objectName}</p><p className="worker-self-muted">{data.config?.instruction??"При возникновении вопросов обратитесь к менеджеру."}</p></section>}
+       {activeMore==="employment"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Тип оформления</span></div><p>{employmentLabel[data.details?.employment??""]??"Тип оформления уточняется"}</p></section>}
+       {activeMore==="objectInfo"&&sections.objectInfo&&data.config?.instruction&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Важно для работы</span></div><p>{data.config.instruction}</p></section>}
+       {activeMore==="adjustments"&&<><div className="worker-self-page-title"><div><h1>Удержания и корректировки</h1><p>Информационный раздел. Ничего не удерживается автоматически.</p></div></div>
+        {(data.details?.adjustments??[]).length?(data.details?.adjustments??[]).map(item=><section className="worker-self-panel" key={item.id}><div className="worker-self-panel-head"><span>{item.periodStart} — {item.periodEnd}</span><strong>{item.amount.toLocaleString("ru-RU")} ₽</strong></div><p>{item.description}</p><p className="worker-self-muted">Основание: {item.reason}. Статус: {({review:"На проверке",confirmed:"Подтверждено менеджером",accounted:"Учтено в расчёте"} as Record<string,string>)[item.status]??"Уточняется"}</p><button className="worker-self-light-button full" onClick={()=>{setAdjustmentQuestionId(item.id);setAdjustmentQuestion("")}}>Есть вопрос по удержанию</button>{adjustmentQuestionId===item.id&&<div className="worker-self-edit"><label>Ваш вопрос<textarea value={adjustmentQuestion} onChange={e=>setAdjustmentQuestion(e.target.value)} maxLength={500} rows={2}/></label><button className="worker-self-main-button" disabled={busy||!adjustmentQuestion.trim()} onClick={async()=>{if(await save({action:"question_adjustment",adjustmentId:item.id,question:adjustmentQuestion},"Вопрос направлен менеджеру"))setAdjustmentQuestionId(null)}}>Отправить вопрос</button></div>}</section>):<p className="worker-self-muted">Подтверждённых и проверяемых корректировок нет.</p>}
+       </>}
        {activeMore==="settings"&&<>
         <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Здесь можно посмотреть свой график и запросить изменение.</p></div></div>
         <section className="worker-self-panel worker-self-schedule-summary">
@@ -314,7 +347,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    <nav className="worker-self-bottom-nav" aria-label="Главная навигация">
     {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>{sections.shifts?"Смены":"Действия"}</button>}
     {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>}
-    <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Ещё</button>
+    <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Профиль</button>
    </nav>
   </div>
  </main>;

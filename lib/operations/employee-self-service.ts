@@ -5,7 +5,7 @@ import {listObjects,listWorkers} from "@/lib/data/service";
 import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {resolveToken,assertEmployeeLinkActive,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
-import {applyPortalPatch,defaultPortalConfiguration,type PortalConfigurationPatch} from "@/lib/operations/employee-portal-config";
+import {effectiveActiveLinkConfiguration,type PortalConfigurationPatch} from "@/lib/operations/employee-portal-config";
 
 export const docLabels:Record<string,string>={
  passport:"Паспорт",snils:"СНИЛС",inn:"ИНН",bank_details:"Реквизиты для выплат",
@@ -21,8 +21,10 @@ const defaultRequired:Record<RelationType,string[]>={
  custom:["passport","inn","bank_details"]
 };
 export type PortalDetails={
- clothingSize:string|null;shoeSize:string|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
- documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean}>;
+ clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;sizeRequest:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
+ documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean;status:string}>;
+ onboarding:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;
+ adjustments:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;
  workwear:Array<{name:string;state:"issued"|"needed";variant:string|null}>;
  visibility:{documents:boolean;workwear:boolean;employment:boolean;contacts:boolean};
  shiftWindows:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean}>;
@@ -36,10 +38,10 @@ export function checklistCodes(relation:RelationType,overrides:Array<{code:strin
 async function authorizedEmployee(token:string){
  const ref=await resolveToken(token);if(!ref)return null;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;configuration:PortalConfigurationPatch}>>`
+  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;configuration:PortalConfigurationPatch;linkOverride:PortalConfigurationPatch}>>`
    SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,st.schedule_authority,CASE WHEN st.schedule_owner='client' THEN 'worker' ELSE st.schedule_owner END,'manager') owner,
    COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),st.timezone,'Europe/Moscow') timezone,
-   l.portal_config_snapshot configuration,
+   l.portal_config_snapshot configuration,l.link_config_override "linkOverride",
    COALESCE((SELECT er.relation_type FROM employment_relations er WHERE er.worker_id=l.worker_id
       AND er.effective_from<=current_date AND (er.effective_to IS NULL OR er.effective_to>=current_date)
       ORDER BY er.effective_from DESC LIMIT 1),'custom') employment
@@ -51,7 +53,7 @@ async function authorizedEmployee(token:string){
    WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${createHashToken(token)}
       AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active' AND COALESCE(st.reporting_enabled,true) LIMIT 1`;
   if(!link)return null;
-  const cfg=applyPortalPatch(defaultPortalConfiguration,link.configuration??{});
+  const cfg=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
   return {ref,link:{...link,timezone:cfg.timezone,showDocuments:cfg.sections.documents,showWorkwear:cfg.sections.workwear,scheduleChanges:cfg.sections.scheduleChanges,showEmployment:cfg.sections.employment,showContacts:cfg.sections.contacts,managerName:cfg.managerName,managerPhone:cfg.managerPhone}};
  });
 }
@@ -60,9 +62,9 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
  const scope=await authorizedEmployee(token);if(!scope)return null;
  const {ref,link}=scope;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges]=await Promise.all([
-   sql<Array<{clothingSize:string|null;shoeSize:string|null;managerName:string|null;managerPhone:string|null}>>`
-    SELECT w.clothing_size "clothingSize",w.shoe_size "shoeSize",u.display_name "managerName",s.manager_phone "managerPhone"
+  const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges,onboarding,adjustments,sizeRequests]=await Promise.all([
+   sql<Array<{clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;managerName:string|null;managerPhone:string|null}>>`
+    SELECT w.clothing_size "clothingSize",w.shoe_size "shoeSize",w.glove_size "gloveSize",w.ppe_size_comment "ppeSizeComment",u.display_name "managerName",s.manager_phone "managerPhone"
     FROM worker_profiles w JOIN objects o ON o.id=${link.objectId}::uuid
     LEFT JOIN worker_object_assignments a ON a.worker_id=w.id AND a.object_id=o.id
       AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
@@ -70,7 +72,7 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
     LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
     WHERE w.id=${link.workerId}::uuid ORDER BY a.effective_from DESC LIMIT 1`,
    sql<Array<{code:string;required:boolean}>>`SELECT document_code code,required FROM object_worker_document_requirements WHERE object_id=${link.objectId}::uuid AND relation_type=${link.employment}`,
-   sql<Array<{code:string;employeeReported:boolean;managerVerified:boolean}>>`SELECT document_code code,(employee_reported_at IS NOT NULL) "employeeReported",(manager_verified_at IS NOT NULL) "managerVerified" FROM worker_document_checklist WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid`,
+   sql<Array<{code:string;employeeReported:boolean;managerVerified:boolean;status:string|null}>>`SELECT document_code code,(employee_reported_at IS NOT NULL) "employeeReported",(manager_verified_at IS NOT NULL) "managerVerified",document_status status FROM worker_document_checklist WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid`,
    sql<Array<{name:string;variant:string|null}>>`
      SELECT i.name, NULLIF(m.variant,'') variant FROM inventory_movements m JOIN inventory_items i ON i.id=m.item_id
      WHERE m.worker_id=${link.workerId}::uuid AND i.returnable
@@ -101,21 +103,36 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
      SELECT work_date::text date,to_char(start_time,'HH24:MI') "startTime",to_char(end_time,'HH24:MI') "endTime",
        ends_next_day "endsNextDay",applies_to "appliesTo",status FROM worker_shift_time_changes
      WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-      AND (work_date BETWEEN current_date-33 AND current_date+31 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+31))`
+      AND (work_date BETWEEN current_date-33 AND current_date+31 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+31))`,
+   sql<Array<{stage:string;comment:string|null;showAfterCompleted:boolean}>>`
+    SELECT stage,employee_comment comment,show_after_completed "showAfterCompleted" FROM worker_onboarding_status
+    WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid LIMIT 1`,
+   sql<Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>>`
+    SELECT id,period_start::text "periodStart",period_end::text "periodEnd",amount::float8 amount,adjustment_type "adjustmentType",
+      reason,employee_description description,status FROM worker_pay_adjustments
+    WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+      AND status IN ('review','confirmed','accounted') ORDER BY period_start DESC LIMIT 25`,
+    sql<Array<{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}>>`
+      SELECT status,clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment FROM worker_ppe_size_requests
+      WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+      ORDER BY created_at DESC LIMIT 1`,
   ]);
   const codes=checklistCodes(link.employment,overrides);
   const verified=new Map(checkItems.map(item=>[item.code,item]));
   const names=new Set(issueRows.map(x=>x.name));
   const workwear=[...issueRows.map(x=>({...x,state:"issued" as const})),...normRows.filter(x=>!names.has(x.name)).map(x=>({name:x.name,variant:null,state:"needed" as const}))];
   return {clothingSize:profile[0]?.clothingSize??null,shoeSize:profile[0]?.shoeSize??null,
+    gloveSize:profile[0]?.gloveSize??null,ppeSizeComment:profile[0]?.ppeSizeComment??null,sizeRequest:sizeRequests[0]??null,
     employment:link.employment,managerName:link.managerName,managerPhone:link.managerPhone,
-    documents:link.showDocuments?codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false})):[],
+    onboarding:onboarding[0]??null,
+    adjustments:adjustments??[],
+    documents:link.showDocuments?codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false,status:verified.get(code)?.status??(verified.get(code)?.managerVerified?"accepted":verified.get(code)?.employeeReported?"received":"awaiting")})):[],
     workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear,employment:link.showEmployment,contacts:link.showContacts},shiftWindows,timeChanges:link.scheduleChanges?timeChanges:[]};
  });
 }
 
 type EmployeeDetailChange=
- |{action:"sizes";clothingSize:string|null;shoeSize:string|null}
+ |{action:"sizes";clothingSize:string|null;shoeSize:string|null;gloveSize?:string|null;comment?:string|null}
  |{action:"document";code:string;reported:boolean}
  |{action:"shift_time";date:string;kind?:"day"|"night";startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular"};
 const hhmm=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -127,7 +144,11 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
   if(change.action==="sizes"){
    if(!link.showWorkwear)throw new EmployeePortalError("Раздел спецодежды недоступен на объекте");
    if((change.clothingSize?.length??0)>40||(change.shoeSize?.length??0)>40)throw new EmployeePortalError("Укажите корректные размеры");
-   await sql`UPDATE worker_profiles SET clothing_size=${change.clothingSize?.trim()||null},shoe_size=${change.shoeSize?.trim()||null},updated_at=now() WHERE id=${link.workerId}::uuid`;
+   if((change.gloveSize?.length??0)>40||(change.comment?.length??0)>500)throw new EmployeePortalError("Проверьте дополнительные размеры");
+   await sql`UPDATE worker_ppe_size_requests SET status='superseded' WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND status='pending'`;
+   await sql`INSERT INTO worker_ppe_size_requests(organization_id,worker_id,object_id,source_link_id,clothing_size,shoe_size,glove_size,comment)
+      VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${ref.linkId}::uuid,
+       ${change.clothingSize?.trim()||null},${change.shoeSize?.trim()||null},${change.gloveSize?.trim()||null},${change.comment?.trim()||null})`;
    return {ok:true};
   }
   if(change.action==="document"){
@@ -183,8 +204,15 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
  |{action:"review_shift_time";objectId:string;workerId:string;date:string;approve:boolean}
  |{action:"manager_phone";objectId:string;phone:string|null}
  |{action:"document_requirement";objectId:string;relationType:RelationType;code:string;required:boolean}
- |{action:"portal_sections";objectId:string;documents:boolean;workwear:boolean}){
+ |{action:"portal_sections";objectId:string;documents:boolean;workwear:boolean}
+ |{action:"review_sizes";objectId:string;workerId:string;requestId:string;approve:boolean}
+ |{action:"set_onboarding";objectId:string;workerId:string;stage:"not_started"|"requested"|"partial"|"review"|"completed"|"correction";comment:string|null;showAfterCompleted:boolean}
+ |{action:"set_document_status";objectId:string;workerId:string;code:string;status:"not_requested"|"awaiting"|"received"|"accepted"|"resubmit"}
+ |{action:"resolve_hours_dispute";objectId:string;workerId:string;disputeId:string;status:"in_review"|"resolved"|"rejected"}
+ |{action:"upsert_adjustment";objectId:string;workerId:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:"deduction"|"damage"|"advance"|"other";reason:string;description:string;status:"draft"|"review"|"confirmed"|"cancelled"}){
+
  requireCapability(actor,"operations.shift.edit");
+ if(change.action==="upsert_adjustment")requireCapability(actor,"finance.worker_accrual.edit");
  if(actor.demo)throw new EmployeePortalError("Действие недоступно в демонстрации");
  const objects=await listObjects(actor);
  const obj=objects.find(x=>x.id===change.objectId);
@@ -214,6 +242,38 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
      VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.code},
        CASE WHEN ${change.verified} THEN now() ELSE NULL END,CASE WHEN ${change.verified} THEN ${actor.userId}::uuid ELSE NULL END)
      ON CONFLICT(worker_id,object_id,document_code) DO UPDATE SET manager_verified_at=EXCLUDED.manager_verified_at,manager_verified_by_user_id=EXCLUDED.manager_verified_by_user_id,updated_at=now()`;
+  }else if(change.action==="review_sizes"){
+   const [request]=await sql<Array<{id:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}>>`
+     SELECT id,clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment FROM worker_ppe_size_requests
+     WHERE id=${change.requestId}::uuid AND worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND status='pending' FOR UPDATE`;
+   if(!request)throw new EmployeePortalError("Запрос размеров уже обработан");
+   if(change.approve)await sql`UPDATE worker_profiles SET clothing_size=${request.clothingSize},shoe_size=${request.shoeSize},
+      glove_size=${request.gloveSize},ppe_size_comment=${request.comment},updated_at=now()
+      WHERE id=${change.workerId}::uuid AND organization_id=${actor.organizationId}::uuid`;
+   await sql`UPDATE worker_ppe_size_requests SET status=${change.approve?"approved":"rejected"},reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now()
+      WHERE id=${change.requestId}::uuid`;
+  }else if(change.action==="set_onboarding"){
+   await sql`INSERT INTO worker_onboarding_status(organization_id,worker_id,object_id,stage,employee_comment,show_after_completed,updated_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.stage},${change.comment?.trim()||null},${change.showAfterCompleted},${actor.userId}::uuid)
+     ON CONFLICT(worker_id) DO UPDATE SET object_id=EXCLUDED.object_id,stage=EXCLUDED.stage,employee_comment=EXCLUDED.employee_comment,
+     show_after_completed=EXCLUDED.show_after_completed,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
+  }else if(change.action==="set_document_status"){
+   if(!docLabels[change.code])throw new EmployeePortalError("Неизвестный документ");
+   await sql`INSERT INTO worker_document_checklist(organization_id,worker_id,object_id,document_code,document_status,manager_verified_at,manager_verified_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.code},${change.status},
+       CASE WHEN ${change.status}='accepted' THEN now() ELSE NULL END,CASE WHEN ${change.status}='accepted' THEN ${actor.userId}::uuid ELSE NULL END)
+     ON CONFLICT(worker_id,object_id,document_code) DO UPDATE SET document_status=EXCLUDED.document_status,
+       manager_verified_at=EXCLUDED.manager_verified_at,manager_verified_by_user_id=EXCLUDED.manager_verified_by_user_id,updated_at=now()`;
+  }else if(change.action==="resolve_hours_dispute"){
+   const updated=await sql`UPDATE worker_hours_disputes SET status=${change.status},resolved_at=CASE WHEN ${change.status}='in_review' THEN NULL ELSE now() END,
+     resolved_by_user_id=CASE WHEN ${change.status}='in_review' THEN NULL ELSE ${actor.userId}::uuid END
+     WHERE id=${change.disputeId}::uuid AND worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND status IN ('open','in_review') RETURNING id`;
+   if(!updated.length)throw new EmployeePortalError("Обращение уже обработано");
+  }else if(change.action==="upsert_adjustment"){
+   if(change.periodEnd<change.periodStart)throw new EmployeePortalError("Период указан неверно");
+   await sql`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.periodStart}::date,${change.periodEnd}::date,
+       ${change.amount},${change.adjustmentType},${change.reason.trim()},${change.description.trim()},${change.status},${actor.userId}::uuid)`;
   }else{
    await sql`UPDATE worker_shift_time_changes SET status=${change.approve?"accepted":"rejected"},reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),updated_at=now()
      WHERE worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND work_date=${change.date}::date`;

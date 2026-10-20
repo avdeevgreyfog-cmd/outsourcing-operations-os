@@ -1,3 +1,4 @@
+import {effectiveActiveLinkConfiguration,type PortalConfigurationPatch} from "@/lib/operations/employee-portal-config";
 import {scheduleCycleWork,schedulingConditionForDate,schedulingCycle,type SchedulingCondition} from "@/lib/operations/schedule-cycle";
 import type {Actor} from "@/lib/access/types";
 import {AccessDeniedError,requireCapability} from "@/lib/access/server";
@@ -33,8 +34,9 @@ export function cycleKind(date:string,anchor:string|null,workDays:number|null,re
 async function scopeForToken(token:string):Promise<TenantScope>{
  const ref=await resolveToken(token);if(!ref)throw new EmployeePortalAccessError("Недействительная ссылка");
  return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
-  const [row]=await sql<Array<Omit<TenantScope,"org"|"actor"|"link">>>`SELECT
+  const [row]=await sql<Array<Omit<TenantScope,"org"|"actor"|"link"> & {linkOverride:PortalConfigurationPatch}>>`SELECT
    l.worker_id worker,l.object_id object,a.specialty_id "specialtyId",
+   l.link_config_override "linkOverride",
    (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text today,
    COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
    COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
@@ -51,7 +53,10 @@ async function scopeForToken(token:string):Promise<TenantScope>{
      AND COALESCE(s.reporting_enabled,true)
    ORDER BY a.effective_from DESC LIMIT 1`;
   if(!row)throw new EmployeePortalAccessError("Персональный доступ закрыт");
-  return {...row,org:ref.tenantId,actor:ref.actorUserId,link:ref.linkId};
+  const config=await effectiveActiveLinkConfiguration(sql,ref.tenantId,row.object,row.worker,row.linkOverride);
+  const local=new Intl.DateTimeFormat("en-GB",{timeZone:config.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const dateParts=Object.fromEntries(local.map(part=>[part.type,part.value]));
+  return {...row,timezone:config.timezone,today:`${dateParts.year}-${dateParts.month}-${dateParts.day}`,org:ref.tenantId,actor:ref.actorUserId,link:ref.linkId};
  });
 }
 async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
@@ -266,7 +271,7 @@ export async function submitEmployeeWeek(token:string,weekStart:string,offDates:
  const s=await scopeForToken(token);
  if(!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)||new Date(weekStart+"T00:00:00Z").getUTCDay()!==1)throw new EmployeePortalError("Выберите неделю, начиная с понедельника");
  const dates=Array.from({length:7},(_,i)=>addDays(weekStart,i));
- if(weekStart<s.today||dates[6]>addDays(s.today,s.horizon))throw new EmployeePortalError("Выберите полную будущую неделю в пределах горизонта планирования");
+ if(weekStart<=s.today||dates[6]>addDays(s.today,s.horizon))throw new EmployeePortalError("Выберите полную будущую неделю в пределах горизонта планирования");
  if(new Set(offDates).size!==offDates.length||offDates.some(d=>!dates.includes(d)))throw new EmployeePortalError("Проверьте выбранные выходные");
  return withTenant(s.org,s.actor,async sql=>{
   await assertEmployeeLinkActive(sql,{tenantId:s.org,linkId:s.link},token);
@@ -275,11 +280,12 @@ export async function submitEmployeeWeek(token:string,weekStart:string,offDates:
   const workDays=p?.workDays??s.workDays,restDays=p?.restDays??s.restDays;
   if(!p?.floating||!(workDays===5&&restDays===2||workDays===6&&restDays===1))throw new EmployeePortalError("Плавающие выходные не разрешены в текущем графике");
   if(offDates.length!==restDays)throw new EmployeePortalError(restDays===1?"На неделе должен быть один выходной":"На неделе должно быть два выходных");
-  const status=s.owner==="worker"?"accepted":"proposed";
+  // Proposed floating days off require manager approval even if the employee can plan other shifts.
+  const status="proposed" as const;
   for(const date of dates){
    await ensureNotLocked(sql,s,date);
    const kind:PlannedKind=offDates.includes(date)?"off":p?.kind??s.defaultKind??"day";
-   if(status==="accepted")await writePlan(sql,s,date,kind);
+   // A floating-day request is never an approved shift until the manager reviews it.
    await sql`INSERT INTO worker_shift_plan_changes(organization_id,object_id,worker_id,work_date,requested_kind,status,requested_by_link_id)
     VALUES(${s.org}::uuid,${s.object}::uuid,${s.worker}::uuid,${date}::date,${kind},${status},${s.link}::uuid)
     ON CONFLICT(worker_id,object_id,work_date) DO UPDATE SET requested_kind=EXCLUDED.requested_kind,status=EXCLUDED.status,

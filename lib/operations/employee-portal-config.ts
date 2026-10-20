@@ -1,20 +1,20 @@
 import type {Sql} from "postgres";
 
-export const portalSectionKeys=["shifts","confirm","decline","scheduleChanges","hours","timesheet","documents","employment","workwear","contacts","objectInfo"] as const;
+export const portalSectionKeys=["shifts","confirm","decline","scheduleChanges","hours","timesheet","documents","employment","workwear","contacts","objectInfo","payAdjustments","suggestDaysOff"] as const;
 export type PortalSection=typeof portalSectionKeys[number];
 export type PortalSections=Record<PortalSection,boolean>;
 export type PortalConfiguration={
- managerName:string|null;managerPhone:string|null;contactMethod:string|null;instruction:string;
+ managerName:string|null;managerPhone:string|null;contactMethod:string|null;instruction:string;showWorkInstruction:boolean;
  timezone:string;validDays:number;autoRevokeOnExit:boolean;sections:PortalSections;
 };
 export type PortalConfigurationPatch=Partial<Omit<PortalConfiguration,"sections">>&{sections?:Partial<PortalSections>};
 
 export const defaultPortalConfiguration:PortalConfiguration={
  managerName:null,managerPhone:null,contactMethod:null,
- instruction:"Подтверждайте предстоящие смены и передавайте фактически отработанные часы после завершения работы.",
+ instruction:"",showWorkInstruction:false,
  timezone:"Europe/Moscow",validDays:30,autoRevokeOnExit:true,
  sections:{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,
-   documents:true,employment:true,workwear:true,contacts:true,objectInfo:true}
+   documents:true,employment:true,workwear:true,contacts:true,objectInfo:false,payAdjustments:false,suggestDaysOff:false}
 };
 export function normalizePortalPatch(value:unknown):PortalConfigurationPatch{
  if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("Некорректные настройки кабинета");
@@ -29,6 +29,10 @@ export function normalizePortalPatch(value:unknown):PortalConfigurationPatch{
    if(typeof v.timezone!=="string"||v.timezone.length>80)throw new Error("Некорректный часовой пояс");
    try{new Intl.DateTimeFormat("en-US",{timeZone:v.timezone});}catch{throw new Error("Неизвестный часовой пояс");}
    out.timezone=v.timezone;
+ }
+ if("showWorkInstruction" in v){
+   if(typeof v.showWorkInstruction!=="boolean")throw new Error("Некорректная настройка рабочей инструкции");
+   out.showWorkInstruction=v.showWorkInstruction;
  }
  if("validDays" in v){
    if(typeof v.validDays!=="number"||!Number.isInteger(v.validDays)||v.validDays<1||v.validDays>365)throw new Error("Срок ссылки: 1–365 дней");
@@ -48,7 +52,7 @@ export function normalizePortalPatch(value:unknown):PortalConfigurationPatch{
    if(Object.keys(raw).some(k=>!portalSectionKeys.includes(k as PortalSection)))throw new Error("Неизвестный раздел");
    out.sections=sections;
  }
- if(Object.keys(v).some(k=>!["managerName","managerPhone","contactMethod","instruction","timezone","validDays","autoRevokeOnExit","sections"].includes(k)))throw new Error("Неизвестная настройка кабинета");
+ if(Object.keys(v).some(k=>!["managerName","managerPhone","contactMethod","instruction","timezone","validDays","autoRevokeOnExit","showWorkInstruction","sections"].includes(k)))throw new Error("Неизвестная настройка кабинета");
  return out;
 }
 export function applyPortalPatch(base:PortalConfiguration,patch:PortalConfigurationPatch):PortalConfiguration{
@@ -82,4 +86,19 @@ export async function effectivePortalConfiguration(sql:Sql,organizationId:string
   sections:{...(legacy.documents===false?{documents:false}:{}),...(legacy.workwear===false?{workwear:false}:{})}
  }:{};
  return resolvePortalConfiguration([overrides.organization,fallback,overrides.object,overrides.worker,issuePatch??{}]);
+}
+
+/** Live inheritance: an issued link overrides only keys explicitly changed on issuance. */
+export function diffPortalConfiguration(base:PortalConfiguration,issued:PortalConfigurationPatch):PortalConfigurationPatch{
+ const full=applyPortalPatch(base,issued),patch:PortalConfigurationPatch={};
+ for(const key of ["managerName","managerPhone","contactMethod","instruction","timezone","validDays","autoRevokeOnExit","showWorkInstruction"] as const){
+   if(full[key]!==base[key])Object.assign(patch,{[key]:full[key]});
+ }
+ const sections:Partial<PortalSections>={};
+ for(const key of portalSectionKeys)if(full.sections[key]!==base.sections[key])sections[key]=full.sections[key];
+ if(Object.keys(sections).length)patch.sections=sections;
+ return patch;
+}
+export async function effectiveActiveLinkConfiguration(sql:Sql,organizationId:string,objectId:string,workerId:string,linkOverride?:PortalConfigurationPatch){
+ return effectivePortalConfiguration(sql,organizationId,objectId,workerId,linkOverride??{});
 }
