@@ -145,8 +145,8 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    <div className="worker-self-layout">
     <aside className="worker-self-sidebar">
      <p>РАБОЧЕЕ ПРОСТРАНСТВО</p>
-     <button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> Мои смены</button>
-     <button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>
+     {sections.shifts&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> Мои смены</button>}
+     {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>}
      <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Ещё</button>
      <div className="worker-self-sidebar-foot">{data.name}<small>{data.objectName}</small></div>
     </aside>
@@ -311,8 +311,8 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     </div>
    </div>
    <nav className="worker-self-bottom-nav" aria-label="Главная навигация">
-    <button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>Смены</button>
-    <button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>
+    {sections.shifts&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>Смены</button>}
+    {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>}
     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Ещё</button>
    </nav>
   </div>
