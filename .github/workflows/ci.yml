@@ -69,6 +69,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run db:setup
       - run: npm run test:db
+      - name: Verify employee portal in disposable database
+        run: npm run test:employee-db
       - name: Build database-backed app
         run: npm run build
       - name: Verify real tenant object rendering
