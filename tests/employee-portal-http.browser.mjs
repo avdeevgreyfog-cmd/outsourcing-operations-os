@@ -53,7 +53,7 @@ try{
    assert.equal(deniedSection.status(),403,'hidden employee action blocked server-side');
  }
  const hiddenMenu=await employee.newPage();await hiddenMenu.goto(origin+rotated.path,{waitUntil:'networkidle'});
- await hiddenMenu.getByRole('button',{name:'Ещё'}).last().click();
+ await hiddenMenu.getByRole('button',{name:'Профиль'}).last().click();
  assert.equal(await hiddenMenu.getByRole('button',{name:/Документы/}).count(),0,'hidden documents removed from navigation');
  console.log('Per-link hidden documents, PPE, contacts and timesheet protected in UI and API');
  const sectionCases=[
