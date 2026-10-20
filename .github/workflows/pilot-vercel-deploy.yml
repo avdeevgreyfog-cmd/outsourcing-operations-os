@@ -1,0 +1,117 @@
+name: Deploy Personal Pilot to Vercel
+on:
+  push:
+    branches: [pilot/sergey-work]
+    paths:
+      - ".github/workflows/pilot-vercel-deploy.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: employee-portal-personal-pilot-deploy
+  cancel-in-progress: false
+jobs:
+  deploy-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_tp2OXywX0LuhpNrhNwRc7yMj
+      VERCEL_PROJECT_ID: prj_cuwSOgH7IxGXunZMSrsgTlFypXSP
+      EXPECTED_SCHEMA: 0082_employee_portal_legacy_expiration.sql
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Verify Vercel publishing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::error::VERCEL_TOKEN is not configured as a repository Actions secret. The connected Vercel API also returned 403. Configure an authorized Vercel token and rerun this workflow; no deployment or alias has been changed."
+            exit 1
+          fi
+      - name: Build and test exact commit
+        env:
+          DEMO_MODE: "true"
+          SESSION_SECRET: "ci-only-no-live-tokens"
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npm run typecheck
+          npm run lint
+      - name: Record currently serving database identity
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 https://operis-workspace.vercel.app/api/system/status -o /tmp/pilot-before.json
+          node - <<'NODE'
+          const state=require('/tmp/pilot-before.json');
+          if(!state.ok||!state.databaseConfigured||!state.databaseIdentity||state.schemaVersion!==process.env.EXPECTED_SCHEMA)
+            throw Error("Live personal tenant is not healthy or on the required migration");
+          console.log("Existing personal runtime healthy; preserving the same database identity.");
+          NODE
+      - name: Install Vercel CLI and link existing project by immutable IDs
+        run: |
+          npm install --global vercel@latest
+          mkdir -p .vercel
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > .vercel/project.json
+      - name: Load only pilot branch Preview environment
+        run: |
+          vercel pull --yes --environment=preview --git-branch=pilot/sergey-work --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
+      - name: Build and create protected Preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          vercel build --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
+          deployed_url="$(vercel deploy --prebuilt --yes --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID")"
+          if [[ "$deployed_url" != https://*.vercel.app ]]; then
+            echo "::error::Preview deployment did not return a Vercel URL"; exit 1
+          fi
+          printf '%s' "$deployed_url" > /tmp/pilot-preview-url
+          echo "A fresh protected Preview was created for this commit."
+      - name: Verify protected Preview runtime before touching personal alias
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_url="$(cat /tmp/pilot-preview-url)"
+          for attempt in $(seq 1 12); do
+            if vercel curl /api/system/status --deployment "$deployed_url" --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" -fsS -o /tmp/pilot-candidate.json; then
+              if node - <<'NODE'
+          const current=require('/tmp/pilot-before.json');
+          const fresh=require('/tmp/pilot-candidate.json');
+          const expected=process.env.GITHUB_SHA;
+          if(!fresh.ok||fresh.databaseIdentity!==current.databaseIdentity
+           ||fresh.schemaVersion!==process.env.EXPECTED_SCHEMA
+           ||fresh.employeeLinkEncryptionConfigured!==true
+           ||fresh.employeePortalRelease!=='v2-live-20261020'
+           ||fresh.deploymentSha!==expected)process.exit(1);
+          console.log("Preview passed: exact SHA, correct tenant DB, encryption, and schema.");
+          NODE
+              then break; fi
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "::error::Candidate did not pass safety checks: alias is unchanged."; exit 1
+            fi
+            sleep 5
+          done
+          vercel curl /employee-timesheet/demo --deployment "$deployed_url" --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID" -fsS -o /tmp/pilot-demo.html
+          grep -Eq 'OPERIS|Личный кабинет' /tmp/pilot-demo.html || { echo "::error::Employee demo page is missing"; exit 1; }
+      - name: Switch personal Vercel alias only after all checks pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_url="$(cat /tmp/pilot-preview-url)"
+          vercel alias set "$deployed_url" operis-workspace.vercel.app --token="$VERCEL_TOKEN" --scope="$VERCEL_ORG_ID"
+          curl -fsS --retry 4 https://operis-workspace.vercel.app/api/system/status -o /tmp/pilot-after.json
+          node - <<'NODE'
+          const old=require('/tmp/pilot-before.json');
+          const newer=require('/tmp/pilot-after.json');
+          if(newer.deploymentSha!==process.env.GITHUB_SHA || newer.databaseIdentity!==old.databaseIdentity
+           || newer.schemaVersion!==process.env.EXPECTED_SCHEMA || newer.employeePortalRelease!=='v2-live-20261020')
+           throw Error("Alias smoke failed; please inspect the current deployment.");
+          console.log("Personal alias serves the reviewed employee portal release; protected data unchanged.");
+          NODE
