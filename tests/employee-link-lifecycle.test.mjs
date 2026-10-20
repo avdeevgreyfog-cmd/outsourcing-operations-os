@@ -14,7 +14,7 @@ function harness({entry=null,assigned=null}={}){const links=[],directory=[],quer
   if(q.includes('set_config'))return [];
   if(q.includes('FROM public_worker_timesheet_tokens'))return directory.filter(x=>x.hash===values[0]).map(x=>({tenantId:org,actorUserId:user,linkId:x.link}));
   if(q.includes('FROM worker_profiles w'))return employed?[{id:worker}]:[];
-  if(q.includes('FROM employee_portal_config_overrides')||q.includes('FROM object_shift_reporting_settings WHERE'))return [];
+  if(q.includes('FROM employee_portal_config_overrides')||q.includes('FROM object_shift_reporting_settings WHERE')||q.includes('FROM objects o'))return [];
   if(q.includes('FROM worker_timesheet_links WHERE organization_id=')){
     return links.filter(l=>['active','paused'].includes(l.status)).slice(-1).map(l=>({id:l.id,status:l.status,ciphertext:l.ciphertext,valid:true}));
   }
