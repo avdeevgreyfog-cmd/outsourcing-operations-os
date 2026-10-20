@@ -36,7 +36,8 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
     timeChanges:sections.scheduleChanges?details.timeChanges:[],
     visibility:{documents:sections.documents,workwear:sections.workwear,employment:sections.employment,contacts:sections.contacts}
    }:null;
-  return NextResponse.json({...data,
+  const exposedConfig={sections:data.config.sections,instruction:data.config.sections.objectInfo?data.config.instruction:""};
+  return NextResponse.json({...data,config:exposedConfig,
     reports:sections.shifts||sections.timesheet?data.reports:[],
     plans:sections.timesheet?data.plans:[],
     planning:planning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
