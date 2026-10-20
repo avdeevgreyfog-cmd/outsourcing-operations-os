@@ -103,7 +103,7 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
      SELECT work_date::text date,to_char(start_time,'HH24:MI') "startTime",to_char(end_time,'HH24:MI') "endTime",
        ends_next_day "endsNextDay",applies_to "appliesTo",status FROM worker_shift_time_changes
      WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
-      AND (work_date BETWEEN current_date-33 AND current_date+31 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+31))`
+      AND (work_date BETWEEN current_date-33 AND current_date+31 OR (applies_to='regular' AND status='accepted' AND work_date<=current_date+31))`,
    sql<Array<{stage:string;comment:string|null;showAfterCompleted:boolean}>>`
     SELECT stage,employee_comment comment,show_after_completed "showAfterCompleted" FROM worker_onboarding_status
     WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid LIMIT 1`,
