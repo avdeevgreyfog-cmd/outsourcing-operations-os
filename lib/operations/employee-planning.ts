@@ -94,7 +94,9 @@ export async function employeePlanning(token:string,selectedMonth?:string):Promi
    &&selectedMonth>=addDays(s.today,-366).slice(0,7)?selectedMonth:null;
   const monthFrom=(validMonth??s.today.slice(0,7))+"-01";
   const from=monthFrom<addDays(s.today,-3)?monthFrom:addDays(s.today,-3);
-  const to=addDays(s.today,s.horizon);
+  const monthEnd=new Date(Date.UTC(Number(monthFrom.slice(0,4)),Number(monthFrom.slice(5,7)),0)).toISOString().slice(0,10);
+  const defaultEnd=addDays(s.today,s.horizon);
+  const to=monthEnd>defaultEnd?monthEnd:defaultEnd;
   const records=await planningRows(sql,s,from,to);
   const entries=new Map(records.entries.map(e=>[e.date,e]));
   const shifts=new Map(records.shifts.map(e=>[e.date,e]));
