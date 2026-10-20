@@ -269,7 +269,7 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
   const ref=await resolveToken(token);if(!ref)throw new EmployeePortalAccessError("Недействительная ссылка");
   return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
     await assertEmployeeLinkActive(sql,ref,token);
-    const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string;paidHours:number;configuration:PortalConfigurationPatch}>>`
+    const [link]=await sql<Array<{workerId:string;objectId:string;owner:string;localToday:string;deadline:string;timezone:string;paidHours:number|null;linkOverride:PortalConfigurationPatch}>>`
       SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
       (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text "localToday",
       COALESCE(s.confirmation_deadline::text,'22:00') deadline,
@@ -283,12 +283,17 @@ export async function submitEmployeeReply(token:string,payload:{date:string;resp
       WHERE l.id=${ref.linkId}::uuid AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active' AND COALESCE(s.reporting_enabled,true)
       LIMIT 1`;
     if(!link)throw new EmployeePortalAccessError("Доступ закрыт");
-    const sections=(await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride)).sections;
+    const config=await effectiveActiveLinkConfiguration(sql,ref.tenantId,link.objectId,link.workerId,link.linkOverride);
+    const sections=config.sections;
+    const todayParts=new Intl.DateTimeFormat("en-GB",{timeZone:config.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+    const localDate=Object.fromEntries(todayParts.map(part=>[part.type,part.value]));
+    link.localToday=`${localDate.year}-${localDate.month}-${localDate.day}`;
+    link.timezone=config.timezone;
     if(payload.hours!==undefined&&!sections.hours)throw new EmployeePortalError("Ввод часов отключён для этой ссылки");
     if(payload.response==="working"&&!sections.confirm)throw new EmployeePortalError("Подтверждение выхода недоступно");
     if(payload.response==="cannot_work"&&!sections.decline)throw new EmployeePortalError("Сообщение о невыходе недоступно");
     if(payload.response==="day_off"&&!sections.scheduleChanges)throw new EmployeePortalError("Изменение графика недоступно");
-    if(payload.hours!==undefined&&Math.abs(payload.hours-link.paidHours)>0.001&&!payload.reason?.trim())throw new EmployeePortalError("При отличии часов от нормы укажите причину");
+    if(payload.hours!==undefined&&link.paidHours!=null&&Math.abs(payload.hours-link.paidHours)>0.001&&!payload.reason?.trim())throw new EmployeePortalError("При отличии часов от нормы укажите причину");
     const activeShifts=await sql<Array<{id:string}>>`
       SELECT sh.id FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
       WHERE sh.object_id=${link.objectId}::uuid AND sa.worker_id=${link.workerId}::uuid
