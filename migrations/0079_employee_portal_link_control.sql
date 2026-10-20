@@ -63,3 +63,22 @@ UPDATE worker_shift_reports SET review_status='approved',approved_hours=reported
 CREATE INDEX IF NOT EXISTS idx_employee_portal_pending_review ON worker_shift_reports
  (organization_id,object_id,work_date)
  WHERE reported_hours IS NOT NULL AND review_status='pending';
+
+-- Defence in depth: prevent dormant links from being reactivated when a worker is
+-- dismissed outside the standard exit workflow. Does not remove reports or tokens.
+CREATE OR REPLACE FUNCTION revoke_worker_portal_access_on_status_change()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.status='active' AND NEW.status<>'active' THEN
+  UPDATE worker_timesheet_links
+    SET status='revoked',revoked_at=now(),changed_at=now()
+    WHERE organization_id=NEW.organization_id AND worker_id=NEW.id
+      AND status IN ('active','paused');
+ END IF;
+ RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS worker_portal_auto_revoke_on_exit ON worker_profiles;
+CREATE TRIGGER worker_portal_auto_revoke_on_exit
+ AFTER UPDATE OF status ON worker_profiles
+ FOR EACH ROW EXECUTE FUNCTION revoke_worker_portal_access_on_status_change();
