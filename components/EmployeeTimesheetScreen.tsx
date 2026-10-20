@@ -98,8 +98,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const agreementHours=totalHours(approved,true);
  const periodReplies=monthReplies.filter(r=>r.hours!=null);
  const periodDisputes=(data?.disputes??[]).filter(d=>d.date.startsWith(currentMonth)&&(d.status==="open"||d.status==="in_review"));
- const acceptedHours=data?.periodClosedAt?agreementHours:0;
- const acceptedShifts=data?.periodClosedAt?approved.filter(r=>(r.approvedHours??r.hours??0)>0).length:0;
+ const isPeriodClosed=Boolean(data?.periodClosedAt||["fixed","closed"].includes(data?.periodStatus??""));
+ const acceptedHours=isPeriodClosed?agreementHours:0;
+ const acceptedShifts=isPeriodClosed?approved.filter(r=>(r.approvedHours??r.hours??0)>0).length:0;
  const summary={
   planned:{hours:planHours,shifts:monthPlans.length},
   submitted:{hours:totalHours(submitted),shifts:submitted.length},
@@ -156,13 +157,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
   if(activeDisputes.has(date)||reply?.reviewStatus==="rejected")return "Есть расхождение";
   if(reply?.reviewStatus==="approved"||reply?.reconciledAt){
     if(reply?.reviewedAt&&reply?.updatedAt&&Date.parse(reply.updatedAt)>Date.parse(reply.reviewedAt)+1000)return "Исправлено после согласования";
-    return data?.periodClosedAt?"Закрыто для расчёта":"Согласовано";
+    return isPeriodClosed?"Закрыто для расчёта":"Согласовано";
   }
   if(reply?.hours!=null)return reply.reviewStatus==="pending"?"Проверяется менеджером":"Часы переданы сотрудником";
   if(reply?.response)return "Ожидается ответ сотрудника";
   return hasPlan?"Черновик менеджера":"Нет смены";
  };
- const periodStatus=periodDisputes.length?"Есть расхождения":data?.periodClosedAt?"Закрыт для расчёта":approved.length&&approved.length===periodReplies.length?"Согласован":periodReplies.length?"Проверяется":"Табель формируется";
+ const periodStatus=periodDisputes.length?"Есть расхождения":isPeriodClosed?"Закрыт для расчёта":approved.length&&approved.length===periodReplies.length?"Согласован":periodReplies.length?"Проверяется":"Табель формируется";
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
  if(!data)return <main className="worker-self"><div className="worker-self-loading"><LockKeyhole/> Кабинет недоступен. {error}</div></main>;
  return <main className={"worker-self "+(previewLayout==="phone"?"worker-self-phone":"")+(previewLayout==="desktop"?" worker-self-desktop":"")}>
@@ -256,7 +257,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       <div className="worker-self-totals">
        {([{title:"План",value:summary.planned},{title:"Передано сотрудником",value:summary.submitted},{title:"Согласовано менеджером",value:summary.approved},{title:"Принято в расчёт",value:summary.accounted}] as const).map(item=><div key={item.title}><small>{item.title}</small><strong>{item.value.hours===null?"Норма уточняется":item.value.hours+" ч"}</strong><small>{item.value.shifts} смен</small></div>)}
       </div>
-      <p className="worker-self-muted">Статус периода: <strong>{periodStatus}</strong>. {data.periodClosedAt&&periodStatus==="Закрыт для расчёта"?"Часы за период согласованы и приняты в расчёт. Это не означает выплату.":""}</p>
+      <p className="worker-self-muted">Статус периода: <strong>{periodStatus}</strong>. {isPeriodClosed&&periodStatus==="Закрыт для расчёта"?"Часы за период согласованы и приняты в расчёт. Это не означает выплату.":""}</p>
       <section className="worker-self-panel worker-self-timesheet-panel">
        <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> {monthLabel}</span></div>
        <div className="worker-self-ledger-header"><span>Дата</span><span>Часы</span></div>
