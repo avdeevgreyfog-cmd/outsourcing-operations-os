@@ -69,12 +69,12 @@ export async function effectivePortalConfiguration(sql:Sql,organizationId:string
  const overrides=await loadPortalOverrides(sql,organizationId,objectId,workerId);
  const [legacy]=await sql<Array<{timezone:string|null;managerPhone:string|null;managerName:string|null;documents:boolean;workwear:boolean}>>`
  SELECT s.timezone,s.manager_phone "managerPhone",u.display_name "managerName",s.show_employee_documents documents,s.show_employee_workwear workwear
- FROM object_shift_reporting_settings s
- LEFT JOIN objects o ON o.id=s.object_id
+ FROM objects o
+ LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
  LEFT JOIN LATERAL (SELECT manager_user_id FROM worker_object_assignments WHERE worker_id=${workerId}::uuid AND object_id=${objectId}::uuid
   AND (effective_from IS NULL OR effective_from<=current_date) AND (effective_to IS NULL OR effective_to>=current_date) ORDER BY effective_from DESC LIMIT 1) a ON true
  LEFT JOIN app_users u ON u.id=COALESCE(a.manager_user_id,o.owner_user_id)
- WHERE s.object_id=${objectId}::uuid`;
+ WHERE o.id=${objectId}::uuid`;
  const fallback:PortalConfigurationPatch=legacy?{
   ...(legacy.managerPhone?{managerPhone:legacy.managerPhone}:{}),
   ...(legacy.managerName?{managerName:legacy.managerName}:{}),
