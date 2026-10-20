@@ -21,7 +21,7 @@ const defaultRequired:Record<RelationType,string[]>={
  custom:["passport","inn","bank_details"]
 };
 export type PortalDetails={
- clothingSize:string|null;shoeSize:string|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
+ clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;sizeRequest:{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
  documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean;status:string}>;
  onboarding:{stage:string;comment:string|null;showAfterCompleted:boolean}|null;
  adjustments:Array<{id:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:string;reason:string;description:string;status:string}>;
@@ -62,9 +62,9 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
  const scope=await authorizedEmployee(token);if(!scope)return null;
  const {ref,link}=scope;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges,onboarding,adjustments]=await Promise.all([
-   sql<Array<{clothingSize:string|null;shoeSize:string|null;managerName:string|null;managerPhone:string|null}>>`
-    SELECT w.clothing_size "clothingSize",w.shoe_size "shoeSize",u.display_name "managerName",s.manager_phone "managerPhone"
+  const [profile,overrides,checkItems,issueRows,normRows,shiftWindows,timeChanges,onboarding,adjustments,sizeRequests]=await Promise.all([
+   sql<Array<{clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;ppeSizeComment:string|null;managerName:string|null;managerPhone:string|null}>>`
+    SELECT w.clothing_size "clothingSize",w.shoe_size "shoeSize",w.glove_size "gloveSize",w.ppe_size_comment "ppeSizeComment",u.display_name "managerName",s.manager_phone "managerPhone"
     FROM worker_profiles w JOIN objects o ON o.id=${link.objectId}::uuid
     LEFT JOIN worker_object_assignments a ON a.worker_id=w.id AND a.object_id=o.id
       AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date)
@@ -112,12 +112,17 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
       reason,employee_description description,status FROM worker_pay_adjustments
     WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
       AND status IN ('review','confirmed','accounted') ORDER BY period_start DESC LIMIT 25`,
+    sql<Array<{status:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}>>`
+      SELECT status,clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment FROM worker_ppe_size_requests
+      WHERE organization_id=${ref.tenantId}::uuid AND worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid
+      ORDER BY created_at DESC LIMIT 1`,
   ]);
   const codes=checklistCodes(link.employment,overrides);
   const verified=new Map(checkItems.map(item=>[item.code,item]));
   const names=new Set(issueRows.map(x=>x.name));
   const workwear=[...issueRows.map(x=>({...x,state:"issued" as const})),...normRows.filter(x=>!names.has(x.name)).map(x=>({name:x.name,variant:null,state:"needed" as const}))];
   return {clothingSize:profile[0]?.clothingSize??null,shoeSize:profile[0]?.shoeSize??null,
+    gloveSize:profile[0]?.gloveSize??null,ppeSizeComment:profile[0]?.ppeSizeComment??null,sizeRequest:sizeRequests[0]??null,
     employment:link.employment,managerName:link.managerName,managerPhone:link.managerPhone,
     onboarding:onboarding[0]??null,
     adjustments:adjustments??[],
@@ -127,7 +132,7 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
 }
 
 type EmployeeDetailChange=
- |{action:"sizes";clothingSize:string|null;shoeSize:string|null}
+ |{action:"sizes";clothingSize:string|null;shoeSize:string|null;gloveSize?:string|null;comment?:string|null}
  |{action:"document";code:string;reported:boolean}
  |{action:"shift_time";date:string;kind?:"day"|"night";startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular"};
 const hhmm=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -139,7 +144,11 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
   if(change.action==="sizes"){
    if(!link.showWorkwear)throw new EmployeePortalError("Раздел спецодежды недоступен на объекте");
    if((change.clothingSize?.length??0)>40||(change.shoeSize?.length??0)>40)throw new EmployeePortalError("Укажите корректные размеры");
-   await sql`UPDATE worker_profiles SET clothing_size=${change.clothingSize?.trim()||null},shoe_size=${change.shoeSize?.trim()||null},updated_at=now() WHERE id=${link.workerId}::uuid`;
+   if((change.gloveSize?.length??0)>40||(change.comment?.length??0)>500)throw new EmployeePortalError("Проверьте дополнительные размеры");
+   await sql`UPDATE worker_ppe_size_requests SET status='superseded' WHERE worker_id=${link.workerId}::uuid AND object_id=${link.objectId}::uuid AND status='pending'`;
+   await sql`INSERT INTO worker_ppe_size_requests(organization_id,worker_id,object_id,source_link_id,clothing_size,shoe_size,glove_size,comment)
+      VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${ref.linkId}::uuid,
+       ${change.clothingSize?.trim()||null},${change.shoeSize?.trim()||null},${change.gloveSize?.trim()||null},${change.comment?.trim()||null})`;
    return {ok:true};
   }
   if(change.action==="document"){
