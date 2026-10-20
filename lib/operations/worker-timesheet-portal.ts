@@ -10,7 +10,7 @@ import {defaultPortalConfiguration,applyPortalPatch,effectivePortalConfiguration
 export class EmployeePortalError extends Error {}
 export class EmployeePortalAccessError extends EmployeePortalError {}
 const tokenHash=(token:string)=>createHash("sha256").update(token).digest("hex");
-function tokenCipherKey(){const secret=process.env.SESSION_SECRET;if(!secret)throw new Error("SESSION_SECRET не задан");return createHash("sha256").update(secret).digest()}
+function tokenCipherKey(){const secret=process.env.SESSION_SECRET;if(!secret)throw new EmployeePortalError("Не настроен ключ персональных ссылок в серверном окружении (SESSION_SECRET). Обратитесь к администратору.");return createHash("sha256").update(secret).digest()}
 function encryptToken(raw:string){const iv=randomBytes(12),cipher=createCipheriv("aes-256-gcm",tokenCipherKey(),iv);const encrypted=Buffer.concat([cipher.update(raw,"utf8"),cipher.final()]);return [iv,cipher.getAuthTag(),encrypted].map(x=>x.toString("base64url")).join(".")}
 function decryptToken(ciphertext:string){const [iv,tag,blob]=ciphertext.split(".").map(x=>Buffer.from(x,"base64url"));const cipher=createDecipheriv("aes-256-gcm",tokenCipherKey(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(blob),cipher.final()]).toString("utf8")}
 export type EmployeeReply={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;shiftId?:string|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;employeeRespondedAt:string|null;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:"pending"|"approved"|"rejected";approvedHours?:number|null;reviewComment?:string|null;reviewedAt?:string|null};
