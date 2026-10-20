@@ -85,37 +85,56 @@ export async function editPortalSettings(actor:Actor,objectId:string,owner:"mana
   });
 }
 
-export async function editWorkerLink(actor:Actor,objectId:string,workerId:string,action:"create"|"rotate"|"copy"|"pause"|"resume"|"revoke"){
-  if(actor.demo)throw new EmployeePortalError("Ссылки выдаются только в рабочем контуре");
-  await assertManage(actor,objectId,workerId);
-  return withTenant(actor.organizationId,actor.userId,async(sql)=>{
-    const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w
-      WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${workerId}::uuid AND w.status='active'
-        AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=w.organization_id AND a.worker_id=w.id AND a.object_id=${objectId}::uuid
-          AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date)) FOR UPDATE OF w`;
-    if(!worker)throw new EmployeePortalError("Сотрудник больше не работает на объекте");
-    if(action==="copy"){
-      const [existing]=await sql<Array<{ciphertext:string}>>`SELECT token_ciphertext ciphertext FROM worker_timesheet_links WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND status='active' ORDER BY created_at DESC LIMIT 1`;
-      if(!existing)throw new EmployeePortalError("Активная ссылка не найдена");
-      return {ok:true,path:"/employee-timesheet/"+decryptToken(existing.ciphertext)};
-    }
-    if(action==="create"||action==="rotate"){
-      const raw=randomBytes(32).toString("base64url");
-      const hash=tokenHash(raw);
-      await sql`UPDATE worker_timesheet_links SET status='revoked',revoked_at=now()
-        WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND status<>'revoked'`;
-      const [link]=await sql<Array<{id:string}>>`INSERT INTO worker_timesheet_links(organization_id,worker_id,object_id,token_hash,token_ciphertext,created_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${objectId}::uuid,${hash},${encryptToken(raw)},${actor.userId}::uuid) RETURNING id`;
-      await sql`INSERT INTO public_worker_timesheet_tokens(token_hash,tenant_id,actor_user_id,link_id)
-        VALUES(${hash},${actor.organizationId}::uuid,${actor.userId}::uuid,${link.id}::uuid)`;
-      return {ok:true,path:"/employee-timesheet/"+raw};
-    }
-    const status=action==="pause"?"paused":action==="resume"?"active":"revoked";
-    await sql`UPDATE worker_timesheet_links SET status=${status},revoked_at=CASE WHEN ${status}='revoked' THEN now() ELSE revoked_at END
-      WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid
-        AND status IN ('active','paused')`;
-    return {ok:true};
-  });
+export async function editWorkerLink(actor:Actor,objectId:string,workerId:string,action:"create"|"rotate"|"copy"|"pause"|"resume"|"revoke",issuedConfig?:PortalConfigurationPatch,requestedExpiry?:string,requestedAutoRevoke?:string){
+ if(actor.demo)throw new EmployeePortalError("Ссылки выдаются только в рабочем контуре");
+ await assertManage(actor,objectId,workerId);
+ return withTenant(actor.organizationId,actor.userId,async(sql)=>{
+   const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w
+     WHERE w.organization_id=${actor.organizationId}::uuid AND w.id=${workerId}::uuid AND w.status='active'
+     AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.organization_id=w.organization_id AND a.worker_id=w.id AND a.object_id=${objectId}::uuid
+       AND (a.effective_from IS NULL OR a.effective_from<=current_date) AND (a.effective_to IS NULL OR a.effective_to>=current_date))
+     FOR UPDATE OF w`;
+   if(!worker)throw new EmployeePortalError("Сотрудник больше не работает на объекте");
+   const [current]=await sql<Array<{id:string;status:string;ciphertext:string;valid:boolean}>>`
+     SELECT id,status,token_ciphertext ciphertext,
+     ((expires_at IS NULL OR expires_at>now()) AND (auto_revoke_at IS NULL OR auto_revoke_at>now())) valid
+     FROM worker_timesheet_links WHERE organization_id=${actor.organizationId}::uuid
+     AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid
+     AND status IN ('active','paused') ORDER BY created_at DESC LIMIT 1 FOR UPDATE`;
+   if(action==="copy"){
+     if(!current||current.status!=="active"||!current.valid)throw new EmployeePortalError("Активная ссылка не найдена");
+     return {ok:true,path:"/employee-timesheet/"+decryptToken(current.ciphertext)};
+   }
+   if(action==="create"&&current?.valid)throw new EmployeePortalError(current.status==="paused"?"Ссылка приостановлена. Возобновите её или перевыпустите.":"У сотрудника уже есть активная ссылка. Скопируйте или перевыпустите её.");
+   if(action==="rotate"&&!current?.valid)throw new EmployeePortalError("Ссылка истекла. Выпустите новую ссылку.");
+   if(action==="create"||action==="rotate"){
+     const patch=issuedConfig?normalizePortalPatch(issuedConfig):{};
+     const config=await effectivePortalConfiguration(sql,actor.organizationId,objectId,workerId,patch);
+     const expiresAt=requestedExpiry??new Date(Date.now()+config.validDays*86400000).toISOString();
+     if(!Number.isFinite(Date.parse(expiresAt))||Date.parse(expiresAt)<=Date.now()||Date.parse(expiresAt)>Date.now()+366*86400000)throw new EmployeePortalError("Некорректный срок действия ссылки");
+     if(requestedAutoRevoke&&(!Number.isFinite(Date.parse(requestedAutoRevoke))||Date.parse(requestedAutoRevoke)<=Date.now()))throw new EmployeePortalError("Некорректная дата автоматического отзыва");
+     const raw=randomBytes(32).toString("base64url"),hash=tokenHash(raw);
+     if(current)await sql`UPDATE worker_timesheet_links SET status='revoked',revoked_at=now(),changed_by_user_id=${actor.userId}::uuid,changed_at=now()
+       WHERE id=${current.id}::uuid AND status IN ('active','paused')`;
+     const [link]=await sql<Array<{id:string}>>`INSERT INTO worker_timesheet_links(
+       organization_id,worker_id,object_id,token_hash,token_ciphertext,created_by_user_id,
+       portal_config_snapshot,expires_at,auto_revoke_at)
+       VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${objectId}::uuid,${hash},${encryptToken(raw)},${actor.userId}::uuid,
+       ${sql.json(config)},${expiresAt}::timestamptz,${requestedAutoRevoke??null}::timestamptz) RETURNING id`;
+     if(current)await sql`UPDATE worker_timesheet_links SET replaced_by_link_id=${link.id}::uuid WHERE id=${current.id}::uuid`;
+     await sql`INSERT INTO public_worker_timesheet_tokens(token_hash,tenant_id,actor_user_id,link_id)
+       VALUES(${hash},${actor.organizationId}::uuid,${actor.userId}::uuid,${link.id}::uuid)`;
+     return {ok:true,path:"/employee-timesheet/"+raw,expiresAt,config};
+   }
+   if(!current)throw new EmployeePortalError("Действующая ссылка не найдена");
+   if(action==="resume"&&(current.status!=="paused"||!current.valid))throw new EmployeePortalError("Истёкшую или отозванную ссылку нельзя возобновить");
+   if(action==="pause"&&current.status!=="active")throw new EmployeePortalError("Ссылка уже приостановлена");
+   const status=action==="pause"?"paused":action==="resume"?"active":"revoked";
+   await sql`UPDATE worker_timesheet_links SET status=${status},revoked_at=CASE WHEN ${status}='revoked' THEN now() ELSE revoked_at END,
+     changed_by_user_id=${actor.userId}::uuid,changed_at=now()
+     WHERE id=${current.id}::uuid AND status IN ('active','paused')`;
+   return {ok:true};
+ });
 }
 
 type TokenContext={tenantId:string;actorUserId:string;linkId:string};
