@@ -27,7 +27,7 @@ try{
  await pg.query(legacySql);
  const legacyAfter=(await pg.query("SELECT expires_at expiry FROM worker_timesheet_links WHERE worker_id=$1 AND status='active'",[fixture.worker])).rows[0];
  assert.equal(legacyAfter.expiry,null,'legacy generated 30-day expiry is removed without rotating token');
- assert.equal((await employee.request.get(origin+link.path)).status(),200,'original bearer token remains valid');
+ assert.equal((await manager.request.get(origin+link.path)).status(),200,'original bearer token remains valid after migration');
 
  const preview=await manager.newPage();preview.on('pageerror',e=>errors.push(e.message));
  await preview.goto(origin+'/employee-preview?objectId='+fixture.object+'&workerId='+fixture.worker,{waitUntil:'domcontentloaded',timeout:60000});
