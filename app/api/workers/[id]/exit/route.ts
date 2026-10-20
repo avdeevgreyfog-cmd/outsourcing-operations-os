@@ -203,7 +203,16 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         `;
       }
 
-      await tx`UPDATE worker_timesheet_links SET status='revoked',revoked_at=now()
+      // The manager's completed dismissal and the portal's auto-block have distinct audit events.
+      // Retain old token registrations and histories; never restore an old token after rehiring.
+      await tx`INSERT INTO worker_portal_events(organization_id,worker_id,object_id,link_id,actor_user_id,event_type,details)
+        SELECT l.organization_id,l.worker_id,l.object_id,l.id,${actor.userId}::uuid,'blocked_on_exit',
+               jsonb_build_object('effectiveDate',${body.effectiveDate},'source','offboarding')
+        FROM worker_timesheet_links l
+        WHERE l.organization_id=${actor.organizationId}::uuid AND l.worker_id=${id}::uuid
+          AND l.status IN ('active','paused')`;
+      await tx`UPDATE worker_timesheet_links SET status='revoked',revoked_at=now(),block_reason='dismissal',changed_at=now(),
+          changed_by_user_id=${actor.userId}::uuid
         WHERE organization_id=${actor.organizationId}::uuid AND worker_id=${id}::uuid AND status IN ('active','paused')`;
       await tx`UPDATE worker_profiles SET status='dismissed' ,updated_at=now() WHERE id=${id}::uuid`;
 
