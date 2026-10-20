@@ -40,7 +40,22 @@ try{
  assert.equal(entries[0].hours,10);assert.equal(entries[0].source,'manual');
  const lockedReply=await employee.request.post(publicUrl,{data:{date:dates.yesterday,hours:12,reason:'Поздняя корректировка'}});assert.equal(lockedReply.status(),400);assert.match((await lockedReply.json()).error,/согласована/);console.log('Manager-approved hours persisted and protected');
  await post('/api/operations/worker-confirmations',{action:'pause',objectId:fixture.object,workerId:fixture.worker});assert.equal((await employee.request.get(publicUrl)).status(),404);assert.equal((await employee.request.post(publicUrl,{data:{date:dates.tomorrow,response:'working',kind:'day'}})).status(),403);await mobile.reload({waitUntil:'networkidle'});await mobile.getByText('Ссылка недействительна или приостановлена',{exact:false}).waitFor();await post('/api/operations/worker-confirmations',{action:'resume',objectId:fixture.object,workerId:fixture.worker});assert.equal((await employee.request.get(publicUrl)).status(),200);
- const rotated=await post('/api/operations/worker-confirmations',{action:'rotate',objectId:fixture.object,workerId:fixture.worker});assert.notEqual(rotated.path,link.path);assert.equal((await employee.request.get(publicUrl)).status(),404);const newPublicUrl=origin+'/api/public/worker-timesheet/'+rotated.path.split('/').at(-1);assert.equal((await employee.request.get(newPublicUrl)).status(),200);
+ const rotated=await post('/api/operations/worker-confirmations',{action:'rotate',objectId:fixture.object,workerId:fixture.worker,config:{sections:{documents:false,workwear:false,contacts:false,timesheet:false}}});assert.notEqual(rotated.path,link.path);assert.equal((await employee.request.get(publicUrl)).status(),404);const newPublicUrl=origin+'/api/public/worker-timesheet/'+rotated.path.split('/').at(-1);assert.equal((await employee.request.get(newPublicUrl)).status(),200);
+ const protectedData=await (await employee.request.get(newPublicUrl)).json();
+ assert.equal(protectedData.configuration,undefined,'raw link snapshot must not be exposed');
+ assert.equal(protectedData.config.managerPhone,undefined,'hidden contacts must not leak through configuration');
+ assert.equal(protectedData.details.managerPhone,null,'manager phone hidden');
+ assert.deepEqual(protectedData.details.documents,[],'document checklist hidden');
+ assert.deepEqual(protectedData.details.workwear,[],'PPE hidden');
+ assert.deepEqual(protectedData.plans,[],'timesheet data hidden');
+ for(const request of [{action:'document',code:'passport',reported:true},{action:'sizes',clothingSize:'52',shoeSize:'43'}]){
+   const deniedSection=await employee.request.post(newPublicUrl,{data:request});
+   assert.equal(deniedSection.status(),403,'hidden employee action blocked server-side');
+ }
+ const hiddenMenu=await employee.newPage();await hiddenMenu.goto(origin+rotated.path,{waitUntil:'networkidle'});
+ await hiddenMenu.getByRole('button',{name:'Ещё'}).last().click();
+ assert.equal(await hiddenMenu.getByRole('button',{name:/Документы/}).count(),0,'hidden documents removed from navigation');
+ console.log('Per-link hidden documents, PPE, contacts and timesheet protected in UI and API');
  const denied=await manager.request.post(origin+'/api/workers/'+fixture.worker+'/exit',{data:{action:'plan',effectiveDate:dates.today,reasonCode:'employee_request',replacementRequired:false,returnToRecruiting:false}});assert.equal(denied.status(),403,'manager cannot bypass offboarding permission');
  const director=(await pg.query(`SELECT u.id,u.email::text email FROM app_users u JOIN organization_memberships m ON m.user_id=u.id JOIN role_templates r ON r.id=m.role_template_id JOIN organizations o ON o.id=m.organization_id WHERE r.code='director' AND o.slug=$1 LIMIT 1`,[fixture.organization])).rows[0];assert.ok(director);await pg.query(`UPDATE app_users SET password_hash=crypt($1,gen_salt('bf')) WHERE id=$2`,['isolated-http-fixture-password',director.id]);
  const directorLogin=await manager.request.post(origin+'/api/session/login',{data:{organization:fixture.organization,email:director.email,password:'isolated-http-fixture-password'}});assert.equal(directorLogin.status(),200,await directorLogin.text());
