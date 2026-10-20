@@ -1,0 +1,36 @@
+name: Personal Employee Link Diagnostic
+on:
+  push:
+    branches: [pilot/sergey-work]
+    paths:
+      - "app/api/system/status/route.ts"
+      - ".github/workflows/pilot-employee-link-diagnostic.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-personal-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify live personal runtime readiness without exposing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            code="$(curl --max-time 12 -sS -o /tmp/pilot-status.json -w '%{http_code}' "https://operis-workspace.vercel.app/api/system/status" || true)"
+            if [ "$code" = "200" ]; then
+              if node - <<'NODE'
+          const status=require('/tmp/pilot-status.json');
+          console.log(JSON.stringify({deployedSha:status.deploymentSha,schemaVersion:status.schemaVersion,dbAvailable:status.databaseConfigured,cryptoAvailable:status.employeeLinkEncryptionConfigured}));
+          if(status.ok!==true||status.schemaVersion!=='0079_employee_portal_link_control.sql')process.exit(1);
+          if(status.deploymentSha!==process.env.GITHUB_SHA)process.exit(1);
+          if(status.employeeLinkEncryptionConfigured!==true)process.exit(2);
+          NODE
+              then exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "::error::Personal portal live runtime did not reach a usable deployment with an encryption key."
+          exit 1
