@@ -40,6 +40,7 @@ export type RequestBoardRow = {
   title: string;
   client: string;
   clientId: string | null;
+  commercialLocked?:boolean;
   status: string;
   workflowStageCode: string;
   location: string;
@@ -64,6 +65,7 @@ export type RequestBoardRow = {
 };
 
 export type RequestTimelineItem = {
+  changes?:import("@/lib/commercial/edit-history").EditChange[];
   id: string;
   at: string;
   actor: string;

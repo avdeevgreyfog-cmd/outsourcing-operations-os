@@ -1,3 +1,4 @@
+import {resolveObjectConditionInTransaction,conditionScheduleParts} from "@/lib/operations/object-conditions";
 import { NextResponse } from "next/server";
 import type { Sql } from "postgres";
 import { z } from "zod";
@@ -7,6 +8,7 @@ import { withTenant } from "@/lib/db/client";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { normalizeRecruitingStage, recruitingStageLabels } from "@/lib/recruiting/model";
 import { validateStageChange, type WorkflowDetails } from "@/lib/recruiting/workflow";
+import {ensureEmploymentEpisode,EmploymentEpisodeConflict} from "@/lib/recruiting/employment-episode";
 
 class WorkflowError extends Error {}
 
@@ -32,6 +34,7 @@ const workflowSchema=z.object({
   housingDueAt:z.string().datetime().optional(),
   housingAssigneeUserId:z.string().uuid().optional(),
   firstShiftOutcome:z.enum(["pending","worked","no_show","not_admitted"]).optional(),
+  employmentRelationType:z.enum(["employment","gph","npd","custom","unspecified"]).optional(),
   documentsReceived:z.number().int().min(0).max(100).optional(),
   documentsRequired:z.number().int().min(0).max(100).optional(),
   missingDocuments:z.array(z.string().trim().max(160)).max(50).optional(),
@@ -139,7 +142,7 @@ async function ensureBlockingDocumentsReady(tx:Sql,current:ScopeRow,targetStage:
 
 export async function PATCH(request:Request,{params}:{params:Promise<{id:string}>}){
   try{
-    const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
+    const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Войдите в систему"},{status:401});
     const {id}=await params;const body=schema.parse(await request.json());
     const objectFeedback=body.sourceContext==="object_feedback";
     const canRecruitEdit=hasCapability(actor.access,"recruiting.candidate.edit");
@@ -163,13 +166,13 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           COALESCE(NULLIF(ca.conditions_snapshot->>'paidHoursPerShift','')::numeric,NULLIF(n.conditions_snapshot->>'paidHoursPerShift','')::numeric) "paidHoursPerShift",
           c.full_name "fullName"
         FROM candidate_applications ca
-        JOIN candidates c ON c.id=ca.candidate_id
-        JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
+        JOIN candidates c ON c.id=ca.candidate_id AND c.organization_id=ca.organization_id
+        JOIN needs n ON n.id=ca.need_id AND n.organization_id=ca.organization_id LEFT JOIN objects o ON o.id=ca.object_id AND o.organization_id=ca.organization_id
         WHERE (ca.id=COALESCE(${body.applicationId??null}::uuid,${id}::uuid)
-           OR (${body.applicationId??null}::uuid IS NULL AND ca.candidate_id=${id}::uuid)) AND ca.candidate_id=${id}::uuid
+           OR (${body.applicationId??null}::uuid IS NULL AND ca.candidate_id=${id}::uuid)) AND ca.candidate_id=${id}::uuid AND ca.organization_id=${actor.organizationId}::uuid
         ORDER BY ca.updated_at DESC LIMIT 1 FOR UPDATE OF ca
       `;
-      if(!current)throw new AccessDeniedError(objectFeedback?"operations.object.edit":"recruiting.candidate.edit");
+      if(!current||current.organizationId!==actor.organizationId)throw new AccessDeniedError(objectFeedback?"operations.object.edit":"recruiting.candidate.edit");
       if(objectFeedback){
         if(!current.objectId||!canReadRow(actor.access,"operations.object.edit",current,actor))throw new AccessDeniedError("operations.object.edit");
         if(body.ownerUserId!==undefined)throw new WorkflowError("Из объекта нельзя менять ответственного рекрутера");
@@ -186,8 +189,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       const plannedArrivalValue=body.plannedArrivalAt===undefined?current.plannedArrivalAt:body.plannedArrivalAt;
       const plannedShiftKindValue=body.plannedShiftKind===undefined?current.plannedShiftKind:body.plannedShiftKind;
       if(objectFeedback&&body.stage==="first_shift"&&body.plannedStartDate&&body.workflow?.firstShiftOutcome===undefined)workflow.firstShiftOutcome="pending";
+      if(!current.actualStartAt&&actualStartValue&&!body.workflow?.employmentRelationType)throw new WorkflowError("Выберите тип оформления или укажите, что оформление пока не указано.");
       const message=validateStageChange({...current,stage:normalizedCurrent,workflow:current.workflow}, {...body,workflow,plannedArrivalAt:plannedArrivalValue,actualStartAt:actualStartValue});
       if(message)throw new WorkflowError(message);
+      const confirmingFirstShift=workflow.firstShiftOutcome==="worked" && Boolean(actualStartValue) && !current.actualStartAt;
+      if(confirmingFirstShift&&!objectFeedback){
+        requireCapability(actor,"recruiting.candidate.convert");
+        if(!canReadRow(actor.access,"recruiting.candidate.convert",current,actor))throw new AccessDeniedError("recruiting.candidate.convert");
+      }
       if(changed)await ensureBlockingDocumentsReady(tx,current,body.stage,objectFeedback&&body.stage==="first_shift");
 
       if(body.ownerUserId!==undefined&&body.ownerUserId!==null)await ensureActiveAssignee(tx,actor.organizationId,body.ownerUserId);
@@ -259,15 +268,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
       }
 
       let workerId:string|null=null;
-      const confirmingFirstShift=workflow.firstShiftOutcome==="worked" && actualStartValue && !current.actualStartAt;
-      if(confirmingFirstShift){
-        if(!objectFeedback)requireCapability(actor,"recruiting.candidate.convert");
-        if(!current.objectId)throw new Error("Перед фактическим выходом назначьте кандидату объект");
+      let employmentRelationId:string|null=null;
+      if(confirmingFirstShift&&actualStartValue){
+        if(!current.objectId)throw new WorkflowError("Перед фактическим выходом назначьте кандидату объект");
         const [candidate]=await tx<Array<{fullName:string;phone:string|null;email:string|null;city:string|null;birthDate:string|null;notes:string|null;source:string|null;originalRecruiterUserId:string|null}>>`
           SELECT full_name "fullName",phone,email,city,birth_date::text "birthDate",notes,source,original_recruiter_user_id "originalRecruiterUserId"
-          FROM candidates WHERE id=${current.candidateId}::uuid FOR UPDATE
+          FROM candidates WHERE id=${current.candidateId}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE
         `;
-        if(!candidate)throw new Error("Кандидат не найден");
+        if(!candidate)throw new WorkflowError("Кандидат не найден");
         const [employmentDocs]=await tx<Array<{required:number;ready:number}>>`
           SELECT count(*)::int required,count(*) FILTER (WHERE COALESCE(cd.status,cad.status,'missing') IN ('received','verified','ready'))::int ready
           FROM need_document_requirements ndr
@@ -277,7 +285,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE ndr.need_id=${current.needId}::uuid AND ndr.required
         `;
         const documentStatus=employmentDocs&&employmentDocs.required>0&&employmentDocs.ready>=employmentDocs.required?"received":employmentDocs&&employmentDocs.ready>0?"collecting":"not_received";
-        const [existingWorker]=await tx<Array<{id:string}>>`SELECT id FROM worker_profiles WHERE origin_candidate_id=${current.candidateId}::uuid FOR UPDATE`;
+        const [existingWorker]=await tx<Array<{id:string}>>`SELECT id FROM worker_profiles WHERE origin_candidate_id=${current.candidateId}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
         if(existingWorker){workerId=existingWorker.id;await tx`UPDATE worker_profiles SET status='active',employment_documents_status=CASE WHEN employment_documents_status='completed' THEN employment_documents_status ELSE ${documentStatus} END,updated_at=now() WHERE id=${workerId}::uuid`;}
         else{
           const [worker]=await tx<Array<{id:string}>>`
@@ -287,14 +295,18 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           `;
           workerId=worker.id;
         }
+        employmentRelationId=await ensureEmploymentEpisode(tx,actor,workerId,actualStartValue,workflow.employmentRelationType!);
         const [assignment]=await tx<Array<{id:string}>>`
           SELECT id FROM worker_object_assignments WHERE worker_id=${workerId}::uuid AND object_id=${current.objectId}::uuid AND effective_to IS NULL
         `;
         if(!assignment){
+          const startDate=new Date(actualStartValue).toLocaleDateString("sv-SE",{timeZone:"Europe/Moscow"});
+          const condition=current.specialtyId?await resolveObjectConditionInTransaction(tx,actor.organizationId,{objectId:current.objectId,specialtyId:current.specialtyId,shiftKind:plannedShiftKindValue??current.defaultShiftKind,date:startDate}):null;
+          const schedule=conditionScheduleParts(condition);
           await tx`
-            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,created_by_user_id)
-            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,${actualStartValue}::timestamptz::date,${current.managerUserId??current.objectOwnerId}::uuid,${current.workMode},${current.paidHoursPerShift??null},
-              ${current.defaultTransitionDays},${current.defaultDailyPaymentShifts},${current.defaultScheduleWorkDays},${current.defaultScheduleRestDays},COALESCE(${plannedShiftKindValue},${current.defaultShiftKind}),${actualStartValue}::timestamptz::date,${actor.userId}::uuid)
+            INSERT INTO worker_object_assignments(organization_id,worker_id,object_id,specialty_id,effective_from,manager_user_id,work_mode,paid_hours_per_shift,transition_days,daily_payment_shifts,schedule_work_days,schedule_rest_days,schedule_shift_kind,schedule_anchor_date,source_condition_id,created_by_user_id)
+            VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.objectId}::uuid,${current.specialtyId}::uuid,(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${current.managerUserId??current.objectOwnerId}::uuid,${current.workMode},${condition?.paidHours??current.paidHoursPerShift??null},
+              ${current.defaultTransitionDays},${current.defaultDailyPaymentShifts},${schedule.workDays??current.defaultScheduleWorkDays},${schedule.restDays??current.defaultScheduleRestDays},COALESCE(${plannedShiftKindValue},${condition?.shiftKind??current.defaultShiftKind}),(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${condition?.id??null}::uuid,${actor.userId}::uuid)
           `;
         }
         const [activeRate]=await tx<Array<{id:string}>>`
@@ -302,7 +314,8 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE worker_id=${workerId}::uuid AND object_id=${current.objectId}::uuid AND specialty_id=${current.specialtyId}::uuid AND effective_to IS NULL
           LIMIT 1
         `;
-        if(!activeRate&&current.sourceRequestRoleId){
+        const defaultConditions=current.specialtyId?await resolveObjectConditionInTransaction(tx,actor.organizationId,{objectId:current.objectId,specialtyId:current.specialtyId,shiftKind:plannedShiftKindValue??current.defaultShiftKind,date:new Date(actualStartValue).toLocaleDateString("sv-SE",{timeZone:"Europe/Moscow"})}):null;
+        if(!activeRate&&!defaultConditions&&current.sourceRequestRoleId){
           const [rate]=await tx<Array<{amount:number|null}>>`
             SELECT COALESCE(
               NULLIF(cs.inputs_snapshot->>'workerNetHourly','')::numeric,
@@ -317,7 +330,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           if(rate?.amount!=null&&Number(rate.amount)>0){
             await tx`
               INSERT INTO worker_rates(organization_id,worker_id,specialty_id,object_id,amount,unit,day_night,effective_from,created_by_user_id)
-              VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.specialtyId}::uuid,${current.objectId}::uuid,${rate.amount},'hour','any',${actualStartValue}::timestamptz::date,${actor.userId}::uuid)
+              VALUES(${actor.organizationId}::uuid,${workerId}::uuid,${current.specialtyId}::uuid,${current.objectId}::uuid,${rate.amount},'hour','any',(${actualStartValue}::timestamptz AT TIME ZONE 'Europe/Moscow')::date,${actor.userId}::uuid)
             `;
           }
         }
@@ -342,14 +355,14 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           await tx`
             UPDATE needs SET count_filled=LEAST(count_required,(
               SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+              WHERE wa.organization_id=${actor.organizationId}::uuid AND wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND (wa.effective_from IS NULL OR wa.effective_from<=current_date) AND (wa.effective_to IS NULL OR wa.effective_to>=current_date) AND EXISTS(SELECT 1 FROM candidates nc JOIN candidate_applications ca ON ca.candidate_id=nc.id AND ca.organization_id=nc.organization_id WHERE nc.id=wp.origin_candidate_id AND nc.organization_id=wa.organization_id AND ca.need_id=${current.needId}::uuid)
             )),status=CASE WHEN (
               SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+              WHERE wa.organization_id=${actor.organizationId}::uuid AND wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND (wa.effective_from IS NULL OR wa.effective_from<=current_date) AND (wa.effective_to IS NULL OR wa.effective_to>=current_date) AND EXISTS(SELECT 1 FROM candidates nc JOIN candidate_applications ca ON ca.candidate_id=nc.id AND ca.organization_id=nc.organization_id WHERE nc.id=wp.origin_candidate_id AND nc.organization_id=wa.organization_id AND ca.need_id=${current.needId}::uuid)
             )>=count_required THEN 'filled' ELSE 'in_progress' END,
             closed_at=CASE WHEN (
               SELECT count(DISTINCT wa.worker_id)::int FROM worker_object_assignments wa JOIN worker_profiles wp ON wp.id=wa.worker_id AND wp.status='active'
-              WHERE wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND wa.effective_from<=current_date AND (wa.effective_to IS NULL OR wa.effective_to>=current_date)
+              WHERE wa.organization_id=${actor.organizationId}::uuid AND wa.object_id=${current.objectId}::uuid AND wa.specialty_id=${current.specialtyId}::uuid AND (wa.effective_from IS NULL OR wa.effective_from<=current_date) AND (wa.effective_to IS NULL OR wa.effective_to>=current_date) AND EXISTS(SELECT 1 FROM candidates nc JOIN candidate_applications ca ON ca.candidate_id=nc.id AND ca.organization_id=nc.organization_id WHERE nc.id=wp.origin_candidate_id AND nc.organization_id=wa.organization_id AND ca.need_id=${current.needId}::uuid)
             )>=count_required THEN COALESCE(closed_at,now()) ELSE NULL END
             WHERE id=${current.needId}::uuid
           `;
@@ -362,16 +375,17 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'candidate',${current.candidateId}::uuid,'stage_changed',
           ${changed?`Этап кандидата: ${recruitingStageLabels[normalizedCurrent]} → ${recruitingStageLabels[body.stage]}`:"Обновлены рабочие действия по кандидату"},
-          ${sql.json({applicationId:current.id,needId:current.needId,workerId,actionCode:workflow.actionCode??null,outcomeCode:workflow.outcomeCode??null,reasonCode:body.reasonCode??null,ownerUserId:body.ownerUserId??current.ownerUserId,sourceContext:body.sourceContext??"recruiting",plannedShiftKind:plannedShiftKindValue})})
+          ${sql.json({applicationId:current.id,needId:current.needId,workerId,employmentRelationId,employmentRelationType:workflow.employmentRelationType??null,actionCode:workflow.actionCode??null,outcomeCode:workflow.outcomeCode??null,reasonCode:body.reasonCode??null,ownerUserId:body.ownerUserId??current.ownerUserId,sourceContext:body.sourceContext??"recruiting",plannedShiftKind:plannedShiftKindValue})})
       `;
       return {candidateId:current.candidateId,applicationId:current.id,stage:body.stage,workerId};
     }));
     if("conflict" in result)return NextResponse.json({error:"Заявка уже изменена. Обновите страницу перед сохранением."},{status:409});
     return NextResponse.json(result);
   }catch(error){
+    if(error instanceof EmploymentEpisodeConflict)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof WorkflowError)return NextResponse.json({error:error.message},{status:422});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте действие и обязательные поля",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
+    console.error(error);return NextResponse.json({error:"Не удалось сохранить рабочий этап кандидата"},{status:500});
   }
 }

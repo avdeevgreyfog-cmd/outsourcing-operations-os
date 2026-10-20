@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
+import {requireObjectScope} from "@/lib/operations/object-conditions";
 import { withTenant } from "@/lib/db/client";
 
 function addDaysIso(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
@@ -11,6 +12,9 @@ const schema = z.object({
   specialtyId: z.string().uuid(),
   objectId: z.string().uuid().nullable().optional(),
   regionId: z.string().uuid().nullable().optional(),
+  staffingPlanTargetId:z.string().uuid().optional(),
+  shiftKind:z.enum(["day","night","mixed"]).default("mixed"),
+  ownerUserId:z.string().uuid().nullable().optional(),
   countRequired: z.number().int().min(1).max(10000),
   deadline: z.string().date().nullable().optional(),
   sourceKind: z.enum(["object","manual","replacement","reserve","other"]).default("manual"),
@@ -25,6 +29,8 @@ const schema = z.object({
   conditions: z.object({
     location: z.string().trim().max(500).nullable().optional(),
     schedule: z.string().trim().max(1000).nullable().optional(),
+    paidHoursPerShift:z.number().positive().max(24).nullable().optional(),
+    workMode:z.enum(["local","rotation"]).nullable().optional(),
     workerPay: z.string().trim().max(500).nullable().optional(),
     shift: z.string().trim().max(500).nullable().optional(),
     housing: z.string().trim().max(1000).nullable().optional(),
@@ -58,6 +64,7 @@ export async function POST(request: Request) {
     const body = schema.parse(await request.json());
     if (!body.objectId && !body.regionId) return NextResponse.json({error:"Укажите объект или регион потребности"},{status:400});
 
+    if(body.objectId)await requireObjectScope(actor,body.objectId,"operations.need.create");
     const result = await withTenant(actor.organizationId, actor.userId, async sql => sql.begin(async tx => {
       let regionId = body.regionId ?? null;
       let objectOwnerId: string | null = null;
@@ -66,7 +73,7 @@ export async function POST(request: Request) {
       if (body.objectId) {
         const [object] = await tx<Array<{regionId:string;ownerUserId:string|null;recruitingMode:"company_rules"|"object_team"}>>`
           SELECT region_id "regionId",owner_user_id "ownerUserId",recruiting_routing_mode "recruitingMode"
-          FROM objects WHERE id=${body.objectId}::uuid
+          FROM objects WHERE id=${body.objectId}::uuid AND organization_id=${actor.organizationId}::uuid
         `;
         if (!object) throw new Error("Объект не найден");
         if (regionId && regionId !== object.regionId) throw new Error("Регион потребности не совпадает с регионом объекта");
@@ -84,9 +91,9 @@ export async function POST(request: Request) {
           `;
         }
       }
-      if (!regionId) throw new Error("Регион потребности не определён");
-      if (!actor.access.allOrg && !actor.regionIds.includes(regionId)) throw new AccessDeniedError("operations.need.create");
-      const [specialty] = await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${body.specialtyId}::uuid AND active`;
+      if (!regionId&&!body.objectId) throw new Error("Укажите объект или регион");
+      if (!actor.access.allOrg && regionId && !actor.regionIds.includes(regionId)) throw new AccessDeniedError("operations.need.create");
+      const [specialty] = await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${body.specialtyId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`;
       if (!specialty) throw new Error("Специальность не найдена");
 
       const [routed] = await tx<Array<{userId:string;teamId:string|null}>>`
@@ -106,12 +113,24 @@ export async function POST(request: Request) {
         SELECT "userId","teamId" FROM (SELECT * FROM responsibility UNION ALL SELECT * FROM recruiter) x
         WHERE "userId" IS NOT NULL ORDER BY priority LIMIT 1
       `;
-      const routeOwnerId=routed?.userId??actor.userId;
+      let routeOwnerId=body.ownerUserId??routed?.userId??actor.userId;
+      if(body.ownerUserId){const [member]=await tx`SELECT user_id FROM organization_memberships WHERE organization_id=${actor.organizationId}::uuid AND user_id=${body.ownerUserId}::uuid AND status='active'`;if(!member)throw new Error("Ответственный не состоит в организации");routeOwnerId=member.user_id;}
+      if(body.staffingPlanTargetId){
+        const [target]=await tx`SELECT * FROM staffing_plan_targets WHERE id=${body.staffingPlanTargetId}::uuid AND organization_id=${actor.organizationId}::uuid AND object_id=${body.objectId??null}::uuid AND specialty_id=${body.specialtyId}::uuid AND shift_kind=${body.shiftKind} AND status='active' AND(effective_from IS NULL OR effective_from<=current_date) AND(effective_to IS NULL OR effective_to>=current_date) FOR UPDATE`;
+        if(!target)throw new Error("Активная строка плана не найдена");
+        const [existing]=await tx`SELECT id FROM needs WHERE staffing_plan_target_id=${target.id}::uuid AND organization_id=${actor.organizationId}::uuid AND status IN('open','in_progress','paused') LIMIT 1`;
+        if(existing)return {id:existing.id,existing:true};
+        const [workforce]=await tx`SELECT count(DISTINCT a.worker_id)::int count FROM worker_object_assignments a JOIN worker_profiles w ON w.id=a.worker_id AND w.organization_id=a.organization_id AND w.status='active' WHERE a.organization_id=${actor.organizationId}::uuid AND a.object_id=${body.objectId??null}::uuid AND a.specialty_id=${body.specialtyId}::uuid AND(a.effective_from IS NULL OR a.effective_from<=current_date) AND(a.effective_to IS NULL OR a.effective_to>=current_date) AND(${body.shiftKind}='mixed' OR a.schedule_shift_kind=${body.shiftKind})`;
+        if(body.countRequired>Math.max(target.planned_count-workforce.count,0))throw new Error("Объём потребности превышает текущий дефицит. Обновите план");
+      }
       const useObjectTeam=recruitingMode==="object_team"&&objectRecruiters.length>0;
 
+      const [objectCondition]=body.objectId?await tx`SELECT id,schedule,base_rate,payment_unit,paid_hours,start_time::text,end_time::text FROM object_specialty_conditions WHERE organization_id=${actor.organizationId}::uuid AND object_id=${body.objectId}::uuid AND specialty_id=${body.specialtyId}::uuid AND status='active' AND(shift_kind=${body.shiftKind} OR shift_kind='mixed') AND(effective_from IS NULL OR effective_from<=current_date) AND(effective_to IS NULL OR effective_to>=current_date) ORDER BY(shift_kind=${body.shiftKind})DESC,effective_from DESC NULLS LAST,created_at DESC LIMIT 1`:[];
+      const inheritedConditions=objectCondition?{objectConditionId:objectCondition.id,schedule:objectCondition.schedule,workerPay:objectCondition.base_rate?`${objectCondition.base_rate} ₽/${objectCondition.payment_unit==='shift'?'смену':'час'}`:null,shift:objectCondition.start_time&&objectCondition.end_time?`${objectCondition.start_time.slice(0,5)}–${objectCondition.end_time.slice(0,5)}`:null,paidHoursPerShift:objectCondition.paid_hours}:{};
+      const conditions={...inheritedConditions,...Object.fromEntries(Object.entries(body.conditions).filter(([,value])=>value!==null&&value!==undefined&&value!==""))};
       const [need] = await tx<Array<{id:string}>>`
-        INSERT INTO needs(organization_id,object_id,region_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,manager_user_id,created_by_user_id,source_kind,title,priority,conditions_snapshot)
-        VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${regionId}::uuid,${body.specialtyId}::uuid,${body.countRequired},0,${body.deadline??null}::date,'open',${routeOwnerId}::uuid,${objectOwnerId}::uuid,${actor.userId}::uuid,${body.sourceKind},${body.title},${body.priority},${sql.json(body.conditions)})
+        INSERT INTO needs(organization_id,object_id,region_id,specialty_id,count_required,count_filled,deadline,status,owner_user_id,manager_user_id,created_by_user_id,source_kind,title,priority,conditions_snapshot,staffing_plan_target_id,shift_kind)
+        VALUES(${actor.organizationId}::uuid,${body.objectId??null}::uuid,${regionId}::uuid,${body.specialtyId}::uuid,${body.countRequired},0,${body.deadline??null}::date,'open',${routeOwnerId}::uuid,${objectOwnerId}::uuid,${actor.userId}::uuid,${body.sourceKind},${body.title},${body.priority},${sql.json(conditions)},${body.staffingPlanTargetId??null}::uuid,${body.shiftKind})
         RETURNING id
       `;
       if(useObjectTeam){

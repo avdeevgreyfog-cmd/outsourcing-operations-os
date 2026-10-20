@@ -1,8 +1,10 @@
 "use client";
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
+import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
+import {EmployeePortalLinkControls,type LinkPayload} from "@/components/EmployeePortalLinkControls";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number;workDays?:number|null;restDays?:number|null;shiftKind?:"day"|"night"|"mixed"|null};
-type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string};
+type Report={workerId:string;objectId:string;date:string;shiftKind:"day"|"night"|"off"|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;updatedAt:string;employeeRespondedAt?:string|null;reconciledAt?:string|null;needsReconfirmation?:boolean;reviewStatus?:"pending"|"approved"|"rejected";approvedHours?:number|null;reviewedAt?:string|null;reviewComment?:string|null};
 type Plan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 type LinkRecord={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked";lastOpenedAt:string|null;createdAt:string};
 type Setting={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;managerPhone?:string|null;planningHorizonDays?:number;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
@@ -13,21 +15,26 @@ type Authority={workerId:string;objectId:string;scheduleOwner:"manager"|"worker"
 type DocumentUpdate={workerId:string;objectId:string;code:string;employeeReported:boolean;managerVerified:boolean};
 type Payload={workers:Worker[];reports:Report[];links:LinkRecord[];settings:Setting[];plans?:Plan[];timeChanges?:TimeUpdate[];documents?:DocumentUpdate[];planningChanges?:PlanningChange[];workerAuthorities?:Authority[];patternChanges?:PatternChange[]};
 const empty:Payload={workers:[],reports:[],links:[],settings:[]};
-function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10)}
+function localDate(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function tomorrow(){const d=new Date();d.setDate(d.getDate()+1);return localDate(d)}
 function dateLabel(date:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(date+"T00:00:00Z"))}
-export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcile=false,demo=false}:{objectId?:string;workerId?:string;canEdit:boolean;canReconcile?:boolean;demo?:boolean}){
+export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcile=false,demo=false,view,hideTabs=false}:{objectId?:string;workerId?:string;canEdit:boolean;canReconcile?:boolean;demo?:boolean;view?:"answers"|"links"|"updates";hideTabs?:boolean}){
  const [data,setData]=useState<Payload>(empty);
  const [loaded,setLoaded]=useState(false);
  const [error,setError]=useState("");
  const [info,setInfo]=useState("");
- const [mode,setMode]=useState<"answers"|"links"|"updates">("answers");
+ const [hoursReview,setHoursReview]=useState<{worker:Worker;report:Report}|null>(null);
+ const [approvedHours,setApprovedHours]=useState("");
+ const [reviewComment,setReviewComment]=useState("");
+ const [confirmation,setConfirmation]=useState<{title:string;text:string;label:string;body:Record<string,string|number|boolean|null>}|null>(null);
+ const [localMode,setMode]=useState<"answers"|"links"|"updates">("answers");
+ const mode=view??localMode;
  const [search,setSearch]=useState("");
- const [contactNumber,setContactNumber]=useState("");
  const [patternWorker,setPatternWorker]=useState("");
  const [patternCode,setPatternCode]=useState("5/2");
  const [patternShift,setPatternShift]=useState<"day"|"night">("day");
  const [patternFloating,setPatternFloating]=useState(false);
- const [patternFrom,setPatternFrom]=useState(new Date().toISOString().slice(0,10));
+ const [patternFrom,setPatternFrom]=useState(localDate());
  const [specialWorker,setSpecialWorker]=useState("");
  const [specialOwner,setSpecialOwner]=useState<"inherit"|"manager"|"worker">("inherit");
 
@@ -37,15 +44,16 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [onlyAttention,setOnlyAttention]=useState(false);
  const [filterObject,setFilterObject]=useState(objectId??"all");
  const [busy,setBusy]=useState("");
- const [day,setDay]=useState(tomorrow());
- const [fromDate,setFromDate]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10)});
- const [toDate,setToDate]=useState(()=>new Date().toISOString().slice(0,10));
+ const initialDates=useRef(false);
+ const [day,setDay]=useState(()=>new Date(Date.now()+86400000).toISOString().slice(0,10));
+ const [fromDate,setFromDate]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return localDate(d)});
+ const [toDate,setToDate]=useState(()=>localDate());
  const load=useCallback(async()=>{
   try{
    const q=new URLSearchParams();if(objectId)q.set("objectId",objectId);if(workerId)q.set("workerId",workerId);
    const r=await fetch("/api/operations/worker-confirmations?"+q.toString(),{cache:"no-store"});
    const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось получить данные");
-   setData(j);setError("");
+   setData(j);setError("");if(!initialDates.current){setDay(tomorrow());initialDates.current=true;}
   }catch(e){setError(e instanceof Error?e.message:"Ошибка получения данных")}finally{setLoaded(true)}
  },[objectId,workerId]);
  useEffect(()=>{void Promise.resolve().then(()=>load())},[load]);
@@ -55,12 +63,13 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const plans=useMemo(()=>new Map((data.plans??[]).map(x=>[x.workerId+":"+x.objectId+":"+x.date,x])),[data.plans]);
  const options=useMemo(()=>[...new Map(data.workers.filter(x=>x.objectId).map(x=>[x.objectId!,x.object??"Объект"])).entries()].sort((a,b)=>a[1].localeCompare(b[1],"ru")),[data.workers]);
  const scoped=data.workers.filter(w=>(filterObject==="all"||w.objectId===filterObject)&&(!search||((w.name+" "+w.object+" "+w.specialty).toLowerCase().includes(search.toLowerCase()))));
- const visible=scoped.filter(w=>!onlyAttention||(!reports.get(w.id+":"+w.objectId+":"+day)&&plans.get(w.id+":"+w.objectId+":"+day)?.timeCode!=="DAY_OFF"));
- const expected=scoped.filter(w=>plans.get(w.id+":"+w.objectId+":"+day)?.timeCode!=="DAY_OFF");
- const replies=expected.filter(w=>reports.get(w.id+":"+w.objectId+":"+day)).length;
+ const visible=scoped.filter(w=>!onlyAttention||((!reports.get(w.id+":"+w.objectId+":"+day)||reports.get(w.id+":"+w.objectId+":"+day)?.needsReconfirmation)&&["PLANNED","WORK","WORK_PENDING"].includes(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode??"")));
+ const expected=scoped.filter(w=>{const p=plans.get(w.id+":"+w.objectId+":"+day);return p&&["PLANNED","WORK","WORK_PENDING"].includes(p.timeCode)});
+ const replies=expected.filter(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return r&&!r.needsReconfirmation}).length;
  const missing=expected.length-replies;
  const activeLinks=data.links.filter(l=>l.status==="active").length;
  async function action(body:Record<string,string|number|boolean|null>){
+  if(busy)return;
   const key=String(body.action)+":"+String(body.workerId??body.objectId);setBusy(key);setError("");setInfo("");
   if(demo){
    if(body.action==="create"||body.action==="rotate"||body.action==="copy"||body.action==="copy_mobile"||body.action==="copy_desktop"){
@@ -81,23 +90,25 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  }
  function reply(w:Worker){
   const r=reports.get(w.id+":"+w.objectId+":"+day);
-  if(!r){if(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode==="DAY_OFF")return <span className="worker-confirmation-status">Выходной по графику</span>;return <span className="worker-confirmation-status warn">Нет ответа</span>;}
+  if(!r){if(!plans.has(w.id+":"+w.objectId+":"+day))return <span className="worker-confirmation-status">Выход не запланирован</span>;if(plans.get(w.id+":"+w.objectId+":"+day)?.timeCode==="DAY_OFF")return <span className="worker-confirmation-status">Выходной по графику</span>;return <span className="worker-confirmation-status warn">Нет ответа</span>;}
+  if(r.needsReconfirmation){const p=plans.get(w.id+":"+w.objectId+":"+day);return <span className="worker-confirmation-status warn">{p?.timeCode==="DAY_OFF"?"Выходной по новому плану":!p?"Нет назначенной смены":"План изменён · нужен новый ответ"}</span>;}
   if(r.response==="cannot_work")return <span className="worker-confirmation-status bad">Не выйдет</span>;
   if(r.response==="day_off")return <span className="worker-confirmation-status">Выходной</span>;
   return <span className="worker-confirmation-status good">{r.shiftKind==="night"?"Выйдет ночью":"Выйдет днём"}</span>;
  }
  return <section className="worker-confirmation-manager">
-  <div className="worker-confirmation-tabs">
-   <button type="button" className={mode==="answers"?"active":""} onClick={()=>setMode("answers")}>Подтверждения</button>
-   <button type="button" className={mode==="links"?"active":""} onClick={()=>setMode("links")}>Персональные ссылки</button>
-    <button type="button" className={mode==="updates"?"active":""} onClick={()=>setMode("updates")}>Изменения сотрудников</button>
+  {!hideTabs&&<div className="worker-confirmation-tabs object-local-tabs">
+   <button type="button" aria-pressed={mode==="answers"} className={mode==="answers"?"active":""} onClick={()=>setMode("answers")}>Подтверждения</button>
+   <button type="button" aria-pressed={mode==="links"} className={mode==="links"?"active":""} onClick={()=>setMode("links")}>Персональные ссылки</button>
+    <button type="button" aria-pressed={mode==="updates"} className={mode==="updates"?"active":""} onClick={()=>setMode("updates")}>Изменения сотрудников</button>
    {demo&&<span className="cell-sub">Демонстрационный режим</span>}
-  </div>
+  </div>}
+  {hideTabs&&demo&&<div className="object-context-line">Демонстрационный режим</div>}
   <div className="worker-confirmation-toolbar">
    {!objectId&&<select aria-label="Фильтр по объекту" value={filterObject} onChange={e=>setFilterObject(e.target.value)}><option value="all">Все объекты</option>{options.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select>}
    <input aria-label="Поиск сотрудника" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск по сотруднику"/>
    {mode==="answers"&&<><input type="date" value={day} onChange={e=>setDay(e.target.value)} aria-label="Дата подтверждений"/><label className="worker-confirmation-compact"><input type="checkbox" checked={onlyAttention} onChange={e=>setOnlyAttention(e.target.checked)}/> Только без ответа</label></>}
-   <button type="button" className="button right" onClick={()=>void load()}><RefreshCw size={14}/> Обновить</button>
+   <button type="button" className="button right" onClick={()=>void load()}><RefreshCw size={14}/> Обновить данные</button>
   </div>
   {error&&<div role="alert" className="worker-confirmation-manager-error">{error}</div>}
   {info&&<div role="status" className="worker-confirmation-note">{info}</div>}
@@ -105,9 +116,13 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
    {mode==="answers"?<>
     <div className="worker-confirmation-summary"><span>На {dateLabel(day)}</span><span>Ответили: <b>{replies}</b></span><span>Нет ответа: <b>{missing}</b></span></div>
     <div className="worker-confirmation-note">Сведения сотрудников используются для оперативного планирования. Неответивший сотрудник не считается неявившимся.</div>
-    {canReconcile&&(objectId||filterObject!=="all")&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Промежуточная сверка с заказчиком:</span><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} aria-label="Сверить с"/><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} aria-label="Сверить по"/><button type="button" className="button" disabled={!!busy||toDate<fromDate} onClick={()=>{if(window.confirm("Вы сверили часы за этот период с заказчиком?"))void action({action:"reconcile",objectId:objectId??filterObject,fromDate,toDate})}}>Отметить период сверенным</button></div>}
-    <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>Подтверждение</th><th>Часы</th><th>Последний ответ</th></tr></thead><tbody>
-     {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}</td><td>{r?.updatedAt?new Date(r.updatedAt).toLocaleString("ru-RU"):"—"}</td></tr>})}
+    {canReconcile&&<p className="worker-confirmation-note">Ответ сотрудника не становится автоматически утверждённым табелем. Проверяйте часы отдельно по каждому дню.</p>}
+    <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>План менеджера</th><th>Подтверждение</th><th>Часы сотрудника</th><th>Проверка / источник</th><th>Последний ответ</th><th>Действия</th></tr></thead><tbody>
+     {visible.map(w=>{const r=reports.get(w.id+":"+w.objectId+":"+day);return <tr key={w.id+":"+w.objectId}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td>{(()=>{const p=plans.get(w.id+":"+w.objectId+":"+day);return !p?"Не запланировано":p.timeCode==="DAY_OFF"?"Выходной":p.kind==="night"?"Ночь":p.kind==="day"?"День":"Смена"})()}</td><td>{reply(w)}{r?.reason&&<span className="cell-sub">{r.reason}</span>}</td><td className="num">{r?.hours!=null?String(r.hours).replace(".",",")+" ч":"—"}{r?.hours!=null&&w.paidHours!==r.hours&&<span className="cell-sub">Норма: {w.paidHours} ч · отклонение</span>}</td>
+ <td>{r?.hours!=null?(r.reviewStatus==="approved"||r.reconciledAt?"Подтверждено менеджером":r.reviewStatus==="rejected"?"Отклонено":"Требует проверки"):"—"}{r?.approvedHours!=null&&<span className="cell-sub">Итог: {r.approvedHours} ч</span>}
+ {r&&<span className="cell-sub">Сотрудник по персональной ссылке{r.reviewedAt?" · проверено "+new Date(r.reviewedAt).toLocaleString("ru-RU"):""}</span>}</td>
+ <td>{r?.employeeRespondedAt?new Date(r.employeeRespondedAt).toLocaleString("ru-RU"):"—"}</td>
+ <td>{canReconcile&&r?.hours!=null&&r.reviewStatus!=="approved"&&!r.reconciledAt&&<button type="button" className="button" disabled={!!busy} onClick={()=>{setHoursReview({worker:w,report:r});setApprovedHours(String(r.hours));setReviewComment("");}}>Проверить часы</button>}</td></tr>})}
     </tbody></table>{!visible.length&&<div className="empty-inline">Нет сотрудников по выбранным условиям</div>}</div>
    </>:mode==="updates"?<>
     <div className="worker-confirmation-summary"><span>Изменения от сотрудников</span><span>Ожидают решения: <b>{(data.timeChanges??[]).filter(x=>x.status==="proposed").length+(data.planningChanges??[]).filter(x=>x.status==="proposed").length+(data.patternChanges??[]).filter(x=>x.status==="proposed").length}</b></span></div>
@@ -118,12 +133,8 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
      {(data.documents??[]).filter(x=>scoped.some(w=>w.id===x.workerId)&&x.employeeReported).map(x=>{const w=data.workers.find(w=>w.id===x.workerId);return <tr key={x.workerId+":"+x.code}><td>{w?.name??"Сотрудник"}</td><td>{w?.object??"—"}</td><td>{({passport:"Паспорт",snils:"СНИЛС",inn:"ИНН",bank_details:"Реквизиты",medical_book:"Медкнижка",military:"Военный билет",application:"Заявление",photo:"Фотография",contract:"Договор"} as Record<string,string>)[x.code]??x.code}</td><td>{x.managerVerified?"Получено":"Сотрудник отметил передачу"}</td><td>{canEdit&&!x.managerVerified&&<button className="button" disabled={!!busy} onClick={()=>void action({action:"verify_document",objectId:x.objectId,workerId:x.workerId,code:x.code,verified:true})}>Получено</button>}</td></tr>})}
     </tbody></table>{!data.timeChanges?.length&&!data.documents?.length&&!data.planningChanges?.length&&!data.patternChanges?.length&&<div className="empty-inline">Изменений пока нет</div>}</div>
    </>:<>
-    <div className="worker-confirmation-summary"><span>Управление доступом к персональным табелям</span><span>Активных: <b>{activeLinks}</b></span></div>
-    <div className="worker-confirmation-note">Ссылка действует постоянно, пока не приостановлена или аннулирована. Копирование не является подтверждением отправки через мессенджер.</div>
-    {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><label>График составляет: <select value={settings.get(objectId)?.scheduleOwner??"manager"} onChange={e=>void action({action:"settings",objectId,scheduleOwner:e.target.value})} disabled={!!busy}><option value="manager">Менеджер составляет график</option><option value="worker">Сотрудник составляет график</option></select></label></div>}
-    <div className="request-table-wrap"><table className="data-table"><thead><tr><th>Сотрудник</th>{!objectId&&<th>Объект</th>}<th>Ссылка</th><th>Последнее открытие</th><th>Действия</th></tr></thead><tbody>
-     {visible.map(w=>{const l=links.get(w.id+":"+w.objectId),key=w.id+":"+w.objectId,params={objectId:w.objectId??"",workerId:w.id};return <tr key={key}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>{!objectId&&<td>{w.object??"—"}</td>}<td><span className={"worker-confirmation-status "+(l?.status==="active"?"good":l?.status==="paused"?"warn":"")}>{!l?"Не создана":l.status==="active"?"Активна":l.status==="paused"?"Приостановлена":"Аннулирована"}</span></td><td>{l?.lastOpenedAt?new Date(l.lastOpenedAt).toLocaleString("ru-RU"):"—"}</td><td><div className="worker-confirmation-actions">{canEdit&&(!l||l.status==="revoked")&&<button type="button" className="button" disabled={!!busy} onClick={()=>void action({action:"create",...params})}><Link2 size={13}/> Создать</button>}{canEdit&&l?.status==="active"&&<><button className="button" disabled={!!busy} onClick={()=>void action({action:"copy_mobile",...params})}><Copy size={13}/> Для телефона</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"copy_desktop",...params})}><Copy size={13}/> Для компьютера</button><button className="button" disabled={!!busy} onClick={()=>void action({action:"pause",...params})}>Приостановить</button></>}{canEdit&&l?.status==="paused"&&<button className="button" disabled={!!busy} onClick={()=>void action({action:"resume",...params})}>Возобновить</button>}{canEdit&&l&&l.status!=="revoked"&&<><button className="button" disabled={!!busy} onClick={()=>{if(window.confirm("Старая ссылка перестанет действовать. Выпустить новую?"))void action({action:"rotate",...params})}}><RefreshCw size={13}/> Обновить</button><button className="button" disabled={!!busy} onClick={()=>{if(window.confirm("Аннулировать персональный доступ?"))void action({action:"revoke",...params})}}><ShieldOff size={13}/> Отозвать</button></>}{!l&&!canEdit&&"—"}</div></td></tr>})}
-    </tbody></table>{!visible.length&&<div className="empty-inline">Нет сотрудников</div>}</div>
+    <EmployeePortalLinkControls data={data as LinkPayload} objectId={objectId} canEdit={canEdit} demo={demo} onRefresh={load}/>
+    <div className="worker-confirmation-settings"><div className="section-head"><div><h2>Планирование графика объекта</h2><p>Настройка графика, индивидуальных исключений и требований к документам. Основные настройки кабинета находятся выше.</p></div></div>
     {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><label>Горизонт планирования (дни): <select value={settings.get(objectId)?.planningHorizonDays??14} onChange={e=>void action({action:"settings",objectId,scheduleOwner:settings.get(objectId)?.scheduleOwner??"manager",horizon:Number(e.target.value)})} disabled={!!busy}>{[3,5,7,10,14,21,31].map(n=><option key={n} value={n}>{n}</option>)}</select></label></div>}
      {objectId&&canEdit&&<details className="worker-confirmation-exceptions"><summary>Индивидуальные исключения из режима объекта</summary>
        <div className="worker-confirmation-toolbar"><select aria-label="Сотрудник с индивидуальным графиком" value={specialWorker} onChange={e=>{const next=e.target.value;setSpecialWorker(next);setSpecialOwner(data.workerAuthorities?.find(x=>x.workerId===next)?.scheduleOwner??"inherit")}}><option value="">Выберите сотрудника</option>{data.workers.filter(x=>x.objectId===objectId).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>
@@ -131,12 +142,6 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
         <button className="button" type="button" disabled={!specialWorker||!!busy} onClick={()=>void action({action:"worker_schedule_owner",objectId,workerId:specialWorker,scheduleOwner:specialOwner==="inherit"?null:specialOwner})}>Сохранить исключение</button></div>
        <p className="worker-confirmation-note">По умолчанию сотрудники используют режим своего объекта. Здесь можно назначить исключение без изменения графиков остальных.</p>
      </details>}
-     {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Разделы личного кабинета:</span>
-       <label><input type="checkbox" checked={settings.get(objectId)?.showEmployeeDocuments??true} disabled={!!busy}
-        onChange={e=>void action({action:"portal_sections",objectId,documents:e.target.checked,workwear:settings.get(objectId)?.showEmployeeWorkwear??true})}/> Документы</label>
-       <label><input type="checkbox" checked={settings.get(objectId)?.showEmployeeWorkwear??true} disabled={!!busy}
-        onChange={e=>void action({action:"portal_sections",objectId,documents:settings.get(objectId)?.showEmployeeDocuments??true,workwear:e.target.checked})}/> Спецодежда и СИЗ</label>
-      </div>}
     {objectId&&canEdit&&<details className="worker-confirmation-exceptions"><summary>Настроить график сотрудника</summary>
      <div className="worker-confirmation-toolbar">
       <label>Сотрудник <select value={patternWorker} onChange={e=>{const id=e.target.value;setPatternWorker(id);const w=data.workers.find(w=>w.id===id);const approved=data.patternChanges?.find(p=>p.workerId===id&&p.status==="accepted");setPatternCode(approved?approved.workDays+"/"+approved.restDays:w?.workDays&&w.restDays!==null?w.workDays+"/"+w.restDays:"5/2");setPatternShift(approved?.shiftKind??(w?.shiftKind==="night"?"night":"day"));setPatternFloating(approved?.floatingDaysOff??false)}}><option value="">Выберите сотрудника</option>{data.workers.filter(w=>w.objectId===objectId).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
@@ -147,10 +152,22 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
       <button className="button" disabled={!patternWorker||!!busy||!patternFrom} onClick={()=>void action({action:"set_worker_pattern",objectId,workerId:patternWorker,effectiveFrom:patternFrom,workDays:Number(patternCode.split("/")[0]),restDays:Number(patternCode.split("/")[1]),shiftKind:patternShift,floatingDaysOff:patternFloating})}>Сохранить график</button>
      </div><p className="worker-confirmation-note">5/2 и 6/1 по умолчанию: выходные суббота-воскресенье или воскресенье. Циклические графики отсчитываются с даты начала.</p></details>}
 
-     {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><label>Телефон менеджера <input value={contactNumber} onChange={e=>setContactNumber(e.target.value)} placeholder={settings.get(objectId)?.managerPhone??"+7…"} /></label><button className="button" disabled={!!busy} onClick={()=>void action({action:"manager_phone",objectId,phone:contactNumber||null})}>Сохранить</button></div>}
      {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Перечень документов объекта:</span><select value={relationType} onChange={e=>setRelationType(e.target.value as typeof relationType)} aria-label="Тип оформления"><option value="gph">ГПХ</option><option value="employment">Трудовой договор</option><option value="npd">Самозанятый</option><option value="custom">Другое</option></select><select value={docCode} onChange={e=>setDocCode(e.target.value)} aria-label="Документ">{[["passport","Паспорт"],["snils","СНИЛС"],["inn","ИНН"],["bank_details","Реквизиты"],["military","Военный билет"],["medical_book","Медкнижка"],["photo","Фотография"],["application","Заявление"],["contract","Договор"]].map(([code,label])=><option key={code} value={code}>{label}</option>)}</select><label><input type="checkbox" checked={docRequired} onChange={e=>setDocRequired(e.target.checked)}/> Требуется</label><button className="button" disabled={!!busy} onClick={()=>void action({action:"document_requirement",objectId,relationType,code:docCode,required:docRequired})}>Применить</button></div>}
-     <p className="worker-confirmation-note"><a href="/employee-timesheet/demo?layout=mobile" target="_blank" rel="noopener noreferrer"><ExternalLink size={13} style={{verticalAlign:"middle"}}/> Версия для телефона</a> · <a href="/employee-timesheet/demo?layout=desktop" target="_blank" rel="noopener noreferrer">Версия для компьютера</a></p>
+     <p className="worker-confirmation-note"><a href="/employee-timesheet/demo?layout=mobile" target="_blank" rel="noopener noreferrer"><ExternalLink size={13} style={{verticalAlign:"middle"}}/> Версия для телефона</a> · <a href="/employee-timesheet/demo?layout=desktop" target="_blank" rel="noopener noreferrer">Версия для компьютера</a></p></div>
    </>}
   </>}
+ {hoursReview&&<RegistryDrawer className="object-form-drawer" title="Проверка фактически отработанных часов" onClose={()=>setHoursReview(null)}
+   footer={<><button className="button" onClick={()=>setHoursReview(null)}>Отмена</button>
+    <button className="button" disabled={!!busy||!reviewComment.trim()} onClick={()=>{const {worker,report}=hoursReview;setHoursReview(null);void action({action:"review_hours",objectId:report.objectId,workerId:worker.id,date:report.date,approve:false,comment:reviewComment})}}>Отклонить</button>
+    <button className="button primary" disabled={!!busy||!approvedHours.trim()||!Number.isFinite(Number(approvedHours))||Number(approvedHours)<=0||Number(approvedHours)>24} onClick={()=>{const {worker,report}=hoursReview;setHoursReview(null);void action({action:"review_hours",objectId:report.objectId,workerId:worker.id,date:report.date,approve:true,approvedHours:Number(approvedHours),comment:reviewComment})}}>Подтвердить часы</button></>}>
+   <p>{hoursReview.worker.name} · {dateLabel(hoursReview.report.date)} · {hoursReview.worker.object??"Объект"}</p>
+   <p>Плановая норма: {hoursReview.worker.paidHours} ч · сообщил сотрудник: {hoursReview.report.hours} ч</p>
+   <p>Источник: сотрудник по персональной ссылке · {hoursReview.report.employeeRespondedAt?new Date(hoursReview.report.employeeRespondedAt).toLocaleString("ru-RU"):"время не указано"}</p>
+   {hoursReview.report.reason&&<p>Причина отклонения: {hoursReview.report.reason}</p>}
+   <label>Итоговые часы<input type="number" min={0.01} max={24} step={0.25} value={approvedHours} onChange={e=>setApprovedHours(e.target.value)}/></label>
+   <label>Комментарий менеджера<textarea rows={3} maxLength={500} value={reviewComment} onChange={e=>setReviewComment(e.target.value)} placeholder="Причина исправления или отклонения"/></label>
+   <p className="worker-confirmation-note">При подтверждении запись будет внесена в рабочий табель. Закрытые периоды изменять нельзя.</p>
+  </RegistryDrawer>}
+  {confirmation&&<RegistryDrawer className="object-form-drawer" title={confirmation.title} onClose={()=>setConfirmation(null)} footer={<><button className="button" onClick={()=>setConfirmation(null)}>Отмена</button><button className="button primary" onClick={()=>{const body=confirmation.body;setConfirmation(null);void action(body)}}>{confirmation.label}</button></>}><p className="object-form-explanation">{confirmation.text}</p></RegistryDrawer>}
  </section>;
 }

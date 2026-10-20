@@ -1,78 +1,37 @@
-import type { Actor } from "@/lib/access/types";
-import { AccessDeniedError, requireCapability } from "@/lib/access/server";
-import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
-import { withTenant } from "@/lib/db/client";
-
-export type StaffingPlanTargetWrite={
-  objectId:string;
-  specialtyId:string;
-  plannedCount:number;
-  shiftKind:"day"|"night"|"mixed";
-  effectiveFrom:string;
-  note?:string|null;
-};
-
-type StaffingPlanScope={
-  organizationId:string;
-  objectId:string;
-  ownerUserId:string|null;
-  regionId:string|null;
-  assigneeUserIds:string[];
-};
-
-function editCapability(actor:Actor){
-  if(hasCapability(actor.access,"operations.staffing_plan.edit"))return "operations.staffing_plan.edit";
-  requireCapability(actor,"operations.need.edit");
-  return "operations.need.edit";
+import * as demo from "@/lib/demo/data";
+import {getOperationsReferenceData} from "@/lib/operations/service";
+import {z} from "zod";
+import type {Actor} from "@/lib/access/types";
+import {withTenant} from "@/lib/db/client";
+import {conditionSchema,requireObjectScope,saveObjectConditionInTransaction,staffingEditCapability} from "./object-conditions";
+export const staffingPlanSchema=z.object({id:z.string().uuid().optional(),objectId:z.string().uuid(),specialtyId:z.string().uuid(),plannedCount:z.number().int().min(0).max(10000),shiftKind:z.enum(["day","night","mixed"]).default("mixed"),effectiveFrom:z.string().date().nullable().optional(),effectiveTo:z.string().date().nullable().optional(),status:z.enum(["active","paused","closed"]).default("active"),note:z.string().trim().max(2000).nullable().optional()}).superRefine((v,c)=>{if(v.effectiveFrom&&v.effectiveTo&&v.effectiveTo<v.effectiveFrom)c.addIssue({code:"custom",message:"Дата окончания раньше начала"});if(v.status!=="active"&&!v.note?.trim())c.addIssue({code:"custom",message:"Укажите причину приостановки или закрытия"})});
+export const staffingPlanWithConditionsSchema=z.object({plan:staffingPlanSchema,initialCondition:conditionSchema.optional()}).superRefine((v,c)=>{if(v.initialCondition&&(v.plan.id||v.initialCondition.supersedesId||v.initialCondition.specialtyId!==v.plan.specialtyId||v.initialCondition.shiftKind!==v.plan.shiftKind))c.addIssue({code:"custom",message:"Начальные условия должны соответствовать новой строке плана. Для изменения используйте новую версию условий"})});
+export type StaffingPlanTargetWrite=z.infer<typeof staffingPlanSchema>;
+export type StaffingPlanRow={id:string;objectId:string;specialtyId:string;specialty:string;plannedCount:number;shiftKind:"day"|"night"|"mixed";effectiveFrom:string|null;effectiveTo:string|null;status:"active"|"paused"|"closed";note:string|null;actualCount:number;plannedExits:number;replacementCount:number;openNeedCount:number;deficit:number};
+export async function listStaffingPlan(actor:Actor,objectId:string):Promise<StaffingPlanRow[]>{
+ await requireObjectScope(actor,objectId,"operations.need.read");if(actor.demo){const refs=await getOperationsReferenceData(actor,"operations.need.read",{includeWorkers:false});if(!refs.objects.some(o=>o.id===objectId))return [];return demo.needs.filter(n=>n.objectId===objectId).map(n=>({id:`demo-plan-${n.id}`,objectId,specialtyId:refs.specialties.find(s=>s.name===n.specialty)?.id??"",specialty:n.specialty,plannedCount:Number(n.required),shiftKind:"mixed" as const,effectiveFrom:null,effectiveTo:null,status:"active" as const,note:"Демо: существующая потребность, без записи рабочего плана",actualCount:Number(n.filled),plannedExits:0,replacementCount:0,openNeedCount:1,deficit:Math.max(Number(n.required)-Number(n.filled),0)}));}
+ return withTenant(actor.organizationId,actor.userId,async sql=>sql<StaffingPlanRow[]>`
+ SELECT t.id,t.object_id "objectId",t.specialty_id "specialtyId",s.name specialty,t.planned_count "plannedCount",t.shift_kind "shiftKind",t.effective_from::text "effectiveFrom",t.effective_to::text "effectiveTo",t.status,t.note,
+ w.actual "actualCount",w.exits "plannedExits",n.replacements "replacementCount",n.open_count "openNeedCount",CASE WHEN t.status='active' AND(t.effective_from IS NULL OR t.effective_from<=current_date) AND(t.effective_to IS NULL OR t.effective_to>=current_date) THEN GREATEST(t.planned_count-w.actual,0) ELSE 0 END::int deficit
+ FROM staffing_plan_targets t JOIN specialties s ON s.id=t.specialty_id AND s.organization_id=t.organization_id
+ LEFT JOIN LATERAL(SELECT count(DISTINCT a.worker_id)::int actual,count(DISTINCT a.worker_id) FILTER(WHERE a.effective_to BETWEEN current_date AND current_date+30 OR EXISTS(SELECT 1 FROM worker_exit_processes ep WHERE ep.organization_id=a.organization_id AND ep.worker_id=a.worker_id AND ep.object_id=a.object_id AND ep.status='planned' AND ep.effective_date BETWEEN current_date AND current_date+30))::int exits FROM worker_object_assignments a JOIN worker_profiles p ON p.id=a.worker_id AND p.organization_id=a.organization_id AND p.status='active' WHERE a.organization_id=t.organization_id AND a.object_id=t.object_id AND a.specialty_id=t.specialty_id AND(a.effective_from IS NULL OR a.effective_from<=current_date) AND(a.effective_to IS NULL OR a.effective_to>=current_date) AND(t.shift_kind='mixed' OR a.schedule_shift_kind=t.shift_kind))w ON true
+ LEFT JOIN LATERAL(SELECT count(*) FILTER(WHERE source_kind='replacement')::int replacements,count(*)::int open_count FROM needs WHERE organization_id=t.organization_id AND object_id=t.object_id AND specialty_id=t.specialty_id AND status IN('open','in_progress') AND(shift_kind=t.shift_kind OR t.shift_kind='mixed'))n ON true
+ WHERE t.organization_id=${actor.organizationId}::uuid AND t.object_id=${objectId}::uuid ORDER BY t.status,s.name,t.shift_kind,t.created_at DESC`);
 }
-
-export async function setStaffingPlanTarget(actor:Actor,input:StaffingPlanTargetWrite){
-  const capability=editCapability(actor);
-  if(actor.demo)return {id:`demo-plan-${input.objectId}-${input.specialtyId}`,demo:true};
-  return withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
-    const [scope]=await tx<StaffingPlanScope[]>`
-      SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
-        ARRAY(SELECT oa.user_id::text FROM object_assignments oa
-          WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"
-      FROM objects o WHERE o.id=${input.objectId}::uuid
-    `;
-    if(!scope||!canReadRow(actor.access,capability,scope,actor))throw new AccessDeniedError(capability);
-
-    const [specialty]=await tx<Array<{id:string}>>`
-      SELECT id FROM specialties WHERE id=${input.specialtyId}::uuid AND active
-    `;
-    if(!specialty)throw new Error("Специальность недоступна");
-
-    await tx`
-      UPDATE staffing_plan_targets
-      SET effective_to=(${input.effectiveFrom}::date-1),updated_by_user_id=${actor.userId}::uuid,updated_at=now()
-      WHERE object_id=${input.objectId}::uuid
-        AND specialty_id=${input.specialtyId}::uuid
-        AND shift_kind=${input.shiftKind}
-        AND effective_from<${input.effectiveFrom}::date
-        AND (effective_to IS NULL OR effective_to>=${input.effectiveFrom}::date)
-    `;
-
-    const [created]=await tx<Array<{id:string}>>`
-      INSERT INTO staffing_plan_targets(
-        organization_id,object_id,specialty_id,shift_kind,planned_count,effective_from,
-        source_kind,note,created_by_user_id,updated_by_user_id
-      ) VALUES(
-        ${actor.organizationId}::uuid,${input.objectId}::uuid,${input.specialtyId}::uuid,${input.shiftKind},
-        ${input.plannedCount},${input.effectiveFrom}::date,'manual',${input.note??null},
-        ${actor.userId}::uuid,${actor.userId}::uuid
-      ) RETURNING id
-    `;
-
-    await tx`
-      INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-      VALUES(
-        ${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${input.objectId}::uuid,
-        'staffing_plan_updated','Обновлён план комплектации',
-        ${tx.json({specialtyId:input.specialtyId,plannedCount:input.plannedCount,shiftKind:input.shiftKind,effectiveFrom:input.effectiveFrom})}
-      )
-    `;
-
-    return {id:created.id,demo:false};
-  }));
+export async function setStaffingPlanTarget(actor:Actor,raw:StaffingPlanTargetWrite,initialCondition?:z.infer<typeof conditionSchema>){
+ const {plan:input}=staffingPlanWithConditionsSchema.parse({plan:raw,initialCondition});await requireObjectScope(actor,input.objectId,staffingEditCapability(actor));
+ if(actor.demo)throw new Error("Демо: изменения плана не записываются. Используйте рабочую организацию");
+ return withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+ await tx`SELECT pg_advisory_xact_lock(hashtextextended(${actor.organizationId+':'+input.objectId},77))`;
+ const [specialty]=await tx`SELECT id FROM specialties WHERE id=${input.specialtyId}::uuid AND organization_id=${actor.organizationId}::uuid AND active`;if(!specialty)throw new Error("Специальность недоступна");
+ let row;
+ if(input.id){const [prior]=await tx`SELECT id,specialty_id,shift_kind FROM staffing_plan_targets WHERE id=${input.id}::uuid AND organization_id=${actor.organizationId}::uuid AND object_id=${input.objectId}::uuid FOR UPDATE`;if(!prior)throw new Error("Строка плана не найдена");if(prior.specialty_id!==input.specialtyId||prior.shift_kind!==input.shiftKind){const [linked]=await tx`SELECT id FROM needs WHERE organization_id=${actor.organizationId}::uuid AND staffing_plan_target_id=${input.id}::uuid LIMIT 1`;if(linked)throw new Error("У строки уже есть история потребностей. Закройте её и создайте новую специальность или смену");}
+ [row]=await tx`UPDATE staffing_plan_targets SET specialty_id=${input.specialtyId}::uuid,shift_kind=${input.shiftKind},planned_count=${input.plannedCount},effective_from=${input.effectiveFrom??null}::date,effective_to=${input.effectiveTo??null}::date,status=${input.status},note=${input.note??null},updated_by_user_id=${actor.userId}::uuid,updated_at=now() WHERE id=${input.id}::uuid AND organization_id=${actor.organizationId}::uuid RETURNING id`;
+ }else{
+ const [duplicate]=await tx`SELECT id FROM staffing_plan_targets WHERE organization_id=${actor.organizationId}::uuid AND object_id=${input.objectId}::uuid AND specialty_id=${input.specialtyId}::uuid AND shift_kind=${input.shiftKind} AND status='active' AND ${input.status}='active' AND daterange(effective_from,effective_to,'[]')&&daterange(${input.effectiveFrom??null}::date,${input.effectiveTo??null}::date,'[]')`;if(duplicate)throw new Error("Активная строка этой специальности и смены уже существует. Отредактируйте её");
+ [row]=await tx`INSERT INTO staffing_plan_targets(organization_id,object_id,specialty_id,shift_kind,planned_count,effective_from,effective_to,status,source_kind,note,created_by_user_id)VALUES(${actor.organizationId}::uuid,${input.objectId}::uuid,${input.specialtyId}::uuid,${input.shiftKind},${input.plannedCount},${input.effectiveFrom??null}::date,${input.effectiveTo??null}::date,${input.status},'manual',${input.note??null},${actor.userId}::uuid)RETURNING id`;
+ }
+ if(initialCondition)await saveObjectConditionInTransaction(tx,actor,input.objectId,conditionSchema.parse(initialCondition));
+ await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'object',${input.objectId}::uuid,'staffing_plan_updated','Обновлён план комплектации',${tx.json(input)})`;return row;
+ }));
 }

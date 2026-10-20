@@ -3,6 +3,7 @@ import {z} from "zod";
 import type {Sql} from "postgres";
 import {getCurrentActor} from "@/lib/auth/server";
 import {AccessDeniedError,requireCapability} from "@/lib/access/server";
+import {listClients,listClientContacts} from "@/lib/data/service";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {withTenant} from "@/lib/db/client";
 
@@ -22,7 +23,7 @@ async function assertEditable(actor:NonNullable<Awaited<ReturnType<typeof getCur
   const [row]=await sql<Scope[]>`
     SELECT id,id "clientId",organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",
       assigned_team_id "teamId",region_id "regionId"
-    FROM client_companies WHERE id=${clientId}::uuid
+    FROM client_companies WHERE organization_id=${actor.organizationId}::uuid AND id=${clientId}::uuid FOR UPDATE
   `;
   if(!row)throw new Error("Клиент не найден");
   if(!canReadRow(actor.access,"sales.client.edit",row,actor))throw new AccessDeniedError("sales.client.edit");
@@ -36,8 +37,14 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;
     const body=schema.parse(await request.json());
-    const row=await withTenant(actor.organizationId,actor.userId,async sql=>{
+    const row=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async sql=>{
       await assertEditable(actor,id,sql);
+      const [duplicate]=await sql<Array<{id:string}>>`SELECT id FROM contacts WHERE organization_id=${actor.organizationId}::uuid AND client_company_id=${id}::uuid AND (
+        lower(trim(full_name))=lower(trim(${body.fullName}))
+        OR (${body.phone??''}<>'' AND regexp_replace(coalesce(phone,''),'[^0-9]','','g')=regexp_replace(${body.phone??''},'[^0-9]','','g'))
+        OR (${body.email??''}<>'' AND lower(email)=lower(${body.email??''}))
+      ) ORDER BY id LIMIT 1`;
+      if(duplicate)return {...duplicate,duplicate:true};
       const [created]=await sql<Array<{id:string}>>`
         INSERT INTO contacts(
           organization_id,client_company_id,full_name,position,phone,email,telegram,whatsapp,max_contact,communication_preference,
@@ -52,7 +59,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       await sql`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'client',${id}::uuid,'contact_added','Добавлен контакт клиента')`;
       return created;
-    });
+    }));
     return NextResponse.json(row,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные контакта",issues:error.issues},{status:400});
@@ -60,4 +67,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     console.error(error);
     return NextResponse.json({error:error instanceof Error?error.message:"Не удалось добавить контакт"},{status:500});
   }
+}
+
+export async function GET(_request:Request,{params}:{params:Promise<{id:string}>}){
+ try{const actor=await getCurrentActor();if(!actor)return NextResponse.json({error:"Необходимо войти в систему"},{status:401});requireCapability(actor,"sales.client.read");const {id}=await params;const client=(await listClients(actor)).find(x=>x.id===id);if(!client)return NextResponse.json({error:"Клиент не найден"},{status:404});const contacts=await listClientContacts(actor,id);return NextResponse.json({client,contacts,canEdit:canReadRow(actor.access,"sales.client.edit",client,actor)});}catch(e){if(e instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав для контактов клиента"},{status:403});return NextResponse.json({error:"Не удалось загрузить контакты"},{status:500});}
 }

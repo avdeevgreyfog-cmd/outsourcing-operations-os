@@ -37,7 +37,7 @@ function patchFixture({caps,result=null,rowDenied=false}={}){
   let conditions={legacy:'keep',subject:'before'};
   const tx=async(strings,...values)=>{
     const query=strings.join('?');
-    if(query.startsWith('SELECT organization_id'))return [{organizationId:rowDenied?'other':'org',ownerUserId:'user',createdByUserId:'user',stage:'analysis',result}];
+    if(query.startsWith('SELECT updated_at'))return [{organizationId:rowDenied?'other':'org',ownerUserId:'user',createdByUserId:'user',stage:'analysis',result,updatedAt:'v1'}];
     if(query.includes('SELECT EXISTS'))return [{ok:true}];
     if(query.startsWith('UPDATE tenders')){
       writes.push(query);
@@ -51,7 +51,7 @@ function patchFixture({caps,result=null,rowDenied=false}={}){
   const api=load('app/api/tenders/[id]/route.ts',{
     'next/server':{NextResponse:{json:(body,{status=200}={})=>({body,status})}},
     '@/lib/auth/server':{getCurrentActor:async()=>a},'@/lib/access/server':auth,
-    '@/lib/tenders/model':load('lib/tenders/model.ts'),'@/lib/tenders/trading.mjs':{calculateTenderBidEconomics:async()=>{throw Error('Unexpected tender bid economics calculation in entity safety fixture');}},'@/lib/core/access.mjs':{canReadRow},'@/lib/db/client':{withTenant:async(org,user,cb)=>cb(tx)},
+    '@/lib/commercial/edit-conflict':load('lib/commercial/edit-conflict.ts'),'@/lib/commercial/edit-history':load('lib/commercial/edit-history.ts'),'@/lib/tenders/model':load('lib/tenders/model.ts'),'@/lib/tenders/trading.mjs':{calculateTenderBidEconomics:async()=>{throw Error('Unexpected tender bid economics calculation in entity safety fixture');}},'@/lib/core/access.mjs':{canReadRow},'@/lib/db/client':{withTenant:async(org,user,cb)=>cb(tx)},
   });
   return {writes,conditions:()=>conditions,patch:body=>api.PATCH(new Request('http://localhost/api/tenders/'+id,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({id})})};
 }

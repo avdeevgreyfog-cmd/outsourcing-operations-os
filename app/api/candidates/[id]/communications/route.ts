@@ -29,7 +29,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
         LEFT JOIN needs n ON n.id=ca.need_id LEFT JOIN objects o ON o.id=ca.object_id
         WHERE c.id=${id}::uuid LIMIT 1
       `;
-      if(!scope||(!actor.access.allOrg&&!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor)))throw new AccessDeniedError("recruiting.candidate.edit");
+      if(!scope||!canReadRow(actor.access,"recruiting.candidate.edit",scope,actor))throw new AccessDeniedError("recruiting.candidate.edit");
       if(body.applicationId){const [application]=await tx<Array<{id:string}>>`SELECT id FROM candidate_applications WHERE id=${body.applicationId}::uuid AND candidate_id=${id}::uuid`;if(!application)throw new Error("Заявка кандидата не найдена");}
       const [row]=await tx<Array<{id:string}>>`
         INSERT INTO candidate_communications(organization_id,candidate_id,application_id,channel,direction,summary,happened_at,created_by_user_id)

@@ -298,3 +298,12 @@ export function calculateRequestCompleteness(request: RequestCompletenessSource,
   const completed = checks.filter((item) => item.ok).length;
   return { percent: Math.round((completed / checks.length) * 100), missing: checks.filter((item) => !item.ok).map((item) => item.label), ready: completed >= 8 && request.roles.length > 0 };
 }
+
+// Older demo records store dates as DD.MM.YYYY; date inputs and API payloads use ISO.
+export function normalizeRequestStartDate(value:string|null|undefined):string{
+  if(!value)return "";
+  const iso=value.match(/^(\d{4}-\d{2}-\d{2})(?:$|T| )/);
+  if(iso)return iso[1];
+  const local=value.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  return local?`${local[3]}-${local[2]}-${local[1]}`:value;
+}

@@ -1,7 +1,8 @@
 import type { Actor } from "@/lib/access/types";
 import { requireCapability } from "@/lib/access/server";
-import { canReadRow } from "@/lib/core/access.mjs";
+import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import {listEligibleObjectManagers,listEligibleObjectRecruiters} from "./object-manager-options";
 import * as demo from "@/lib/demo/data";
 import * as demoOrg from "@/lib/demo/organization";
 
@@ -12,6 +13,8 @@ export type ObjectManagementOptions={
   regions:Array<{id:string;name:string}>;
   managers:ObjectPersonOption[];
   recruiters:ObjectPersonOption[];
+  requisitesPermissions?:{client:boolean;legalEntity:boolean};
+  creationPermissions?:{client:boolean;legalEntity:boolean;region:boolean};
 };
 export type ObjectHistoryRow={id:string;createdAt:string;actor:string;verb:string;summary:string;metadata:Record<string,unknown>};
 
@@ -30,7 +33,9 @@ export async function getLegalEntityOptions(actor:Actor,capability:string){
 
 export async function getObjectManagementOptions(actor:Actor,options:{includeCreation?:boolean;includeAssignments?:boolean}={}):Promise<ObjectManagementOptions>{
   requireCapability(actor,"operations.object.read");
-  const includeCreation=options.includeCreation===true;
+  const requisitesPermissions={client:hasCapability(actor.access,"sales.client.edit"),legalEntity:hasCapability(actor.access,"organization.manage")};
+  const creationPermissions={client:hasCapability(actor.access,"sales.client.create"),legalEntity:hasCapability(actor.access,"organization.manage"),region:hasCapability(actor.access,"admin.permissions.manage")};
+  const includeCreation=options.includeCreation!==false;
   const includeAssignments=options.includeAssignments!==false;
   if(actor.demo){
     const managers=includeAssignments?demoOrg.companyEmployees
@@ -40,6 +45,7 @@ export async function getObjectManagementOptions(actor:Actor,options:{includeCre
       .filter(item=>item.status==="active"&&(item.position??"").toLocaleLowerCase("ru").includes("подбор"))
       .map(item=>({id:item.userId,name:item.name})):[];
     return {
+      creationPermissions,requisitesPermissions,
       clients:includeCreation?demo.clients.map(item=>({id:item.id,name:item.name})):[],
       legalEntities:demoOrg.companyProfile.legalEntities.map(item=>({id:item.id,name:item.name,shortName:item.shortName??null,primary:item.primary})),
       regions:includeCreation?demoOrg.companyProfile.regions.map(item=>({id:item.id,name:item.name})):[],
@@ -49,65 +55,19 @@ export async function getObjectManagementOptions(actor:Actor,options:{includeCre
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [clients,legalEntities,regions,managers,recruiters]=await Promise.all([
-      includeCreation?sql<Array<{id:string;name:string}>>`
-        SELECT id,name FROM client_companies WHERE status<>'archived' ORDER BY name
-      `:Promise.resolve([]),
+      includeCreation?sql<Array<{id:string;name:string;organizationId:string;ownerUserId:string|null;createdByUserId:string|null;regionId:string|null;teamId:string|null}>>`
+        SELECT id,name,organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",region_id "regionId",assigned_team_id "teamId"
+        FROM client_companies WHERE status<>'archived' ORDER BY name
+      `.then(rows=>rows.filter(row=>canReadRow(actor.access,"sales.client.read",{...row,clientId:row.id},actor)).map(({id,name})=>({id,name}))):Promise.resolve([]),
       sql<Array<{id:string;name:string;shortName:string|null;primary:boolean}>>`
         SELECT id,name,short_name "shortName",is_primary "primary"
         FROM legal_entities WHERE active ORDER BY is_primary DESC,name
       `,
       includeCreation?sql<Array<{id:string;name:string}>>`SELECT id,name FROM regions ORDER BY name`:Promise.resolve([]),
-      includeAssignments?sql<ObjectPersonOption[]>`
-        SELECT DISTINCT m.user_id id,u.display_name name
-        FROM organization_memberships m
-        JOIN app_users u ON u.id=m.user_id
-        LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-        WHERE m.status='active'
-          AND (
-            rt.code='object_manager'
-            OR EXISTS (
-              SELECT 1
-              FROM position_assignments pa
-              JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN positions p ON p.id=sp.job_profile_id
-              WHERE pa.membership_id=m.id
-                AND pa.status<>'ended'
-                AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND p.code IN ('object-manager','object_manager')
-            )
-          )
-        ORDER BY name
-      `:Promise.resolve([]),
-      includeAssignments?sql<ObjectPersonOption[]>`
-        SELECT DISTINCT m.user_id id,u.display_name name
-        FROM organization_memberships m
-        JOIN app_users u ON u.id=m.user_id
-        LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-        WHERE m.status='active'
-          AND (
-            rt.code IN ('recruiter','recruiting_manager','recruitment_head')
-            OR EXISTS (
-              SELECT 1 FROM permission_grants pg
-              WHERE pg.role_template_id=m.role_template_id
-                AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign')
-                AND pg.effect='allow'
-            )
-            OR EXISTS (
-              SELECT 1
-              FROM position_assignments pa
-              JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
-              WHERE pa.membership_id=m.id
-                AND pa.status<>'ended'
-                AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND ppg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign')
-                AND ppg.effect='allow'
-            )
-          )
-        ORDER BY name
-      `:Promise.resolve([]),
+      includeAssignments?listEligibleObjectManagers(sql,actor.organizationId):Promise.resolve([]),
+      includeAssignments?listEligibleObjectRecruiters(sql,actor.organizationId):Promise.resolve([]),
     ]);
-    return {clients,legalEntities,regions,managers,recruiters};
+    return {clients,legalEntities,regions,managers,recruiters,creationPermissions,requisitesPermissions};
   });
 }
 
@@ -128,11 +88,11 @@ export async function listObjectHistory(actor:Actor,objectId:string,limit=100):P
   }
   return withTenant(actor.organizationId,actor.userId,async sql=>{
     const [scope]=await sql<Array<{
-      organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string;
+      organizationId:string;objectId:string;ownerUserId:string|null;regionId:string|null;clientId:string|null;createdByUserId:string;
       sourceRequestId:string|null;sourceProposalId:string|null;createdAt:string;assigneeUserIds:string[];
     }>>`
       SELECT o.organization_id "organizationId",o.id "objectId",o.owner_user_id "ownerUserId",o.region_id "regionId",
-        o.client_company_id "clientId",o.source_request_id "sourceRequestId",o.source_proposal_id "sourceProposalId",
+        o.client_company_id "clientId",o.created_by_user_id "createdByUserId",o.source_request_id "sourceRequestId",o.source_proposal_id "sourceProposalId",
         to_char(o.created_at,'DD.MM.YYYY HH24:MI') "createdAt",
         ARRAY(SELECT oa.user_id::text FROM object_assignments oa
           WHERE oa.object_id=o.id AND oa.effective_from<=current_date AND (oa.effective_to IS NULL OR oa.effective_to>=current_date)) "assigneeUserIds"

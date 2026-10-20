@@ -39,3 +39,14 @@
 .operis-worker-registry .operis-registry-popover:is(.columns,.groups){position:relative;inset:auto;width:100%;max-width:100%;max-height:none;overflow:visible;margin:12px 0;box-shadow:none}
 .operis-worker-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:1000px){.operis-worker-registry .operis-registry-popover.columns .registry-column-list{grid-template-columns:1fr}}
+
+/* Existing-contour import uses the shared accessible drawer and local text tabs. */
+.quick-start-import-drawer { width:min(860px,100vw); }
+.quick-start-import-drawer p { overflow-wrap:anywhere; font-size:13px; }
+.quick-start-import-actions,.quick-start-import-steps { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.quick-start-import-actions input { max-width:100%; }
+.quick-start-import-steps button { border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); min-height:38px; font:inherit; padding:8px; }
+.quick-start-import-steps button[aria-current="step"] { color:var(--text); border-color:var(--accent); }
+.quick-start-import-drawer .data-table { min-width:560px; }
+.quick-start-import-drawer footer { flex-wrap:wrap; }
+.object-profile-incomplete { overflow-wrap:anywhere; }

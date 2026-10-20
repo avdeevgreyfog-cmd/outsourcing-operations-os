@@ -35,3 +35,15 @@ clients, proposals and tenders. Existing architecture and backend actions retain
   changes target the Next.js application used by the Vercel deployment.
 
 Reusable rules and adoption checklist: `docs/UI_SYSTEM.md`.
+
+
+## Sales card refinement — 2026-10-10
+
+The following checks cover the sales card changes after the user supplied the evening screenshots; earlier entries above describe earlier revisions.
+
+- 177 unit/API tests pass, including request contact snapshot preservation, version conflicts, client row/capability checks, duplicate rejection and cross-client contact selection. Production build and TypeScript compilation pass. Full lint reports 0 errors and 54 existing warnings; changed components pass focused lint.
+- Shared browser suite: 24 registry/quick-edit/block combinations at 1440/1024/768/390 px in light/dark. Save/reload checks include request schedule and new position, client notes and inline contact, tender data/analysis/position edit/new position/documents, plus new request creation and subsequent editing. No JavaScript/hydration errors or demo API writes. Saving scenarios repeated on the final production build.
+- Refinement suite: 96 card-tab combinations at 1440/390 px in light/dark. Assertions cover tab inset, transparent status backgrounds/borders, page overflow and compact desktop position summaries (85 px). Request existing-contact selection and new contact creation are checked through the request and client cards, retaining request roles and provision.
+- Screenshots inspected against the supplied examples: request overview and positions, tender submission, client contacts on mobile/dark. The active visual mode originally overrode tab padding; the final rule explicitly handles that mode. Forms use the shared inline layout.
+- The final form check covers 16 inline add/edit layouts at 1440/390 px in both themes, with cancellation and page-overflow assertions.
+- Browser checks use the repository's demo mode and existing data. API tests mock the tenant transaction; authenticated live database writes and protected Vercel browser flows are not certified by these checks.

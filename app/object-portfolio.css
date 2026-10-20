@@ -396,3 +396,170 @@
   color:var(--muted);
   font-weight:560;
 }
+
+/* Settings blocks keep their own edit boundary and stay within the object canvas. */
+.object-settings-form{margin:0;border:0;min-width:0}
+.object-settings-form:disabled input,.object-settings-form:disabled select{color:var(--text);opacity:1}
+.object-settings-layout .section-head{gap:12px;flex-wrap:wrap}
+.object-settings-actions{flex-wrap:wrap}
+.object-settings-actions :is(.form-error,.object-settings-success){flex:1 1 240px;line-height:1.45}
+.sales-workspace.operations-workspace .object-workspace-pilot,
+.sales-workspace.operations-workspace .object-pilot-header,
+.sales-workspace.operations-workspace .object-primary-nav{min-width:0;max-width:100%}
+.sales-workspace.operations-workspace .object-primary-nav .entity-tabs{min-width:0;max-width:100%;overflow-x:auto}
+@media(max-width:760px){
+  .sales-workspace.operations-workspace .object-pilot-header{grid-template-columns:minmax(0,1fr)}
+  .sales-workspace.operations-workspace .object-pilot-title :is(h1,p){white-space:normal;overflow-wrap:anywhere}
+  .object-settings-form>label{min-width:0}
+  .object-settings-form :is(input,select){min-width:0;max-width:100%}
+  .object-settings-actions .button{flex:1 1 120px}
+}
+
+/* Object card uses the existing 13px work text and 12px secondary text. */
+.sales-workspace.operations-workspace .object-workspace-pilot{font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif;font-size:13px}
+.sales-workspace.operations-workspace .object-workspace-pilot .section-head h2{font-size:14px;line-height:1.4}
+.sales-workspace.operations-workspace .object-workspace-pilot .section-head p,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-form>label,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-form small,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-history-list :is(time,span){font-size:12px;line-height:1.45}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-form :is(input,select):not([type="checkbox"]){font:inherit;min-height:38px}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-layout .button{min-height:38px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;text-align:center}
+.sales-workspace.operations-workspace .object-workspace-pilot .object-history-list p{font-size:13px;line-height:1.5;overflow-wrap:anywhere;margin:5px 0 0}
+.sales-workspace.operations-workspace .object-pilot-meta strong{white-space:normal;overflow-wrap:anywhere}
+.sales-workspace.operations-workspace .object-workspace-pilot small,
+.sales-workspace.operations-workspace .object-workspace-pilot .object-settings-readonly :is(span,small),
+.sales-workspace.operations-workspace .object-workspace-pilot .object-agenda-list :is(time,small),
+.sales-workspace.operations-workspace .object-workspace-pilot .key-value{font-size:12px;line-height:1.45}
+.sales-workspace.operations-workspace .object-workspace-pilot :is(input,select,textarea){font-family:inherit}
+.sales-workspace.operations-workspace .object-workspace-pilot table td{font-size:13px;line-height:1.4}
+.sales-workspace.operations-workspace .object-workspace-pilot table th{font-size:12px;line-height:1.4}
+/* Manager portal controls follow the object workspace controls. */
+.sales-workspace.operations-workspace .worker-confirmation-tabs button,
+.sales-workspace.operations-workspace .worker-confirmation-actions .button{min-height:38px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.sales-workspace.operations-workspace .worker-confirmation-toolbar :is(input,select){min-height:38px;font:inherit;min-width:0;max-width:100%}
+.sales-workspace.operations-workspace .worker-confirmation-note{font-size:12px;line-height:1.5}
+@media(max-width:760px){.sales-workspace.operations-workspace .worker-confirmation-toolbar>input{flex:1 1 160px;width:100%}.worker-confirmation-tabs{min-width:0}.worker-confirmation-tabs button{flex:1 1 120px}}
+.sales-workspace.operations-workspace .worker-confirmation-toolbar label{display:inline-flex;align-items:center;flex-wrap:wrap;gap:8px}
+.sales-workspace.operations-workspace .worker-confirmation-toolbar input[type="checkbox"]{width:14px;height:14px;min-height:0;padding:0;flex:none}
+
+/* Shared saved-object working surface. Calendars retain their cell geometry. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot{
+  --object-space:14px;
+  --object-control-height:38px;
+  --object-title-size:14px;
+}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.section,.object-module-shell,.object-supply-actions){border-radius:8px;box-shadow:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.section-head,.object-module-head,.object-supply-actions){min-height:60px;padding:12px var(--object-space);gap:12px;background:var(--panel);flex-wrap:wrap}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.section-head h2,.object-module-head h2,.object-supply-actions>div>strong){font-size:var(--object-title-size);font-weight:650;line-height:1.4;margin:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.section-head p,.object-module-head p,.object-supply-actions>div>span){font-size:12px;line-height:1.5;margin:3px 0 0;color:var(--muted)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .button{min-height:var(--object-control-height);padding:8px 13px;border-radius:7px;font-size:13px;line-height:1.35;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(input,select):not([type="checkbox"]):not([type="radio"]){min-height:var(--object-control-height);font-size:13px;border-radius:7px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot textarea{font-size:13px;border-radius:7px;line-height:1.5}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .cell-title{font-size:13px;font-weight:600;line-height:1.4}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .cell-sub{font-size:12px;line-height:1.45;font-weight:400}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .request-table-wrap{min-width:0;max-width:100%;overflow-x:auto;border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .data-table:not(.timesheet):not(.object-shift-matrix):not(.object-shift-specialty) th{height:42px;padding:10px 14px;font-weight:600;background:var(--panel-2)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .data-table:not(.timesheet):not(.object-shift-matrix):not(.object-shift-specialty) td{padding:10px 14px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-local-tabs,.object-finance-tabs){display:flex;align-items:stretch;gap:20px;min-height:44px;padding:0 14px;margin:0;border:0;border-bottom:1px solid var(--border);border-radius:0;background:var(--panel);overflow-x:auto;flex-wrap:nowrap}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-local-tabs,.object-finance-tabs)>:is(button,a){position:relative;display:inline-flex;align-items:center;gap:6px;flex:none;min-height:44px;height:auto;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--muted);font-size:13px;font-weight:500;white-space:nowrap}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-local-tabs,.object-finance-tabs)>:is(button,a).active{background:transparent;color:var(--text);font-weight:650;box-shadow:inset 0 -2px var(--accent)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-local-tabs,.object-finance-tabs)>:is(button,a)::after{display:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics){margin:0 0 14px;gap:0;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;box-shadow:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric{min-height:72px;padding:10px 14px;border:0;border-right:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric::before{display:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric:last-child{border-right:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric>span{font-size:12px;font-weight:500}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric strong{font-size:20px;font-weight:650;margin-top:4px;line-height:1.3;font-variant-numeric:tabular-nums}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-manager{min-width:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-tabs>.cell-sub{align-self:center;margin-left:auto;white-space:nowrap}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-toolbar{margin:0;padding:12px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);gap:8px;align-items:center}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-summary{margin:0;padding:10px 14px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:var(--panel);flex-wrap:wrap;font-size:12px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-note{margin:0;padding:10px 14px;font-size:12px;line-height:1.5}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-settings{border-top:1px solid var(--border);margin-top:14px;background:var(--panel)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-exceptions{border-bottom:1px solid var(--border)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-exceptions>summary{padding:12px 14px;font-size:13px;cursor:pointer;color:var(--text)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-settings .worker-confirmation-toolbar{background:var(--panel)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-actions{gap:8px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .empty-inline{padding:28px 14px;font-size:13px;color:var(--muted)}
+@media(max-width:760px){
+ :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics){grid-template-columns:repeat(2,minmax(0,1fr))}
+ :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric{border-bottom:1px solid var(--border)}
+ :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metrics-grid:not(.object-analytics-metrics) .metric:nth-child(2n){border-right:0}
+ :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-toolbar label{flex:1 1 200px}
+ :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-toolbar label:has(input[type="checkbox"]){flex:0 1 auto}
+ :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .worker-confirmation-toolbar label :is(input,select):not([type="checkbox"]){width:100%;min-width:0}
+}
+/* Payment controls wrap inside the object canvas, including desktop sidebars. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-payment-entry-row{display:grid;grid-template-columns:minmax(0,1fr);width:100%;min-width:0;gap:10px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-payment-entry-grid{display:grid;grid-template-columns:repeat(3,minmax(120px,.7fr)) minmax(200px,1.4fr);width:100%;min-width:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-payment-entry-grid label{min-width:0;font-size:12px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-payment-entry-actions{justify-content:flex-end;flex-wrap:wrap;gap:8px;white-space:normal}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-finance-hint,.object-daily-toolbar>span,.object-daily-toolbar label,.object-daily-policy>label){font-size:12px;line-height:1.5}
+@media(max-width:900px){:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-payment-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-payment-entry-grid{grid-template-columns:minmax(0,1fr)}}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-analytics,.object-analytics-commandbar,.object-local-tabs,.object-analytics-period){min-width:0;max-width:100%}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-local-tabs a{text-decoration:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-analytics-period{font-size:12px;flex-wrap:wrap}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-analytics-period .segmented{max-width:100%;overflow-x:auto}
+/* A single object view at a time: navigation -> tools -> context -> data. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot [hidden]{display:none!important}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-workspace{display:block}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-actions{border:0;border-bottom:1px solid var(--border);border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-context-line{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--panel-2);color:var(--muted);font-size:12px;line-height:1.5}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-context-line b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-content>.section{margin:0;border:0;border-bottom:1px solid var(--border);border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-stock-grid{display:block;margin:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-supply-stock-grid>.section{margin:0;border:0;border-bottom:1px solid var(--border);border-radius:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-settings-layout{display:block;padding:0}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-settings-actions:empty{display:none}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch{display:flex;align-items:center;gap:4px;padding:10px 14px;border-bottom:1px solid var(--border);overflow-x:auto;background:var(--panel-2)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch button{flex:none;min-height:32px;border:1px solid transparent;border-radius:5px;padding:5px 10px;background:transparent;color:var(--muted);font-size:13px;cursor:pointer}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch button.active{border-color:var(--border);background:var(--panel);color:var(--text);font-weight:600}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-view-switch button span{margin-left:5px;font-size:12px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-plan-explanation{padding:0 14px;margin:0 0 10px;font-size:12px;line-height:1.5;color:var(--muted)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-guidance{display:block;padding:10px 14px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-guidance>.object-shift-paint{display:flex;flex-direction:row;align-items:center;flex-wrap:wrap;gap:6px;width:100%;max-width:none}
+
+/* Secondary object views must remain readable alongside the shared workspace. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-overview-timeline,.object-overview-contact,.object-linked-documents) strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-shifts td:first-child strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>a,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-document-attention button strong{font-size:13px;line-height:1.4}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-overview-contours,.object-overview-timeline,.object-overview-contact,.object-linked-documents,.object-document-attention) span,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contours strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contact a,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-overview-timeline,.object-overview-contact) small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .metric small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-analytics-attention-list small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>span,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>small,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-card>strong,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot :is(.object-candidate-lane-head,.object-candidate-lane-empty,.object-staffing-replacement){font-size:12px;line-height:1.45}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-controls .button{height:auto;min-height:38px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-candidate-controls>div:first-child{grid-template-columns:minmax(0,1fr) 112px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contact :is(span,a){overflow-wrap:anywhere}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-contours strong{min-width:0;overflow-wrap:anywhere}
+/* Calendar columns keep their width; short weekday labels do not need micro type. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-shift-matrix th span,
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .timesheet-two-line th.day span{font-size:11px;line-height:1.3}
+@media(max-width:560px){
+  :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-attention .stack-item{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-pilot .object-overview-attention .stack-item .button{align-self:flex-start}
+}
+
+/* Object forms reuse the accessible registry drawer, including portalled panels. */
+.operis-registry-drawer.object-form-drawer{font-size:13px}
+.operis-registry-drawer.object-form-drawer>header h2{font-size:18px;line-height:1.4}
+.operis-registry-drawer.object-form-drawer :is(label,.object-contact-section-title span){font-size:12px;line-height:1.5}
+.operis-registry-drawer.object-form-drawer .object-form-explanation{margin:0;font-size:13px;line-height:1.6}
+.operis-registry-drawer.object-form-drawer .object-form-message{font-size:12px;line-height:1.5;color:var(--muted)}
+.operis-registry-drawer.object-form-drawer>footer{justify-content:flex-end;flex-wrap:wrap}
+.operis-registry-drawer.object-form-drawer input:is([type="checkbox"],[type="radio"]){width:16px;height:16px;min-height:16px;padding:0;flex:none}
+.operis-registry-drawer.object-form-drawer .object-contact-form-body{display:grid;align-content:start;gap:20px}
+.operis-registry-drawer.object-contact-form{width:490px}
+@media(max-width:560px){.operis-registry-drawer.object-form-drawer .form-grid.two{grid-template-columns:minmax(0,1fr)}.operis-registry-drawer.object-form-drawer .form-grid.two .span-2{grid-column:auto}}
+.operis-registry-drawer.object-form-drawer .form-grid.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.operis-registry-drawer.object-form-drawer .form-grid.two>label{display:grid;align-content:start;gap:6px;min-width:0;color:var(--muted);font-weight:500}
+.operis-registry-drawer.object-form-drawer .form-grid.two .span-2{grid-column:1/-1}
+@media(max-width:560px){.operis-registry-drawer.object-form-drawer .form-grid.two{grid-template-columns:minmax(0,1fr)}}

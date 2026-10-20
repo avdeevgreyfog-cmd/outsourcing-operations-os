@@ -16,11 +16,16 @@ export async function POST(request:Request){
     if(actor.demo)return NextResponse.json({error:"В демонстрационном режиме справочник не сохраняется"},{status:409});
     const body=createSchema.parse(await request.json());
     const code="custom_"+randomUUID().replaceAll("-","").slice(0,12);
-    const [item]=await withTenant(actor.organizationId,actor.userId,sql=>sql<Array<{id:string;code:string;name:string;kind:string;active:boolean}>>`
-      INSERT INTO recruiting_candidate_sources(organization_id,code,name,kind,created_by_user_id,sort_order)
-      VALUES(${actor.organizationId}::uuid,${code},${body.name},${body.kind},${actor.userId}::uuid,500)
-      RETURNING id,code,name,kind,active
-    `);
+    const item=await withTenant(actor.organizationId,actor.userId,sql=>sql.begin(async tx=>{
+      await tx`SELECT pg_advisory_xact_lock(hashtextextended(${actor.organizationId+":candidate-source:"+body.name.trim().toLocaleLowerCase("ru")},0))`;
+      const [existing]=await tx<Array<{id:string;code:string;name:string;kind:string;active:boolean}>>`SELECT id,code,name,kind,active FROM recruiting_candidate_sources WHERE organization_id=${actor.organizationId}::uuid AND lower(trim(name))=lower(trim(${body.name})) ORDER BY id LIMIT 1`;
+      if(existing){if(!existing.active)throw new Error("Источник с таким названием находится в архиве. Восстановите его в справочнике.");return existing;}
+      const [created]=await tx<Array<{id:string;code:string;name:string;kind:string;active:boolean}>>`
+        INSERT INTO recruiting_candidate_sources(organization_id,code,name,kind,created_by_user_id,sort_order)
+        VALUES(${actor.organizationId}::uuid,${code},${body.name},${body.kind},${actor.userId}::uuid,500)
+        RETURNING id,code,name,kind,active`;
+      return created;
+    }));
     return NextResponse.json(item,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте источник",issues:error.issues},{status:400});
@@ -41,7 +46,7 @@ export async function PATCH(request:Request){
         kind=COALESCE(${body.kind??null},kind),
         active=COALESCE(${body.active??null},active),
         updated_at=now()
-      WHERE id=${body.id}::uuid
+      WHERE organization_id=${actor.organizationId}::uuid AND id=${body.id}::uuid
       RETURNING id,code,name,kind,active
     `);
     if(!item)return NextResponse.json({error:"Источник не найден"},{status:404});

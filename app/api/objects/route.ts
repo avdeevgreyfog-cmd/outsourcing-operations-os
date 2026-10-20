@@ -2,27 +2,30 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
+import {canReadRow} from "@/lib/core/access.mjs";
 import { withTenant } from "@/lib/db/client";
+import { assertEligibleObjectManagers,assertEligibleObjectRecruiters,ObjectSettingsConflict } from "@/lib/operations/object-manager-options";
 import { defaultPrimarySiteVisitChecklist } from "@/lib/operations/launch-checklist";
 
 const schema=z.object({
   name:z.string().trim().min(2).max(240),
   code:z.string().trim().min(2).max(40).regex(/^[A-Za-z0-9_-]+$/).nullable().optional(),
-  clientId:z.string().uuid(),
-  legalEntityId:z.string().uuid(),
-  regionId:z.string().uuid(),
+  contactId:z.string().uuid().nullable().optional(),
+  clientId:z.string().uuid().nullable().optional(),
+  legalEntityId:z.string().uuid().nullable().optional(),
+  regionId:z.string().uuid().nullable().optional(),
   address:z.string().trim().max(500).nullable().optional(),
   targetStartDate:z.string().date().nullable().optional(),
   actualStartDate:z.string().date().nullable().optional(),
-  ownerUserId:z.string().uuid(),
+  ownerUserId:z.string().uuid().nullable().optional(),
   additionalManagerUserIds:z.array(z.string().uuid()).max(20).default([]),
   recruitingMode:z.enum(["company_rules","object_team"]).default("company_rules"),
   recruiterUserIds:z.array(z.string().uuid()).max(50).default([]),
   status:z.enum(["prelaunch","launch","active"]).default("active"),
 }).superRefine((value,ctx)=>{
-  if(value.additionalManagerUserIds.includes(value.ownerUserId))ctx.addIssue({code:"custom",path:["additionalManagerUserIds"],message:"Основной менеджер не должен дублироваться в дополнительных"});
+  if(value.ownerUserId&&value.additionalManagerUserIds.includes(value.ownerUserId))ctx.addIssue({code:"custom",path:["additionalManagerUserIds"],message:"Основной менеджер не должен дублироваться в дополнительных"});
   if(value.recruitingMode==="object_team"&&value.recruiterUserIds.length===0)ctx.addIssue({code:"custom",path:["recruiterUserIds"],message:"Для закреплённой команды выберите хотя бы одного сотрудника подбора"});
-  if(value.status==="active"&&!value.actualStartDate)ctx.addIssue({code:"custom",path:["actualStartDate"],message:"Для действующего объекта укажите фактическую дату начала работы"});
+  if(value.status!=="active"&&!value.ownerUserId)ctx.addIssue({code:"custom",path:["ownerUserId"],message:"Для подготовки запуска выберите менеджера"});
 });
 
 export async function POST(request:Request){
@@ -31,57 +34,20 @@ export async function POST(request:Request){
     requireCapability(actor,"operations.object.create");
     if(actor.demo)return NextResponse.json({error:"В демо-режиме объект добавляется локально"},{status:409});
     const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
       const [[client],[legalEntity],[region]]=await Promise.all([
-        tx<Array<{id:string}>>`SELECT id FROM client_companies WHERE id=${body.clientId}::uuid AND status<>'archived'`,
-        tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId}::uuid AND active`,
-        tx<Array<{id:string}>>`SELECT id FROM regions WHERE id=${body.regionId}::uuid`,
+        tx<Array<{id:string;organizationId:string;ownerUserId:string|null;createdByUserId:string|null;regionId:string|null;teamId:string|null}>>`SELECT id,organization_id "organizationId",owner_user_id "ownerUserId",created_by_user_id "createdByUserId",region_id "regionId",assigned_team_id "teamId" FROM client_companies WHERE id=${body.clientId??null}::uuid AND organization_id=${actor.organizationId}::uuid AND status<>'archived'`,
+        tx<Array<{id:string}>>`SELECT id FROM legal_entities WHERE id=${body.legalEntityId??null}::uuid AND organization_id=${actor.organizationId}::uuid AND active`,
+        tx<Array<{id:string}>>`SELECT id FROM regions WHERE id=${body.regionId??null}::uuid AND organization_id=${actor.organizationId}::uuid`,
       ]);
-      if(!client)throw new Error("Клиент не найден");
-      if(!legalEntity)throw new Error("Юридическое лицо недоступно");
-      if(!region)throw new Error("Регион не найден");
+      if(body.contactId){const [contact]=await tx<Array<{id:string}>>`SELECT id FROM contacts WHERE organization_id=${actor.organizationId}::uuid AND client_company_id=${body.clientId??null}::uuid AND id=${body.contactId}::uuid`;if(!contact)throw new Error("Контакт не принадлежит выбранному клиенту");}
+      if(body.clientId&&(!client||!canReadRow(actor.access,"sales.client.read",{...client,clientId:client.id},actor)))throw new AccessDeniedError("sales.client.read");
+      if(body.legalEntityId&&!legalEntity)throw new Error("Юридическое лицо недоступно");
+      if(body.regionId&&!region)throw new Error("Регион не найден");
 
-      const managerIds=[...new Set([body.ownerUserId,...body.additionalManagerUserIds])];
-      const validManagers=await tx<Array<{id:string}>>`
-        SELECT DISTINCT m.user_id id
-        FROM organization_memberships m
-        LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-        WHERE m.status='active' AND m.user_id=ANY(${managerIds}::uuid[])
-          AND (
-            rt.code IN ('director','object_manager','regional_manager','operations_head')
-            OR EXISTS (
-              SELECT 1 FROM permission_grants pg
-              WHERE pg.role_template_id=m.role_template_id AND pg.capability='operations.object.edit' AND pg.effect='allow'
-            )
-            OR EXISTS (
-              SELECT 1 FROM position_assignments pa
-              JOIN staff_positions sp ON sp.id=pa.staff_position_id
-              JOIN position_permission_grants ppg ON ppg.position_id=sp.job_profile_id
-              WHERE pa.membership_id=m.id AND pa.status<>'ended'
-                AND pa.effective_from<=current_date AND (pa.effective_to IS NULL OR pa.effective_to>=current_date)
-                AND ppg.capability='operations.object.edit' AND ppg.effect='allow'
-            )
-          )
-      `;
-      if(validManagers.length!==managerIds.length)throw new Error("Один из выбранных менеджеров не имеет права работать с объектами");
-      if(body.recruiterUserIds.length){
-        const validRecruiters=await tx<Array<{id:string}>>`
-          SELECT DISTINCT m.user_id id
-          FROM organization_memberships m
-          LEFT JOIN role_templates rt ON rt.id=m.role_template_id
-          WHERE m.status='active' AND m.user_id=ANY(${body.recruiterUserIds}::uuid[])
-            AND (
-              rt.code IN ('recruiter','recruiting_manager','recruitment_head')
-              OR EXISTS (
-                SELECT 1 FROM permission_grants pg
-                WHERE pg.role_template_id=m.role_template_id
-                  AND pg.capability IN ('recruiting.candidate.create','recruiting.candidate.edit','recruiting.candidate.assign')
-                  AND pg.effect='allow'
-              )
-            )
-        `;
-        if(validRecruiters.length!==new Set(body.recruiterUserIds).size)throw new Error("Один из выбранных сотрудников не имеет доступа к подбору");
-      }
+      const managerIds=[...new Set([...(body.ownerUserId?[body.ownerUserId]:[]),...body.additionalManagerUserIds])];
+      await assertEligibleObjectManagers(tx,actor.organizationId,managerIds);
+      if(body.recruiterUserIds.length)await assertEligibleObjectRecruiters(tx,actor.organizationId,body.recruiterUserIds);
 
       const generatedCode=body.code??`OBJ-${crypto.randomUUID().replaceAll("-","").slice(0,8).toUpperCase()}`;
       const [object]=await tx<Array<{id:string;name:string;code:string}>>`
@@ -90,14 +56,15 @@ export async function POST(request:Request){
           owner_user_id,recruiting_routing_mode,created_by_user_id
         )
         VALUES(
-          ${actor.organizationId}::uuid,${body.clientId}::uuid,${body.legalEntityId}::uuid,${body.name},${generatedCode},${body.status},
-          ${body.regionId}::uuid,${body.address??null},${body.targetStartDate??null}::date,${body.actualStartDate??null}::date,${body.ownerUserId}::uuid,${body.recruitingMode},${actor.userId}::uuid
+          ${actor.organizationId}::uuid,${body.clientId??null}::uuid,${body.legalEntityId??null}::uuid,${body.name},${generatedCode},${body.status},
+          ${body.regionId??null}::uuid,${body.address??null},${body.targetStartDate??null}::date,${body.actualStartDate??null}::date,${body.ownerUserId??null}::uuid,${body.recruitingMode},${actor.userId}::uuid
         )
         RETURNING id,name,code
       `;
-      await tx`
+      if(body.contactId)await tx`INSERT INTO object_contact_assignments(organization_id,object_id,contact_id,roles,is_primary,created_by_user_id) VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${body.contactId}::uuid,ARRAY['operations'],true,${actor.userId}::uuid)`;
+      if(body.ownerUserId)await tx`
         INSERT INTO object_assignments(organization_id,object_id,user_id,responsibility_type,effective_from,assigned_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${body.ownerUserId}::uuid,'object_manager',current_date,${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${object.id}::uuid,${body.ownerUserId??null}::uuid,'object_manager',current_date,${actor.userId}::uuid)
       `;
       for(const userId of body.additionalManagerUserIds){
         await tx`
@@ -122,18 +89,18 @@ export async function POST(request:Request){
         await tx`
           INSERT INTO launch_tasks(organization_id,launch_id,title,owner_user_id,start_date,end_date,baseline_start,baseline_end,progress_pct,status,risk_level,is_milestone,is_critical,category,task_kind,blocks_launch,created_by_user_id)
           VALUES
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача объекта в запуск',${body.ownerUserId}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,false,'other','task',false,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Уточнить порядок доступа и вывода сотрудников',${body.ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-7),current_date,GREATEST(current_date,${launch.targetDate}::date-7),0,'planned','watch',false,true,'access','task',true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Создать потребности и план комплектации',${body.ownerUserId}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,'staffing','task',true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'СИЗ, форма и инструмент готовы',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'supply','task',true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Подготовить графики и учёт рабочего времени',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'operations','task',true,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${body.ownerUserId}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,false,'operations','milestone',false,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Первый выход',${body.ownerUserId}::uuid,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,0,'planned','normal',true,false,'operations','milestone',false,${actor.userId}::uuid),
-            (${actor.organizationId}::uuid,${launch.id}::uuid,'Стабилизация запуска',${body.ownerUserId}::uuid,${launch.targetDate}::date,${launch.targetDate}::date+7,${launch.targetDate}::date,${launch.targetDate}::date+7,0,'planned','normal',false,false,'operations','task',false,${actor.userId}::uuid)
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Передача объекта в запуск',${body.ownerUserId??null}::uuid,current_date,current_date,current_date,current_date,0,'planned','normal',false,false,'other','task',false,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Уточнить порядок доступа и вывода сотрудников',${body.ownerUserId??null}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-7),current_date,GREATEST(current_date,${launch.targetDate}::date-7),0,'planned','watch',false,true,'access','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Создать потребности и план комплектации',${body.ownerUserId??null}::uuid,current_date,GREATEST(current_date,${launch.targetDate}::date-2),current_date,GREATEST(current_date,${launch.targetDate}::date-2),0,'planned','watch',false,true,'staffing','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'СИЗ, форма и инструмент готовы',${body.ownerUserId??null}::uuid,GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-7),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'supply','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Подготовить графики и учёт рабочего времени',${body.ownerUserId??null}::uuid,GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-5),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',false,true,'operations','task',true,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Готовность к первому выходу',${body.ownerUserId??null}::uuid,GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),GREATEST(current_date,${launch.targetDate}::date-1),0,'planned','normal',true,false,'operations','milestone',false,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Первый выход',${body.ownerUserId??null}::uuid,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,${launch.targetDate}::date,0,'planned','normal',true,false,'operations','milestone',false,${actor.userId}::uuid),
+            (${actor.organizationId}::uuid,${launch.id}::uuid,'Стабилизация запуска',${body.ownerUserId??null}::uuid,${launch.targetDate}::date,${launch.targetDate}::date+7,${launch.targetDate}::date,${launch.targetDate}::date+7,0,'planned','normal',false,false,'operations','task',false,${actor.userId}::uuid)
         `;
         await tx`
           INSERT INTO launch_site_visits(organization_id,launch_id,visit_type,scheduled_date,owner_user_id,status,checklist_json,created_by_user_id)
-          VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,'primary',GREATEST(current_date,${launch.targetDate}::date-10),${body.ownerUserId}::uuid,'planned',${tx.json(defaultPrimarySiteVisitChecklist())},${actor.userId}::uuid)
+          VALUES(${actor.organizationId}::uuid,${launch.id}::uuid,'primary',GREATEST(current_date,${launch.targetDate}::date-10),${body.ownerUserId??null}::uuid,'planned',${tx.json(defaultPrimarySiteVisitChecklist())},${actor.userId}::uuid)
         `;
       }
       await tx`
@@ -145,11 +112,12 @@ export async function POST(request:Request){
         )
       `;
       return object;
-    }));
+    });
     return NextResponse.json(result,{status:201});
   }catch(error){
     if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные объекта",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Не удалось создать объект"},{status:500});
+    if(error instanceof ObjectSettingsConflict)return NextResponse.json({error:error.message},{status:409});
+    console.error(error);return NextResponse.json({error:"Не удалось создать объект. Проверьте данные и повторите попытку"},{status:500});
   }
 }

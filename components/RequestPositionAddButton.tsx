@@ -1,0 +1,23 @@
+"use client";
+import {useRef,useState,type FormEvent,type ComponentProps} from 'react';
+import {Plus} from 'lucide-react';
+import {useRouter} from 'next/navigation';
+import {SalesInlineForm} from '@/components/sales/SalesInlineForm';
+import {useUnsavedChanges,useSalesEditSession} from '@/components/sales/SalesEditSection';
+import {getDemoRequest,saveDemoRequest} from '@/lib/commercial/demo-workspace-client';
+import type {RequestIntakeWorkspacePolished} from '@/components/RequestIntakeWorkspacePolished';
+type Props=ComponentProps<typeof RequestIntakeWorkspacePolished>;
+export function RequestPositionAddButton({request,intake,options,workflowMeta,demo,demoRequestId,demoRequestBase}:Props){
+ const editorBusy=Boolean(useSalesEditSession()?.active);const router=useRouter(),anchor=useRef<HTMLButtonElement>(null);const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[dirty,setDirty]=useState(false);const canLeave=useUnsavedChanges(open&&dirty);
+ if(!request||!intake)return null;
+ function cancel(){if(!busy&&canLeave()){setOpen(false);setDirty(false);}}
+ async function save(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy||!request||!intake)return;const fd=new FormData(event.currentTarget);const specialtyName=String(fd.get('specialty')??'').trim(),count=Number(fd.get('count'));if(specialtyName.length<2||!Number.isInteger(count)||count<1||count>5000){setError('Укажите специальность и количество от 1 до 5000');return;}setBusy(true);setError('');try{
+ const specialtyId=options.specialties.find(x=>x.name.toLowerCase()===specialtyName.toLowerCase())?.id??null;const rate=String(fd.get('rate')??'');const added={specialtyId,specialtyName,count,schedule:{},requirements:{description:String(fd.get('notes')??'').trim()},targetClientRate:rate?Number(rate):null};
+ const id=demoRequestId??request.id;const previous=demo?getDemoRequest(id):null;
+ const payload={clientId:request.clientId,title:request.title,source:request.source||'manual',location:request.location,regionId:request.regionId,startDate:request.startDate?.slice(0,10)??null,durationText:request.durationText,schedule:request.schedule,intake:previous?.payload.intake??intake,lunchPaid:request.lunchPaid??false,vatMode:request.vatMode,comments:request.comments,ownerUserId:request.ownerUserId??options.currentUserId,observerUserIds:workflowMeta?.observers.map(x=>x.id)??[],roles:[...(previous?.payload.roles??request.roles.map(x=>({...x,specialtyName:x.specialty,targetClientRate:x.targetClientRate==null?null:Number(x.targetClientRate)}))),{...added,...(demo?{id:crypto.randomUUID()}: {})}]};
+ if(demo){saveDemoRequest({...previous?.payload,...payload},{id,base:previous?.board??demoRequestBase,clientName:options.clients.find(x=>x.id===request.clientId)?.name,ownerName:workflowMeta?.owner??undefined,actorId:options.currentUserId});}
+ else{const response=await fetch(`/api/requests/${id}/v2`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({...payload,section:'need',expectedUpdatedAt:request.updatedAt})});const json=await response.json();if(!response.ok)throw Error(json.error??'Не удалось добавить позицию');}
+ setDirty(false);setOpen(false);router.refresh();
+ }catch(e){setError(e instanceof Error?e.message:'Не удалось добавить позицию');}finally{setBusy(false);}}
+ return <><button disabled={editorBusy} className="button" ref={anchor} type="button" onClick={()=>{setOpen(true);setError('');setDirty(false);}}><Plus size={14}/>Добавить позицию</button>{open&&<SalesInlineForm anchor={anchor} title="Добавить позицию"><form onSubmit={save} onChange={()=>setDirty(true)}><fieldset className="sales-edit-fieldset" disabled={busy}><div className="form-grid two"><label><span>Специальность *</span><input name="specialty" list={`position-specialties-${request.id}`} required minLength={2} maxLength={160}/><datalist id={`position-specialties-${request.id}`}>{options.specialties.map(x=><option key={x.id} value={x.name}/>)}</datalist></label><label><span>Количество *</span><input name="count" type="number" min={1} max={5000} step={1} defaultValue={1} required/></label><label><span>Ориентир ставки заказчика, ₽</span><input name="rate" type="number" min={0} step="0.01"/></label><label><span>Дополнительные требования</span><input name="notes" maxLength={1000}/></label></div><p className="muted">Новая позиция использует общий график заявки. Существующие позиции и расчёты сохраняются.</p>{error&&<p role="alert" className="form-error">{error}</p>}<div className="sales-edit-footer"><button type="button" className="button" onClick={cancel}>Отмена</button><button type="submit" className="button primary">Сохранить позицию</button></div></fieldset></form></SalesInlineForm>}</>;
+}

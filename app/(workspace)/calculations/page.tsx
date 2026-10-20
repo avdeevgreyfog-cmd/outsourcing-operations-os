@@ -1,3 +1,4 @@
+import {isRequestCommercialLocked} from "@/lib/commercial/request-lock-state";
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -44,8 +45,9 @@ export default async function Calculations({searchParams}:{searchParams:Promise<
       ? tender.roles.map((role) => ({id:role.id,specialtyId:role.specialtyId,specialty:role.title,count:role.count ?? 1,schedule:role.schedule,targetClientRate:role.targetClientRate}))
       : [];
   const projectWorkers = baseRoles.reduce((sum, role) => sum + Number(role.count || 0), 0);
-  const canCreate = hasCapability(actor.access, "calculation.scenario.create");
-  const canEdit = hasCapability(actor.access, "calculation.scenario.edit");
+  const commercialLocked=Boolean(request&&isRequestCommercialLocked(request));
+  const canCreate = !commercialLocked&&hasCapability(actor.access, "calculation.scenario.create");
+  const canEdit = !commercialLocked&&hasCapability(actor.access, "calculation.scenario.edit");
 
   if (!source) {
     const [requests, tenders] = await Promise.all([

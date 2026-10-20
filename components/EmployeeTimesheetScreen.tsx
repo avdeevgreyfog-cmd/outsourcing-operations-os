@@ -1,16 +1,17 @@
 "use client";
 import {useCallback,useEffect,useMemo,useState} from "react";
+import type {PortalConfig} from "@/components/EmployeePortalLinkControls";
 import {CalendarDays,ClipboardCheck,Check,CheckCircle2,Clock3,ChevronDown,ChevronRight,Phone,FileText,Shirt,Settings2,LockKeyhole,Moon,Sun,AlertTriangle,MoreHorizontal,ArrowLeft,Info} from "lucide-react";
 
 type Kind="day"|"night"|"off";
-type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null};
-type PlanDay={date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
+type Reply={date:string;shiftKind:Kind|null;response:"working"|"day_off"|"cannot_work";reason:string|null;hours:number|null;reconciledAt?:string|null;needsReconfirmation?:boolean};
+type PlanDay={reserveKind?:"day"|"night"|null;date:string;kind:Kind|null;source:"assigned"|"manual"|"cycle"|"worker"|"none";proposal:Kind|null;proposalStatus:"proposed"|"rejected"|null;startTime:string|null;endTime:string|null;endsNextDay:boolean};
 type Planning={owner:"manager"|"worker";horizon:number;workDays:number|null;restDays:number|null;defaultKind:"day"|"night"|null;floatingDaysOff:boolean;patternFrom:string;days:PlanDay[]};
 type Document={code:string;label:string;employeeReported:boolean;managerVerified:boolean};
-type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;visibility?:{documents:boolean;workwear:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
-type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning};
+type Details={clothingSize:string|null;shoeSize:string|null;employment:string;managerName:string|null;managerPhone:string|null;visibility?:{documents:boolean;workwear:boolean;employment?:boolean;contacts?:boolean};documents:Document[];workwear:{name:string;state:"issued"|"needed";variant:string|null}[];shiftWindows:unknown[];timeChanges:unknown[]};
+type Portal={name:string;objectName:string;paidHours:number;deadline:string;today:string;timezone:string;selectedMonth?:string;reports:Reply[];plans:{date:string;timeCode:string;hours:number;kind:string;source?:string}[];details?:Details;planning:Planning;config?:PortalConfig};
 type Tab="shifts"|"timesheet"|"more";
-type More="overview"|"documents"|"workwear"|"contact"|"settings";
+type More="overview"|"documents"|"workwear"|"contact"|"settings"|"employment"|"objectInfo";
 function move(d:string,n:number){const x=new Date(d+"T00:00:00Z");x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
 function format(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"numeric",month:"long",weekday:"long",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
 function smallDate(d:string){return new Intl.DateTimeFormat("ru-RU",{day:"2-digit",month:"2-digit",timeZone:"UTC"}).format(new Date(d+"T00:00:00Z"))}
@@ -35,7 +36,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const [more,setMore]=useState<More>("overview");
  const [error,setError]=useState("");const [notice,setNotice]=useState("");const [loading,setLoading]=useState(!isDemo);
  const [busy,setBusy]=useState(false);const [showReason,setShowReason]=useState(false);const [reason,setReason]=useState("");
- const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("11");
+ const [hourEdit,setHourEdit]=useState(false);const [hours,setHours]=useState("11");const [hoursComment,setHoursComment]=useState("");
  const [editingDay,setEditingDay]=useState<string|null>(null);const [kindChoice,setKindChoice]=useState<Kind>("night");
  const [showAll,setShowAll]=useState(false);
  const [weekEditing,setWeekEditing]=useState(false);
@@ -50,11 +51,15 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  
  const reload=useCallback(async()=>{
   const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token)+(monthOverride?"?month="+encodeURIComponent(monthOverride):""),{cache:"no-store"});
-  const j=await r.json();if(!r.ok)throw new Error(j.error??"Не удалось загрузить кабинет");
+  const j=await r.json();if(!r.ok){if(r.status===403||r.status===404)setData(null);throw new Error(j.error??"Не удалось загрузить кабинет");}
   setData(j as Portal);return j as Portal;
  },[token,monthOverride]);
  useEffect(()=>{if(isDemo)return;let alive=true;void Promise.resolve().then(()=>reload()).catch(e=>{if(alive)setError(e instanceof Error?e.message:"Ошибка подключения")}).finally(()=>{if(alive)setLoading(false)});return()=>{alive=false}},[reload,isDemo]);
 
+ const sections=data?.config?.sections??{shifts:true,confirm:true,decline:true,scheduleChanges:true,hours:true,timesheet:true,documents:true,employment:true,workwear:true,contacts:true,objectInfo:true};
+ const hasShiftActions=sections.shifts||sections.confirm||sections.decline||sections.hours;
+ const activeTab:Tab=tab==="shifts"&&!hasShiftActions?(sections.timesheet?"timesheet":"more"):tab==="timesheet"&&!sections.timesheet?(hasShiftActions?"shifts":"more"):tab;
+ const activeMore:More=more==="documents"&&!sections.documents||more==="workwear"&&!sections.workwear||more==="contact"&&!sections.contacts||more==="settings"&&!sections.scheduleChanges||more==="employment"&&!sections.employment||more==="objectInfo"&&!sections.objectInfo?"overview":more;
  const clothing=clothingDraft??data?.details?.clothingSize??"";
  const shoe=shoeDraft??data?.details?.shoeSize??"";
  const checkedAt=clockNow(data?.timezone??"Europe/Moscow");
@@ -66,8 +71,8 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
   const end=move(p.date,p.endsNextDay?1:0)+"T"+(p.endTime??(p.kind==="night"?"08:00":"20:00"));
   return checkedAt>=end;
  };
- const completed=useMemo(()=>[0,-1,-2,-3].map(i=>schedule(move(today,i))).find(p=>p&&canFinish(p))??null,[today,records,checkedAt]);
- const next=schedule(tomorrow),nextAnswer=answers.get(tomorrow),completedAnswer=completed?answers.get(completed.date):null;
+ const completed=[0,-1,-2,-3].map(i=>schedule(move(today,i))).find(p=>p&&canFinish(p))??null;
+ const next=schedule(tomorrow),previousNextAnswer=answers.get(tomorrow),nextAnswer=previousNextAnswer?.needsReconfirmation?undefined:previousNextAnswer,completedAnswer=completed?answers.get(completed.date):null;
  const future=(data?.planning?.days??[]).filter(x=>x.date>=tomorrow&&x.date<=move(today,data?.planning?.horizon??7));
  const nextMonday=move(today,((8-new Date(today+"T00:00:00Z").getUTCDay())%7)||7);
  const fullWeek=Array.from({length:7},(_,i)=>move(nextMonday,i));
@@ -78,17 +83,17 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  const adjacentMonth=(offset:number)=>new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5))-1+offset,1)).toISOString().slice(0,7);
  const currentEnd=currentMonth===today.slice(0,7)?Number(today.slice(8)):new Date(Date.UTC(Number(currentMonth.slice(0,4)),Number(currentMonth.slice(5)),0)).getUTCDate();
  const dateRows=Array.from({length:currentEnd},(_,i)=>currentMonth+"-"+String(i+1).padStart(2,"0")).reverse();
- const counted=useMemo(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
+ const counted=(()=>{let total=0,shifts=0;const distinct=new Set<string>();const dayEntries=new Map((data?.plans??[]).filter(p=>p.timeCode==="WORK"&&p.date<=today).map(p=>[p.date,p]));
    for(const date of new Set([...dayEntries.keys(),...answers.keys()])){
     if(!date.startsWith(currentMonth)||date>today||distinct.has(date))continue;
     const entry=dayEntries.get(date),reply=answers.get(date);
-    const worked=reply?.reconciledAt?entry?.hours??reply?.hours:reply?.hours??entry?.hours;
+    const worked=reply?.reconciledAt?entry?.hours??reply?.hours:(entry?.source==="manual"?entry.hours:null);
     if(worked!=null&&worked>0&&(entry?.timeCode==="WORK"||reply?.hours!=null)){total+=worked;shifts++;distinct.add(date)}
-   }return{total,shifts}},[today,currentMonth,data?.plans,answers]);
+   }return{total,shifts}})();
  
  const timeText=(p:PlanDay|null)=>p?.kind==="off"?"":p?.startTime&&p.endTime?`${p.startTime}–${p.endTime}${p.endsNextDay?" · до следующего дня":""}`:"Время смены уточняется";
  async function save(payload:Record<string,unknown>,message:string){
-  if(!data)return false;setError("");setNotice("");setBusy(true);
+  if(!data||busy)return false;setError("");setNotice("");setBusy(true);
   try{
    if(isDemo){
     const date=String(payload.date??"");
@@ -110,7 +115,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     }else if(payload.action==="shift_time"){setNotice("Изменение графика передано менеджеру (демонстрация)");}
    }else{
     const r=await fetch("/api/public/worker-timesheet/"+encodeURIComponent(token),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-    const j=await r.json();if(!r.ok)throw new Error(j.error??"Ошибка сохранения");await reload();
+    const j=await r.json();if(!r.ok){if(r.status===403||r.status===404)setData(null);throw new Error(j.error??"Ошибка сохранения");}await reload();
    }
    setNotice(message);return true;
   }catch(e){setError(e instanceof Error?e.message:"Не удалось сохранить");return false}
@@ -118,13 +123,15 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
  }
  async function confirmExit(){const kind=next?.kind;if(!kind||kind==="off")return;const ok=await save({date:tomorrow,response:"working",kind},"Выход подтверждён");if(ok)setShowReason(false)}
  async function confirmHours(){if(!completed)return;
-   if(completedAnswer?.response!=="working"){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
-   const ok=await save({date:completed.date,hours:hourEdit?Number(hours):data?.paidHours??11},"Часы переданы для сверки");if(ok)setHourEdit(false);
+   if(completedAnswer?.response!=="working"||completedAnswer.needsReconfirmation){const ok=await save({date:completed.date,response:"working",kind:completed.kind},"Смена отмечена");if(!ok)return}
+   const submitted=hourEdit?Number(hours):data?.paidHours??11;
+   if(submitted!==data?.paidHours&&!hoursComment.trim()){setError("При отличии часов от нормы укажите причину");return}
+   const ok=await save({date:completed.date,hours:submitted,reason:hoursComment.trim()||undefined},"Часы переданы для проверки менеджеру");if(ok){setHourEdit(false);setHoursComment("")}
  }
  async function planDay(date:string,kind:Kind){if(busy)return;const direct=data?.planning.owner==="worker"&&data?.planning.floatingDaysOff;const ok=await save({action:"plan_day",date,kind},direct?"График обновлён":"Предложение передано менеджеру");if(ok)setEditingDay(null)}
  async function saveWeek(){if(!data)return;const expected=data.planning.restDays??0;if(restDates.length!==expected){setError("По вашему графику на неделе "+expected+" выходных. Выберите именно столько.");return}if(await save({action:"plan_week",weekStart:nextMonday,offDates:restDates},data.planning.owner==="worker"?"Выходные на неделю сохранены":"Предложение по выходным отправлено"))setWeekEditing(false)}
  function openSettings(){setTab("more");setMore("settings");setSettingsEditing(false);setWorkPattern((data?.planning.workDays??5)+"/"+(data?.planning.restDays??2));setPatternFloating(Boolean(data?.planning.floatingDaysOff));setEffectiveFrom(tomorrow);setSettingKind(data?.planning.defaultKind??"night");const d=records.get(tomorrow);setStartTime(d?.startTime??(d?.kind==="day"?"08:00":"20:00"));setEndTime(d?.endTime??"08:00");setNextDay(d?.endsNextDay??true)}
- const managerCall=data?.details?.managerPhone?.replace(/[^+\d]/g,"");
+ const managerCall=sections.contacts?data?.details?.managerPhone?.replace(/[^+\d]/g,""):undefined;
  if(loading)return <main className="worker-self"><div className="worker-self-loading">Загружаем личный кабинет…</div></main>;
  if(!data)return <main className="worker-self"><div className="worker-self-loading"><LockKeyhole/> Кабинет недоступен. {error}</div></main>;
  return <main className={"worker-self "+(previewLayout==="phone"?"worker-self-phone":"")+(previewLayout==="desktop"?" worker-self-desktop":"")}>
@@ -133,51 +140,53 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     <div className="worker-self-brand"><span className="worker-self-logo">O</span><div><small>OPERIS · СОТРУДНИК</small><strong>Личный кабинет</strong></div></div>
     <div className="worker-self-identity"><strong>{data.name}</strong><span>{data.objectName}</span></div>
     <div className="worker-self-header-actions">
-      {managerCall?<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру"><Phone size={17}/></a>:<button className="worker-self-icon-button" onClick={()=>{setTab("more");setMore("contact")}} aria-label="Контакты менеджера"><Phone size={17}/></button>}
+      {sections.contacts&&(managerCall?<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру"><Phone size={17}/></a>:<button className="worker-self-icon-button" onClick={()=>{setTab("more");setMore("contact")}} aria-label="Контакты менеджера"><Phone size={17}/></button>)}
     </div>
    </header>
    <div className="worker-self-layout">
     <aside className="worker-self-sidebar">
      <p>РАБОЧЕЕ ПРОСТРАНСТВО</p>
-     <button className={tab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> Мои смены</button>
-     <button className={tab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>
-     <button className={tab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Ещё</button>
+     {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> {sections.shifts?"Мои смены":"Мои действия"}</button>}
+     {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>}
+     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Ещё</button>
      <div className="worker-self-sidebar-foot">{data.name}<small>{data.objectName}</small></div>
     </aside>
     <div className="worker-self-main">
      {error&&<div role="alert" className="worker-self-alert"><AlertTriangle size={16}/>{error}</div>}
      {notice&&<div role="status" className="worker-self-alert success"><CheckCircle2 size={16}/>{notice}{isDemo?" · демонстрация":""}</div>}
-     {tab==="shifts"&&<>
-      <div className="worker-self-page-title"><div><h1>Мои смены</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings}><Settings2 size={15}/> Мой график</button></div>
+     {activeTab==="shifts"&&hasShiftActions&&<>
+      <div className="worker-self-page-title"><div><h1>{sections.shifts?"Мои смены":"Мои действия"}</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings} disabled={!sections.scheduleChanges}><Settings2 size={15}/> Мой график</button></div>
       <div className="worker-self-primary-grid">
-       <section className="worker-self-panel worker-self-priority">
+       {(sections.shifts||sections.confirm||sections.decline)&&<section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
         <h2>{format(tomorrow)}</h2>
-        <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
+        <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{next?.reserveKind?"Резерв · "+kindShort(next.reserveKind):kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
         {next?.proposalStatus==="proposed"&&<p className="worker-self-hint">Запрошено изменение: {kindShort(next.proposal)}. Ожидается решение менеджера.</p>}
-        {!next?.kind?<><p className="worker-self-muted">На завтра пока нет установленной смены. Укажите рабочий день или выходной.</p><button className="worker-self-main-button" onClick={()=>setEditingDay(tomorrow)}>Запланировать день</button></>:
-        next.kind==="off"?<><p className="worker-self-muted">Выходной уже стоит в вашем графике. Подтверждать его не нужно.</p><button className="worker-self-light-button full" onClick={()=>setEditingDay(tomorrow)}>{data.planning.owner==="manager"?"Запросить рабочий день":"Изменить на рабочий день"}</button></>:
+        {!next?.kind?<><p className="worker-self-muted">На завтра пока нет установленной смены. Укажите рабочий день или выходной.</p>{sections.scheduleChanges&&<button className="worker-self-main-button" onClick={()=>setEditingDay(tomorrow)}>Запланировать день</button>}</>:
+        next.kind==="off"?<><p className="worker-self-muted">Выходной уже стоит в вашем графике. Подтверждать его не нужно.</p>{sections.scheduleChanges&&<button className="worker-self-light-button full" onClick={()=>setEditingDay(tomorrow)}>{data.planning.owner==="manager"?"Запросить рабочий день":"Изменить на рабочий день"}</button>}</>:
         <>
+         {previousNextAnswer?.needsReconfirmation&&<p className="worker-self-warning">Менеджер изменил план. Подтвердите актуальную смену ещё раз.</p>}
          {nextAnswer?.response==="working"?<div className="worker-self-done"><CheckCircle2 size={17}/> Вы подтвердили выход на эту смену.</div>:nextAnswer?.response==="cannot_work"?<p className="worker-self-warning">Вы сообщили о невыходе. Причина: {nextAnswer.reason??"не указана"}.</p>:<p className="worker-self-question">Вы выйдете на смену?</p>}
-         {nextAnswer?.response!=="working"&&<button className="worker-self-main-button" disabled={busy} onClick={()=>void confirmExit()}><Check size={17}/> Подтвердить выход</button>}
-         <button className="worker-self-light-button full" disabled={busy} onClick={()=>setShowReason(x=>!x)}>{nextAnswer?.response==="working"?"Изменились планы":"Не смогу выйти"}</button>
-         {showReason&&<div className="worker-self-edit"><label>Почему не сможете выйти?<textarea rows={2} maxLength={250} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Например, заболел"/></label><button className="worker-self-main-button" disabled={busy||!reason.trim()} onClick={async()=>{if(await save({date:tomorrow,response:"cannot_work",kind:next.kind,reason},"Изменение передано менеджеру")){setShowReason(false);setReason("")}}}>Сообщить менеджеру</button></div>}
-         <button className="worker-self-quiet" onClick={()=>setEditingDay(tomorrow)}>Предложить изменение графика</button>
+         {sections.confirm&&nextAnswer?.response!=="working"&&<button className="worker-self-main-button" disabled={busy} onClick={()=>void confirmExit()}><Check size={17}/> Подтвердить выход</button>}
+         {sections.decline&&<button className="worker-self-light-button full" disabled={busy} onClick={()=>setShowReason(x=>!x)}>{nextAnswer?.response==="working"?"Изменились планы":"Не смогу выйти"}</button>}
+         {sections.decline&&showReason&&<div className="worker-self-edit"><label>Почему не сможете выйти?<textarea rows={2} maxLength={250} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Например, заболел"/></label><button className="worker-self-main-button" disabled={busy||!reason.trim()} onClick={async()=>{if(await save({date:tomorrow,response:"cannot_work",kind:next.kind,reason},"Изменение передано менеджеру")){setShowReason(false);setReason("")}}}>Сообщить менеджеру</button></div>}
+         {sections.scheduleChanges&&<button className="worker-self-quiet" onClick={()=>setEditingDay(tomorrow)}>Предложить изменение графика</button>}
         </>}
         <div className="worker-self-deadline"><Clock3 size={13}/> Подтверждение до {format(today)}, {data.deadline.slice(0,5)}. О важных изменениях сообщайте сразу.</div>
-       </section>
-       <section className="worker-self-panel">
+       </section>}
+       {sections.hours&&<section className="worker-self-panel">
         <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> Последняя завершённая смена</span><span className={"worker-self-dot "+(completedAnswer?.hours!=null?"good":"")}>{completedAnswer?.hours!=null?"Часы переданы":"Не заполнено"}</span></div>
         {completed?<><h2>{format(completed.date)}</h2><p className="worker-self-shift"><ShiftIcon kind={completed.kind}/><strong>{kindLabel(completed.kind)}</strong><span>{timeText(completed)}</span></p>
-         {completedAnswer?.hours!=null&&!hourEdit?<><div className="worker-self-done"><CheckCircle2 size={17}/> Вы указали {completedAnswer.hours} ч.</div><button className="worker-self-light-button full" onClick={()=>{setHourEdit(true);setHours(String(completedAnswer.hours))}}>Исправить часы</button></>:
+         {completedAnswer?.hours!=null&&!hourEdit?<><div className="worker-self-done"><CheckCircle2 size={17}/> Вы указали {completedAnswer.hours} ч.</div>{!completedAnswer.reconciledAt&&<button className="worker-self-light-button full" onClick={()=>{setHourEdit(true);setHours(String(completedAnswer.hours))}}>Исправить часы</button>}</>:
           <><p className="worker-self-question">Сколько часов вы отработали?</p>{hourEdit&&<label className="worker-self-hours">Отработано часов<input type="number" min={0} max={24} step={0.5} inputMode="decimal" value={hours} onChange={e=>setHours(e.target.value)}/></label>}
-           <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":`${data.paidHours} ч — верно`}</button>
+           {hourEdit&&Number(hours)!==(data.paidHours??11)&&<label className="worker-self-hours">Причина отличия от нормы<textarea rows={2} maxLength={250} value={hoursComment} onChange={e=>setHoursComment(e.target.value)} placeholder="Укажите причину расхождения"/></label>}
+            <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24||(Number(hours)!==data.paidHours&&!hoursComment.trim())))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":`${data.paidHours} ч — верно`}</button>
            <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
          <div className="worker-self-deadline"><Info size={13}/> Ночная смена отмечается датой её начала.</div>
         </>:<p className="worker-self-muted">Нет завершённых смен за ближайшие дни.</p>}
-       </section>
+       </section>}
       </div>
-      <section className="worker-self-panel worker-self-future">
+      {sections.shifts&&<section className="worker-self-panel worker-self-future">
        <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайшие дни</span><button className="worker-self-quiet" onClick={()=>setShowAll(x=>!x)}>{showAll?"Свернуть":"Весь график"} <ChevronDown size={14}/></button></div>
        <p className="worker-self-muted">Нажмите на дату, если ваши планы изменились.</p>
        <div className="worker-self-days">
@@ -185,16 +194,16 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          <button className="worker-self-date-row" aria-expanded={editingDay===p.date}
            onClick={()=>{setEditingDay(x=>x===p.date?null:p.date);setKindChoice(p.kind??data.planning.defaultKind??"day")}}>
           <span className="worker-self-date-info"><strong>{format(p.date)}</strong><small>{p.kind==="off"?"Выходной":p.kind?"Смена "+(p.kind==="night"?"ночная":"дневная"):"Не запланировано"}</small></span>
-          <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{kindShort(p.kind)}</span><ChevronRight size={17}/></span>
+          <span className="worker-self-date-right"><span className={p.kind==="off"?"worker-self-day-off":""}>{p.reserveKind?"Резерв · "+kindShort(p.reserveKind):kindShort(p.kind)}</span><ChevronRight size={17}/></span>
          </button>
-         {editingDay===p.date&&<div className="worker-self-edit worker-self-inline-edit">
+         {sections.scheduleChanges&&editingDay===p.date&&<div className="worker-self-edit worker-self-inline-edit">
           <p>Изменить на:</p>
           <div className="worker-self-choices">{(["day","night","off"] as Kind[]).map(k=><button key={k} className={kindChoice===k?"selected":""} onClick={()=>setKindChoice(k)}>{kindShort(k)}</button>)}</div>
           <button className="worker-self-main-button" disabled={busy} onClick={()=>void planDay(p.date,kindChoice)}>{data.planning.owner==="worker"&&data.planning.floatingDaysOff?"Сохранить":"Отправить запрос"}</button>
          </div>}
         </div>)}
        </div>
-       {canEditWeek&&<div className="worker-self-week-tool">
+       {sections.scheduleChanges&&canEditWeek&&<div className="worker-self-week-tool">
         <div><strong>Плавающие выходные</strong><p className="worker-self-muted">Выберите {(data.planning.restDays??0)===1?"один день отдыха":"два дня отдыха"} на следующую неделю. Рабочие смены выставятся автоматически.</p></div>
         <button className="worker-self-light-button" onClick={()=>{setWeekEditing(x=>!x);setRestDates(fullWeek.filter(d=>records.get(d)?.kind==="off"))}}>{weekEditing?"Свернуть":"Выбрать дни отдыха"}</button>
         {weekEditing&&<div className="worker-self-week-editor">
@@ -203,9 +212,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          <button className="worker-self-main-button" disabled={busy||restDates.length!==(data.planning.restDays??0)} onClick={()=>void saveWeek()}>Сохранить неделю</button>
         </div>}
        </div>}
-      </section>
+      </section>}
      </>}
-     {tab==="timesheet"&&<>
+     {activeTab==="timesheet"&&sections.timesheet&&<>
       <div className="worker-self-page-title"><div><h1>Мой табель</h1></div></div>
       <div className="worker-self-month-nav">
        <button aria-label="Предыдущий месяц" onClick={()=>setMonthOverride(adjacentMonth(-1))} disabled={currentMonth<="2020-01"}><ChevronRight size={18} style={{transform:"rotate(180deg)"}}/></button>
@@ -235,12 +244,12 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        {counted.shifts===0&&<p className="worker-self-muted">За этот месяц пока нет отработанных смен.</p>}
       </section>
      </>}
-     {tab==="more"&&<>
-      {more==="overview"?<><div className="worker-self-page-title"><div><h1>Дополнительно</h1><p>Рабочие документы, спецодежда и контакты.</p></div></div>
-       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"contact",label:"Важные контакты",sub:"Ваш менеджер объекта",icon:Phone},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2}] as const).filter(x=>x.key==="documents"?(data.details?.visibility?.documents??true):x.key==="workwear"?(data.details?.visibility?.workwear??true):true).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
+     {activeTab==="more"&&<>
+      {activeMore==="overview"?<><div className="worker-self-page-title"><div><h1>Дополнительно</h1><p>Рабочие документы, спецодежда и контакты.</p></div></div>
+       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"employment",label:"Статус оформления",sub:"Мой тип оформления",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"contact",label:"Важные контакты",sub:"Ваш менеджер объекта",icon:Phone},{key:"objectInfo",label:"Об объекте",sub:"Инструкция и информация",icon:Info},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2}] as const).filter(x=>x.key==="documents"?sections.documents:x.key==="workwear"?sections.workwear:x.key==="employment"?sections.employment:x.key==="contact"?sections.contacts:x.key==="objectInfo"?sections.objectInfo:sections.scheduleChanges).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
       </>:<>
        <button className="worker-self-back" onClick={()=>setMore("overview")}><ArrowLeft size={15}/> Все разделы</button>
-       {more==="documents"&&<><div className="worker-self-page-title"><div><h1>Мои документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · Что требуется для работы на объекте.</p></div></div>
+       {activeMore==="documents"&&<><div className="worker-self-page-title"><div><h1>Мои документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · Что требуется для работы на объекте.</p></div></div>
         <section className="worker-self-panel"><div className="worker-self-panel-head"><span><FileText size={17}/> Чек-лист документов</span></div><p className="worker-self-muted">Отметьте переданные документы. Менеджер проверит получение.</p>
          <div className="worker-self-doc-list">{(data.details?.documents??[]).map(d=><div className="worker-self-doc-row" key={d.code}>
           <span className={"worker-self-doc-icon "+(d.managerVerified?"verified":d.employeeReported?"reported":"")}><Check size={14}/></span>
@@ -249,19 +258,21 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          </div>)}</div>
         </section>
        </>}
-       {more==="workwear"&&<><div className="worker-self-page-title"><div><h1>Спецодежда и СИЗ</h1><p>Укажите размеры и проверьте, что уже выдано на объекте.</p></div></div>
+       {activeMore==="workwear"&&<><div className="worker-self-page-title"><div><h1>Спецодежда и СИЗ</h1><p>Укажите размеры и проверьте, что уже выдано на объекте.</p></div></div>
         <section className="worker-self-panel"><div className="worker-self-panel-head"><span><Shirt size={17}/> Мои размеры</span></div><div className="worker-self-fields"><label>Размер одежды<input value={clothing} onChange={e=>setClothingDraft(e.target.value)} maxLength={40} placeholder="Например, 52–54"/></label><label>Размер обуви<input value={shoe} onChange={e=>setShoeDraft(e.target.value)} maxLength={40} placeholder="Например, 43"/></label></div><button className="worker-self-main-button" disabled={busy} onClick={()=>void save({action:"sizes",clothingSize:clothing.trim()||null,shoeSize:shoe.trim()||null},"Размеры сохранены")}>Сохранить размеры</button></section>
         <section className="worker-self-panel worker-self-additional"><div className="worker-self-panel-head"><span>Выдача по объекту</span></div>
          {(data.details?.workwear??[]).map((x,i)=><div className="worker-self-asset-row" key={i}><span><strong>{x.name}</strong>{x.variant&&<small>Размер: {x.variant}</small>}</span><span className={"worker-self-asset-tag "+(x.state==="issued"?"issued":"")}>{x.state==="issued"?"Выдано":"Не выдано"}</span></div>)}
          <p className="worker-self-muted">Если что-то не выдано, обратитесь к менеджеру.</p>
         </section>
        </>}
-       {more==="contact"&&<><div className="worker-self-page-title"><div><h1>Важные контакты</h1><p>Ответственный за вашу работу на объекте.</p></div></div>
+       {activeMore==="contact"&&<><div className="worker-self-page-title"><div><h1>Важные контакты</h1><p>Ответственный за вашу работу на объекте.</p></div></div>
         <section className="worker-self-panel worker-self-contact"><small>МЕНЕДЖЕР ОБЪЕКТА</small><h2>{data.details?.managerName??"Менеджер объекта"}</h2><p>{data.objectName}</p>
          {managerCall?<a className="worker-self-main-button" href={"tel:"+managerCall}><Phone size={17}/> Позвонить · {data.details?.managerPhone}</a>:<p className="worker-self-muted">Контактный телефон пока не указан. Менеджер добавит рабочий номер в настройках объекта.</p>}
         </section>
        </>}
-       {more==="settings"&&<>
+       {activeMore==="employment"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Статус оформления</span></div><p>{employmentLabel[data.details?.employment??""]??"Тип оформления уточняется"}</p><p className="worker-self-muted">Состояние передачи документов указано в чек-листе, если он доступен.</p></section>}
+       {activeMore==="objectInfo"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Информация об объекте</span></div><p>{data.objectName}</p><p className="worker-self-muted">{data.config?.instruction??"При возникновении вопросов обратитесь к менеджеру."}</p></section>}
+       {activeMore==="settings"&&<>
         <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Здесь можно посмотреть свой график и запросить изменение.</p></div></div>
         <section className="worker-self-panel worker-self-schedule-summary">
          <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Действующий график</span></div>
@@ -301,9 +312,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     </div>
    </div>
    <nav className="worker-self-bottom-nav" aria-label="Главная навигация">
-    <button className={tab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>Смены</button>
-    <button className={tab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>
-    <button className={tab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Ещё</button>
+    {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>{sections.shifts?"Смены":"Действия"}</button>}
+    {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>}
+    <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Ещё</button>
    </nav>
   </div>
  </main>;

@@ -1,4 +1,6 @@
 "use client";
+import {scheduleCycleWork,schedulingConditionForDate,schedulingCycle,type SchedulingCondition} from "@/lib/operations/schedule-cycle";
+import {planningCoverage} from "@/lib/operations/planning-coverage";
 
 import Link from "next/link";
 import {useEffect,useMemo,useState} from "react";
@@ -11,10 +13,10 @@ type Mode="workers"|"specialties"|"attention";
 type PlannerAssignment={workerId:string;date:string;kind:"day"|"night"|"mixed";reserve:boolean;status:string};
 type PlannerEntry={workerId:string;date:string;timeCode:string;factHours:number|string;dayHours:number|string;nightHours:number|string;source:string;plannedShiftKind:"day"|"night"|"mixed"|null};
 type PlannerAbsence={workerId:string;type:string;from:string;to:string|null;status:string};
-type PlannerDemand={date:string;specialtyId:string;specialty:string;required:number};
+type PlannerDemand={date:string;specialtyId:string;specialty:string;shiftKind?:"day"|"night"|"mixed";required:number};
 type LockedRange={from:string;to:string;status:string};
-type PlannerPattern={workerId:string;effectiveFrom:string;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean};
-type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];patterns?:PlannerPattern[];demo?:boolean};
+type PlannerPattern={workerId:string;effectiveFrom:string;anchorDate:string|null;workDays:number;restDays:number;shiftKind:"day"|"night";floatingDaysOff:boolean};
+type PlannerData={assignments:PlannerAssignment[];entries:PlannerEntry[];absences:PlannerAbsence[];demand:PlannerDemand[];lockedRanges:LockedRange[];patterns?:PlannerPattern[];conditions?:SchedulingCondition[];demo?:boolean};
 type CellState={kind:Kind;label:string;source:"fact"|"plan"|"suggested"|"absence"|"none";editable:boolean;attention:boolean;factWithoutPlan:boolean;title:string};
 
 const paintLabels:Record<PaintKind,string>={day:"День",night:"Ночь",off:"Выходной",reserve_day:"Резерв день",reserve_night:"Резерв ночь",clear:"Очистить"};
@@ -72,6 +74,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return out;
   },[planner,rows]);
   const entryMap=useMemo(()=>{const out=new Map<string,PlannerEntry>();for(const row of planner?.entries??[])out.set(`${row.workerId}:${row.date}`,row);return out},[planner]);
+  const declined=new Set((planner?.assignments??[]).filter(a=>a.status==="declined").map(a=>`${a.workerId}:${a.date}`));
   const demandRows=planner?.demand??[];
 
   function absenceFor(worker:WorkerRow,date:string):PlannerAbsence|null{
@@ -83,19 +86,23 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return null;
   }
   function scheduleKind(worker:WorkerRow,date:string):Kind{
-    if(!worker.startDate||date<worker.startDate)return "";
+    if(worker.startDate&&date<worker.startDate)return "";
     const pattern=planner?.patterns?.find(p=>p.workerId===worker.id&&p.effectiveFrom<=date);
-    const workDays=pattern?.workDays??worker.scheduleWorkDays,restDays=pattern?.restDays??worker.scheduleRestDays;
+    if(pattern){const works=scheduleCycleWork(date,{...pattern,anchorDate:pattern.anchorDate??pattern.effectiveFrom,explicitAnchor:pattern.anchorDate!=null});return works==null?"":works?pattern.shiftKind:"off";}
+    const condition=schedulingConditionForDate(planner?.conditions??[],worker.specialtyId,worker.scheduleShiftKind,date);
+    if(condition){const cycle=schedulingCycle(condition);const works=scheduleCycleWork(date,{...cycle,anchorDate:cycle.anchorDate??worker.scheduleAnchorDate??worker.startDate??null});return works==null?"":works?(condition.shiftKind==="night"?"night":"day"):"off";}
+    const workDays=worker.scheduleWorkDays,restDays=worker.scheduleRestDays;
     if(workDays==null||restDays==null||workDays<1)return "";
-    const anchor=pattern?.effectiveFrom??worker.scheduleAnchorDate??worker.startDate;const cycle=workDays+restDays;
+    const anchor=worker.scheduleAnchorDate??worker.startDate;const cycle=workDays+restDays;
     if((workDays===5&&restDays===2)||(workDays===6&&restDays===1)){
       const dow=new Date(date+"T00:00:00Z").getUTCDay();
       if(dow===0||(dow===6&&workDays===5))return "off";
-      return (pattern?.shiftKind??worker.scheduleShiftKind)==="night"?"night":"day";
+      return worker.scheduleShiftKind==="night"?"night":"day";
     }
+    if(!anchor)return "";
     const diff=Math.floor((Date.parse(date+"T00:00:00Z")-Date.parse(anchor+"T00:00:00Z"))/86400000);
     const offset=((diff%cycle)+cycle)%cycle;if(offset>=workDays)return "off";
-    return (pattern?.shiftKind??worker.scheduleShiftKind)==="night"?"night":"day";
+    return worker.scheduleShiftKind==="night"?"night":"day";
   }
   function planned(worker:WorkerRow,date:string):Kind{
     const key=`${worker.id}:${date}`;const absence=absenceFor(worker,date);
@@ -109,19 +116,25 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     return scheduleKind(worker,date);
   }
 
+  function demandKnown(date:string,specialty?:string){
+    return planner?demandRows.some(row=>row.date===date&&(!specialty||row.specialty===specialty))
+      :rows.some(row=>row.dateIso===date&&row.demand!=null&&(!specialty||row.specialty===specialty));
+  }
   function demandTotal(date:string,specialty?:string){
     if(planner)return demandRows.filter(row=>row.date===date&&(!specialty||row.specialty===specialty)).reduce((sum,row)=>sum+Number(row.required),0);
     const filtered=rows.filter(row=>row.dateIso===date&&(!specialty||row.specialty===specialty));const bySpecialty=new Map<string,number>();
     for(const row of filtered)bySpecialty.set(row.specialty,Math.max(bySpecialty.get(row.specialty)??0,Number(row.demand??0)));
     return [...bySpecialty.values()].reduce((sum,value)=>sum+value,0);
   }
-  function countsFor(date:string,specialty?:string){
+  function countsFor(date:string,specialty?:string,shiftKind?:"day"|"night"|"mixed"){
     let plan=0,reserve=0,suggested=0,fact=0;
     for(const worker of workers){
       if(specialty&&(worker.specialty??"Без специальности")!==specialty)continue;
       const key=`${worker.id}:${date}`,entry=entryMap.get(key),value=planned(worker,date);
+      if(shiftKind&&shiftKind!=="mixed"&&value!==shiftKind&&!(entry&&isFactual(entry)&&(shiftKind==="night"?Number(entry.nightHours)>0:Number(entry.dayHours)>0)))continue;
       const scheduleEntryPlan=Boolean(entry&&!isFactual(entry)&&entry.timeCode==="PLANNED"&&entry.plannedShiftKind);
       if(entry&&isFactual(entry)&&(Number(entry.factHours)>0||entry.timeCode==="WORK_PENDING"))fact++;
+      if(declined.has(key)&&overrides[key]===undefined)continue;
       if(map.has(key)||scheduleEntryPlan)plan++;else if(reserveMap.has(key))reserve++;else if(date>=today&&(value==="day"||value==="night"))suggested++;
     }
     return {plan,reserve,suggested,fact};
@@ -137,6 +150,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       const mismatch=Boolean(plan&&["day","night"].includes(plan)&&factKind&&plan!==factKind);const attention=["WORK_PENDING","NO_SHOW","SICK","ABSENCE"].includes(entry.timeCode)||mismatch;
       return {kind:factKind as Kind,label,source:"fact",editable:false,attention,factWithoutPlan:!plan,title:`Факт из табеля: ${label}. План: ${plan?shortKind(plan):"не было"}`};
     }
+    if(declined.has(key)&&overrides[key]===undefined)return {kind:plan??"",label:"Отказ",source:"plan",editable:canEdit&&!dateLocked(date),attention:true,factWithoutPlan:false,title:"Сотрудник сообщил о невыходе. Требуется замена или новое подтверждение."};
     if(absence){const kind:Kind=absence.type==="intershift"?"intershift":absence.type==="vacation"?"vacation":"off";return {kind,label:shortKind(kind),source:"absence",editable:false,attention:Boolean(plan),factWithoutPlan:false,title:absence.type==="intershift"?"Межвахта":absence.type==="vacation"?"Отпуск":"Согласованный выходной"};}
     if(plan){const attention=date<today;return {kind:plan,label:shortKind(plan),source:"plan",editable:canEdit&&!dateLocked(date),attention,factWithoutPlan:false,title:attention?"План за прошедшую дату не закрыт в табеле":plan.startsWith("reserve")?"Резерв":"Зафиксированный план"};}
     const suggested=date>=today?scheduleKind(worker,date):"";
@@ -177,8 +191,10 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
   const specialties=[...new Set([...workers.map(worker=>worker.specialty??"Без специальности"),...demandRows.map(row=>row.specialty)])].sort((a,b)=>a.localeCompare(b,"ru"));
   const visibleWorkers=mode==="attention"?workers.filter(workerNeedsAttention):workers;
   const attentionCount=workers.filter(workerNeedsAttention).length;
+  const knownDemandDays=dates.filter(date=>demandKnown(date)).length;
   const weekSummary=dates.reduce((acc,date)=>{const required=demandTotal(date),counts=countsFor(date),coverage=date<today?counts.fact:counts.plan;acc.required+=required;acc.plan+=coverage;acc.reserve+=counts.reserve;acc.suggested+=date>=today?counts.suggested:0;acc.deficit+=Math.max(required-coverage,0);return acc},{required:0,plan:0,reserve:0,suggested:0,deficit:0});
-  const focusGaps=specialties.map(name=>{const required=demandTotal(focusDate,name),counts=countsFor(focusDate,name),coverage=focusDate<today?counts.fact:counts.plan;return {name,required,plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.required>0||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
+  const focusDemand=planner?demandRows.filter(row=>row.date===focusDate):specialties.map(specialty=>({specialty,shiftKind:"mixed" as const,required:demandTotal(focusDate,specialty)}));
+  const focusGaps=focusDemand.map(demand=>{const name=demand.specialty,shiftKind=demand.shiftKind??"mixed",required=demand.required,counts=countsFor(focusDate,name,shiftKind),coverage=focusDate<today?counts.fact:counts.plan;return {name,shiftKind,required,known:demandKnown(focusDate,name),plan:coverage,reserve:counts.reserve,suggested:focusDate>=today?counts.suggested:0,gap:Math.max(required-coverage,0)}}).filter(row=>row.known||row.plan>0||row.suggested>0).sort((a,b)=>b.gap-a.gap||a.name.localeCompare(b.name,"ru"));
 
   function toggleWorker(id:string){setSelected(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next})}
   function toggleAll(){setSelected(current=>current.size===visibleWorkers.length?new Set():new Set(visibleWorkers.map(worker=>worker.id)))}
@@ -211,7 +227,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     finally{setBusy("")}
   }
   return <div className={`object-shift-planner object-shift-workbench ${pilot?"object-shift-pilot":"object-shift-classic"}`}>
-    {pilot&&<div className="object-local-tabs object-shift-local-tabs" role="tablist" aria-label="Представления смен"><button type="button" className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>План по сотрудникам <span>{workers.length}</span></button><button type="button" className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям <span>{specialties.length}</span></button><button type="button" className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания <span>{attentionCount}</span></button></div>}
+    {pilot&&<div className="object-view-switch" role="group" aria-label="Представления смен"><button type="button" className={mode==="workers"?"active":""} onClick={()=>setMode("workers")}>План по сотрудникам <span>{workers.length}</span></button><button type="button" className={mode==="specialties"?"active":""} onClick={()=>setMode("specialties")}>По специальностям <span>{specialties.length}</span></button><button type="button" className={mode==="attention"?"active":""} onClick={()=>setMode("attention")}>Требует внимания <span>{attentionCount}</span></button></div>}
     <div className="object-shift-planner-toolbar">
       <div className="page-actions">
         <button className="button" onClick={()=>{const next=addDays(start,-7);setStart(next);setFocusDate(next)}}>← Неделя</button>
@@ -225,15 +241,10 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       </div>
     </div>
 
-    <div className="object-shift-week-summary">
-      <div><span>Потребность</span><strong>{weekSummary.required}</strong><small>человеко-выходов</small></div>
-      <div><span>План / факт</span><strong>{weekSummary.plan}</strong><small>{weekSummary.suggested?`ещё ${weekSummary.suggested} рассчитано`:"закрыто планом или фактом"}</small></div>
-      <div className={weekSummary.deficit?"is-attention":""}><span>Дефицит</span><strong>{weekSummary.deficit}</strong><small>{weekSummary.deficit?"нужно закрыть":"план закрыт"}</small></div>
-      <div><span>Резерв</span><strong>{weekSummary.reserve}</strong><small>не передаётся в табель как план</small></div>
-    </div>
+    <div className="object-context-line"><span>Потребность ({knownDemandDays}/{dates.length} дней): <b>{knownDemandDays?weekSummary.required:"—"}</b></span><span>План / факт: <b>{weekSummary.plan}</b></span><span>Дефицит: <b>{knownDemandDays?weekSummary.deficit:"—"}</b></span><span>Резерв: <b>{weekSummary.reserve}</b></span>{weekSummary.suggested>0&&<span>По графикам: <b>+{weekSummary.suggested}</b>, ещё не утверждено</span>}</div>
 
     <div className="object-shift-guidance">
-      <div><strong>План → факт</strong><span>Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику; «Сформировать с сегодня» фиксирует их как план.</span></div>
+
       {canEdit&&!selected.size&&<div className="object-shift-paint"><span>Клик по ячейке:</span>{(["day","night","off","reserve_day","reserve_night","clear"] as PaintKind[]).map(kind=><button type="button" key={kind} className={paint===kind?"active":""} onClick={()=>setPaint(kind)}><b>{paintCode(kind)}</b>{paintLabels[kind]}</button>)}</div>}
     </div>
 
@@ -256,16 +267,16 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
       <div className="page-actions"><button className="button" type="button" onClick={()=>setAbsenceOpen(false)}>Отмена</button><button className="button primary" type="button" disabled={busy==="absence"} onClick={()=>void planAbsence()}>{busy==="absence"?"Сохраняем…":"Запланировать"}</button></div>
     </div>}
 
-    {pilot?<details className="object-shift-legend object-shift-legend-collapsible"><summary>Обозначения и логика плана</summary><div><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div></details>:<div className="object-shift-legend"><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div>}
+    {pilot?<details className="object-shift-legend object-shift-legend-collapsible"><summary>Обозначения и логика плана</summary><p className="object-plan-explanation">Прошедшие даты читаются из табеля. Серые будущие значения рассчитаны по графику. «Сформировать с сегодня» фиксирует их как план; резерв не передаётся в табель как рабочий выход.</p><div><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div></details>:<div className="object-shift-legend"><span><b>11</b> факт табеля</span><span><b>Д</b> план день</span><span><b>Н</b> план ночь</span><span><b>РД / РН</b> резерв</span><span><b>В</b> выходной</span><span><b>МВ</b> межвахта</span><span><b>О</b> отпуск</span><span className="object-shift-suggested-key">Серое значение — расчёт по графику, ещё не зафиксированный план.</span></div>}
     {message&&<div className="object-staffing-message">{message}</div>}
 
     <div className="object-shift-coverage">
-      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{required||"—"}</strong><small>{past?(deficit?`Не хватило: ${deficit}`:"Факт закрыт"):(deficit?`Дефицит: ${deficit}`:"План закрыт")}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
+      {dates.map(date=>{const required=demandTotal(date),counts=countsFor(date),past=date<today,coverage=past?counts.fact:counts.plan,deficit=Math.max(required-coverage,0),known=demandKnown(date);return <button type="button" key={date} onClick={()=>applyDate(date)} className={`${deficit?"has-deficit":""} ${focusDate===date?"active":""}`}><span>{weekday(date)} · {shortDate(date)}</span><strong>{past?"Факт":"План"} {coverage}/{known?required:"—"}</strong><small>{planningCoverage(known?required:null,coverage,past).label}{counts.reserve?` · резерв ${counts.reserve}`:""}</small>{!past&&counts.suggested>0&&<small>По графикам ещё +{counts.suggested}</small>}</button>})}
     </div>
 
     <div className="object-shift-deficit-panel">
       <div><strong>{weekday(focusDate)} · {shortDate(focusDate)}</strong><span>Потребность и покрытие по специальностям</span></div>
-      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name} className={row.gap?"has-gap":""}><b>{row.name}</b> {row.plan}/{row.required||"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
+      <div className="object-shift-deficit-list">{focusGaps.length?focusGaps.map(row=><span key={row.name+row.shiftKind} className={row.gap?"has-gap":""}><b>{row.name} · {row.shiftKind==="day"?"День":row.shiftKind==="night"?"Ночь":"Смешанная"}</b> {row.plan}/{row.known?row.required:"—"}{row.reserve?` · резерв ${row.reserve}`:""}{row.gap?` · −${row.gap}`:""}{focusDate>=today&&row.gap>0&&row.suggested>0&&row.shiftKind==="mixed"&&<button type="button" onClick={()=>closeGapBySchedule(row.name,focusDate,row.gap)}>Закрыть по графику</button>}</span>):<span>Нет активной потребности на эту дату</span>}</div>
       <div className="page-actions"><Link className="button" href={`/needs?object=${objectId}`}>Потребности</Link><Link className="button" href={`/recruiting?object=${objectId}`}>Подбор</Link></div>
     </div>
 
@@ -284,7 +295,7 @@ export function ObjectShiftsWorkspace({objectId,rows,workers,today,canEdit,canPl
     </table>{mode==="attention"&&!visibleWorkers.length&&<div className="sales-empty object-shift-empty">На этой неделе нет сотрудников, требующих внимания.</div>}</div>
     :<div className="request-table-wrap"><table className="data-table object-shift-specialty">
       <thead><tr><th>Специальность</th>{dates.map(date=><th key={date} className={focusDate===date?"is-focus":""}>{shortDate(date)}</th>)}</tr></thead>
-      <tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{const required=demandTotal(date,name),counts=countsFor(date,name),coverage=date<today?counts.fact:counts.plan,gap=Math.max(required-coverage,0);return <td key={date} className={`${gap?"object-shift-deficit":""} ${focusDate===date?"is-focus":""}`}><strong>{date<today?"Факт":"План"} {coverage}/{required||"—"}</strong><span className="cell-sub">резерв {counts.reserve||"—"}{counts.suggested?` · расчёт +${counts.suggested}`:""}</span>{gap>0&&<small>−{gap}</small>}</td>})}</tr>)}</tbody>
+      <tbody>{specialties.map(name=><tr key={name}><td className="cell-title">{name}</td>{dates.map(date=>{const required=demandTotal(date,name),counts=countsFor(date,name),coverage=date<today?counts.fact:counts.plan,gap=Math.max(required-coverage,0);return <td key={date} className={`${gap?"object-shift-deficit":""} ${focusDate===date?"is-focus":""}`}><strong>{date<today?"Факт":"План"} {coverage}/{demandKnown(date,name)?required:"—"}</strong><span className="cell-sub">резерв {counts.reserve||"—"}{counts.suggested?` · расчёт +${counts.suggested}`:""}</span>{gap>0&&<small>−{gap}</small>}</td>})}</tr>)}</tbody>
     </table></div>}
 
     <div className="section-actions"><Link className="button primary" href={`/objects/${objectId}?tab=timesheets`}>Перейти к факту в табеле</Link><Link className="button" href={`/shifts?object=${objectId}`}>Расширенный список смен</Link></div>

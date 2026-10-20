@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentActor } from "@/lib/auth/server";
@@ -14,14 +15,23 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
     requireCapability(actor,"approval.decide");
     if(actor.demo)return NextResponse.json({error:"Демонстрационные данные доступны только для чтения"},{status:409});
     const {id}=await params;const body=schema.parse(await request.json());
-    const result=await withTenant(actor.organizationId,actor.userId,async sql=>sql.begin(async tx=>{
+    const result=await withTenant(actor.organizationId,actor.userId,async tx=>{
+      const [source]=await tx<Array<{requestId:string|null}>>`
+        SELECT CASE WHEN ai.subject_type='proposal' THEN p.request_id ELSE c.request_id END "requestId"
+        FROM approval_instances ai
+        LEFT JOIN proposals p ON ai.subject_type='proposal' AND p.id=ai.subject_id AND p.organization_id=ai.organization_id
+        LEFT JOIN calculation_scenarios cs ON ai.subject_type='calculation_scenario' AND cs.id=ai.subject_id AND cs.organization_id=ai.organization_id
+        LEFT JOIN calculations c ON c.id=cs.calculation_id AND c.organization_id=ai.organization_id
+        WHERE ai.id=${id}::uuid AND ai.organization_id=${actor.organizationId}::uuid
+      `;
+      if(source?.requestId)await assertRequestCommercialEditable(tx,actor,source.requestId);
       const [approval]=await tx<Array<ApprovalRow>>`
         SELECT ai.id,ai.subject_type "subjectType",ai.subject_id "subjectId",ai.process_code "processCode",ai.status,aps.approver_user_id "approverUserId"
         FROM approval_instances ai JOIN approval_steps aps ON aps.approval_id=ai.id AND aps.step_order=1 WHERE ai.id=${id}::uuid FOR UPDATE
       `;
-      if(!approval)throw new Error("Согласование не найдено");
-      if(approval.status!=="pending")throw new Error("Согласование уже завершено");
-      const allOrg=actor.access.allOrg||actor.access.scopes["approval.decide"]?.some(scope=>scope.type==="all_org");
+      if(!approval)throw new CommercialRequestConflict("Согласование не найдено");
+      if(approval.status!=="pending")throw new CommercialRequestConflict("Согласование уже завершено");
+      const allOrg=actor.access.scopes["approval.decide"]?.some(scope=>scope.type==="all_org")??false;
       if(!allOrg&&approval.approverUserId!==actor.userId)throw new AccessDeniedError("approval.decide");
       const nextStatus=body.decision==="approve"?"approved":"rejected";
       await tx`UPDATE approval_steps SET status=${nextStatus},decided_by_user_id=${actor.userId}::uuid,decision_comment=${body.comment??null},decided_at=now() WHERE approval_id=${id}::uuid AND step_order=1`;
@@ -33,7 +43,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           SELECT c.request_id "requestId",c.tender_id "tenderId",cs.request_role_id "requestRoleId",cs.tender_role_id "tenderRoleId",cs.calculation_id "calculationId"
           FROM calculation_scenarios cs JOIN calculations c ON c.id=cs.calculation_id WHERE cs.id=${approval.subjectId}::uuid
         `;
-        if(!subject)throw new Error("Сценарий расчёта не найден");requestId=subject.requestId;tenderId=subject.tenderId;
+        if(!subject)throw new CommercialRequestConflict("Сценарий расчёта не найден");requestId=subject.requestId;tenderId=subject.tenderId;
         if(body.decision==="approve"){
           if(subject.requestRoleId)await tx`UPDATE calculation_scenarios SET status='superseded' WHERE request_role_id=${subject.requestRoleId}::uuid AND status='accepted' AND id<>${approval.subjectId}::uuid`;
           else await tx`UPDATE calculation_scenarios SET status='superseded' WHERE tender_role_id=${subject.tenderRoleId}::uuid AND status='accepted' AND id<>${approval.subjectId}::uuid`;
@@ -73,7 +83,7 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         }
       }else if(approval.subjectType==="proposal"){
         const [subject]=await tx<Array<{requestId:string}>>`SELECT request_id "requestId" FROM proposals WHERE id=${approval.subjectId}::uuid`;
-        if(!subject)throw new Error("КП не найдено");requestId=subject.requestId;
+        if(!subject)throw new CommercialRequestConflict("КП не найдено");requestId=subject.requestId;
         if(body.decision==="approve"){
           await tx`UPDATE proposals SET status='approved',approved_by_user_id=${actor.userId}::uuid,approved_at=now() WHERE id=${approval.subjectId}::uuid`;
           await tx`UPDATE requests SET status='proposal',updated_at=now() WHERE id=${subject.requestId}::uuid`;
@@ -83,19 +93,19 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         }
       }else if(approval.subjectType==="contract"){
         const [subject]=await tx<Array<{requestId:string}>>`SELECT request_id "requestId" FROM contracts WHERE id=${approval.subjectId}::uuid FOR UPDATE`;
-        if(!subject)throw new Error("Договор не найден");requestId=subject.requestId;
+        if(!subject)throw new CommercialRequestConflict("Договор не найден");requestId=subject.requestId;
         if(body.decision==="approve"){
           await tx`UPDATE contracts SET status='approved',updated_at=now() WHERE id=${approval.subjectId}::uuid`;
         }else{
           await tx`UPDATE contracts SET status='rejected',updated_at=now() WHERE id=${approval.subjectId}::uuid`;
         }
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'contract',${approval.subjectId}::uuid,'approval_decided',${body.decision==="approve"?'Договор внутренне согласован':'Договор возвращён на доработку'},${sql.json({comment:body.comment??null})})`;
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'contract',${approval.subjectId}::uuid,'approval_decided',${body.decision==="approve"?'Договор внутренне согласован':'Договор возвращён на доработку'},${tx.json({comment:body.comment??null})})`;
       }else if(approval.subjectType==="supply_request"){
         const [subject]=await tx<Array<{id:string;title:string;requestType:string;amount:number|null}>>`
           SELECT id,title,request_type "requestType",amount::numeric amount FROM supply_requests WHERE id=${approval.subjectId}::uuid FOR UPDATE
         `;
-        if(!subject)throw new Error("Внутренняя заявка не найдена");
+        if(!subject)throw new CommercialRequestConflict("Внутренняя заявка не найдена");
         const approved=body.decision==="approve";
         await tx`
           UPDATE supply_requests
@@ -106,11 +116,11 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
           WHERE id=${approval.subjectId}::uuid
         `;
         await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
-          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'supply_request',${approval.subjectId}::uuid,'approval_decided',${approved?'Внутренняя заявка согласована':'Внутренняя заявка отклонена'},${sql.json({comment:body.comment??null,amount:subject.amount})})`;
+          VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'supply_request',${approval.subjectId}::uuid,'approval_decided',${approved?'Внутренняя заявка согласована':'Внутренняя заявка отклонена'},${tx.json({comment:body.comment??null,amount:subject.amount})})`;
       }else{
         tenderId=approval.subjectId;
         const [tender]=await tx<Array<{id:string;stage:string}>>`SELECT id,stage FROM tenders WHERE id=${tenderId}::uuid FOR UPDATE`;
-        if(!tender)throw new Error("Тендер не найден");
+        if(!tender)throw new CommercialRequestConflict("Тендер не найден");
         if(approval.processCode==="tender_participation"){
           if(body.decision==="approve")await tx`UPDATE tenders SET decision='participate',stage='calculation',updated_at=now() WHERE id=${tenderId}::uuid`;
           else await tx`UPDATE tenders SET decision='needs_clarification',stage='analysis',updated_at=now() WHERE id=${tenderId}::uuid`;
@@ -119,14 +129,15 @@ export async function PATCH(request:Request,{params}:{params:Promise<{id:string}
         }else{
           await tx`UPDATE tenders SET stage='preparation',updated_at=now() WHERE id=${tenderId}::uuid`;
         }
-        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${tenderId}::uuid,'approval_decided',${body.decision==="approve"?'Согласование тендера одобрено':'Согласование тендера возвращено'},${sql.json({processCode:approval.processCode,comment:body.comment??null})})`;
+        await tx`INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata) VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'tender',${tenderId}::uuid,'approval_decided',${body.decision==="approve"?'Согласование тендера одобрено':'Согласование тендера возвращено'},${tx.json({processCode:approval.processCode,comment:body.comment??null})})`;
       }
       return {id:approval.id,status:nextStatus,requestId,tenderId};
-    }));
+    });
     return NextResponse.json(result);
   }catch(error){
+    if(error instanceof CommercialRequestConflict)return NextResponse.json({error:error.message},{status:409});
     if(error instanceof z.ZodError)return NextResponse.json({error:"Некорректное решение",issues:error.issues},{status:400});
     if(error instanceof AccessDeniedError)return NextResponse.json({error:"Это согласование назначено другому пользователю"},{status:403});
-    console.error(error);return NextResponse.json({error:error instanceof Error?error.message:"Internal error"},{status:500});
+    console.error(error);return NextResponse.json({error:"Не удалось выполнить действие. Повторите попытку"},{status:500});
   }
 }

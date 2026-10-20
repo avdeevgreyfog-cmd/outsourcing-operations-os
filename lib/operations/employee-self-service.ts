@@ -4,7 +4,8 @@ import {withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
 import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
-import {resolveToken} from "@/lib/operations/worker-timesheet-portal";
+import {resolveToken,assertEmployeeLinkActive,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
+import {applyPortalPatch,defaultPortalConfiguration,type PortalConfigurationPatch} from "@/lib/operations/employee-portal-config";
 
 export const docLabels:Record<string,string>={
  passport:"Паспорт",snils:"СНИЛС",inn:"ИНН",bank_details:"Реквизиты для выплат",
@@ -23,7 +24,7 @@ export type PortalDetails={
  clothingSize:string|null;shoeSize:string|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
  documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean}>;
  workwear:Array<{name:string;state:"issued"|"needed";variant:string|null}>;
- visibility:{documents:boolean;workwear:boolean};
+ visibility:{documents:boolean;workwear:boolean;employment:boolean;contacts:boolean};
  shiftWindows:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean}>;
  timeChanges:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular";status:"proposed"|"accepted"|"rejected"}>;
 };
@@ -35,10 +36,10 @@ export function checklistCodes(relation:RelationType,overrides:Array<{code:strin
 async function authorizedEmployee(token:string){
  const ref=await resolveToken(token);if(!ref)return null;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;showDocuments:boolean;showWorkwear:boolean}>>`
+  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;configuration:PortalConfigurationPatch}>>`
    SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,st.schedule_authority,CASE WHEN st.schedule_owner='client' THEN 'worker' ELSE st.schedule_owner END,'manager') owner,
-   COALESCE(st.timezone,'Europe/Moscow') timezone,
-   COALESCE(st.show_employee_documents,true) "showDocuments",COALESCE(st.show_employee_workwear,true) "showWorkwear",
+   COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),st.timezone,'Europe/Moscow') timezone,
+   l.portal_config_snapshot configuration,
    COALESCE((SELECT er.relation_type FROM employment_relations er WHERE er.worker_id=l.worker_id
       AND er.effective_from<=current_date AND (er.effective_to IS NULL OR er.effective_to>=current_date)
       ORDER BY er.effective_from DESC LIMIT 1),'custom') employment
@@ -48,9 +49,10 @@ async function authorizedEmployee(token:string){
    LEFT JOIN object_shift_reporting_settings st ON st.object_id=l.object_id
    LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
    WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${createHashToken(token)}
-      AND l.status='active' AND w.status='active' AND COALESCE(st.reporting_enabled,true) LIMIT 1`;
+      AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active' AND COALESCE(st.reporting_enabled,true) LIMIT 1`;
   if(!link)return null;
-  return {ref,link};
+  const cfg=applyPortalPatch(defaultPortalConfiguration,link.configuration??{});
+  return {ref,link:{...link,timezone:cfg.timezone,showDocuments:cfg.sections.documents,showWorkwear:cfg.sections.workwear,scheduleChanges:cfg.sections.scheduleChanges,showEmployment:cfg.sections.employment,showContacts:cfg.sections.contacts,managerName:cfg.managerName,managerPhone:cfg.managerPhone}};
  });
 }
 function createHashToken(raw:string){return createHash("sha256").update(raw).digest("hex")}
@@ -106,9 +108,9 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
   const names=new Set(issueRows.map(x=>x.name));
   const workwear=[...issueRows.map(x=>({...x,state:"issued" as const})),...normRows.filter(x=>!names.has(x.name)).map(x=>({name:x.name,variant:null,state:"needed" as const}))];
   return {clothingSize:profile[0]?.clothingSize??null,shoeSize:profile[0]?.shoeSize??null,
-    employment:link.employment,managerName:profile[0]?.managerName??null,managerPhone:profile[0]?.managerPhone??null,
+    employment:link.employment,managerName:link.managerName,managerPhone:link.managerPhone,
     documents:link.showDocuments?codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false})):[],
-    workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear},shiftWindows,timeChanges};
+    workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear,employment:link.showEmployment,contacts:link.showContacts},shiftWindows,timeChanges:link.scheduleChanges?timeChanges:[]};
  });
 }
 
@@ -118,35 +120,37 @@ type EmployeeDetailChange=
  |{action:"shift_time";date:string;kind?:"day"|"night";startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular"};
 const hhmm=/^(?:[01]\d|2[0-3]):[0-5]\d$/;
 export async function updateEmployeePortalDetails(token:string,change:EmployeeDetailChange){
- const scope=await authorizedEmployee(token);if(!scope)throw new Error("Доступ недействителен");
+ const scope=await authorizedEmployee(token);if(!scope)throw new EmployeePortalAccessError("Доступ недействителен");
  const {ref,link}=scope;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
+  await assertEmployeeLinkActive(sql,ref,token);
   if(change.action==="sizes"){
-   if(!link.showWorkwear)throw new Error("Раздел спецодежды недоступен на объекте");
-   if((change.clothingSize?.length??0)>40||(change.shoeSize?.length??0)>40)throw new Error("Укажите корректные размеры");
+   if(!link.showWorkwear)throw new EmployeePortalError("Раздел спецодежды недоступен на объекте");
+   if((change.clothingSize?.length??0)>40||(change.shoeSize?.length??0)>40)throw new EmployeePortalError("Укажите корректные размеры");
    await sql`UPDATE worker_profiles SET clothing_size=${change.clothingSize?.trim()||null},shoe_size=${change.shoeSize?.trim()||null},updated_at=now() WHERE id=${link.workerId}::uuid`;
    return {ok:true};
   }
   if(change.action==="document"){
-   if(!link.showDocuments)throw new Error("Раздел документов недоступен на объекте");
+   if(!link.showDocuments)throw new EmployeePortalError("Раздел документов недоступен на объекте");
    const overrides=await sql<Array<{code:string;required:boolean}>>`SELECT document_code code,required FROM object_worker_document_requirements WHERE object_id=${link.objectId}::uuid AND relation_type=${link.employment}`;
-   if(!checklistCodes(link.employment,overrides).includes(change.code))throw new Error("Документ не входит в список объекта");
+   if(!checklistCodes(link.employment,overrides).includes(change.code))throw new EmployeePortalError("Документ не входит в список объекта");
    await sql`INSERT INTO worker_document_checklist(organization_id,worker_id,object_id,document_code,employee_reported_at)
      VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${change.code},CASE WHEN ${change.reported} THEN now() ELSE NULL END)
      ON CONFLICT(worker_id,object_id,document_code) DO UPDATE SET employee_reported_at=EXCLUDED.employee_reported_at,updated_at=now()`;
    return {ok:true};
   }
-  if(!hhmm.test(change.startTime)||!hhmm.test(change.endTime))throw new Error("Укажите время в формате ЧЧ:ММ");
+  if(!link.scheduleChanges)throw new EmployeePortalError("Изменение графика недоступно по ссылке");
+  if(!hhmm.test(change.startTime)||!hhmm.test(change.endTime))throw new EmployeePortalError("Укажите время в формате ЧЧ:ММ");
   const minutes=(x:string)=>Number(x.slice(0,2))*60+Number(x.slice(3,5));
   const duration=minutes(change.endTime)-minutes(change.startTime)+(change.endsNextDay?1440:0);
-  if(duration<60||duration>24*60)throw new Error("Продолжительность смены должна быть от 1 до 24 часов");
+  if(duration<60||duration>24*60)throw new EmployeePortalError("Продолжительность смены должна быть от 1 до 24 часов");
   const parts=new Intl.DateTimeFormat("ru-RU",{timeZone:link.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
   const local=Object.fromEntries(parts.map(p=>[p.type,p.value]));
   const today=`${local.year}-${local.month}-${local.day}`;
   const offset=Math.round((Date.parse(change.date+"T00:00:00Z")-Date.parse(today+"T00:00:00Z"))/86400000);
-  if(!Number.isFinite(offset)||offset<0||offset>31)throw new Error("Изменение времени доступно на ближайший месяц");
+  if(!Number.isFinite(offset)||offset<0||offset>31)throw new EmployeePortalError("Изменение времени доступно на ближайший месяц");
   const [locked]=await sql<Array<{id:string}>>`SELECT id FROM timesheet_snapshots WHERE object_id=${link.objectId}::uuid AND period_start<=${change.date}::date AND period_end>=${change.date}::date AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
-  if(locked)throw new Error("Период табеля уже зафиксирован");
+  if(locked)throw new EmployeePortalError("Период табеля уже зафиксирован");
   const status="proposed" as const;
   await sql`INSERT INTO worker_shift_time_changes(organization_id,worker_id,object_id,work_date,start_time,end_time,ends_next_day,applies_to,status,source_link_id,shift_kind)
     VALUES(${ref.tenantId}::uuid,${link.workerId}::uuid,${link.objectId}::uuid,${change.date}::date,${change.startTime}::time,${change.endTime}::time,${change.endsNextDay},${change.appliesTo},${status},${ref.linkId}::uuid,${change.kind??null})
@@ -158,7 +162,7 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
 export async function employeeDetailManagerList(actor:Actor,objectId?:string){
  requireCapability(actor,"operations.shift.read");
  if(actor.demo)return {timeChanges:[],documents:[]};
- const workers=(await listWorkers(actor)).filter(w=>w.objectId&&(!objectId||w.objectId===objectId));
+ const workers=(await listWorkers(actor)).filter(w=>w.objectId&&canReadRow(actor.access,"operations.shift.read",w,actor)&&(!objectId||w.objectId===objectId));
  if(!workers.length)return {timeChanges:[],documents:[]};
  const ids=workers.map(w=>w.id);
  return withTenant(actor.organizationId,actor.userId,async(sql)=>{
@@ -181,12 +185,12 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
  |{action:"document_requirement";objectId:string;relationType:RelationType;code:string;required:boolean}
  |{action:"portal_sections";objectId:string;documents:boolean;workwear:boolean}){
  requireCapability(actor,"operations.shift.edit");
- if(actor.demo)throw new Error("Действие недоступно в демонстрации");
+ if(actor.demo)throw new EmployeePortalError("Действие недоступно в демонстрации");
  const objects=await listObjects(actor);
  const obj=objects.find(x=>x.id===change.objectId);
  if(!obj||!canReadRow(actor.access,"operations.shift.edit",obj,actor))throw new AccessDeniedError("operations.shift.edit");
  if("workerId" in change){
-  if(!(await listWorkers(actor)).some(w=>w.id===change.workerId&&w.objectId===change.objectId))throw new Error("Нет доступа к сотруднику");
+  if(!(await listWorkers(actor)).some(w=>w.id===change.workerId&&w.objectId===change.objectId))throw new EmployeePortalError("Нет доступа к сотруднику");
  }
  return withTenant(actor.organizationId,actor.userId,async(sql)=>{
   if(change.action==="portal_sections"){
@@ -195,17 +199,17 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
      ON CONFLICT(object_id) DO UPDATE SET show_employee_documents=EXCLUDED.show_employee_documents,
        show_employee_workwear=EXCLUDED.show_employee_workwear,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }else if(change.action==="manager_phone"){
-   if((change.phone?.length??0)>50)throw new Error("Номер слишком длинный");
+   if((change.phone?.length??0)>50)throw new EmployeePortalError("Номер слишком длинный");
    await sql`INSERT INTO object_shift_reporting_settings(organization_id,object_id,manager_phone,updated_by_user_id)
      VALUES(${actor.organizationId}::uuid,${change.objectId}::uuid,${change.phone},${actor.userId}::uuid)
      ON CONFLICT(object_id) DO UPDATE SET manager_phone=EXCLUDED.manager_phone,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }else if(change.action==="document_requirement"){
-   if(!docLabels[change.code])throw new Error("Неизвестный тип документа");
+   if(!docLabels[change.code])throw new EmployeePortalError("Неизвестный тип документа");
    await sql`INSERT INTO object_worker_document_requirements(organization_id,object_id,relation_type,document_code,required,updated_by_user_id)
      VALUES(${actor.organizationId}::uuid,${change.objectId}::uuid,${change.relationType},${change.code},${change.required},${actor.userId}::uuid)
      ON CONFLICT(object_id,relation_type,document_code) DO UPDATE SET required=EXCLUDED.required,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
   }else if(change.action==="verify_document"){
-   if(!docLabels[change.code])throw new Error("Неизвестный документ");
+   if(!docLabels[change.code])throw new EmployeePortalError("Неизвестный документ");
    await sql`INSERT INTO worker_document_checklist(organization_id,worker_id,object_id,document_code,manager_verified_at,manager_verified_by_user_id)
      VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.code},
        CASE WHEN ${change.verified} THEN now() ELSE NULL END,CASE WHEN ${change.verified} THEN ${actor.userId}::uuid ELSE NULL END)

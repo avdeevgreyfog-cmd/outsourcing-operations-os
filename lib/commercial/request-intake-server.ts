@@ -1,3 +1,4 @@
+import {assertRequestCommercialEditable,CommercialRequestConflict} from "@/lib/commercial/request-lock";
 import { randomBytes } from "node:crypto";
 import type { Actor } from "@/lib/access/types";
 import { AccessDeniedError, requireCapability } from "@/lib/access/server";
@@ -14,32 +15,48 @@ import {
   type RequestIntake,
 } from "@/lib/commercial/request-intake";
 
-function demoIntake(request: NonNullable<Awaited<ReturnType<typeof getCommercialRequest>>>): RequestIntake {
-  const schedule = request.schedule ?? {};
-  const pattern = typeof schedule.pattern === "string"
-    ? schedule.pattern
-    : typeof schedule.label === "string"
-      ? schedule.label
-      : "";
+type IntakeSourceRequest = Pick<NonNullable<Awaited<ReturnType<typeof getCommercialRequest>>>,
+  "client"|"location"|"schedule"|"lunchPaid"|"housingRule"|"travelRule"|"shuttleRule"|"ppeRule"|"medicalRule"|"citizenshipRule"|"toolsRule">;
+
+function record(value:unknown):Record<string,unknown>{return value&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:{};}
+function legacyProvision(value:string|null){
+  const label=value?.trim()??"";
+  const providers:Record<string,string>={client:"client",us:"us",not_required:"not_required",unknown:"unknown","заказчик":"client","мы":"us","не требуется":"not_required","уточняется":"unknown","не указано":"unknown"};
+  const provider=providers[label.toLowerCase()];
+  return {provider:provider??"unknown",comment:provider?"":label};
+}
+
+// Legacy conditions remain a fallback only. Explicit stored values, including false,
+// null and empty strings, take precedence over the older request columns.
+export function normalizeStoredRequestIntake(value:unknown,request:IntakeSourceRequest):RequestIntake{
+  const stored=record(value);
+  const schedule=request.schedule??{};
+  const legacyPattern=typeof schedule.pattern==="string"?schedule.pattern:typeof schedule.label==="string"?schedule.label:"";
+  const knownPattern=["","5/2","6/1","7/0","2/2","3/3","rotation","on_demand","custom"].includes(legacyPattern);
+  const ppe=(request.ppeRule??"").split(" / ");
+  const medical=(request.medicalRule??"").split(" / ");
+  const fallbackProvision={housing:legacyProvision(request.housingRule),travel:legacyProvision(request.travelRule),shuttle:legacyProvision(request.shuttleRule),workwear:legacyProvision(ppe[0]??null),ppe:legacyProvision(ppe[1]??ppe[0]??null),medical:legacyProvision(medical[0]??null),medbook:legacyProvision(medical[1]??medical[0]??null),tools:legacyProvision(request.toolsRule)};
+  const suppliedProvision=record(stored.provision);
+  const provision:Record<string,unknown>={...suppliedProvision};
+  for(const [key,fallback] of Object.entries(fallbackProvision))provision[key]={...fallback,...record(suppliedProvision[key])};
+  const citizenship=(request.citizenshipRule??"").split(/[,;]\s*/).filter(Boolean);
+  const knownCategories=citizenship.every((item)=>["rf","eaeu","foreign_with_docs","client_rules"].includes(item));
   return normalizeRequestIntake({
-    companyName: request.client,
-    object: { siteName: request.location, city: request.location },
-    schedule: {
-      pattern,
-      presenceHours: typeof schedule.presenceHours === "number" ? schedule.presenceHours : null,
-      paidHours: typeof schedule.paidHours === "number" ? schedule.paidHours : null,
-      lunchPaid: request.lunchPaid ?? false,
-    },
+    companyName:request.client,...stored,
+    object:{siteName:request.location,...record(stored.object)},
+    schedule:{...schedule,pattern:knownPattern?legacyPattern:"custom",customPattern:knownPattern?"":legacyPattern,lunchPaid:request.lunchPaid??false,...record(stored.schedule)},
+    provision,
+    compliance:{workerCategories:knownCategories?citizenship:[],comment:knownCategories?"":request.citizenshipRule??"",...record(stored.compliance)},
   });
 }
 
 export async function getRequestIntake(actor: Actor, requestId: string): Promise<RequestIntake> {
   const request = await getCommercialRequest(actor, requestId);
   if (!request) throw new Error("Заявка не найдена");
-  if (actor.demo) return demoIntake(request);
+  if (actor.demo) return normalizeStoredRequestIntake({},request);
   return withTenant(actor.organizationId, actor.userId, async (sql) => {
     const [row] = await sql<Array<{ intake: unknown }>>`SELECT intake_json intake FROM requests WHERE id=${requestId}::uuid`;
-    return normalizeRequestIntake(row?.intake);
+    return normalizeStoredRequestIntake(row?.intake,request);
   });
 }
 
@@ -158,18 +175,19 @@ export async function submitPublicRequest(token: string, payload: PublicRequestS
 
 export async function reviewPublicSubmission(actor: Actor, requestId: string, submissionId: string, decision: "accept" | "reject", comment: string | null) {
   requireCapability(actor, "sales.request.edit");
-  if (actor.demo) throw new Error("В демонстрационном режиме изменения доступны только для просмотра интерфейса");
+  if (actor.demo) throw new CommercialRequestConflict("В демонстрационном режиме изменения доступны только для просмотра интерфейса");
   const current = await getCommercialRequest(actor, requestId);
-  if (!current) throw new Error("Заявка не найдена");
+  if (!current) throw new CommercialRequestConflict("Заявка не найдена");
   if (!canReadRow(actor.access, "sales.request.edit", current, actor)) throw new AccessDeniedError("sales.request.edit");
-  if (current.archivedAt || ["accepted","launched"].includes(current.status)) throw new Error("Зафиксированную заявку нельзя обновить из внешней формы");
+  if (current.archivedAt || ["accepted","launched"].includes(current.status)) throw new CommercialRequestConflict("Зафиксированную заявку нельзя обновить из внешней формы");
 
   return withTenant(actor.organizationId, actor.userId, async (tx) => {
+    await assertRequestCommercialEditable(tx,actor,requestId);
     const [submission] = await tx<Array<{status:string;payload:PublicRequestSubmissionPayload}>>`
       SELECT status,payload FROM request_public_submissions WHERE id=${submissionId}::uuid AND request_id=${requestId}::uuid FOR UPDATE
     `;
-    if (!submission) throw new Error("Версия внешней формы не найдена");
-    if (submission.status !== "pending") throw new Error("Эта версия уже обработана");
+    if (!submission) throw new CommercialRequestConflict("Версия внешней формы не найдена");
+    if (submission.status !== "pending") throw new CommercialRequestConflict("Эта версия уже обработана");
 
     if (decision === "reject") {
       await tx`UPDATE request_public_submissions SET status='rejected',reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),review_comment=${comment} WHERE id=${submissionId}::uuid`;
@@ -179,7 +197,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
     const payload = submission.payload;
     for (const role of payload.roles) {
       const [specialty] = await tx<Array<{id:string}>>`SELECT id FROM specialties WHERE id=${role.specialtyId}::uuid AND active`;
-      if (!specialty) throw new Error("Одна из выбранных специальностей больше недоступна. Проверьте заявку вручную");
+      if (!specialty) throw new CommercialRequestConflict("Одна из выбранных специальностей больше недоступна. Проверьте заявку вручную");
     }
 
     await tx`
@@ -199,7 +217,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
       if (role.id) {
         const oldRole = current.roles.find((item) => item.id === role.id);
         if (oldRole && linkedIds.some((item) => item.id === role.id) && oldRole.specialtyId !== role.specialtyId) {
-          throw new Error("Нельзя менять специальность позиции, по которой уже создан расчёт");
+          throw new CommercialRequestConflict("Нельзя менять специальность позиции, по которой уже создан расчёт");
         }
         await tx`
           UPDATE request_roles SET specialty_id=${role.specialtyId}::uuid,count_required=${role.count},schedule_json=${tx.json(toJsonValue(role.schedule))},
@@ -215,7 +233,7 @@ export async function reviewPublicSubmission(actor: Actor, requestId: string, su
     }
     for (const oldRole of current.roles) {
       if (suppliedIds.has(oldRole.id)) continue;
-      if (linkedIds.some((item) => item.id === oldRole.id)) throw new Error("Нельзя удалить позицию, по которой уже создан расчёт");
+      if (linkedIds.some((item) => item.id === oldRole.id)) throw new CommercialRequestConflict("Нельзя удалить позицию, по которой уже создан расчёт");
       await tx`DELETE FROM request_roles WHERE id=${oldRole.id}::uuid AND request_id=${requestId}::uuid`;
     }
 

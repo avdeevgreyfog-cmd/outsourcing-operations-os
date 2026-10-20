@@ -1,6 +1,6 @@
 import { isGithubPagesDemo } from "@/lib/demo/pages";
 import { requireActor } from "@/lib/auth/server";
-import { hasCapability } from "@/lib/core/access.mjs";
+import { canReadRow, hasCapability } from "@/lib/core/access.mjs";
 import { listRequestBoard, listRequestStages, getRequestWorkspaceOptions, getRequestSnapshotTime } from "@/lib/commercial/request-workflow-server";
 import { getRequestAnalytics, normalizeRequestAnalyticsFilters } from "@/lib/commercial/request-analytics";
 import { canConfigureRequestAnalytics, getRequestAnalyticsMetricPreferences } from "@/lib/commercial/request-analytics-metrics";
@@ -43,6 +43,7 @@ export default async function RequestsPage({searchParams}:{searchParams:Promise<
       canCreate={hasCapability(actor.access,"sales.request.create")}
       canConfigure={options.canConfigurePipeline}
       canEdit={hasCapability(actor.access,"sales.request.edit")}
+      editableIds={rows.filter(row=>canReadRow(actor.access,"sales.request.edit",row,actor)).map(row=>row.id)}
       now={getRequestSnapshotTime()}
       demo={actor.demo}
       preferenceScope={`${actor.organizationId}:${actor.membershipId}`}

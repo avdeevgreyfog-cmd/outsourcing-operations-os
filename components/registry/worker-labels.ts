@@ -33,6 +33,7 @@ export function nextChange(row:WorkerRow){
 }
 export function documentsLabel(value:string|null|undefined){return ({completed:"Готовы",submitted:"Переданы",processing:"Проверка",collecting:"Сбор"} as Record<string,string>)[value??""]??"Не указано"}
 export function workerNeedsAttention(row:WorkerRow){
+  if(row.status==="requires_assignment")return true;
   if(row.status!=="active")return false;
   if(!row.objectId||!row.specialtyId)return true;
   if(row.todayTimeCode==="NO_SHOW"||row.todayAttendanceEvent==="no_show")return true;
@@ -43,8 +44,8 @@ export function workerNeedsAttention(row:WorkerRow){
   if(row.todayShiftAssigned&&!row.todayShiftConfirmed)return true;
   return false;
 }
-export function operationalState(row:WorkerRow){if(row.status==="dismissed")return"Работа завершена";if(row.startDate&&row.startDate>today())return"Ожидает выхода";const current=Boolean(row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()));return current?(absenceLabels[row.absenceType??""]??"Отсутствует"):"Работает"}
+export function operationalState(row:WorkerRow){if(row.status==="dismissed")return"Работа завершена";if(row.status==="requires_assignment")return"Требует назначения";if(row.startDate&&row.startDate>today())return"Ожидает выхода";const current=Boolean(row.absenceStatus==="confirmed"&&row.absenceFrom&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()));return current?(absenceLabels[row.absenceType??""]??"Отсутствует"):"Работает"}
 export function availabilityChange(row:WorkerRow){if(!row.absenceFrom)return"—";const label=absenceLabels[row.absenceType??""]??"Отсутствие";if(row.absenceStatus==="confirmed"&&row.absenceFrom<=today()&&(!row.absenceTo||row.absenceTo>=today()))return row.absenceTo?`возврат ${formatDate(addDays(row.absenceTo,1))}`:"дата возврата открыта";return `${label.toLocaleLowerCase("ru")} с ${formatDate(row.absenceFrom)}`}
 export function addDays(value:string,days:number){const date=new Date(value+"T00:00:00Z");date.setUTCDate(date.getUTCDate()+days);return date.toISOString().slice(0,10)}
 export function formatDate(value:string){return new Intl.DateTimeFormat("ru-RU").format(new Date(value+"T00:00:00"))}
-export function rateLabel(row:WorkerRow){if(row.rate==null)return"—";const unit=row.rateUnit==="shift"?"/смену":row.rateUnit==="month"?"/мес":"/ч";if(row.rateUnit==="shift"&&Number(row.paidHoursPerShift)>0)return`${rub(row.rate)}${unit} · ${rub(Number(row.rate)/Number(row.paidHoursPerShift))}/ч`;return`${rub(row.rate)}${unit}`}
+export function rateLabel(row:WorkerRow){if(row.rate==null)return"—";const unit=row.rateUnit==="shift"?"/смену":row.rateUnit==="month"?"/мес":row.rateUnit==="hour"?"/ч":" · единица не указана";if(row.rateUnit==="shift"&&Number(row.paidHoursPerShift)>0)return`${rub(row.rate)}${unit} · ${rub(Number(row.rate)/Number(row.paidHoursPerShift))}/ч`;return`${rub(row.rate)}${unit}`}

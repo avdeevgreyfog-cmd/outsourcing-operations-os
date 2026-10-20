@@ -1,0 +1,99 @@
+-- Employee portal configuration is versioned by the issued link snapshot.
+-- All additions are non-destructive; existing links and reports remain.
+CREATE TABLE IF NOT EXISTS employee_portal_config_overrides (
+  organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  scope text NOT NULL CHECK (scope IN ('organization','object','worker')),
+  scope_id uuid NOT NULL,
+  config jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(config)='object'),
+  updated_by_user_id uuid REFERENCES app_users(id),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (organization_id,scope,scope_id)
+);
+ALTER TABLE employee_portal_config_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE employee_portal_config_overrides FORCE ROW LEVEL SECURITY;
+CREATE POLICY employee_portal_config_tenant ON employee_portal_config_overrides
+ USING (organization_id=app_current_organization_id())
+ WITH CHECK (organization_id=app_current_organization_id());
+CREATE TRIGGER audit_employee_portal_config_overrides
+ AFTER INSERT OR UPDATE OR DELETE ON employee_portal_config_overrides
+ FOR EACH ROW EXECUTE FUNCTION audit_row_change();
+
+ALTER TABLE worker_timesheet_links
+ ADD COLUMN IF NOT EXISTS portal_config_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb,
+ ADD COLUMN IF NOT EXISTS expires_at timestamptz,
+ ADD COLUMN IF NOT EXISTS auto_revoke_at timestamptz,
+ ADD COLUMN IF NOT EXISTS replaced_by_link_id uuid REFERENCES worker_timesheet_links(id),
+ ADD COLUMN IF NOT EXISTS changed_by_user_id uuid REFERENCES app_users(id),
+ ADD COLUMN IF NOT EXISTS changed_at timestamptz;
+
+-- Freeze a safe snapshot of legacy links; never retroactively apply new preferences.
+UPDATE worker_timesheet_links l SET portal_config_snapshot=jsonb_build_object(
+ 'managerName',(SELECT u.display_name FROM app_users u WHERE u.id=COALESCE(
+   (SELECT a.manager_user_id FROM worker_object_assignments a
+    WHERE a.worker_id=l.worker_id AND a.object_id=o.id
+      AND (a.effective_from IS NULL OR a.effective_from<=current_date)
+      AND (a.effective_to IS NULL OR a.effective_to>=current_date)
+    ORDER BY a.effective_from DESC LIMIT 1),
+   o.owner_user_id) LIMIT 1),
+ 'managerPhone',s.manager_phone,
+ 'contactMethod',NULL,
+ 'instruction','',
+ 'timezone',COALESCE(s.timezone,'Europe/Moscow'),
+ 'validDays',30,
+ 'autoRevokeOnExit',true,
+ 'sections',jsonb_build_object(
+    'shifts',true,'confirm',true,'decline',true,'scheduleChanges',true,
+    'hours',true,'timesheet',true,
+    'documents',COALESCE(s.show_employee_documents,true),
+    'employment',true,'workwear',COALESCE(s.show_employee_workwear,true),
+    'contacts',true,'objectInfo',true))
+FROM objects o LEFT JOIN object_shift_reporting_settings s ON s.object_id=o.id
+WHERE l.object_id=o.id AND l.portal_config_snapshot='{}'::jsonb;
+
+ALTER TABLE worker_shift_reports
+ ADD COLUMN IF NOT EXISTS shift_id uuid REFERENCES shifts(id);
+
+-- Preserve legacy daily reports; associate an exact shift only when unambiguous.
+UPDATE worker_shift_reports r SET shift_id=(
+ SELECT sa.shift_id FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
+ WHERE sa.worker_id=r.worker_id AND sh.object_id=r.object_id AND sh.shift_date=r.work_date
+   AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+ LIMIT 1)
+ WHERE r.shift_id IS NULL AND 1=(
+ SELECT count(*) FROM shift_assignments sa JOIN shifts sh ON sh.id=sa.shift_id
+ WHERE sa.worker_id=r.worker_id AND sh.object_id=r.object_id AND sh.shift_date=r.work_date
+   AND sh.status<>'cancelled' AND sa.confirmation_status<>'cancelled'
+);
+
+ALTER TABLE worker_shift_reports
+ ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'pending'
+ CHECK(review_status IN ('pending','approved','rejected')),
+ ADD COLUMN IF NOT EXISTS reviewed_at timestamptz,
+ ADD COLUMN IF NOT EXISTS reviewed_by_user_id uuid REFERENCES app_users(id),
+ ADD COLUMN IF NOT EXISTS approved_hours numeric(5,2)
+ CHECK(approved_hours IS NULL OR (approved_hours>=0 AND approved_hours<=24)),
+ ADD COLUMN IF NOT EXISTS review_comment text;
+UPDATE worker_shift_reports SET review_status='approved',approved_hours=reported_hours,reviewed_at=hours_reconciled_at,reviewed_by_user_id=hours_reconciled_by_user_id
+ WHERE hours_reconciled_at IS NOT NULL AND review_status='pending';
+CREATE INDEX IF NOT EXISTS idx_employee_portal_pending_review ON worker_shift_reports
+ (organization_id,object_id,work_date)
+ WHERE reported_hours IS NOT NULL AND review_status='pending';
+
+-- Defence in depth: prevent dormant links from being reactivated when a worker is
+-- dismissed outside the standard exit workflow. Does not remove reports or tokens.
+CREATE OR REPLACE FUNCTION revoke_worker_portal_access_on_status_change()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF OLD.status='active' AND NEW.status<>'active' THEN
+  UPDATE worker_timesheet_links
+    SET status='revoked',revoked_at=now(),changed_at=now()
+    WHERE organization_id=NEW.organization_id AND worker_id=NEW.id
+      AND status IN ('active','paused');
+ END IF;
+ RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS worker_portal_auto_revoke_on_exit ON worker_profiles;
+CREATE TRIGGER worker_portal_auto_revoke_on_exit
+ AFTER UPDATE OF status ON worker_profiles
+ FOR EACH ROW EXECUTE FUNCTION revoke_worker_portal_access_on_status_change();

@@ -1,8 +1,8 @@
 "use client";
 
-import {createPortal} from "react-dom";
+import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import {useMemo,useState} from "react";
-import {Plus,Trash2,X} from "lucide-react";
+import {Plus,Trash2} from "lucide-react";
 import type {ClientContactOption,ObjectContactRow} from "@/lib/operations/service";
 import {Empty} from "@/components/UI";
 
@@ -38,6 +38,7 @@ export function ObjectContactsWorkspace({
   const [preferred,setPreferred]=useState<Channel>("phone");
   const [roles,setRoles]=useState<string[]>(["operations"]);
   const [note,setNote]=useState("");
+  const [isPrimary,setPrimary]=useState(false);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const assignedIds=useMemo(()=>new Set(rows.map(row=>row.contactId)),[rows]);
@@ -48,7 +49,7 @@ export function ObjectContactsWorkspace({
   function open(){
     setMode(available.length?"existing":"new");setContactId(available[0]?.id??"");
     setFullName("");setPosition("");setMethods([{id:crypto.randomUUID(),channel:"phone",value:""}]);setPreferred("phone");
-    setRoles(["operations"]);setNote("");setError("");setShow(true);
+    setRoles(["operations"]);setNote("");setPrimary(false);setError("");setShow(true);
   }
   function switchMode(value:"existing"|"new"){setMode(value);setError("");if(value==="existing")setContactId(available[0]?.id??"")}
   function toggleRole(role:string){setRoles(current=>current.includes(role)?current.filter(item=>item!==role):[...current,role])}
@@ -70,15 +71,15 @@ export function ObjectContactsWorkspace({
     if(mode==="new"&&!filledMethods.length){setError("Добавьте хотя бы один способ связи.");return;}
     setBusy(true);setError("");
     try{
-      if(demo){setError("Демо: форма доступна для проверки, сохранение отключено.");return;}
       const values=Object.fromEntries(filledMethods.map(item=>[item.channel,item.value.trim()])) as Partial<Record<Channel,string>>;
       const preferredChannel=filledMethods.some(item=>item.channel===preferred)?preferred:filledMethods[0]?.channel??null;
+      if(demo){const contact=mode==="existing"?selected:null;const row:ObjectContactRow={assignmentId:crypto.randomUUID(),contactId:contact?.id??crypto.randomUUID(),fullName:contact?.fullName??fullName.trim(),position:contact?.position??(position.trim()||null),phone:contact?.phone??values.phone??null,email:contact?.email??values.email??null,telegram:contact?.telegram??values.telegram??null,whatsapp:contact?.whatsapp??values.whatsapp??null,maxContact:contact?.maxContact??values.max??null,preferredChannel:contact?.preferredChannel??preferredChannel,roles,note:note||null,isPrimary};setRows(current=>[...current.map(x=>isPrimary?{...x,isPrimary:false}:x),row]);setShow(false);return;}
       const response=await fetch("/api/objects/"+objectId+"/contacts",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(mode==="existing"?{
-        contactId,roles,note:note||null,
+        contactId,roles,isPrimary,note:note||null,
       }:{
         contactId:null,fullName:fullName.trim(),position:position.trim()||null,
         phone:values.phone??null,email:values.email??null,telegram:values.telegram??null,whatsapp:values.whatsapp??null,maxContact:values.max??null,
-        preferredChannel,roles,note:note||null,
+        preferredChannel,roles,isPrimary,note:note||null,
       })});
       const json=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(json.error??"Не удалось сохранить контакт");
@@ -102,9 +103,9 @@ export function ObjectContactsWorkspace({
   return <>
     <section className="section section-flush">
       <div className="section-head"><div><h2>Контакты объекта</h2><p>Контакты заказчика и их зона ответственности именно на этом объекте.</p></div>{canEdit&&<button className="button primary" onClick={open}><Plus size={14}/> Добавить контакт</button>}</div>
-      {error&&!show&&<div className="recruiting-error">{error}</div>}
+      {error&&!show&&<div role="alert" className="recruiting-error">{error}</div>}
       {rows.length?<div className="request-table-wrap"><table className="data-table"><thead><tr><th>Контакт</th><th>Роль на объекте</th><th>Связь</th><th>Комментарий</th>{canEdit&&<th aria-label="Действия"></th>}</tr></thead><tbody>{rows.map(row=><tr key={row.assignmentId}>
-        <td><strong className="cell-title">{row.fullName}</strong><span className="cell-sub">{row.position??"Должность не указана"}</span></td>
+        <td><strong className="cell-title">{row.fullName}</strong>{row.isPrimary&&<span className="cell-sub">Основной контакт</span>}<span className="cell-sub">{row.position??"Должность не указана"}</span></td>
         <td>{row.roles.map(role=>roleLabels[role]??role).join(" · ")}</td>
         <td><strong>{primaryContact(row)}</strong><span className="cell-sub">{secondaryContact(row)}</span></td>
         <td>{row.note??"—"}</td>
@@ -112,10 +113,7 @@ export function ObjectContactsWorkspace({
       </tr>)}</tbody></table></div>:<Empty title="Контакты не назначены" text="Добавьте контакт заказчика и укажите, за какие вопросы он отвечает на объекте."/>}
     </section>
 
-    {show&&<Portal><div className="object-contact-drawer-overlay" onMouseDown={event=>{if(event.currentTarget===event.target)setShow(false)}}>
-      <aside className="object-contact-drawer" role="dialog" aria-modal="true" aria-label="Контакт объекта">
-        <header className="object-contact-drawer-head"><div><h2>Контакт объекта</h2><p>Контакт клиента хранится один раз; здесь задаётся только его роль на объекте.</p></div><button className="icon-button" type="button" onClick={()=>setShow(false)}><X size={17}/></button></header>
-        <div className="object-contact-drawer-body">
+    {show&&<RegistryDrawer className="object-form-drawer object-contact-form" title="Контакт объекта" subtitle="Контакт клиента хранится один раз; здесь задаётся только его роль на объекте." onClose={()=>{if(!busy)setShow(false)}} footer={<><button className="button" type="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||!roles.length||(mode==="existing"?!contactId:!fullName.trim()||!filledMethods.length)} onClick={()=>void save()}>{busy?"Сохраняю…":"Добавить контакт"}</button></>}><div className="object-contact-form-body">{demo&&<p className="form-hint">Демо: изменения действуют до обновления страницы; на сервер не записываются.</p>}
           <div className="object-action-choice object-contact-mode"><button type="button" className={mode==="existing"?"active":""} onClick={()=>switchMode("existing")} disabled={!available.length}>Выбрать существующий</button><button type="button" className={mode==="new"?"active":""} onClick={()=>switchMode("new")}>Создать новый</button></div>
 
           {mode==="existing"?<section className="object-contact-form-section">
@@ -135,12 +133,9 @@ export function ObjectContactsWorkspace({
           </section>}
 
           <section className="object-contact-form-section"><div className="object-contact-section-title"><strong>Зона ответственности на объекте</strong><span>Можно выбрать несколько направлений.</span></div><div className="object-contact-role-grid">{roleOptions.map(([value,label])=><label className={roles.includes(value)?"active":""} key={value}><input type="checkbox" checked={roles.includes(value)} onChange={()=>toggleRole(value)}/><span>{label}</span></label>)}</div></section>
-          <section className="object-contact-form-section"><label>Комментарий<textarea value={note} onChange={event=>setNote(event.target.value)} placeholder="Например: табель присылает до 10:00, по пропускам писать в Telegram"/></label></section>
-          {error&&<div className="recruiting-error">{error}</div>}
-        </div>
-        <footer className="object-contact-drawer-footer"><button className="button" type="button" onClick={()=>setShow(false)}>Отмена</button><button className="button primary" type="button" disabled={busy||!roles.length||(mode==="existing"?!contactId:!fullName.trim()||!filledMethods.length)} onClick={()=>void save()}>{busy?"Сохраняю…":"Добавить контакт"}</button></footer>
-      </aside>
-    </div></Portal>}
+          <section className="object-contact-form-section"><label><input type="checkbox" checked={isPrimary} onChange={e=>setPrimary(e.target.checked)}/> Основной контакт объекта</label><label>Комментарий<textarea value={note} onChange={event=>setNote(event.target.value)} placeholder="Например: табель присылает до 10:00, по пропускам писать в Telegram"/></label></section>
+          {error&&<div role="alert" className="recruiting-error">{error}</div>}
+        </div></RegistryDrawer>}
   </>;
 }
 
@@ -158,4 +153,3 @@ function secondaryContact(row:ObjectContactRow){
   const values=[row.phone,row.telegram,row.whatsapp,row.email,row.maxContact].filter(Boolean).filter(value=>!primaryContact(row).includes(String(value)));
   return values.slice(0,2).join(" · ");
 }
-function Portal({children}:{children:React.ReactNode}){return typeof document==="undefined"?null:createPortal(children,document.body)}

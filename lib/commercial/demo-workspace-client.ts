@@ -4,6 +4,7 @@ import type { RequestBoardRow } from "@/lib/commercial/request-workflow";
 
 export type DemoRequestPayload = {
   clientId: string | null;
+  contactId?: string | null;
   title: string;
   source: string;
   location: string;

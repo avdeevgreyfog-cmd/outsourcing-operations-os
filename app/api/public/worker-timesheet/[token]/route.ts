@@ -1,6 +1,6 @@
 import {NextResponse} from "next/server";
 import {z} from "zod";
-import {employeePortal,submitEmployeeReply} from "@/lib/operations/worker-timesheet-portal";
+import {employeePortal,submitEmployeeReply,assertPortalSectionAllowed,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
 import {employeePortalDetails,updateEmployeePortalDetails} from "@/lib/operations/employee-self-service";
 import {employeePlanning,submitEmployeePlan,submitEmployeeWeek,submitEmployeePattern} from "@/lib/operations/employee-planning";
 const responseSchema=z.object({
@@ -21,12 +21,41 @@ const noStore={"Cache-Control":"no-store, private"};
 export async function GET(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
   const {token}=await params;const data=await employeePortal(token,new URL(request.url).searchParams.get("month")??undefined);
-  return data?NextResponse.json({...data,...await (async()=>{const [details,planning]=await Promise.all([employeePortalDetails(token),employeePlanning(token)]);return {details,planning}})()},{headers:noStore}):NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
- }catch(error){console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
+  if(!data)return NextResponse.json({error:"Ссылка недействительна или приостановлена"},{status:404,headers:noStore});
+  const sections=data.config.sections;
+  const [details,planning]=await Promise.all([employeePortalDetails(token),sections.shifts||sections.confirm||sections.decline||sections.scheduleChanges||sections.hours?employeePlanning(token):Promise.resolve(null)]);
+  const safeDetails=details?{...details,
+    managerName:sections.contacts?details.managerName:null,
+    managerPhone:sections.contacts?details.managerPhone:null,
+    employment:sections.employment?details.employment:"hidden",
+    clothingSize:sections.workwear?details.clothingSize:null,
+    shoeSize:sections.workwear?details.shoeSize:null,
+    documents:sections.documents?details.documents:[],
+    workwear:sections.workwear?details.workwear:[],
+    shiftWindows:sections.shifts?details.shiftWindows:[],
+    timeChanges:sections.scheduleChanges?details.timeChanges:[],
+    visibility:{documents:sections.documents,workwear:sections.workwear,employment:sections.employment,contacts:sections.contacts}
+   }:null;
+  const localDay=new Date(data.today+"T00:00:00Z");
+  const previousDay=new Date(localDay.getTime()-3*86400000).toISOString().slice(0,10);
+  const nextDay=new Date(localDay.getTime()+86400000).toISOString().slice(0,10);
+  const safePlanning=planning&&sections.shifts?planning:planning?{...planning,days:planning.days.filter(d=>d.date>=previousDay&&d.date<=nextDay)}:null;
+  const exposedConfig={sections:data.config.sections,instruction:data.config.sections.objectInfo?data.config.instruction:""};
+  const {configuration:unusedInternalSnapshot,...safeData}=data;
+  void unusedInternalSnapshot;
+  return NextResponse.json({...safeData,config:exposedConfig,
+    reports:sections.shifts||sections.timesheet||sections.confirm||sections.decline||sections.hours?data.reports:[],
+    plans:sections.timesheet?data.plans:[],
+    planning:safePlanning??{owner:"manager",horizon:0,workDays:null,restDays:null,defaultKind:null,floatingDaysOff:false,patternFrom:data.today,days:[]},
+    details:safeDetails
+  },{headers:noStore});
+ }catch(error){if(error instanceof EmployeePortalError)return NextResponse.json({error:"Ссылка недействительна или заблокирована"},{status:404,headers:noStore});console.error("employee timesheet context",error);return NextResponse.json({error:"Не удалось открыть табель"},{status:500,headers:noStore})}
 }
 export async function POST(request:Request,{params}:{params:Promise<{token:string}>}){
  try{
   const {token}=await params;const raw=await request.json();
+  const section=raw?.action==="document"?"documents":raw?.action==="sizes"?"workwear":raw?.action==="shift_time"||raw?.action==="plan_day"||raw?.action==="plan_week"||raw?.action==="pattern_change"?"scheduleChanges":raw?.hours!==undefined?"hours":raw?.response==="cannot_work"?"decline":raw?.response==="day_off"?"scheduleChanges":"confirm";
+  await assertPortalSectionAllowed(token,section);
   const result=raw&&typeof raw==="object"&&"action" in raw
     ?raw.action==="plan_week"
       ?await (async()=>{const input=weekSchema.parse(raw);return submitEmployeeWeek(token,input.weekStart,input.offDates)})()
@@ -39,6 +68,6 @@ export async function POST(request:Request,{params}:{params:Promise<{token:strin
   return NextResponse.json(result,{headers:noStore});
  }catch(error){
   if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте ввод"},{status:400,headers:noStore});
-  return NextResponse.json({error:error instanceof Error?error.message:"Не удалось сохранить ответ"},{status:400,headers:noStore});
+  return NextResponse.json({error:error instanceof EmployeePortalError?error.message:"Не удалось сохранить ответ. Попробуйте позже"},{status:error instanceof EmployeePortalAccessError?403:error instanceof EmployeePortalError?400:500,headers:noStore});
  }
 }

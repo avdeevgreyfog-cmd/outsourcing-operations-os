@@ -12,12 +12,11 @@ export async function AppShell({ actor, children }: { actor: Actor; children: Re
   const store = staticDemo ? null : await cookies();
   const theme = store?.get("oo_theme")?.value === "dark" ? "dark" : "light";
   const workspace = await getWorkspaceContext(actor);
-  const showFoundations = process.env.SHOW_FOUNDATIONS === "true";
   const navigationAccess = actor.demo ? {
     ...actor.access,
     capabilities: [...new Set([...actor.access.capabilities, "sales.tender.read", "company.document.read"])],
   } : actor.access;
-  const allowed: NavigationSection[] = filterNavigation(navigationManifest, navigationAccess, { showFoundations });
+  const allowed: NavigationSection[] = filterNavigation(navigationManifest, navigationAccess);
   return <div className="app-shell" data-initial-theme={theme} data-initial-ui="new"><ClientRecoveryReset/>
     <script dangerouslySetInnerHTML={{ __html: `document.documentElement.dataset.theme=${JSON.stringify(theme)};document.documentElement.dataset.operisUi="new"` }} />
     <Suspense fallback={<div className="sidebar"/>}><WorkspaceNavigation key={`${actor.organizationId}:${actor.membershipId}:${actor.roleCode}:${actor.accessPreview?.targetId ?? "base"}`} actor={actor} sections={allowed} workspace={workspace}/></Suspense><main className="main-canvas"><Suspense fallback={<div className="page-wrap"/>}><div className="page-wrap">{children}</div></Suspense></main>

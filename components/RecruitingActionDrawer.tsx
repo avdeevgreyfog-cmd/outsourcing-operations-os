@@ -12,6 +12,7 @@ import { recruitingStageLabels } from "@/lib/recruiting/model";
 import { formatWorkDate, workRisks } from "@/lib/recruiting/workflow";
 import { saveApplicationChange } from "@/lib/recruiting/client-actions";
 import { saveDemoApplication } from "@/lib/recruiting/demo-client";
+import { FirstShiftConfirmationFields, type EmploymentRelationTypeChoice } from "@/components/FirstShiftConfirmationFields";
 
 type DocumentRow={
   documentTypeId:string;
@@ -112,6 +113,7 @@ export function RecruitingActionDrawer({
   const [plannedArrival,setPlannedArrival]=useState(localDate(row.plannedArrivalAt));
   const [plannedStart,setPlannedStart]=useState(row.plannedStartDate??"");
   const [actualStart,setActualStart]=useState(localDate(row.actualStartAt));
+  const [employmentRelationType,setEmploymentRelationType]=useState<EmploymentRelationTypeChoice|"">(row.workflow?.employmentRelationType??"");
   const [travelState,setTravelState]=useState(row.workflow?.travelState??"not_required");
   const [ticketAssignee,setTicketAssignee]=useState(row.workflow?.ticketAssigneeUserId??"");
   const [ticketDue,setTicketDue]=useState(localDate(row.workflow?.ticketDueAt));
@@ -223,8 +225,13 @@ export function RecruitingActionDrawer({
 
     let actualStartAt:string|null|undefined=undefined;
     if(action==="shift_worked"){
-      if(!actualStart)throw new Error("Укажите фактическое время первого выхода.");
-      targetStage="first_shift";workflow.outcomeCode="shift_worked";workflow.firstShiftOutcome="worked";actualStartAt=new Date(actualStart).toISOString();
+      targetStage="first_shift";workflow.outcomeCode="shift_worked";workflow.firstShiftOutcome="worked";
+      if(!row.actualStartAt){
+        if(!actualStart)throw new Error("Укажите фактическое время первого выхода.");
+        if(!employmentRelationType)throw new Error("Выберите формат оформления или укажите, что он пока не известен.");
+        workflow.employmentRelationType=employmentRelationType;
+        actualStartAt=new Date(actualStart).toISOString();
+      }
     }
     if(action==="shift_no_show"){
       if(!reasonCode)throw new Error("Выберите причину невыхода.");
@@ -336,7 +343,7 @@ export function RecruitingActionDrawer({
         ? <section className="candidate-stage-actions candidate-retention-panel"><h3>Контроль 30 дней завершён</h3><p>Дальнейшая работа с человеком ведётся в карточке сотрудника. Рекрутинговая история остаётся доступна в карточке кандидата.</p></section>
         : <section className="candidate-stage-actions">
           <header><div><span className="eyebrow">{stageLabel(row.stage)}</span><h3>Результат текущего этапа</h3></div>{risks.length>0&&<span className="candidate-action-risk">{risks[0]}</span>}</header>
-          <div className="candidate-action-grid">{(stageActions[row.stage]??[]).map(option=><button type="button" key={option.code} className={"candidate-action-choice "+(action===option.code?"active ":"")+(option.tone==="danger"?"danger":"")} onClick={()=>{setAction(option.code);setError("")}} disabled={!canEdit}><strong>{option.label}</strong><small>{option.hint}</small></button>)}</div>
+          <div className="candidate-action-grid">{(stageActions[row.stage]??[]).map(option=><button type="button" key={option.code} className={"candidate-action-choice "+(action===option.code?"active ":"")+(option.tone==="danger"?"danger":"")} onClick={()=>{setAction(option.code);setError("");if(option.code==="shift_worked"&&!row.actualStartAt&&!actualStart)setActualStart(localDate(new Date().toISOString()))}} disabled={!canEdit}><strong>{option.label}</strong><small>{option.hint}</small></button>)}</div>
 
           <div className="candidate-action-fields">
             {recruiters.length>0&&<label>Текущий ответственный<select value={ownerUserId} onChange={e=>setOwnerUserId(e.target.value)}><option value="">Не назначен</option>{recruiters.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
@@ -360,12 +367,13 @@ export function RecruitingActionDrawer({
               recruiters={recruiters} housingProvided={housingProvided}
             />}
 
-            {action==="shift_worked"&&<label>Фактическое время выхода<input type="datetime-local" value={actualStart} onChange={e=>setActualStart(e.target.value)}/></label>}
+            {action==="shift_worked"&&!row.actualStartAt&&<div className="wide"><FirstShiftConfirmationFields actualStartAt={actualStart} employmentRelationType={employmentRelationType} onActualStartAtChange={setActualStart} onEmploymentRelationTypeChange={setEmploymentRelationType}/></div>}
+            {action==="shift_worked"&&row.actualStartAt&&<p className="wide">Фактический выход уже подтверждён; дата и оформление не изменяются.</p>}
 
             {action&&<label className="wide">Дополнительный комментарий<textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Только если нужной информации нет в структурированных полях"/></label>}
           </div>
 
-          {action&&<div className="candidate-action-footer"><button className="button primary" type="button" disabled={Boolean(busy)||(!canConvert&&action==="shift_worked")} onClick={()=>void performAction()}>{busy?"Сохраняю…":action==="alternative_need"?"Перевести на вакансию":"Сохранить результат"}</button></div>}
+          {action&&<div className="candidate-action-footer"><button className="button primary" type="button" disabled={Boolean(busy)||(!canConvert&&action==="shift_worked")||(action==="shift_worked"&&!row.actualStartAt&&(!actualStart||!employmentRelationType))} onClick={()=>void performAction().catch(e=>setError(e instanceof Error?e.message:"Не удалось сохранить действие"))}>{busy?"Сохраняю…":action==="alternative_need"?"Перевести на вакансию":"Сохранить результат"}</button></div>}
         </section>}
 
       <div className="recruiting-form-actions candidate-drawer-links"><Link className="button" href={"/candidates/"+row.candidateId}><UserRound size={14}/> Полная карточка</Link>{row.phone&&<a className="button" href={"tel:"+row.phone}><PhoneCall size={14}/> Позвонить</a>}</div>

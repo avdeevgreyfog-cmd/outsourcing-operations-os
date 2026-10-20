@@ -4,12 +4,11 @@ import type {ShiftRow,WorkerRow} from "@/lib/data/service";
 import {ObjectShiftsWorkspace} from "@/components/ObjectShiftsWorkspace";
 import {WorkerConfirmationManager} from "@/components/WorkerConfirmationManager";
 export function ObjectPlanningWorkspace({objectId,rows,workers,today,canEdit,canReconcile,canPlanAbsence,demo}:{objectId:string;rows:ShiftRow[];workers:WorkerRow[];today:string;canEdit:boolean;canReconcile:boolean;canPlanAbsence:boolean;demo:boolean}){
- const [tab,setTab]=useState<"planning"|"confirmations">("planning");
+ const [tab,setTab]=useState<"planning"|"answers"|"links"|"updates">("planning");
  return <div>
-  <div className="worker-confirmation-tabs" role="tablist" aria-label="Планирование выходов">
-   <button role="tab" aria-selected={tab==="planning"} className={tab==="planning"?"active":""} onClick={()=>setTab("planning")}>График сотрудников</button>
-   <button role="tab" aria-selected={tab==="confirmations"} className={tab==="confirmations"?"active":""} onClick={()=>setTab("confirmations")}>Подтверждения и ссылки</button>
+  <div className="object-local-tabs object-planning-tabs" role="tablist" aria-label="Планирование выходов">
+   {([["planning","График сотрудников"],["answers","Подтверждения"],["links","Персональные ссылки"],["updates","Изменения сотрудников"]] as const).map(([key,label])=><button key={key} role="tab" aria-selected={tab===key} className={tab===key?"active":""} onClick={()=>setTab(key)}>{label}</button>)}
   </div>
-  {tab==="planning"?<ObjectShiftsWorkspace objectId={objectId} rows={rows} workers={workers} today={today} canEdit={canEdit} canPlanAbsence={canPlanAbsence} demo={demo} pilot/>:<WorkerConfirmationManager objectId={objectId} canEdit={canEdit} canReconcile={canReconcile} demo={demo}/>}
+  <div hidden={tab!=="planning"}><ObjectShiftsWorkspace objectId={objectId} rows={rows} workers={workers} today={today} canEdit={canEdit} canPlanAbsence={canPlanAbsence} demo={demo} pilot/></div><div hidden={tab==="planning"}><WorkerConfirmationManager objectId={objectId} canEdit={canEdit} canReconcile={canReconcile} demo={demo} view={tab==="planning"?"answers":tab} hideTabs/></div>
  </div>;
 }

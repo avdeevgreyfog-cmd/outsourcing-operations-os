@@ -18,6 +18,10 @@ export async function POST(request:Request){
         FROM objects o WHERE o.id=${body.objectId}::uuid
       `;
       if(!object||!canReadRow(actor.access,"time.timesheet.submit",object,actor))throw new AccessDeniedError("time.timesheet.submit");
+      await tx`SELECT w.id FROM worker_profiles w WHERE w.organization_id=${actor.organizationId}::uuid
+        AND EXISTS(SELECT 1 FROM worker_object_assignments a WHERE a.worker_id=w.id AND a.object_id=${body.objectId}::uuid
+          AND a.organization_id=w.organization_id) ORDER BY w.id FOR UPDATE OF w`;
+      await tx`SELECT id FROM objects WHERE id=${body.objectId}::uuid AND organization_id=${actor.organizationId}::uuid FOR UPDATE`;
       const [total]=await tx<Array<{hours:number|string}>>`
         SELECT COALESCE(sum(fact_hours),0)::numeric hours FROM time_entries
         WHERE object_id=${body.objectId}::uuid AND work_date BETWEEN ${body.periodStart}::date AND ${body.periodEnd}::date
