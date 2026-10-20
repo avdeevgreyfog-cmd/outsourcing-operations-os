@@ -30,7 +30,6 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
  const [localMode,setMode]=useState<"answers"|"links"|"updates">("answers");
  const mode=view??localMode;
  const [search,setSearch]=useState("");
- const [contactNumber,setContactNumber]=useState("");
  const [patternWorker,setPatternWorker]=useState("");
  const [patternCode,setPatternCode]=useState("5/2");
  const [patternShift,setPatternShift]=useState<"day"|"night">("day");
@@ -143,12 +142,6 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
         <button className="button" type="button" disabled={!specialWorker||!!busy} onClick={()=>void action({action:"worker_schedule_owner",objectId,workerId:specialWorker,scheduleOwner:specialOwner==="inherit"?null:specialOwner})}>Сохранить исключение</button></div>
        <p className="worker-confirmation-note">По умолчанию сотрудники используют режим своего объекта. Здесь можно назначить исключение без изменения графиков остальных.</p>
      </details>}
-     {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Разделы личного кабинета:</span>
-       <label><input type="checkbox" checked={settings.get(objectId)?.showEmployeeDocuments??true} disabled={!!busy}
-        onChange={e=>void action({action:"portal_sections",objectId,documents:e.target.checked,workwear:settings.get(objectId)?.showEmployeeWorkwear??true})}/> Документы</label>
-       <label><input type="checkbox" checked={settings.get(objectId)?.showEmployeeWorkwear??true} disabled={!!busy}
-        onChange={e=>void action({action:"portal_sections",objectId,documents:settings.get(objectId)?.showEmployeeDocuments??true,workwear:e.target.checked})}/> Спецодежда и СИЗ</label>
-      </div>}
     {objectId&&canEdit&&<details className="worker-confirmation-exceptions"><summary>Настроить график сотрудника</summary>
      <div className="worker-confirmation-toolbar">
       <label>Сотрудник <select value={patternWorker} onChange={e=>{const id=e.target.value;setPatternWorker(id);const w=data.workers.find(w=>w.id===id);const approved=data.patternChanges?.find(p=>p.workerId===id&&p.status==="accepted");setPatternCode(approved?approved.workDays+"/"+approved.restDays:w?.workDays&&w.restDays!==null?w.workDays+"/"+w.restDays:"5/2");setPatternShift(approved?.shiftKind??(w?.shiftKind==="night"?"night":"day"));setPatternFloating(approved?.floatingDaysOff??false)}}><option value="">Выберите сотрудника</option>{data.workers.filter(w=>w.objectId===objectId).map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
@@ -159,7 +152,6 @@ export function WorkerConfirmationManager({objectId,workerId,canEdit,canReconcil
       <button className="button" disabled={!patternWorker||!!busy||!patternFrom} onClick={()=>void action({action:"set_worker_pattern",objectId,workerId:patternWorker,effectiveFrom:patternFrom,workDays:Number(patternCode.split("/")[0]),restDays:Number(patternCode.split("/")[1]),shiftKind:patternShift,floatingDaysOff:patternFloating})}>Сохранить график</button>
      </div><p className="worker-confirmation-note">5/2 и 6/1 по умолчанию: выходные суббота-воскресенье или воскресенье. Циклические графики отсчитываются с даты начала.</p></details>}
 
-     {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><label>Телефон менеджера <input value={contactNumber} onChange={e=>setContactNumber(e.target.value)} placeholder={settings.get(objectId)?.managerPhone??"+7…"} /></label><button className="button" disabled={!!busy} onClick={()=>void action({action:"manager_phone",objectId,phone:contactNumber||null})}>Сохранить</button></div>}
      {objectId&&canEdit&&<div className="worker-confirmation-toolbar"><span className="cell-sub">Перечень документов объекта:</span><select value={relationType} onChange={e=>setRelationType(e.target.value as typeof relationType)} aria-label="Тип оформления"><option value="gph">ГПХ</option><option value="employment">Трудовой договор</option><option value="npd">Самозанятый</option><option value="custom">Другое</option></select><select value={docCode} onChange={e=>setDocCode(e.target.value)} aria-label="Документ">{[["passport","Паспорт"],["snils","СНИЛС"],["inn","ИНН"],["bank_details","Реквизиты"],["military","Военный билет"],["medical_book","Медкнижка"],["photo","Фотография"],["application","Заявление"],["contract","Договор"]].map(([code,label])=><option key={code} value={code}>{label}</option>)}</select><label><input type="checkbox" checked={docRequired} onChange={e=>setDocRequired(e.target.checked)}/> Требуется</label><button className="button" disabled={!!busy} onClick={()=>void action({action:"document_requirement",objectId,relationType,code:docCode,required:docRequired})}>Применить</button></div>}
      <p className="worker-confirmation-note"><a href="/employee-timesheet/demo?layout=mobile" target="_blank" rel="noopener noreferrer"><ExternalLink size={13} style={{verticalAlign:"middle"}}/> Версия для телефона</a> · <a href="/employee-timesheet/demo?layout=desktop" target="_blank" rel="noopener noreferrer">Версия для компьютера</a></p></div>
    </>}
