@@ -3,14 +3,14 @@ import {useMemo,useState} from "react";
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import {Copy,ExternalLink,Link2,RefreshCw,ShieldOff} from "lucide-react";
 
-export type PortalSection="shifts"|"confirm"|"decline"|"scheduleChanges"|"hours"|"timesheet"|"documents"|"employment"|"workwear"|"contacts"|"objectInfo";
+export type PortalSection="shifts"|"confirm"|"decline"|"scheduleChanges"|"hours"|"timesheet"|"documents"|"employment"|"workwear"|"contacts"|"objectInfo"|"payAdjustments"|"suggestDaysOff";
 export type PortalConfig={
- managerName:string|null;managerPhone:string|null;contactMethod:string|null;instruction:string;
+ managerName:string|null;managerPhone:string|null;contactMethod:string|null;showWorkInstruction:boolean;instruction:string;
  timezone:string;validDays:number;autoRevokeOnExit:boolean;sections:Record<PortalSection,boolean>;
 };
 type Patch=Partial<Omit<PortalConfig,"sections">>&{sections?:Partial<PortalConfig["sections"]>};
 type Worker={id:string;name:string;objectId:string|null;object:string|null;specialty:string|null;paidHours:number};
-type Link={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked"|"expired"|"rotated";lastOpenedAt:string|null;createdAt:string;expiresAt?:string|null;autoRevokeAt?:string|null;createdBy?:string|null;changedBy?:string|null};
+type Link={id:string;workerId:string;objectId:string;status:"active"|"paused"|"revoked"|"expired"|"rotated";lastOpenedAt:string|null;lastManagerPreviewAt?:string|null;blockReason?:string|null;createdAt:string;expiresAt?:string|null;autoRevokeAt?:string|null;createdBy?:string|null;changedBy?:string|null};
 type Setting={objectId:string;timezone?:string;managerPhone?:string|null;showEmployeeDocuments?:boolean;showEmployeeWorkwear?:boolean};
 type Override={scope:"organization"|"object"|"worker";scopeId:string;config:Patch};
 export type LinkPayload={
@@ -23,13 +23,13 @@ const sections:[PortalSection,string][]=[
  ["hours","Фактически отработанные часы"],["timesheet","Мой табель"],
  ["documents","Документы (чек-лист)"],["employment","Статус оформления"],
  ["workwear","Спецодежда и СИЗ"],["contacts","Контакты менеджера"],
- ["objectInfo","Информация по объекту"]
+ ["objectInfo","Рабочая инструкция"],["payAdjustments","Удержания и корректировки"],["suggestDaysOff","Предложение выходных"]
 ];
 const defaults:PortalConfig={
  managerName:null,managerPhone:null,contactMethod:null,
- instruction:"Подтверждайте выходы и фактически отработанные часы после смены.",
+ instruction:"",showWorkInstruction:false,
  timezone:"Europe/Moscow",validDays:30,autoRevokeOnExit:true,
- sections:Object.fromEntries(sections.map(([k])=>[k,true])) as PortalConfig["sections"]
+ sections:Object.fromEntries(sections.map(([k])=>[k!=="objectInfo"&&k!=="payAdjustments"&&k!=="suggestDaysOff"])) as PortalConfig["sections"]
 };
 function merged(base:PortalConfig,patch?:Patch):PortalConfig{
  return {...base,...patch,sections:{...base.sections,...patch?.sections}};
@@ -101,13 +101,13 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
     "Ссылка выпущена. Она ещё не отправлена сотруднику.");
    if(resp?.path)setIssuedUrl(window.location.origin+resp.path);
  }
- async function copyActive(w:Worker,mode:"copy"|"open"="copy"){
+ async function copyActive(w:Worker){
    if(!w.objectId)return;
    const resp=await run({action:"copy",objectId:w.objectId,workerId:w.id},"Ссылка получена. Отправка сотруднику не выполнялась.");
    if(!resp?.path)return;
    const url=window.location.origin+resp.path;
    setShareUrl(url);setIssueWorker(w);setIssuedUrl("");setReplace(false);
-   if(mode==="copy")try{await navigator.clipboard.writeText(url);setMessage("Ссылка скопирована. Отправьте её сотруднику.")}catch{setMessage("Скопируйте ссылку из поля ниже.")}
+   try{await navigator.clipboard.writeText(url);setMessage("Ссылка скопирована. Отправьте её сотруднику.")}catch{setMessage("Скопируйте ссылку из поля ниже.")}
  }
  const relevant=data.workers.filter(w=>(!selectedObject||w.objectId===selectedObject));
  return <div className="employee-portal-link-workspace">
@@ -116,34 +116,34 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
    {message&&<div role="status" className="worker-confirmation-note">{message}</div>}
    {error&&<div role="alert" className="worker-confirmation-manager-error">{error}</div>}
    <div className="request-table-wrap"><table className="data-table">
-     <thead><tr><th>Сотрудник</th><th>Объект</th><th>Ссылка</th><th>Выпущена / кем</th><th>Действует до</th><th>Последнее открытие</th><th>Действия</th></tr></thead>
+     <thead><tr><th>Сотрудник</th><th>Объект</th><th>Ссылка</th><th>Выпущена / кем</th><th>Действует до</th><th>Открыто сотрудником</th><th>Предпросмотр менеджера</th><th>Действия</th></tr></thead>
      <tbody>{relevant.map(w=>{const l=data.links.find(x=>x.workerId===w.id&&x.objectId===w.objectId);
        return <tr key={w.id}><td className="cell-title">{w.name}<span className="cell-sub">{w.specialty??"—"}</span></td>
          <td>{w.object??"—"}</td><td>{l?labels[l.status]:"Не создана"}</td>
          <td>{when(l?.createdAt)}<span className="cell-sub">{l?.changedBy??l?.createdBy??"—"}</span></td>
          <td>{when(l?.expiresAt)}{l?.autoRevokeAt&&<span className="cell-sub">Автоотзыв: {when(l.autoRevokeAt)}</span>}</td>
-         <td>{when(l?.lastOpenedAt)}</td>
+         <td>{when(l?.lastOpenedAt)}</td><td>{when(l?.lastManagerPreviewAt)}</td>
          <td><div className="worker-confirmation-actions">
            {canEdit&&(!l||["revoked","expired","rotated"].includes(l.status))&&<button type="button" className="button" disabled={pending} onClick={()=>startIssue(w)}><Link2 size={13}/> Создать ссылку</button>}
            {canEdit&&l?.status==="active"&&<><button type="button" className="button" disabled={pending} onClick={()=>void copyActive(w)}><Copy size={13}/> Скопировать</button>
-             <button type="button" className="button" disabled={pending} onClick={()=>void copyActive(w,"open")}><ExternalLink size={13}/> Предпросмотр</button>
+             <a className="button" href={"/employee-preview?objectId="+encodeURIComponent(w.objectId??"")+"&workerId="+encodeURIComponent(w.id)} target="_blank" rel="noopener noreferrer"><ExternalLink size={13}/> Предпросмотр</a>
              <button type="button" className="button" disabled={pending} onClick={()=>void run({action:"pause",workerId:w.id,objectId:w.objectId},"Ссылка приостановлена")}>Приостановить</button></>}
            {canEdit&&l?.status==="paused"&&<button type="button" className="button" disabled={pending} onClick={()=>void run({action:"resume",workerId:w.id,objectId:w.objectId},"Доступ возобновлён")}>Возобновить</button>}
            {canEdit&&["active","paused"].includes(l?.status??"")&&<><button type="button" className="button" disabled={pending} onClick={()=>startIssue(w,true)}><RefreshCw size={13}/> Перевыпустить</button>
              <button type="button" className="button" disabled={pending} onClick={()=>{if(window.confirm("Отозвать персональную ссылку без возможности возобновления?"))void run({action:"revoke",workerId:w.id,objectId:w.objectId},"Ссылка отозвана")}}><ShieldOff size={13}/> Отозвать</button></>}
          </div></td></tr>})}</tbody></table>{!relevant.length&&<div className="empty-inline">Для выбранного объекта сотрудники не найдены</div>}</div>
-   <section className="worker-confirmation-settings"><div className="section-head"><div><h2>Базовые настройки кабинета</h2><p>Организация → объект → сотрудник → отдельная выпущенная ссылка. Изменение настроек не меняет действующие ссылки.</p></div></div>
+   <section className="worker-confirmation-settings"><div className="section-head"><div><h2>Базовые настройки кабинета</h2><p>Организация → объект → сотрудник → отдельная выпущенная ссылка. Изменения наследуются действующими ссылками, если для ссылки нет индивидуального исключения.</p></div></div>
      <div className="worker-confirmation-toolbar">
        <label>Уровень <select value={scope} onChange={e=>setScope(e.target.value as typeof scope)}><option value="organization">Организация</option><option value="object">Объект</option><option value="worker">Сотрудник</option></select></label>
        {scope!=="organization"&&<label>Объект <select value={selectedObject} disabled={!!objectId} onChange={e=>{setObjectChoice(e.target.value);setWorkerChoice("")}}><option value="">Выберите объект</option>{options.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label>}
        {scope==="worker"&&<label>Сотрудник <select value={workerChoice} onChange={e=>setWorkerChoice(e.target.value)}><option value="">Выберите сотрудника</option>{people.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
      </div>
      {currentScopeId?<div className="worker-confirmation-configuration">
-       <p className="worker-confirmation-note">Пустое поле или «По умолчанию» использует настройки предыдущего уровня. Изменения действуют только для следующих ссылок.</p>
+       <p className="worker-confirmation-note">Пустое поле или «По умолчанию» использует настройки предыдущего уровня. Изменения автоматически применяются и к действующим ссылкам.</p>
        <div className="worker-confirmation-toolbar">
          {([["managerName","Имя или роль менеджера"],["managerPhone","Рабочий телефон"],["contactMethod","Мессенджер или способ связи"],["instruction","Инструкция сотруднику"],["timezone","Часовой пояс"]] as const).map(([key,label])=>
            <label key={key}>{label} <input value={(editor[key]??"") as string} placeholder={String(inherited[key]??"Не указано (по умолчанию)")} onChange={e=>editValue(key,e.target.value)} style={{minWidth:180}}/></label>)}
-         <label>Срок ссылки, дней <input type="number" min={1} max={365} value={editor.validDays??""} placeholder={String(inherited.validDays)} onChange={e=>setEditor(p=>({...p,validDays:e.target.value?Number(e.target.value):undefined}))}/></label>
+         <label>Показывать рабочую инструкцию <select value={editor.showWorkInstruction===undefined?"inherit":editor.showWorkInstruction?"yes":"no"} onChange={e=>setEditor(p=>({...p,showWorkInstruction:e.target.value==="inherit"?undefined:e.target.value==="yes"}))}><option value="inherit">Наследовать</option><option value="yes">Да</option><option value="no">Нет</option></select></label>
        </div>
        <div className="worker-confirmation-toolbar">
          <label>Автоотзыв после увольнения <select value={editor.autoRevokeOnExit===undefined?"inherit":editor.autoRevokeOnExit?"yes":"no"} onChange={e=>setEditor(p=>({...p,autoRevokeOnExit:e.target.value==="inherit"?undefined:e.target.value==="yes"}))}><option value="inherit">По умолчанию</option><option value="yes">Включён</option><option value="no">Отключён (доступ всё равно блокируется при увольнении)</option></select></label>
@@ -167,20 +167,20 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
        {issuedUrl||shareUrl?<><p role="status">Ссылка доступна. Копирование не означает отправку сотруднику.</p>
          <input aria-label="Персональная ссылка" readOnly value={issuedUrl||shareUrl} style={{width:"100%"}}/>
          <div className="worker-confirmation-actions"><button className="button" onClick={()=>void navigator.clipboard.writeText(issuedUrl||shareUrl).then(()=>setMessage("Ссылка скопирована"),()=>setError("Скопируйте адрес из поля"))}><Copy size={14}/> Скопировать ссылку</button>
-         <a className="button" href={issuedUrl||shareUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={13}/> Открыть кабинет</a>
-         <a className="button" href={(issuedUrl||shareUrl)+"?layout=mobile"} target="_blank" rel="noopener noreferrer">Просмотр на телефоне</a></div>
+         <a className="button" href={"/employee-preview?objectId="+encodeURIComponent(issueWorker.objectId??"")+"&workerId="+encodeURIComponent(issueWorker.id)} target="_blank" rel="noopener noreferrer"><ExternalLink size={13}/> Предпросмотр без токена</a></div>
        </>:<>
          {replace&&<p className="worker-confirmation-note">Старая ссылка будет отозвана, её история останется в системе.</p>}
-         <p className="worker-confirmation-note">Дата выпуска: {new Date().toLocaleString("ru-RU")}. Итоговая конфигурация будет сохранена в ссылке и не изменится при будущих правках объекта.</p>
+         <p className="worker-confirmation-note">Дата выпуска: {new Date().toLocaleString("ru-RU")}. Ссылка действует бессрочно по умолчанию. Настройки организации, объекта и сотрудника будут наследоваться автоматически; отдельные исключения сохраняются для этой ссылки.</p>
          <div className="worker-confirmation-toolbar">
            <label>Имя/роль менеджера<input value={issueConfig.managerName??""} onChange={e=>setIssueConfig(p=>({...p,managerName:e.target.value||null}))}/></label>
            <label>Рабочий телефон<input value={issueConfig.managerPhone??""} placeholder="+7…" onChange={e=>setIssueConfig(p=>({...p,managerPhone:e.target.value||null}))}/></label>
            <label>Способ связи<input value={issueConfig.contactMethod??""} onChange={e=>setIssueConfig(p=>({...p,contactMethod:e.target.value||null}))}/></label>
            <label>Часовой пояс<input value={issueConfig.timezone} onChange={e=>setIssueConfig(p=>({...p,timezone:e.target.value}))}/></label>
-           <label>Срок, дней<input type="number" min={1} max={365} value={issueConfig.validDays} onChange={e=>setIssueConfig(p=>({...p,validDays:Number(e.target.value)}))}/></label>
+           <p className="worker-confirmation-note">Срок действия: бессрочно, если дата окончания не выбрана.</p>
            <label>Последний день действия (если нужен)<input type="date" value={expiry} onChange={e=>setExpiry(e.target.value)}/></label>
            <label>Дата дополнительного автоотзыва<input type="date" value={autoRevoke} onChange={e=>setAutoRevoke(e.target.value)}/></label>
          </div>
+         <label><input type="checkbox" checked={issueConfig.showWorkInstruction} onChange={e=>setIssueConfig(p=>({...p,showWorkInstruction:e.target.checked}))}/> Показывать рабочую инструкцию</label>
          <label>Инструкция сотруднику<textarea rows={3} maxLength={2000} value={issueConfig.instruction} onChange={e=>setIssueConfig(p=>({...p,instruction:e.target.value}))}/></label>
          <p className="worker-confirmation-note">Разделы, доступные сотруднику по этой ссылке:</p>
          <div className="worker-confirmation-toolbar" style={{flexWrap:"wrap",alignItems:"start"}}>
