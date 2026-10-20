@@ -1,3 +1,4 @@
+import {effectiveActiveLinkConfiguration,type PortalConfigurationPatch} from "@/lib/operations/employee-portal-config";
 import {scheduleCycleWork,schedulingConditionForDate,schedulingCycle,type SchedulingCondition} from "@/lib/operations/schedule-cycle";
 import type {Actor} from "@/lib/access/types";
 import {AccessDeniedError,requireCapability} from "@/lib/access/server";
@@ -33,8 +34,9 @@ export function cycleKind(date:string,anchor:string|null,workDays:number|null,re
 async function scopeForToken(token:string):Promise<TenantScope>{
  const ref=await resolveToken(token);if(!ref)throw new EmployeePortalAccessError("Недействительная ссылка");
  return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
-  const [row]=await sql<Array<Omit<TenantScope,"org"|"actor"|"link">>>`SELECT
+  const [row]=await sql<Array<Omit<TenantScope,"org"|"actor"|"link"> & {linkOverride:PortalConfigurationPatch}>>`SELECT
    l.worker_id worker,l.object_id object,a.specialty_id "specialtyId",
+   l.link_config_override "linkOverride",
    (now() AT TIME ZONE COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow'))::date::text today,
    COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),s.timezone,'Europe/Moscow') timezone,
    COALESCE(wa.schedule_owner,s.schedule_authority,CASE WHEN s.schedule_owner='client' THEN 'worker' ELSE s.schedule_owner END,'manager') owner,
@@ -51,7 +53,10 @@ async function scopeForToken(token:string):Promise<TenantScope>{
      AND COALESCE(s.reporting_enabled,true)
    ORDER BY a.effective_from DESC LIMIT 1`;
   if(!row)throw new EmployeePortalAccessError("Персональный доступ закрыт");
-  return {...row,org:ref.tenantId,actor:ref.actorUserId,link:ref.linkId};
+  const config=await effectiveActiveLinkConfiguration(sql,ref.tenantId,row.object,row.worker,row.linkOverride);
+  const local=new Intl.DateTimeFormat("en-GB",{timeZone:config.timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const dateParts=Object.fromEntries(local.map(part=>[part.type,part.value]));
+  return {...row,timezone:config.timezone,today:`${dateParts.year}-${dateParts.month}-${dateParts.day}`,org:ref.tenantId,actor:ref.actorUserId,link:ref.linkId};
  });
 }
 async function planningRows(sql:Sql,s:TenantScope,from:string,to:string){
