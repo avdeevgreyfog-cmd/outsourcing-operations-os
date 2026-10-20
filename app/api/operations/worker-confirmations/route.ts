@@ -69,6 +69,11 @@ export async function POST(request:Request){
  }catch(error){
   if(error instanceof z.ZodError)return NextResponse.json({error:"Проверьте данные"},{status:400});
   if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});
+  if(!(error instanceof EmployeePortalError)){
+    const diagnostic=error as {name?:string;code?:string}|null;
+    // Never log the request payload, raw employee token, credentials, or SQL parameters.
+    console.error("worker confirmations POST failed",{errorType:diagnostic?.name??"unknown",databaseCode:diagnostic?.code??null});
+  }
   return NextResponse.json({error:error instanceof EmployeePortalError?error.message:"Не удалось выполнить действие. Попробуйте позже"},{status:error instanceof EmployeePortalError?400:500});
  }
 }
