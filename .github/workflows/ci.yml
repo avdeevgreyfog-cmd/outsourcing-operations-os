@@ -56,6 +56,8 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/operations_os_test
       # The database is ephemeral and empty; production migration policy remains unchanged.
       ALLOW_DESTRUCTIVE_MIGRATION: "1"
+      # Applies only to the disposable CI service, never production or Vercel.
+      ALLOW_PROTECTED_TENANT_DESTRUCTIVE_MIGRATION: "1"
       DEMO_MODE: "true"
       SESSION_SECRET: "ci-postgres-workspace-smoke"
     steps:
