@@ -81,7 +81,11 @@ try{
  entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
  assert.equal(entries[0].hours,9,'existing manager fact must not change on employee resubmission');
  await assert.rejects(()=>portal.reviewEmployeeHours(actor,fixture.object,fixture.worker,dates.yesterday,true,11),/уже внесены менеджером/);
+ const employeeTimestamp=(await portal.managerPortalData(manager,fixture.object)).reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).employeeRespondedAt;
+ assert.ok(employeeTimestamp,'employee reply timestamp must be recorded');
  await portal.reviewEmployeeHours(actor,fixture.object,fixture.worker,dates.yesterday,true,9,'Сверено по данным объекта');
+ assert.equal((await portal.managerPortalData(manager,fixture.object)).reports.find(r=>r.workerId===fixture.worker&&r.date===dates.yesterday).employeeRespondedAt,employeeTimestamp,
+   'manager review must not change the employee reply timestamp');
  entries=await withTenant(org,director,sql=>sql`SELECT fact_hours::float8 hours,source FROM time_entries WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
  assert.equal(entries[0].hours,9);assert.equal(entries[0].source,'manual');
  const [approvedReport]=await withTenant(org,director,sql=>sql`SELECT approved_hours::float8 hours,review_status status FROM worker_shift_reports WHERE worker_id=${fixture.worker}::uuid AND work_date=${dates.yesterday}::date`);
