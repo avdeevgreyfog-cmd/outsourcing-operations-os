@@ -342,15 +342,19 @@ export async function reviewEmployeeHours(actor:Actor,objectId:string,workerId:s
    const finalHours=approvedHours??report.hours;
    if(approved&&(finalHours<=0||finalHours>24))throw new EmployeePortalError("Некорректные итоговые часы");
    if(approved){
-     const entries=await sql<Array<{id:string;source:string;shiftId:string|null}>>`
-       SELECT id,source,shift_id "shiftId" FROM time_entries
+     const entries=await sql<Array<{id:string;source:string;shiftId:string|null;factHours:number}>>`
+       SELECT id,source,shift_id "shiftId",fact_hours::float8 "factHours" FROM time_entries
        WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid
          AND worker_id=${workerId}::uuid AND work_date=${date}::date
        ORDER BY (shift_id IS NULL) DESC,updated_at DESC FOR UPDATE`;
-     if(entries.filter(e=>e.shiftId!==null).length>1&&entries.every(e=>e.shiftId!==null))
-       throw new EmployeePortalError("На эту дату назначено несколько смен. Проверьте часы в табеле вручную.");
+     if(entries.length>1)throw new EmployeePortalError("Несколько записей табеля за дату: требуется ручная сверка.");
+     const recorded=entries[0];
+     if(recorded&&recorded.source!=="schedule"&&recorded.source!=="worker_report"&&Math.abs(recorded.factHours-finalHours)>0.001)
+       throw new EmployeePortalError("Часы уже внесены менеджером: исправьте расхождение через табель с историей корректировок.");
      const kind=report.kind==="night"?"night":"day";
-     if(entries.length){
+     if(recorded&&recorded.source!=="schedule"&&recorded.source!=="worker_report"){
+       // Existing manager fact matches the approved hours and must not be overwritten.
+     }else if(entries.length){
        const entry=entries[0];
        await sql`UPDATE time_entries SET planned=true,time_code='WORK',fact_hours=${finalHours},
           day_hours=${kind==="day"?finalHours:0},night_hours=${kind==="night"?finalHours:0},
