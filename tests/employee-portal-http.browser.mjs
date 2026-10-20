@@ -49,7 +49,7 @@ try{
  console.log('Employee mobile and desktop cabinets rendered');
  const demoCabinet=await employee.newPage();demoCabinet.on('pageerror',e=>errors.push(e.message));
  await demoCabinet.goto(origin+'/employee-timesheet/demo',{waitUntil:'networkidle'});
- await demoCabinet.locator('.worker-self-sidebar button').filter({hasText:'Табель'}).click();
+ await demoCabinet.getByRole('button',{name:'Табель'}).last().click();
  const demoTotals=await demoCabinet.locator('.worker-self-totals').innerText();
  assert.match(demoTotals,/План/);assert.match(demoTotals,/Передано сотрудником\s*0 ч/);
  assert.match(demoTotals,/Согласовано менеджером\s*0 ч/);
