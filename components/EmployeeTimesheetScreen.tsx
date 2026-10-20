@@ -102,6 +102,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     if(payload.action==="plan_week"){
       const off=new Set(payload.offDates as string[]),begin=String(payload.weekStart);
       setData(d=>d?{...d,planning:{...d.planning,days:d.planning.days.map(p=>p.date>=begin&&p.date<=move(begin,6)?{...p,kind:off.has(p.date)?"off":d.planning.defaultKind??"day",source:"worker" as const}:p)}}:d);
+     }else if(payload.action==="dispute_hours"){
+       setData(d=>d?{...d,disputes:[...(d.disputes??[]),{date,reason:String(payload.reason),comment:String(payload.comment),status:"open",createdAt:new Date().toISOString()}]}:d);
+     }else if(payload.action==="question_adjustment"){setNotice("Вопрос передан менеджеру (демонстрация)");
      }else if(payload.action==="pattern_change"){setNotice("Запрос на изменение постоянного графика отправлен");
      }else if(payload.action==="plan_day"){
      const newKind=payload.kind as Kind;setData(d=>{if(!d)return d;const direct=d.planning.owner==="worker"&&d.planning.floatingDaysOff;return {...d,planning:{...d.planning,days:d.planning.days.map(x=>x.date===date?{...x,kind:direct?newKind:x.kind,source:direct?"worker" as const:x.source,proposal:direct?null:newKind,proposalStatus:direct?null:"proposed" as const}:x)}}});
@@ -152,7 +155,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
     <div className="worker-self-brand"><span className="worker-self-logo">O</span><div><small>OPERIS · СОТРУДНИК</small><strong>Личный кабинет</strong></div></div>
     <div className="worker-self-identity"><strong>{data.name}</strong><span>{data.objectName}</span></div>
     <div className="worker-self-header-actions">
-      {sections.contacts&&(managerCall?<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру"><Phone size={17}/></a>:<button className="worker-self-icon-button" onClick={()=>{setTab("more");setMore("contact")}} aria-label="Контакты менеджера"><Phone size={17}/></button>)}
+      {sections.contacts&&managerCall&&<a href={"tel:"+managerCall} className="worker-self-icon-button" aria-label="Позвонить менеджеру" title="Позвонить менеджеру"><Phone size={17}/><span className="worker-self-call-label"> Позвонить менеджеру</span></a>}
     </div>
    </header>
    <div className="worker-self-layout">
@@ -167,12 +170,13 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
      {error&&<div role="alert" className="worker-self-alert"><AlertTriangle size={16}/>{error}</div>}
      {notice&&<div role="status" className="worker-self-alert success"><CheckCircle2 size={16}/>{notice}{isDemo?" · демонстрация":""}</div>}
      {activeTab==="shifts"&&hasShiftActions&&<>
-      <div className="worker-self-page-title"><div><h1>{sections.shifts?"Мои смены":"Мои действия"}</h1><p>{data.objectName}</p></div><button className="worker-self-quiet" onClick={openSettings} disabled={!sections.scheduleChanges}><Settings2 size={15}/> Мой график</button></div>
+      <div className="worker-self-page-title"><div><h1>{sections.shifts?"Мои смены":"Мои действия"}</h1><p>{data.objectName}</p></div>{sections.scheduleChanges&&<button className="worker-self-quiet" onClick={openSettings}><Settings2 size={15}/> Мой график</button>}</div>
       <div className="worker-self-primary-grid">
        {(sections.shifts||sections.confirm||sections.decline)&&<section className="worker-self-panel worker-self-priority">
         <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Ближайший день</span><span className={"worker-self-dot "+(nextAnswer?.response==="working"?"good":"")}>{nextAnswer?.response==="working"?"Подтверждено":nextAnswer?.response==="cannot_work"?"Не выйду":next?.proposalStatus==="proposed"?"Изменение на проверке":"Требует внимания"}</span></div>
         <h2>{format(tomorrow)}</h2>
         <p className="worker-self-shift"><ShiftIcon kind={next?.kind??null}/><strong>{next?.reserveKind?"Резерв · "+kindShort(next.reserveKind):kindLabel(next?.kind??null)}</strong><span>{timeText(next)}</span></p>
+        {sections.objectInfo&&data.config?.instruction?.trim()&&<div className="worker-self-hint" style={{padding:12,borderLeft:"2px solid var(--border, #ccc)"}}><strong>Важно для работы</strong><p>{data.config.instruction}</p></div>}
         {next?.proposalStatus==="proposed"&&<p className="worker-self-hint">Запрошено изменение: {kindShort(next.proposal)}. Ожидается решение менеджера.</p>}
         {!next?.kind?<><p className="worker-self-muted">На завтра пока нет установленной смены. Укажите рабочий день или выходной.</p>{sections.scheduleChanges&&<button className="worker-self-main-button" onClick={()=>setEditingDay(tomorrow)}>Запланировать день</button>}</>:
         next.kind==="off"?<><p className="worker-self-muted">Выходной уже стоит в вашем графике. Подтверждать его не нужно.</p>{sections.scheduleChanges&&<button className="worker-self-light-button full" onClick={()=>setEditingDay(tomorrow)}>{data.planning.owner==="manager"?"Запросить рабочий день":"Изменить на рабочий день"}</button>}</>:
@@ -191,9 +195,9 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
         {completed?<><h2>{format(completed.date)}</h2><p className="worker-self-shift"><ShiftIcon kind={completed.kind}/><strong>{kindLabel(completed.kind)}</strong><span>{timeText(completed)}</span></p>
          {completedAnswer?.hours!=null&&!hourEdit?<><div className="worker-self-done"><CheckCircle2 size={17}/> Вы указали {completedAnswer.hours} ч.</div>{!completedAnswer.reconciledAt&&<button className="worker-self-light-button full" onClick={()=>{setHourEdit(true);setHours(String(completedAnswer.hours))}}>Исправить часы</button>}</>:
           <><p className="worker-self-question">Сколько часов вы отработали?</p>{hourEdit&&<label className="worker-self-hours">Отработано часов<input type="number" min={0} max={24} step={0.5} inputMode="decimal" value={hours} onChange={e=>setHours(e.target.value)}/></label>}
-           {hourEdit&&Number(hours)!==(data.paidHours??11)&&<label className="worker-self-hours">Причина отличия от нормы<textarea rows={2} maxLength={250} value={hoursComment} onChange={e=>setHoursComment(e.target.value)} placeholder="Укажите причину расхождения"/></label>}
-            <button className="worker-self-main-button" disabled={busy||(hourEdit&&(!hours.trim()||Number(hours)<0||Number(hours)>24||(Number(hours)!==data.paidHours&&!hoursComment.trim())))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit?"Сохранить часы":`${data.paidHours} ч — верно`}</button>
-           <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
+           {hourEdit&&data.paidHours!=null&&Number(hours)!==data.paidHours&&<label className="worker-self-hours">Причина отличия от нормы<textarea rows={2} maxLength={250} value={hoursComment} onChange={e=>setHoursComment(e.target.value)} placeholder="Укажите причину расхождения"/></label>}
+            <button className="worker-self-main-button" disabled={busy||((hourEdit||data.paidHours==null)&&(!hours.trim()||!Number.isFinite(Number(hours))||Number(hours)<0||Number(hours)>24||(data.paidHours!=null&&Number(hours)!==data.paidHours&&!hoursComment.trim())))} onClick={()=>void confirmHours()}><Check size={17}/>{hourEdit||data.paidHours==null?"Передать часы":`${data.paidHours} ч — плановая норма верна`}</button>
+           <button className="worker-self-light-button full" onClick={()=>{setHourEdit(x=>!x);setHours(String(data.paidHours??""))}}>{hourEdit?"Отмена":"Указать другие часы"}</button></>}
          <div className="worker-self-deadline"><Info size={13}/> Ночная смена отмечается датой её начала.</div>
         </>:<p className="worker-self-muted">Нет завершённых смен за ближайшие дни.</p>}
        </section>}
@@ -234,6 +238,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        <button aria-label="Следующий месяц" onClick={()=>setMonthOverride(adjacentMonth(1))} disabled={currentMonth>=today.slice(0,7)}><ChevronRight size={18}/></button>
       </div>
       <div className="worker-self-totals"><div><small>Часы</small><strong>{counted.total}</strong></div><div><small>Смены</small><strong>{counted.shifts}</strong></div></div>
+      <p className="worker-self-muted">Статус периода: <strong>{periodStatus}</strong>. {data.periodClosedAt&&periodStatus==="Закрыт для расчёта"?"Часы за период согласованы и приняты в расчёт. Это не означает выплату.":""}</p>
       <section className="worker-self-panel worker-self-timesheet-panel">
        <div className="worker-self-panel-head"><span><ClipboardCheck size={17}/> {monthLabel}</span></div>
        <div className="worker-self-ledger-header"><span>Дата</span><span>Часы</span></div>
@@ -248,9 +253,15 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
           <div className="worker-self-ledger-date"><strong>{smallDate(date)}</strong><small>{plan?.kind==="night"||fact?.kind==="night"?"Ночная смена":plan?.kind==="day"||fact?.kind==="day"?"Дневная смена":off?"Выходной":"—"}</small></div>
           <div className="worker-self-ledger-result">
            <strong className={h!=null&&Number(h)>0?"actual":""}>{h!=null&&Number(h)>0?String(h)+" ч":off?"Выходной":"—"}</strong>
-           {h!=null&&Number(h)>0&&<small className={approved?"worker-self-agreed":""}>{approved?"Согласовано":"Передано"}</small>}
+           {(h!=null||reply?.response||plan?.kind)&&<small className={approved?"worker-self-agreed":""}>{dayStatus(date,reply,Boolean(plan?.kind||fact))}</small>}
+           {(reply?.updatedAt||reply?.reviewedAt)&&<small>Обновлено: {new Date(reply.reviewedAt??reply.updatedAt??"").toLocaleString("ru-RU")}</small>}
+           {reply?.reviewedAt&&<small>Проверил: {reply.reviewedBy??"менеджер"}</small>}
           </div>
          </div>
+         {h!=null&&Number(h)>0&&<div className="worker-self-ledger-dispute">
+           {activeDisputes.has(date)?<small>Обращение по часам передано менеджеру.</small>:<button className="worker-self-quiet" onClick={()=>{setDisputeDate(disputeDate===date?null:date);setDisputeComment("")}}>Не согласен с часами</button>}
+           {disputeDate===date&&<div className="worker-self-edit"><label>Причина<select value={disputeReason} onChange={e=>setDisputeReason(e.target.value as typeof disputeReason)}><option value="hours">Неверное количество часов</option><option value="missing_shift">Не учтена смена</option><option value="wrong_shift">Другая смена</option><option value="other">Другое</option></select></label><label>Комментарий<textarea value={disputeComment} onChange={e=>setDisputeComment(e.target.value)} maxLength={500} rows={2} placeholder="Укажите, в чём расхождение"/></label><button className="worker-self-main-button" disabled={busy||!disputeComment.trim()} onClick={async()=>{if(await save({action:"dispute_hours",date,reason:disputeReason,comment:disputeComment},"Обращение передано менеджеру"))setDisputeDate(null)}}>Отправить обращение</button></div>}
+         </div>}
         </div>;
        })}
        {counted.shifts===0&&<p className="worker-self-muted">За этот месяц пока нет отработанных смен.</p>}
