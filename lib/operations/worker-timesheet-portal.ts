@@ -2,7 +2,7 @@ import {randomBytes,createHash,createCipheriv,createDecipheriv} from "node:crypt
 import type {Sql} from "postgres";
 import type {Actor} from "@/lib/access/types";
 import {requireCapability,AccessDeniedError} from "@/lib/access/server";
-import {canReadRow} from "@/lib/core/access.mjs";
+import {canReadRow,hasCapability} from "@/lib/core/access.mjs";
 import {db,withTenant} from "@/lib/db/client";
 import {listObjects,listWorkers} from "@/lib/data/service";
 import {defaultPortalConfiguration,applyPortalPatch,effectivePortalConfiguration,effectiveActiveLinkConfiguration,diffPortalConfiguration,normalizePortalPatch,type PortalConfigurationPatch,type PortalConfiguration} from "@/lib/operations/employee-portal-config";
@@ -23,7 +23,7 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
   const availableObjects=(await listObjects(actor)).filter(row=>canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.id===objectId));
   const objectOptions=availableObjects.map(o=>({id:o.id,name:o.name??"Объект"}));
-  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],sizeRequests:[],onboarding:[],hourDisputes:[],adjustments:[],defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
+  if(actor.demo)return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??11,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports:[],links:[],settings:[],plans:[],portalOverrides:[],sizeRequests:[],onboarding:[],hourDisputes:[],adjustments:[],canManageAdjustments:false,defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
   if(!visible.length&&!availableObjects.length)return {workers:[],reports:[],links:[],settings:[],plans:[],portalOverrides:[],defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
   const objects=new Set([...availableObjects.map(o=>o.id),...visible.map(w=>w.objectId!)]);
   const ids=visible.map(w=>w.id);
@@ -51,11 +51,11 @@ export async function managerPortalData(actor:Actor,objectId?:string,workerId?:s
       sql<Array<{id:string;workerId:string;objectId:string;date:string;reason:string;comment:string;status:string}>>`
        SELECT id,worker_id "workerId",object_id "objectId",work_date::text date,reason,comment,status FROM worker_hours_disputes
        WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) AND status IN ('open','in_review') ORDER BY created_at DESC`,
-      sql<Array<{id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string}>>`
+      (hasCapability(actor.access,"finance.worker_accrual.read")?sql<Array<{id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string}>>`
        SELECT id,worker_id "workerId",object_id "objectId",amount::float8 amount,period_start::text "periodStart",period_end::text "periodEnd",status,reason,employee_description description
-       FROM worker_pay_adjustments WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY created_at DESC LIMIT 100`
+       FROM worker_pay_adjustments WHERE worker_id=ANY(${ids}::uuid[]) AND object_id=ANY(${[...objects]}::uuid[]) ORDER BY created_at DESC LIMIT 100`:Promise.resolve([] as Array<{id:string;workerId:string;objectId:string;amount:number;periodStart:string;periodEnd:string;status:string;reason:string;description:string}>))
     ]);
-    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??null,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,sizeRequests,onboarding,hourDisputes,adjustments,defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
+    return {workers:visible.map(w=>({id:w.id,name:w.fullName,objectId:w.objectId,object:w.object,specialty:w.specialty,paidHours:w.paidHoursPerShift??null,workDays:w.scheduleWorkDays??null,restDays:w.scheduleRestDays??null,shiftKind:w.scheduleShiftKind??null})),reports,links,settings,plans,portalOverrides,sizeRequests,onboarding,hourDisputes,adjustments,canManageAdjustments:hasCapability(actor.access,"finance.worker_accrual.edit"),defaultPortalConfiguration,organizationId:actor.organizationId,objectOptions};
   });
 }
 
