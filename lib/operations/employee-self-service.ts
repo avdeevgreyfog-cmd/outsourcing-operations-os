@@ -204,8 +204,15 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
  |{action:"review_shift_time";objectId:string;workerId:string;date:string;approve:boolean}
  |{action:"manager_phone";objectId:string;phone:string|null}
  |{action:"document_requirement";objectId:string;relationType:RelationType;code:string;required:boolean}
- |{action:"portal_sections";objectId:string;documents:boolean;workwear:boolean}){
+ |{action:"portal_sections";objectId:string;documents:boolean;workwear:boolean}
+ |{action:"review_sizes";objectId:string;workerId:string;requestId:string;approve:boolean}
+ |{action:"set_onboarding";objectId:string;workerId:string;stage:"not_started"|"requested"|"partial"|"review"|"completed"|"correction";comment:string|null;showAfterCompleted:boolean}
+ |{action:"set_document_status";objectId:string;workerId:string;code:string;status:"not_requested"|"awaiting"|"received"|"accepted"|"resubmit"}
+ |{action:"resolve_hours_dispute";objectId:string;workerId:string;disputeId:string;status:"in_review"|"resolved"|"rejected"}
+ |{action:"upsert_adjustment";objectId:string;workerId:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:"deduction"|"damage"|"advance"|"other";reason:string;description:string;status:"draft"|"review"|"confirmed"|"cancelled"}){
+
  requireCapability(actor,"operations.shift.edit");
+ if(change.action==="upsert_adjustment")requireCapability(actor,"finance.worker_accrual.edit");
  if(actor.demo)throw new EmployeePortalError("Действие недоступно в демонстрации");
  const objects=await listObjects(actor);
  const obj=objects.find(x=>x.id===change.objectId);
@@ -235,6 +242,38 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
      VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.code},
        CASE WHEN ${change.verified} THEN now() ELSE NULL END,CASE WHEN ${change.verified} THEN ${actor.userId}::uuid ELSE NULL END)
      ON CONFLICT(worker_id,object_id,document_code) DO UPDATE SET manager_verified_at=EXCLUDED.manager_verified_at,manager_verified_by_user_id=EXCLUDED.manager_verified_by_user_id,updated_at=now()`;
+  }else if(change.action==="review_sizes"){
+   const [request]=await sql<Array<{id:string;clothingSize:string|null;shoeSize:string|null;gloveSize:string|null;comment:string|null}>>`
+     SELECT id,clothing_size "clothingSize",shoe_size "shoeSize",glove_size "gloveSize",comment FROM worker_ppe_size_requests
+     WHERE id=${change.requestId}::uuid AND worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND status='pending' FOR UPDATE`;
+   if(!request)throw new EmployeePortalError("Запрос размеров уже обработан");
+   if(change.approve)await sql`UPDATE worker_profiles SET clothing_size=${request.clothingSize},shoe_size=${request.shoeSize},
+      glove_size=${request.gloveSize},ppe_size_comment=${request.comment},updated_at=now()
+      WHERE id=${change.workerId}::uuid AND organization_id=${actor.organizationId}::uuid`;
+   await sql`UPDATE worker_ppe_size_requests SET status=${change.approve?"approved":"rejected"},reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now()
+      WHERE id=${change.requestId}::uuid`;
+  }else if(change.action==="set_onboarding"){
+   await sql`INSERT INTO worker_onboarding_status(organization_id,worker_id,object_id,stage,employee_comment,show_after_completed,updated_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.stage},${change.comment?.trim()||null},${change.showAfterCompleted},${actor.userId}::uuid)
+     ON CONFLICT(worker_id) DO UPDATE SET object_id=EXCLUDED.object_id,stage=EXCLUDED.stage,employee_comment=EXCLUDED.employee_comment,
+     show_after_completed=EXCLUDED.show_after_completed,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`;
+  }else if(change.action==="set_document_status"){
+   if(!docLabels[change.code])throw new EmployeePortalError("Неизвестный документ");
+   await sql`INSERT INTO worker_document_checklist(organization_id,worker_id,object_id,document_code,document_status,manager_verified_at,manager_verified_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.code},${change.status},
+       CASE WHEN ${change.status}='accepted' THEN now() ELSE NULL END,CASE WHEN ${change.status}='accepted' THEN ${actor.userId}::uuid ELSE NULL END)
+     ON CONFLICT(worker_id,object_id,document_code) DO UPDATE SET document_status=EXCLUDED.document_status,
+       manager_verified_at=EXCLUDED.manager_verified_at,manager_verified_by_user_id=EXCLUDED.manager_verified_by_user_id,updated_at=now()`;
+  }else if(change.action==="resolve_hours_dispute"){
+   const updated=await sql`UPDATE worker_hours_disputes SET status=${change.status},resolved_at=CASE WHEN ${change.status}='in_review' THEN NULL ELSE now() END,
+     resolved_by_user_id=CASE WHEN ${change.status}='in_review' THEN NULL ELSE ${actor.userId}::uuid END
+     WHERE id=${change.disputeId}::uuid AND worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND status IN ('open','in_review') RETURNING id`;
+   if(!updated.length)throw new EmployeePortalError("Обращение уже обработано");
+  }else if(change.action==="upsert_adjustment"){
+   if(change.periodEnd<change.periodStart)throw new EmployeePortalError("Период указан неверно");
+   await sql`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
+     VALUES(${actor.organizationId}::uuid,${change.workerId}::uuid,${change.objectId}::uuid,${change.periodStart}::date,${change.periodEnd}::date,
+       ${change.amount},${change.adjustmentType},${change.reason.trim()},${change.description.trim()},${change.status},${actor.userId}::uuid)`;
   }else{
    await sql`UPDATE worker_shift_time_changes SET status=${change.approve?"accepted":"rejected"},reviewed_by_user_id=${actor.userId}::uuid,reviewed_at=now(),updated_at=now()
      WHERE worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND work_date=${change.date}::date`;
