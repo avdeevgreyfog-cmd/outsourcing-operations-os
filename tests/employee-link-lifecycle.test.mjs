@@ -63,3 +63,13 @@ test('hours-only submission rejects a changed manager shift or reserve assignmen
   assert.ok(!h.queries.some(q=>q.includes('UPDATE worker_shift_reports SET reported_hours=')));
  }
 });
+
+test('missing encryption key produces a safe actionable error and does not create a link',async()=>{
+ const previous=process.env.SESSION_SECRET;
+ delete process.env.SESSION_SECRET;
+ try{
+  const h=harness();
+  await assert.rejects(h.run('create'),err=>err instanceof h.service.EmployeePortalError && /ключ персональных ссылок/.test(err.message));
+  assert.equal(h.links.length,0,'failed issuance must not leave a link');
+ }finally{if(previous===undefined)delete process.env.SESSION_SECRET;else process.env.SESSION_SECRET=previous;}
+});
