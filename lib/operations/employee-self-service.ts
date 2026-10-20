@@ -212,10 +212,12 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
  |{action:"set_onboarding";objectId:string;workerId:string;stage:"not_started"|"requested"|"partial"|"review"|"completed"|"correction";comment:string|null;showAfterCompleted:boolean}
  |{action:"set_document_status";objectId:string;workerId:string;code:string;status:"not_requested"|"awaiting"|"received"|"accepted"|"resubmit"}
  |{action:"resolve_hours_dispute";objectId:string;workerId:string;disputeId:string;status:"in_review"|"resolved"|"rejected"}
- |{action:"upsert_adjustment";objectId:string;workerId:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:"deduction"|"damage"|"advance"|"other";reason:string;description:string;status:"draft"|"review"|"confirmed"|"cancelled"}){
+ |{action:"upsert_adjustment";objectId:string;workerId:string;periodStart:string;periodEnd:string;amount:number;adjustmentType:"deduction"|"damage"|"advance"|"other";reason:string;description:string;status:"draft"|"review"|"accounted"|"cancelled"}
+ |{action:"update_adjustment_status";objectId:string;workerId:string;adjustmentId:string;status:"draft"|"review"|"accounted"|"cancelled"}
+ |{action:"answer_adjustment_question";objectId:string;workerId:string;questionId:string}){
 
  requireCapability(actor,"operations.shift.edit");
- if(change.action==="upsert_adjustment")requireCapability(actor,"finance.worker_accrual.edit");
+ if(["upsert_adjustment","update_adjustment_status","answer_adjustment_question"].includes(change.action))requireCapability(actor,"finance.worker_accrual.edit");
  if(actor.demo)throw new EmployeePortalError("Действие недоступно в демонстрации");
  const objects=await listObjects(actor);
  const obj=objects.find(x=>x.id===change.objectId);
@@ -272,6 +274,18 @@ export async function managerEmployeeDetailAction(actor:Actor,change:
      resolved_by_user_id=CASE WHEN ${change.status}='in_review' THEN NULL ELSE ${actor.userId}::uuid END
      WHERE id=${change.disputeId}::uuid AND worker_id=${change.workerId}::uuid AND object_id=${change.objectId}::uuid AND status IN ('open','in_review') RETURNING id`;
    if(!updated.length)throw new EmployeePortalError("Обращение уже обработано");
+  }else if(change.action==="update_adjustment_status"){
+   const changed=await sql`UPDATE worker_pay_adjustments SET status=${change.status},updated_at=now()
+     WHERE organization_id=${actor.organizationId}::uuid AND object_id=${change.objectId}::uuid
+       AND worker_id=${change.workerId}::uuid AND id=${change.adjustmentId}::uuid RETURNING id`;
+   if(!changed.length)throw new EmployeePortalError("Корректировка не найдена");
+  }else if(change.action==="answer_adjustment_question"){
+   const changed=await sql`UPDATE worker_pay_adjustment_questions q SET status='answered'
+     FROM worker_pay_adjustments a WHERE q.id=${change.questionId}::uuid
+       AND q.adjustment_id=a.id AND a.organization_id=${actor.organizationId}::uuid
+       AND a.object_id=${change.objectId}::uuid AND q.worker_id=${change.workerId}::uuid AND q.status='open'
+       RETURNING q.id`;
+   if(!changed.length)throw new EmployeePortalError("Обращение уже обработано");
   }else if(change.action==="upsert_adjustment"){
    if(change.periodEnd<change.periodStart)throw new EmployeePortalError("Период указан неверно");
    await sql`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
