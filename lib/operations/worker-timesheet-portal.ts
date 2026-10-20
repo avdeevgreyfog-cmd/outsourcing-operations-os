@@ -18,8 +18,38 @@ export type EmployeeLink={id:string;workerId:string;objectId:string;status:"acti
 export type EmployeePlan={workerId:string;objectId:string;date:string;timeCode:string;kind:string|null};
 export type PortalConfig={objectId:string;scheduleOwner:"manager"|"worker";confirmationDeadline:string;timezone:string;reportingEnabled:boolean;managerPhone:string|null;planningHorizonDays:number;showEmployeeDocuments:boolean;showEmployeeWorkwear:boolean};
 
+/** Persist scheduled dismissals on first safe runtime access, with system-only audit.
+ * Access checks deny links by effective date independently of this materialization. */
+async function blockDueEmployeeLinks(organizationId:string,actorUserId:string,onlyLinkId?:string){
+ return withTenant(organizationId,actorUserId,async sql=>{
+  const revoked=await sql<Array<{id:string;workerId:string;objectId:string;effectiveDate:string}>>`
+    WITH due AS (
+      SELECT l.id,l.worker_id,l.object_id,e.effective_date
+      FROM worker_timesheet_links l
+      JOIN worker_exit_processes e ON e.organization_id=l.organization_id AND e.worker_id=l.worker_id
+      WHERE l.organization_id=${organizationId}::uuid AND l.status IN ('active','paused')
+        AND (${onlyLinkId??null}::uuid IS NULL OR l.id=${onlyLinkId??null}::uuid)
+        AND e.status IN ('planned','completed')
+        AND e.effective_date<=(now() AT TIME ZONE COALESCE(
+          (SELECT timezone FROM object_shift_reporting_settings WHERE object_id=l.object_id),'Europe/Moscow'))::date
+      FOR UPDATE OF l SKIP LOCKED
+    ), changed AS (
+      UPDATE worker_timesheet_links l SET status='revoked',revoked_at=now(),block_reason='dismissal',changed_at=now()
+      FROM due WHERE l.id=due.id
+      RETURNING l.id,l.worker_id "workerId",l.object_id "objectId",due.effective_date::text "effectiveDate"
+    ) SELECT * FROM changed`;
+  for(const item of revoked){
+   await sql`INSERT INTO worker_portal_events(organization_id,worker_id,object_id,link_id,actor_user_id,event_type,details)
+     VALUES(${organizationId}::uuid,${item.workerId}::uuid,${item.objectId}::uuid,${item.id}::uuid,
+       NULL,'blocked_on_exit',jsonb_build_object('initiator','system','reason','dismissal','effectiveDate',${item.effectiveDate}))`;
+  }
+  return revoked.length;
+ });
+}
+
 export async function managerPortalData(actor:Actor,objectId?:string,workerId?:string){
   requireCapability(actor,"operations.shift.read");
+  if(!actor.demo)await blockDueEmployeeLinks(actor.organizationId,actor.userId);
   const visible=(await listWorkers(actor)).filter(row=>row.objectId&&canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.objectId===objectId)&&(!workerId||row.id===workerId));
   const availableObjects=(await listObjects(actor)).filter(row=>canReadRow(actor.access,"operations.shift.read",row,actor)&&(!objectId||row.id===objectId));
   const objectOptions=availableObjects.map(o=>({id:o.id,name:o.name??"Объект"}));
@@ -178,12 +208,14 @@ type TokenContext={tenantId:string;actorUserId:string;linkId:string};
 export async function resolveToken(token:string):Promise<TokenContext|null>{
   if(!/^[A-Za-z0-9_-]{30,100}$/.test(token))return null;
   const hashed=tokenHash(token);
-  return db().begin(async tx=>{
+  const found=await db().begin(async tx=>{
     await tx`SELECT set_config('app.worker_token_hash',${hashed},true)`;
     const [row]=await tx<Array<TokenContext>>`SELECT tenant_id "tenantId",actor_user_id "actorUserId",link_id "linkId"
       FROM public_worker_timesheet_tokens WHERE token_hash=${hashed} LIMIT 1`;
     return row??null;
   });
+  if(found)await blockDueEmployeeLinks(found.tenantId,found.actorUserId,found.linkId);
+  return found;
 }
 export async function assertEmployeeLinkActive(sql:Sql,ref:{tenantId:string;linkId:string},token:string){
   const [worker]=await sql<Array<{id:string}>>`SELECT w.id FROM worker_profiles w JOIN worker_timesheet_links l ON l.worker_id=w.id AND l.organization_id=w.organization_id
