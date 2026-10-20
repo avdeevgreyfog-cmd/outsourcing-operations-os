@@ -5,6 +5,7 @@ import {listObjects,listWorkers} from "@/lib/data/service";
 import {requireCapability,AccessDeniedError} from "@/lib/access/server";
 import {canReadRow} from "@/lib/core/access.mjs";
 import {resolveToken,assertEmployeeLinkActive,EmployeePortalError,EmployeePortalAccessError} from "@/lib/operations/worker-timesheet-portal";
+import {applyPortalPatch,defaultPortalConfiguration,type PortalConfigurationPatch} from "@/lib/operations/employee-portal-config";
 
 export const docLabels:Record<string,string>={
  passport:"Паспорт",snils:"СНИЛС",inn:"ИНН",bank_details:"Реквизиты для выплат",
@@ -23,7 +24,7 @@ export type PortalDetails={
  clothingSize:string|null;shoeSize:string|null;employment:RelationType;managerName:string|null;managerPhone:string|null;
  documents:Array<{code:string;label:string;employeeReported:boolean;managerVerified:boolean}>;
  workwear:Array<{name:string;state:"issued"|"needed";variant:string|null}>;
- visibility:{documents:boolean;workwear:boolean};
+ visibility:{documents:boolean;workwear:boolean;employment:boolean;contacts:boolean};
  shiftWindows:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean}>;
  timeChanges:Array<{date:string;startTime:string;endTime:string;endsNextDay:boolean;appliesTo:"single"|"regular";status:"proposed"|"accepted"|"rejected"}>;
 };
@@ -35,10 +36,10 @@ export function checklistCodes(relation:RelationType,overrides:Array<{code:strin
 async function authorizedEmployee(token:string){
  const ref=await resolveToken(token);if(!ref)return null;
  return withTenant(ref.tenantId,ref.actorUserId,async(sql)=>{
-  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;showDocuments:boolean;showWorkwear:boolean}>>`
+  const [link]=await sql<Array<{workerId:string;objectId:string;owner:"manager"|"worker";timezone:string;employment:RelationType;configuration:PortalConfigurationPatch}>>`
    SELECT l.worker_id "workerId",l.object_id "objectId",COALESCE(wa.schedule_owner,st.schedule_authority,CASE WHEN st.schedule_owner='client' THEN 'worker' ELSE st.schedule_owner END,'manager') owner,
-   COALESCE(st.timezone,'Europe/Moscow') timezone,
-   COALESCE(st.show_employee_documents,true) "showDocuments",COALESCE(st.show_employee_workwear,true) "showWorkwear",
+   COALESCE(NULLIF(l.portal_config_snapshot->>'timezone',''),st.timezone,'Europe/Moscow') timezone,
+   l.portal_config_snapshot configuration,
    COALESCE((SELECT er.relation_type FROM employment_relations er WHERE er.worker_id=l.worker_id
       AND er.effective_from<=current_date AND (er.effective_to IS NULL OR er.effective_to>=current_date)
       ORDER BY er.effective_from DESC LIMIT 1),'custom') employment
@@ -48,9 +49,10 @@ async function authorizedEmployee(token:string){
    LEFT JOIN object_shift_reporting_settings st ON st.object_id=l.object_id
    LEFT JOIN worker_schedule_authorities wa ON wa.worker_id=l.worker_id AND wa.object_id=l.object_id
    WHERE l.id=${ref.linkId}::uuid AND l.token_hash=${createHashToken(token)}
-      AND l.status='active' AND w.status='active' AND COALESCE(st.reporting_enabled,true) LIMIT 1`;
+      AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at>now()) AND (l.auto_revoke_at IS NULL OR l.auto_revoke_at>now()) AND w.status='active' AND COALESCE(st.reporting_enabled,true) LIMIT 1`;
   if(!link)return null;
-  return {ref,link};
+  const cfg=applyPortalPatch(defaultPortalConfiguration,link.configuration??{});
+  return {ref,link:{...link,timezone:cfg.timezone,showDocuments:cfg.sections.documents,showWorkwear:cfg.sections.workwear,scheduleChanges:cfg.sections.scheduleChanges,showEmployment:cfg.sections.employment,showContacts:cfg.sections.contacts,managerName:cfg.managerName,managerPhone:cfg.managerPhone}};
  });
 }
 function createHashToken(raw:string){return createHash("sha256").update(raw).digest("hex")}
@@ -106,9 +108,9 @@ export async function employeePortalDetails(token:string):Promise<PortalDetails|
   const names=new Set(issueRows.map(x=>x.name));
   const workwear=[...issueRows.map(x=>({...x,state:"issued" as const})),...normRows.filter(x=>!names.has(x.name)).map(x=>({name:x.name,variant:null,state:"needed" as const}))];
   return {clothingSize:profile[0]?.clothingSize??null,shoeSize:profile[0]?.shoeSize??null,
-    employment:link.employment,managerName:profile[0]?.managerName??null,managerPhone:profile[0]?.managerPhone??null,
+    employment:link.employment,managerName:link.managerName??profile[0]?.managerName??null,managerPhone:link.managerPhone??profile[0]?.managerPhone??null,
     documents:link.showDocuments?codes.map(code=>({code,label:docLabels[code],employeeReported:verified.get(code)?.employeeReported??false,managerVerified:verified.get(code)?.managerVerified??false})):[],
-    workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear},shiftWindows,timeChanges};
+    workwear:link.showWorkwear?workwear:[],visibility:{documents:link.showDocuments,workwear:link.showWorkwear,employment:link.showEmployment,contacts:link.showContacts},shiftWindows,timeChanges:link.scheduleChanges?timeChanges:[]};
  });
 }
 
@@ -137,6 +139,7 @@ export async function updateEmployeePortalDetails(token:string,change:EmployeeDe
      ON CONFLICT(worker_id,object_id,document_code) DO UPDATE SET employee_reported_at=EXCLUDED.employee_reported_at,updated_at=now()`;
    return {ok:true};
   }
+  if(!link.scheduleChanges)throw new EmployeePortalError("Изменение графика недоступно по ссылке");
   if(!hhmm.test(change.startTime)||!hhmm.test(change.endTime))throw new EmployeePortalError("Укажите время в формате ЧЧ:ММ");
   const minutes=(x:string)=>Number(x.slice(0,2))*60+Number(x.slice(3,5));
   const duration=minutes(change.endTime)-minutes(change.startTime)+(change.endsNextDay?1440:0);
