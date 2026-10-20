@@ -322,10 +322,25 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
        </>}
        {activeMore==="employment"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Тип оформления</span></div><p>{employmentLabel[data.details?.employment??""]??"Тип оформления уточняется"}</p></section>}
        {activeMore==="objectInfo"&&sections.objectInfo&&data.config?.instruction&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Важно для работы</span></div><p>{data.config.instruction}</p></section>}
-       {activeMore==="adjustments"&&<><div className="worker-self-page-title"><div><h1>Удержания и корректировки</h1><p>Информационный раздел. Ничего не удерживается автоматически.</p></div></div>
-        {(data.details?.adjustments??[]).length?(data.details?.adjustments??[]).map(item=><section className="worker-self-panel" key={item.id}><div className="worker-self-panel-head"><span>{item.periodStart} — {item.periodEnd}</span><strong>{item.amount.toLocaleString("ru-RU")} ₽</strong></div><p>{item.description}</p><p className="worker-self-muted">Основание: {item.reason}. Статус: {({review:"На проверке",confirmed:"Подтверждено менеджером",accounted:"Учтено в расчёте"} as Record<string,string>)[item.status]??"Уточняется"}</p><button className="worker-self-light-button full" onClick={()=>{setAdjustmentQuestionId(item.id);setAdjustmentQuestion("")}}>Есть вопрос по удержанию</button>{adjustmentQuestionId===item.id&&<div className="worker-self-edit"><label>Ваш вопрос<textarea value={adjustmentQuestion} onChange={e=>setAdjustmentQuestion(e.target.value)} maxLength={500} rows={2}/></label><button className="worker-self-main-button" disabled={busy||!adjustmentQuestion.trim()} onClick={async()=>{if(await save({action:"question_adjustment",adjustmentId:item.id,question:adjustmentQuestion},"Вопрос направлен менеджеру"))setAdjustmentQuestionId(null)}}>Отправить вопрос</button></div>}</section>):<p className="worker-self-muted">Подтверждённых и проверяемых корректировок нет.</p>}
+       {activeMore==="adjustments"&&<><div className="worker-self-page-title"><div><h1>Удержания и корректировки</h1><p>Информационные записи менеджера. Автоматических списаний нет.</p></div></div>
+        <div className="worker-self-month-nav">
+          <button aria-label="Предыдущий месяц корректировок" onClick={()=>setMonthOverride(adjacentMonth(-1))} disabled={currentMonth<="2020-01"}><ChevronRight size={18} style={{transform:"rotate(180deg)"}}/></button>
+          <strong>{monthLabel}</strong>
+          <button aria-label="Следующий месяц корректировок" onClick={()=>setMonthOverride(adjacentMonth(1))} disabled={currentMonth>=today.slice(0,7)}><ChevronRight size={18}/></button>
+        </div>
+        {(data.details?.adjustments??[]).length?(data.details?.adjustments??[]).map(item=><section className="worker-self-panel" key={item.id}>
+         <div className="worker-self-panel-head"><span>{item.periodStart} — {item.periodEnd}</span><strong>{item.amount.toLocaleString("ru-RU")} ₽</strong></div>
+         <p>{({deduction:"Удержание",damage:"Компенсация ущерба",advance:"Аванс",other:"Иная корректировка"} as Record<string,string>)[item.adjustmentType]??"Корректировка"} · {item.description}</p>
+         <p className="worker-self-muted">Основание: {item.reason}</p>
+         <p className="worker-self-muted">Создано: {item.createdAt?new Date(item.createdAt).toLocaleString("ru-RU"):"Не указано"} · Статус: {({draft:"Черновик",review:"На проверке",confirmed:"Подтверждено менеджером",accounted:"Учтено в расчёте",cancelled:"Отменено"} as Record<string,string>)[item.status]??"Уточняется"}</p>
+         <button className="worker-self-light-button full" onClick={()=>{setAdjustmentQuestionId(item.id);setAdjustmentQuestion("")}}>Есть вопрос по удержанию</button>
+         {adjustmentQuestionId===item.id&&<div className="worker-self-edit">
+          <label>Ваш вопрос<textarea value={adjustmentQuestion} onChange={e=>setAdjustmentQuestion(e.target.value)} maxLength={500} rows={2}/></label>
+          <button className="worker-self-main-button" disabled={busy||!adjustmentQuestion.trim()} onClick={async()=>{if(await save({action:"question_adjustment",adjustmentId:item.id,question:adjustmentQuestion},"Вопрос направлен менеджеру. Корректировка не отменена."))setAdjustmentQuestionId(null)}}>Отправить вопрос</button>
+         </div>}
+        </section>):<p className="worker-self-muted">За выбранный месяц корректировок нет.</p>}
        </>}
-       {activeMore==="settings"&&<>
+              {activeMore==="settings"&&<>
         <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Здесь можно посмотреть свой график и запросить изменение.</p></div></div>
         <section className="worker-self-panel worker-self-schedule-summary">
          <div className="worker-self-panel-head"><span><CalendarDays size={17}/> Действующий график</span></div>
