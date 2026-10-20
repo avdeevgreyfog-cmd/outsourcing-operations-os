@@ -163,7 +163,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
      <p>РАБОЧЕЕ ПРОСТРАНСТВО</p>
      {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={17}/> {sections.shifts?"Мои смены":"Мои действия"}</button>}
      {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={17}/> Табель</button>}
-     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Ещё</button>
+     <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={17}/> Профиль</button>
      <div className="worker-self-sidebar-foot">{data.name}<small>{data.objectName}</small></div>
     </aside>
     <div className="worker-self-main">
@@ -268,15 +268,16 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
       </section>
      </>}
      {activeTab==="more"&&<>
-      {activeMore==="overview"?<><div className="worker-self-page-title"><div><h1>Дополнительно</h1><p>Рабочие документы, спецодежда и контакты.</p></div></div>
-       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"employment",label:"Статус оформления",sub:"Мой тип оформления",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"contact",label:"Важные контакты",sub:"Ваш менеджер объекта",icon:Phone},{key:"objectInfo",label:"Об объекте",sub:"Инструкция и информация",icon:Info},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2}] as const).filter(x=>x.key==="documents"?sections.documents:x.key==="workwear"?sections.workwear:x.key==="employment"?sections.employment:x.key==="contact"?sections.contacts:x.key==="objectInfo"?sections.objectInfo:sections.scheduleChanges).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
+      {activeMore==="overview"?<><div className="worker-self-page-title"><div><h1>Профиль</h1><p>Рабочие разделы, доступные вам.</p></div></div>
+       <div className="worker-self-extra-list">{([{key:"documents",label:"Документы",sub:"Что необходимо передать",icon:FileText},{key:"employment",label:"Статус оформления",sub:"Мой тип оформления",icon:FileText},{key:"workwear",label:"Спецодежда и СИЗ",sub:"Размеры и выдача",icon:Shirt},{key:"settings",label:"Мой график",sub:"Рабочее время и изменения",icon:Settings2},{key:"adjustments",label:"Удержания и корректировки",sub:"Сумма, причина и статус",icon:FileText}] as const).filter(x=>x.key==="documents"?sections.documents:x.key==="workwear"?sections.workwear:x.key==="employment"?sections.employment:x.key==="contact"?sections.contacts:x.key==="objectInfo"?sections.objectInfo:x.key==="adjustments"?sections.payAdjustments:sections.scheduleChanges).map(x=><button key={x.key} onClick={()=>x.key==="settings"?openSettings():setMore(x.key)}><x.icon size={19}/><span><strong>{x.label}</strong><small>{x.sub}</small></span><ChevronRight size={16}/></button>)}</div>
       </>:<>
        <button className="worker-self-back" onClick={()=>setMore("overview")}><ArrowLeft size={15}/> Все разделы</button>
-       {activeMore==="documents"&&<><div className="worker-self-page-title"><div><h1>Мои документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · Что требуется для работы на объекте.</p></div></div>
+       {activeMore==="documents"&&<><div className="worker-self-page-title"><div><h1>Оформление и документы</h1><p>{employmentLabel[data.details?.employment??""]??"Оформление"} · {({not_started:"Не начато",requested:"Документы запрошены",partial:"Часть получена",review:"На проверке",completed:"Оформлен",correction:"Требуется исправление"} as Record<string,string>)[data.details?.onboarding?.stage??""]??"Уточняется"}</p></div></div>
         <section className="worker-self-panel"><div className="worker-self-panel-head"><span><FileText size={17}/> Чек-лист документов</span></div><p className="worker-self-muted">Отметьте переданные документы. Менеджер проверит получение.</p>
+         {data.details?.onboarding?.comment&&<p className="worker-self-warning">{data.details.onboarding.comment}</p>}
          <div className="worker-self-doc-list">{(data.details?.documents??[]).map(d=><div className="worker-self-doc-row" key={d.code}>
           <span className={"worker-self-doc-icon "+(d.managerVerified?"verified":d.employeeReported?"reported":"")}><Check size={14}/></span>
-          <div><strong>{d.label}</strong><small>{d.managerVerified?"Получено менеджером":d.employeeReported?"Вы отметили передачу · ожидается проверка":"Требуется передать"}</small></div>
+          <div><strong>{d.label}</strong><small>{d.status==="resubmit"?"Требуется повторно":d.managerVerified||d.status==="accepted"?"Принят":d.status==="received"?"Получен, ожидает проверки":d.employeeReported?"Готов к передаче":"Требуется передать"}</small></div>
           {!d.managerVerified&&<button disabled={busy} onClick={()=>void save({action:"document",code:d.code,reported:!d.employeeReported},"Статус документа обновлён")}>{d.employeeReported?"Отменить":"Передал"}</button>}
          </div>)}</div>
         </section>
@@ -293,8 +294,11 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
          {managerCall?<a className="worker-self-main-button" href={"tel:"+managerCall}><Phone size={17}/> Позвонить · {data.details?.managerPhone}</a>:<p className="worker-self-muted">Контактный телефон пока не указан. Менеджер добавит рабочий номер в настройках объекта.</p>}
         </section>
        </>}
-       {activeMore==="employment"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Статус оформления</span></div><p>{employmentLabel[data.details?.employment??""]??"Тип оформления уточняется"}</p><p className="worker-self-muted">Состояние передачи документов указано в чек-листе, если он доступен.</p></section>}
-       {activeMore==="objectInfo"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Информация об объекте</span></div><p>{data.objectName}</p><p className="worker-self-muted">{data.config?.instruction??"При возникновении вопросов обратитесь к менеджеру."}</p></section>}
+       {activeMore==="employment"&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Тип оформления</span></div><p>{employmentLabel[data.details?.employment??""]??"Тип оформления уточняется"}</p></section>}
+       {activeMore==="objectInfo"&&sections.objectInfo&&data.config?.instruction&&<section className="worker-self-panel"><div className="worker-self-panel-head"><span>Важно для работы</span></div><p>{data.config.instruction}</p></section>}
+       {activeMore==="adjustments"&&<><div className="worker-self-page-title"><div><h1>Удержания и корректировки</h1><p>Информационный раздел. Ничего не удерживается автоматически.</p></div></div>
+        {(data.details?.adjustments??[]).length?(data.details?.adjustments??[]).map(item=><section className="worker-self-panel" key={item.id}><div className="worker-self-panel-head"><span>{item.periodStart} — {item.periodEnd}</span><strong>{item.amount.toLocaleString("ru-RU")} ₽</strong></div><p>{item.description}</p><p className="worker-self-muted">Основание: {item.reason}. Статус: {({review:"На проверке",confirmed:"Подтверждено менеджером",accounted:"Учтено в расчёте"} as Record<string,string>)[item.status]??"Уточняется"}</p><button className="worker-self-light-button full" onClick={()=>{setAdjustmentQuestionId(item.id);setAdjustmentQuestion("")}}>Есть вопрос по удержанию</button>{adjustmentQuestionId===item.id&&<div className="worker-self-edit"><label>Ваш вопрос<textarea value={adjustmentQuestion} onChange={e=>setAdjustmentQuestion(e.target.value)} maxLength={500} rows={2}/></label><button className="worker-self-main-button" disabled={busy||!adjustmentQuestion.trim()} onClick={async()=>{if(await save({action:"question_adjustment",adjustmentId:item.id,question:adjustmentQuestion},"Вопрос направлен менеджеру"))setAdjustmentQuestionId(null)}}>Отправить вопрос</button></div>}</section>):<p className="worker-self-muted">Подтверждённых и проверяемых корректировок нет.</p>}
+       </>}
        {activeMore==="settings"&&<>
         <div className="worker-self-page-title"><div><h1>Мой график</h1><p>Здесь можно посмотреть свой график и запросить изменение.</p></div></div>
         <section className="worker-self-panel worker-self-schedule-summary">
@@ -337,7 +341,7 @@ export function EmployeeTimesheetScreen({token,previewLayout}:{token:string;prev
    <nav className="worker-self-bottom-nav" aria-label="Главная навигация">
     {hasShiftActions&&<button className={activeTab==="shifts"?"active":""} onClick={()=>setTab("shifts")}><CalendarDays size={20}/>{sections.shifts?"Смены":"Действия"}</button>}
     {sections.timesheet&&<button className={activeTab==="timesheet"?"active":""} onClick={()=>setTab("timesheet")}><ClipboardCheck size={20}/>Табель</button>}
-    <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Ещё</button>
+    <button className={activeTab==="more"?"active":""} onClick={()=>{setTab("more");setMore("overview")}}><MoreHorizontal size={20}/>Профиль</button>
    </nav>
   </div>
  </main>;
