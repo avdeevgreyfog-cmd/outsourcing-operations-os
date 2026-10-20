@@ -493,7 +493,7 @@ export async function submitEmployeeHoursDispute(token:string,input:{date:string
  const ref=await resolveToken(token);
  if(!ref)throw new EmployeePortalAccessError("Ссылка недействительна");
  const comment=input.comment.trim();
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date)||!comment||comment.length>500)throw new EmployeePortalError("Укажите дату и причину обращения");
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(input.date)||!comment||comment.length>500)throw new EmployeePortalError("Укажите дату и причину обращения");
  return withTenant(ref.tenantId,ref.actorUserId,async sql=>{
   await assertEmployeeLinkActive(sql,ref,token);
   const [link]=await sql<Array<{workerId:string;objectId:string;linkOverride:PortalConfigurationPatch}>>`
