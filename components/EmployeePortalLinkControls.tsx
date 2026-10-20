@@ -66,7 +66,7 @@ export function EmployeePortalLinkControls({data,objectId,canEdit,demo,onRefresh
    if(legacy?.showEmployeeDocuments===false||legacy?.showEmployeeWorkwear===false)
      fallback.sections={...(legacy.showEmployeeDocuments===false?{documents:false}:{}),...(legacy.showEmployeeWorkwear===false?{workwear:false}:{})};
    const base=data.defaultPortalConfiguration??defaults;
-   return [override("organization",orgId),fallback,override("object",obj??""),w?override("worker",w.id):undefined].reduce((a,p)=>merged(a,p),base);
+   return [override("organization",orgId),fallback,override("object",obj??""),w?override("worker",w.id):undefined].reduce<PortalConfig>((a,p)=>merged(a,p),base);
  };
  const editorWorker=data.workers.find(w=>w.id===workerChoice);
  const inherited=scope==="organization"?(data.defaultPortalConfiguration??defaults):
