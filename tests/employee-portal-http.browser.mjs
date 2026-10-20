@@ -4,7 +4,7 @@ import {PGlite} from '@electric-sql/pglite';import {citext} from '@electric-sql/
 const pg=new PGlite({extensions:{citext,pgcrypto,btree_gist}});let socket,server,browser,tls;let serverLog='';const origin='https://localhost:3220',backend='http://127.0.0.1:3218';const certDir=fs.mkdtempSync('/tmp/operis-http-tls-');
 try{
  for(const name of fs.readdirSync('migrations').filter(n=>/^\d{4}_.+\.sql$/.test(n)).sort())await pg.exec(fs.readFileSync('migrations/'+name,'utf8'));
- const fixture=(await pg.query(`SELECT w.id worker,a.object_id object,o.owner_user_id manager,u.email::text email,org.slug organization FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id JOIN objects o ON o.id=a.object_id JOIN app_users u ON u.id=o.owner_user_id JOIN organizations org ON org.id=o.organization_id WHERE w.status='active' AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.id LIMIT 1`)).rows[0];assert.ok(fixture);
+ const fixture=(await pg.query(`SELECT w.id worker,a.object_id object,o.owner_user_id manager,u.email::text email,org.slug organization FROM worker_profiles w JOIN worker_object_assignments a ON a.worker_id=w.id JOIN objects o ON o.id=a.object_id JOIN app_users u ON u.id=o.owner_user_id JOIN organizations org ON org.id=o.organization_id WHERE w.status='active' AND a.effective_from<=current_date AND (a.effective_to IS NULL OR a.effective_to>=current_date) ORDER BY w.id LIMIT 1`)).rows[0];assert.ok(fixture);const qaOrganizationId=(await pg.query('SELECT id FROM organizations WHERE slug=$1',[fixture.organization])).rows[0].id;
  await pg.query(`UPDATE app_users SET password_hash=crypt($1,gen_salt('bf')) WHERE id=$2`,['isolated-http-fixture-password',fixture.manager]);
  const dates=(await pg.query(`SELECT (now() AT TIME ZONE 'Europe/Moscow')::date::text today,((now() AT TIME ZONE 'Europe/Moscow')::date-1)::text yesterday,((now() AT TIME ZONE 'Europe/Moscow')::date+1)::text tomorrow`)).rows[0];
  await pg.query(`DELETE FROM time_entries WHERE worker_id=$1 AND work_date BETWEEN $2::date AND $3::date`,[fixture.worker,dates.yesterday,dates.tomorrow]);await pg.query(`UPDATE timesheet_snapshots SET status='draft' WHERE object_id=$1`,[fixture.object]);
@@ -51,9 +51,9 @@ try{
  await demoCabinet.goto(origin+'/employee-timesheet/demo',{waitUntil:'networkidle'});
  await demoCabinet.locator('.worker-self-sidebar button').filter({hasText:'Табель'}).click();
  const demoTotals=await demoCabinet.locator('.worker-self-totals').innerText();
- assert.match(demoTotals,/План/);assert.match(demoTotals,/Передано сотрудником\\s*0 ч/);
- assert.match(demoTotals,/Согласовано менеджером\\s*0 ч/);
- assert.match(demoTotals,/Принято в расчёт\\s*0 ч/);
+ assert.match(demoTotals,/План/);assert.match(demoTotals,/Передано сотрудником\s*0 ч/);
+ assert.match(demoTotals,/Согласовано менеджером\s*0 ч/);
+ assert.match(demoTotals,/Принято в расчёт\s*0 ч/);
  assert.ok((await demoCabinet.getByText('План: 11 ч').count())>0,'demo should show planned hours as plan instead of worked');
  assert.equal(await demoCabinet.getByText('Фактически отработанные часы сотрудником пока не переданы.',{exact:false}).count()>0,true);
  await demoCabinet.close();
@@ -130,7 +130,7 @@ try{
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'object',scopeId:fixture.object,objectId:fixture.object,config:{sections:{}}});
  await post('/api/operations/worker-confirmations',{action:'save_portal_configuration',scope:'organization',scopeId:qaOrganizationId,config:{sections:{},managerPhone:null}});
  console.log('Contact button obeys inherited visibility and is not duplicated in Profile');
- const qaOrg=(await pg.query('SELECT id FROM organizations WHERE slug=$1',[fixture.organization])).rows[0].id;const qaOrganizationId=qaOrg;
+ const qaOrg=qaOrganizationId;
  const adjustmentId=(await pg.query(`INSERT INTO worker_pay_adjustments(organization_id,worker_id,object_id,period_start,period_end,amount,adjustment_type,reason,employee_description,status,created_by_user_id)
  VALUES($1,$2,$3,$4::date,$5::date,123.45,'deduction','Проверяемая корректировка','Тестовое удержание только для QA','review',$6) RETURNING id`,
  [qaOrg,fixture.worker,fixture.object,dates.yesterday,dates.today,fixture.manager])).rows[0].id;
