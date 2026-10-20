@@ -36,6 +36,7 @@ export async function GET(){
     databaseConfigured,
     databaseIdentity:databaseIdentity(),
     demoAvailable:isDemoMode(),
+    employeeLinkEncryptionConfigured:Boolean(process.env.SESSION_SECRET),
     deploymentSha:process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     schemaVersion,
   });
