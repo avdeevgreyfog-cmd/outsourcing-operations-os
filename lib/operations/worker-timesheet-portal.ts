@@ -41,7 +41,7 @@ async function blockDueEmployeeLinks(organizationId:string,actorUserId:string,on
   for(const item of revoked){
    await sql`INSERT INTO worker_portal_events(organization_id,worker_id,object_id,link_id,actor_user_id,event_type,details)
      VALUES(${organizationId}::uuid,${item.workerId}::uuid,${item.objectId}::uuid,${item.id}::uuid,
-       NULL,'blocked_on_exit',jsonb_build_object('initiator','system','reason','dismissal','effectiveDate',${item.effectiveDate}))`;
+       NULL,'blocked_on_exit',jsonb_build_object('initiator','system','reason','dismissal','effectiveDate',${item.effectiveDate}::date))`;
   }
   return revoked.length;
  });
