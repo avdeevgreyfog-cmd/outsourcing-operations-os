@@ -342,16 +342,31 @@ export async function reviewEmployeeHours(actor:Actor,objectId:string,workerId:s
        AND period_start<=${date}::date AND period_end>=${date}::date
        AND status IN ('fixed','closed','internal_submitted','internal_checked','client_sent','client_approved') LIMIT 1`;
    if(locked)throw new EmployeePortalError("Табель за эту дату уже зафиксирован");
-   const [report]=await sql<Array<{id:string;hours:number|null;response:string;kind:string|null;status:string;reason:string|null;linkId:string;shiftId:string|null}>>`
-     SELECT id,reported_hours::float8 hours,response,shift_kind kind,review_status status,reason,source_link_id "linkId",shift_id "shiftId"
+   const [report]=await sql<Array<{id:string;hours:number|null;response:string;kind:string|null;status:string;reason:string|null;linkId:string;shiftId:string|null;confirmedAt:string|null}>>`
+     SELECT id,reported_hours::float8 hours,response,shift_kind kind,review_status status,reason,source_link_id "linkId",shift_id "shiftId",confirmed_at::text "confirmedAt"
      FROM worker_shift_reports WHERE organization_id=${actor.organizationId}::uuid
        AND object_id=${objectId}::uuid AND worker_id=${workerId}::uuid AND work_date=${date}::date FOR UPDATE`;
    if(!report||report.hours===null||report.response!=="working")throw new EmployeePortalError("Нет переданных сотрудником часов для проверки");
+   if(!report.confirmedAt)throw new EmployeePortalError("План смены изменился. Сотрудник должен повторно подтвердить выход.");
    if(report.status==="approved")throw new EmployeePortalError("Часы уже подтверждены. Корректировку проводите через табель с записью в историю.");
    if(!approved&&!comment?.trim())throw new EmployeePortalError("Для отклонения укажите причину");
    const finalHours=approvedHours??report.hours;
    if(approved&&(finalHours<=0||finalHours>24))throw new EmployeePortalError("Некорректные итоговые часы");
    if(approved){
+     // An old response must never approve hours for a cancelled/replaced shift.
+     const assignments=await sql<Array<{id:string;kind:string;isReserve:boolean}>>`
+       SELECT sh.id,sh.shift_kind kind,sa.is_reserve "isReserve"
+       FROM shifts sh JOIN shift_assignments sa ON sa.shift_id=sh.id
+       WHERE sh.organization_id=${actor.organizationId}::uuid AND sh.object_id=${objectId}::uuid
+         AND sh.shift_date=${date}::date AND sh.status<>'cancelled'
+         AND sa.worker_id=${workerId}::uuid AND sa.confirmation_status<>'cancelled'
+       ORDER BY sh.starts_at LIMIT 2`;
+     if(assignments.length>1)throw new EmployeePortalError("Несколько смен на одну дату: нужна ручная сверка табеля.");
+     const assigned=assignments[0];
+     if(assigned&&(assigned.isReserve||!report.shiftId||assigned.id!==report.shiftId||assigned.kind!==report.kind))
+       throw new EmployeePortalError("Назначение смены изменилось. Запросите новое подтверждение сотрудника.");
+     if(!assigned&&report.shiftId)
+       throw new EmployeePortalError("Смена отменена или назначение закрыто. Подтверждение часов недоступно.");
      const entries=await sql<Array<{id:string;source:string;shiftId:string|null;factHours:number}>>`
        SELECT id,source,shift_id "shiftId",fact_hours::float8 "factHours" FROM time_entries
        WHERE organization_id=${actor.organizationId}::uuid AND object_id=${objectId}::uuid
@@ -364,7 +379,10 @@ export async function reviewEmployeeHours(actor:Actor,objectId:string,workerId:s
        throw new EmployeePortalError("Часы уже внесены менеджером: исправьте расхождение через табель с историей корректировок.");
      const kind=report.kind==="night"?"night":"day";
      if(recorded&&recorded.source!=="schedule"&&recorded.source!=="worker_report"){
-       // Existing manager fact matches the approved hours and must not be overwritten.
+       // A matching manager fact is authoritative; only complete the missing shift reference.
+       if(!recorded.shiftId&&report.shiftId)await sql`UPDATE time_entries SET shift_id=${report.shiftId}::uuid,
+         corrected_by_user_id=${actor.userId}::uuid,updated_at=now()
+         WHERE id=${recorded.id}::uuid AND shift_id IS NULL`;
      }else if(entries.length){
        const entry=entries[0];
        await sql`UPDATE time_entries SET planned=true,time_code='WORK',fact_hours=${finalHours},shift_id=COALESCE(shift_id,${report.shiftId}::uuid),
