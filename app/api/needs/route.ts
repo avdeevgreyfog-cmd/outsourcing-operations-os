@@ -19,6 +19,7 @@ const schema = z.object({
   deadline: z.string().date().nullable().optional(),
   sourceKind: z.enum(["object","manual","replacement","reserve","other"]).default("manual"),
   priority: z.enum(["low","normal","high","critical"]).default("normal"),
+  quantityReason:z.string().trim().min(2).max(1000).optional(),
   documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
   documentRequirements: z.array(z.object({
     documentTypeId:z.string().uuid(),
@@ -160,7 +161,7 @@ export async function POST(request: Request) {
       }
       await tx`
         INSERT INTO need_quantity_changes(organization_id,need_id,old_count,new_count,delta,reason,changed_by_user_id)
-        VALUES(${actor.organizationId}::uuid,${need.id}::uuid,NULL,${body.countRequired},${body.countRequired},'Исходный объём потребности',${actor.userId}::uuid)
+        VALUES(${actor.organizationId}::uuid,${need.id}::uuid,NULL,${body.countRequired},${body.countRequired},${body.quantityReason??"Исходный объём потребности"},${actor.userId}::uuid)
       `;
       if(body.objectId){
         const [launch]=await tx<Array<{id:string;targetDate:string}>>`
