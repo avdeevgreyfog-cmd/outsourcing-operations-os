@@ -16,6 +16,7 @@ export async function GET(request:Request){
   if(!actor)return NextResponse.json({error:"Unauthorized"},{status:401});
   const objectId=z.string().uuid().parse(new URL(request.url).searchParams.get("objectId"));
   const canEditNeed=hasCapability(actor.access,"operations.need.edit");
+  const canCreateNeed=hasCapability(actor.access,"operations.need.create");
   const [rows,conditions,specialties,linkedNeeds,recruitingOptions]=await Promise.all([
    listStaffingPlan(actor,objectId),
    listObjectConditions(actor,objectId),
@@ -29,13 +30,13 @@ export async function GET(request:Request){
     FROM needs n WHERE n.organization_id=${actor.organizationId}::uuid
       AND n.object_id=${objectId}::uuid
       AND n.status IN('open','in_progress','paused') ORDER BY n.created_at DESC`),
-   canEditNeed?getRecruitingOptions(actor).then(options=>options.recruiters):Promise.resolve([]),
+   (canEditNeed||canCreateNeed)?getRecruitingOptions(actor).then(options=>options.recruiters):Promise.resolve([]),
   ]);
   return NextResponse.json({rows,conditions,specialties,
     linkedNeeds:linkedNeeds.filter(row=>canReadRow(actor.access,"operations.need.read",row,actor)),
     recruiters:recruitingOptions,demo:actor.demo,
     canManageDirectories:hasCapability(actor.access,"admin.permissions.manage"),
-    canCreateNeed:hasCapability(actor.access,"operations.need.create"),
+    canCreateNeed,
     canEditNeed,
   });
  }catch(e){return fail(e)}
