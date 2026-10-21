@@ -69,6 +69,8 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run db:setup
       - run: npm run test:db
+      - name: Verify staffing quick actions in isolated SQL fixture
+        run: node tests/operating-contour-db.integration.mjs
       - name: Verify employee portal in disposable database
         run: npm run test:employee-db
       - name: Build database-backed app
