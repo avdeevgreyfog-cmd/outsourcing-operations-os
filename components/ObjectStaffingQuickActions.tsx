@@ -3,7 +3,7 @@ import {useState} from "react";
 import {RegistryDrawer} from "@/components/registry/RegistryDrawer";
 import type {StaffingPlanRow} from "@/lib/operations/staffing-plan";
 
-export type StaffingLinkedNeed={id:string;targetId:string;countRequired:number;countFilled:number;status:string;priority:string;deadline:string|null;ownerUserId:string|null};
+export type StaffingLinkedNeed={id:string;targetId:string|null;specialtyId:string;shiftKind:string;countRequired:number;countFilled:number;status:string;priority:string;deadline:string|null;ownerUserId:string|null};
 export type StaffingRecruiter={id:string;name:string};
 const labels={low:"Низкий",normal:"Обычный",high:"Высокий",critical:"Критический"} as const;
 type Priority=keyof typeof labels;
@@ -19,7 +19,8 @@ export function ObjectStaffingQuickActions({objectId,row,linkedNeeds,recruiters,
  const [error,setError]=useState("");
  const active=linkedNeeds.filter(n=>n.targetId===row.id&&["open","in_progress"].includes(n.status));
  const paused=linkedNeeds.some(n=>n.targetId===row.id&&n.status==="paused");
- const requested=active.reduce((n,item)=>n+Math.max(item.countRequired-item.countFilled,0),0);
+ const unlinked=linkedNeeds.filter(n=>!n.targetId&&n.specialtyId===row.specialtyId&&(n.shiftKind===row.shiftKind||n.shiftKind==="mixed"||row.shiftKind==="mixed"));
+ const requested=[...active,...unlinked.filter(n=>["open","in_progress"].includes(n.status))].reduce((n,item)=>n+Math.max(item.countRequired-item.countFilled,0),0);
  const remaining=Math.max(row.deficit-requested,0);
  const need=active.find(n=>n.id===edit?.needId)??active[0];
  const editNeedAllowed=need?canEditNeed:canCreateNeed;
@@ -56,9 +57,10 @@ export function ObjectStaffingQuickActions({objectId,row,linkedNeeds,recruiters,
     <button className="button" type="button" aria-label={`Уменьшить план: ${row.specialty}`} disabled={busy||demo||row.plannedCount===0} onClick={()=>openPlan(-1)}>−</button>
     <button className="button" type="button" aria-label={`Увеличить план: ${row.specialty}`} disabled={busy||demo} onClick={()=>openPlan(1)}>+</button>
    </>}
-   {row.status==="active"&&(canCreateNeed||canEditNeed)&&<button className="button" type="button" disabled={busy||demo||!editNeedAllowed||paused||remaining===0} onClick={openNeed}>{active.length?"Увеличить потребность":"Создать потребность"}</button>}
+   {row.status==="active"&&(canCreateNeed||canEditNeed)&&<button className="button" type="button" disabled={busy||demo||!editNeedAllowed||paused||(!active.length&&unlinked.length>0)||remaining===0} onClick={openNeed}>{active.length?"Увеличить потребность":"Создать потребность"}</button>}
   </div>
   {paused&&!active.length&&<span className="cell-sub">Потребность приостановлена — проверьте её в реестре</span>}
+  {unlinked.length>0&&<span className="cell-sub">Есть {unlinked.length} потребност{unlinked.length===1?"ь":"и"} без связи со строкой плана — проверьте перед созданием новой</span>}
   {edit&&<RegistryDrawer title={edit.kind==="plan"?"Изменить плановую численность":need?"Увеличить потребность":"Создать потребность"} subtitle={`${row.specialty} · ${row.shiftKind==="day"?"День":row.shiftKind==="night"?"Ночь":"Смешанная смена"}`} onClose={()=>{if(!busy){setEdit(null);setError("")}}} footer={<>
    <button className="button" type="button" disabled={busy} onClick={()=>setEdit(null)}>Отмена</button>
    <button className="button primary" type="button" disabled={busy||demo||!edit.reason.trim()||(edit.kind==="plan"&&Number(edit.count)===row.plannedCount)} onClick={()=>void save()}>Сохранить</button>
