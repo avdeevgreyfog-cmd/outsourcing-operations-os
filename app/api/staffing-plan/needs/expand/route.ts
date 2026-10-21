@@ -69,7 +69,10 @@ export async function POST(request:Request){
         SELECT COALESCE(sum(GREATEST(n.count_required-n.count_filled,0)),0)::int pending
         FROM needs n
         WHERE n.organization_id=${actor.organizationId}::uuid
-          AND n.staffing_plan_target_id=${target.id}::uuid
+          AND (n.staffing_plan_target_id=${target.id}::uuid OR
+            (n.staffing_plan_target_id IS NULL AND n.object_id=${body.objectId}::uuid
+             AND n.specialty_id=${target.specialtyId}::uuid
+             AND (n.shift_kind=${target.shiftKind} OR n.shift_kind='mixed' OR ${target.shiftKind}='mixed')))
           AND n.status IN('open','in_progress')`;
       const deficit=Math.max(target.plannedCount-staff.working,0);
       const unrequested=Math.max(deficit-coverage.pending,0);
