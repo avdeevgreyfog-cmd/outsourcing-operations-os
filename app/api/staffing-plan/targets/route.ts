@@ -9,7 +9,7 @@ import {canReadRow,hasCapability} from "@/lib/core/access.mjs";
 import {getRecruitingOptions} from "@/lib/recruiting/service";
 import {withTenant} from "@/lib/db/client";
 function fail(error:unknown){if(error instanceof AccessDeniedError)return NextResponse.json({error:"Недостаточно прав"},{status:403});if(error instanceof z.ZodError)return NextResponse.json({error:error.issues[0]?.message??"Проверьте поля",issues:error.issues},{status:400});return NextResponse.json({error:error instanceof Error?error.message:"Ошибка плана"},{status:409})}
-type LinkedNeed={id:string;organizationId:string;objectId:string;regionId:string|null;ownerUserId:string|null;managerUserId:string|null;createdByUserId:string|null;assigneeUserIds:string[];targetId:string;countRequired:number;countFilled:number;status:string;priority:string;deadline:string|null};
+type LinkedNeed={id:string;organizationId:string;objectId:string;regionId:string|null;ownerUserId:string|null;managerUserId:string|null;createdByUserId:string|null;assigneeUserIds:string[];targetId:string|null;specialtyId:string;shiftKind:string;countRequired:number;countFilled:number;status:string;priority:string;deadline:string|null};
 export async function GET(request:Request){
  try{
   const actor=await getCurrentActor();
@@ -23,11 +23,11 @@ export async function GET(request:Request){
    actor.demo?Promise.resolve([] as LinkedNeed[]):withTenant(actor.organizationId,actor.userId,sql=>sql<LinkedNeed[]>`
     SELECT n.id,n.organization_id "organizationId",n.object_id "objectId",n.region_id "regionId",
       n.owner_user_id "ownerUserId",n.manager_user_id "managerUserId",n.created_by_user_id "createdByUserId",
-      n.staffing_plan_target_id "targetId",n.count_required "countRequired",n.count_filled "countFilled",
+      n.staffing_plan_target_id "targetId",n.specialty_id "specialtyId",n.shift_kind "shiftKind",n.count_required "countRequired",n.count_filled "countFilled",
       n.status,n.priority,n.deadline::text deadline,
       ARRAY(SELECT a.recruiter_user_id::text FROM need_assignments a WHERE a.need_id=n.id AND a.unassigned_at IS NULL AND a.recruiter_user_id IS NOT NULL) "assigneeUserIds"
     FROM needs n WHERE n.organization_id=${actor.organizationId}::uuid
-      AND n.object_id=${objectId}::uuid AND n.staffing_plan_target_id IS NOT NULL
+      AND n.object_id=${objectId}::uuid
       AND n.status IN('open','in_progress','paused') ORDER BY n.created_at DESC`),
    canEditNeed?getRecruitingOptions(actor).then(options=>options.recruiters):Promise.resolve([]),
   ]);
