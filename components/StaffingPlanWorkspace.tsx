@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import {ObjectStaffingPlanEditor} from "@/components/ObjectStaffingPlanEditor";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Status } from "@/components/UI";
@@ -110,6 +111,7 @@ export function StaffingPlanWorkspace({
   const [localRows,setLocalRows]=useState(rows);
   const [localApplications,setLocalApplications]=useState(applications);
   const [expandedObject,setExpandedObject]=useState<string|null>(null);
+  const [managementObject,setManagementObject]=useState<string|null>(null);
   const [actionsOpen,setActionsOpen]=useState(false);
   const [manager,setManager]=useState("all");
   const [objectFilter,setObjectFilter]=useState("all");
@@ -388,7 +390,7 @@ export function StaffingPlanWorkspace({
               </tr>;
               if(expandedObject!==item.object.id)return [row];
               const detail=<tr key={item.object.id+":detail"} className="staffing-object-detail-row"><td colSpan={9}>
-                <div className="staffing-object-detail-head"><div><strong>{item.object.name}</strong><span>Плановая численность задаётся отдельно от потребности подбора.</span></div><div><Link className="button" href={`/objects/${item.object.id}?tab=staffing`}>Открыть объект</Link><Link className="button primary" href={`/needs?object=${item.object.id}`}>Потребности</Link></div></div>
+                <div className="staffing-object-detail-head"><div><strong>{item.object.name}</strong><span>Плановая численность задаётся отдельно от потребности подбора.</span></div><div><button className="button" type="button" aria-expanded={managementObject===item.object.id} onClick={()=>setManagementObject(current=>current===item.object.id?null:item.object.id)}>Комплектация и подбор</button><Link className="button" href={`/objects/${item.object.id}?tab=staffing`}>Открыть объект</Link><Link className="button" href={`/needs?object=${item.object.id}`}>Потребности</Link></div></div>
                 <div className="request-table-wrap"><table className="data-table staffing-specialty-detail"><thead><tr><th>Профессия</th><th>План</th><th>Работает</th><th>В подготовке</th><th>Подтв. выход</th><th>Выбытие</th><th>Замена</th><th>Прогноз</th><th>Дефицит</th></tr></thead><tbody>
                   {item.objectRows.map(planRow=>{
                     const key=planRow.objectId+":"+planRow.specialtyId;
@@ -398,6 +400,7 @@ export function StaffingPlanWorkspace({
                   })}
                   {!item.objectRows.length&&<tr><td colSpan={9}><div className="empty-inline">Для объекта ещё не задан план численности.</div></td></tr>}
                 </tbody></table></div>
+                {managementObject===item.object.id&&<ObjectStaffingPlanEditor objectId={item.object.id} canEdit={planEditableObjectIds.includes(item.object.id)} demo={demo}/>}
               </td></tr>;
               return [row,detail];
             })}</tbody>
