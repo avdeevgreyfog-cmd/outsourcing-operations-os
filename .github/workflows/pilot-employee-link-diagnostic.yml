@@ -27,7 +27,7 @@ jobs:
               if node - <<'NODE'
           const status=require('/tmp/pilot-status.json');
           console.log(JSON.stringify({deployedSha:status.deploymentSha,schemaVersion:status.schemaVersion,dbAvailable:status.databaseConfigured,cryptoAvailable:status.employeeLinkEncryptionConfigured,employeePortalRelease:status.employeePortalRelease}));
-          if(status.ok!==true||status.schemaVersion!=='0082_employee_portal_legacy_expiration.sql'||status.employeePortalRelease!=='v2.2-live-20261020'||status.databaseConfigured!==true||!status.databaseIdentity||status.environment!=='personal-pilot'||typeof status.demoAvailable!=='boolean')process.exit(1);
+          if(status.ok!==true||status.schemaVersion!=='0082_employee_portal_legacy_expiration.sql'||status.employeePortalRelease!=='v2.2-live-20261021'||status.databaseConfigured!==true||!status.databaseIdentity||status.environment!=='personal-pilot'||typeof status.demoAvailable!=='boolean')process.exit(1);
           if(!status.deploymentSha)process.exit(1);
           require('fs').writeFileSync('/tmp/pilot-deployed-sha',status.deploymentSha);
           if(status.employeeLinkEncryptionConfigured!==true)process.exit(2);
