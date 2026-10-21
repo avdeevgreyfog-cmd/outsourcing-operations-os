@@ -49,6 +49,7 @@ const patchSchema = z.object({
     targetCount: z.number().int().min(0).max(10000),
   })).max(50).optional(),
   quantityReason: z.string().trim().max(1000).nullable().optional(),
+  editReason: z.string().trim().min(2).max(1000).optional(),
   documentTypeIds: z.array(z.string().uuid()).max(50).optional(),
   documentRequirements: z.array(z.object({
     documentTypeId:z.string().uuid(),
@@ -199,7 +200,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await tx`
         INSERT INTO activity_events(organization_id,actor_user_id,entity_type,entity_id,verb,summary,metadata)
         VALUES(${actor.organizationId}::uuid,${actor.userId}::uuid,'need',${id}::uuid,'updated',
-          ${`Обновлена потребность: ${body.title ?? current.title}`},${sql.json({changed})})
+          ${`Обновлена потребность: ${body.title ?? current.title}`},${sql.json({changed,reason:body.editReason??null})})
       `;
       return {id};
     }));
