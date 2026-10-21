@@ -64,7 +64,7 @@ export async function POST(request:Request){
           AND a.specialty_id=${target.specialtyId}::uuid
           AND(a.effective_from IS NULL OR a.effective_from<=current_date)
           AND(a.effective_to IS NULL OR a.effective_to>=current_date)
-          AND(${target.shiftKind}='mixed' OR a.schedule_shift_kind=${target.shiftKind}`;
+          AND(${target.shiftKind}='mixed' OR a.schedule_shift_kind=${target.shiftKind})`;
       const [coverage]=await tx<Array<{pending:number}>>`
         SELECT COALESCE(sum(GREATEST(n.count_required-n.count_filled,0)),0)::int pending
         FROM needs n
