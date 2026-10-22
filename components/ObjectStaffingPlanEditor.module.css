@@ -1,0 +1,29 @@
+.table { min-width: 1140px; }
+.table th { white-space: nowrap; }
+.table td { vertical-align: top; line-height: 1.45; }
+.identity { display: block; min-width: 170px; max-width: 250px; font-size: 13px; font-weight: 600; }
+.secondary { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 400; }
+.numeric { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.numeric strong { font-weight: 600; }
+.rate { min-width: 155px; font-variant-numeric: tabular-nums; }
+.rate strong { font-weight: 600; white-space: nowrap; }
+.schedule { min-width: 200px; }
+.schedule strong { font-weight: 600; }
+.period { min-width: 185px; max-width: 235px; font-size: 12px; }
+.detail, .missing { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.detail summary, .missing summary { cursor: pointer; }
+.detail p, .missing p { margin: 6px 0 0; white-space: normal; overflow-wrap: anywhere; }
+.missing { color: var(--warn); }
+.actions { width: 48px; }
+.actionsHeading { display: block; width: 48px; overflow: hidden; clip-path: inset(50%); height: 1px; }
+.actionMenu > summary { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 7px; list-style: none; cursor: pointer; font-size: 22px; color: var(--text); background: var(--panel); }
+.actionMenu > summary::-webkit-details-marker { display: none; }
+.actionMenu > summary:hover { background: var(--panel-2); }
+.actionMenu > summary:focus-visible, .actionItems > :focus-visible, .detail summary:focus-visible, .missing summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.actionItems { display: grid; gap: 2px; min-width: 180px; margin-top: 6px; padding: 5px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); }
+.actionItems > button, .actionItems > a { display: block; width: 100%; padding: 8px; border: 0; border-radius: 4px; text-align: left; font: inherit; font-size: 13px; line-height: 1.4; color: var(--text); background: transparent; text-decoration: none; cursor: pointer; }
+.actionItems > button:hover, .actionItems > a:hover { background: var(--panel-2); }
+.actionItems > button:disabled { opacity: .5; cursor: default; }
+
+.history > summary { padding: 12px 16px; cursor: pointer; font-size: 13px; color: var(--text); border-top: 1px solid var(--border); }
+.history > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }

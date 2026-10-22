@@ -7,6 +7,7 @@ import {ArrowRight,LogOut,MoreHorizontal,X} from "lucide-react";
 import type {WorkerRow} from "@/lib/data/service";
 import {workerObjectState,workerTodayStatus} from "@/lib/operations/workforce-status";
 import {rub} from "@/lib/ui/format";
+import {workerRatePresentation} from "@/lib/ui/worker-rate.mjs";
 
 type View="grouped"|"list";
 type Scope="all"|"shift"|"absence"|"attention";
@@ -117,7 +118,9 @@ export function ObjectWorkforceWorkspace({
     setActionWorkerId(row.id);setActionMode(mode);setMessage("");setBusy("");
     setTransferScope("same");setTargetObjectId(objectId);setTargetSpecialtyId(row.specialtyId??specialties[0]?.id??"");
     setTimingMode("date");setActionDate(addDays(today,1));setShiftCount("3");
-    setDayRate(row.dayRate==null?"":String(Number(row.dayRate)));setNightRate(row.nightRate==null?"":String(Number(row.nightRate)));
+    const hourly=row.rateUnit==="hour";
+    setDayRate(hourly&&row.dayRate!=null?String(Number(row.dayRate)):"");setNightRate(hourly&&row.nightRate!=null?String(Number(row.nightRate)):"");
+    if(mode==="transfer"&&!hourly&&(row.dayRate!=null||row.nightRate!=null))setMessage("Текущая ставка задана за смену или без единицы оплаты. Для перевода укажите согласованные часовые ставки вручную.");
     setWorkMode(row.workMode==="rotation"?"rotation":"local");setPaidHours(row.paidHoursPerShift==null?"":String(Number(row.paidHoursPerShift)));
     setReason("");setExitReasonCode("employee_request");setReplacementRequired(true);setReturnToRecruiting(true);
   }
@@ -125,6 +128,9 @@ export function ObjectWorkforceWorkspace({
 
   async function saveTransfer(){
     if(!actionWorker||!resolvedDate||!targetSpecialtyId||!canEdit)return;
+    if(actionWorker.rateUnit!=="hour"&&((actionWorker.dayRate!=null&&nullableNumber(dayRate)==null)||(actionWorker.nightRate!=null&&nullableNumber(nightRate)==null))){
+      setMessage("Укажите согласованные часовые ставки для дня и ночи: сохранённую сумму за смену нельзя автоматически принять за ₽/ч.");return;
+    }
     if(transferScope==="same"&&actionWorker.specialtyId===targetSpecialtyId&&sameNumber(dayRate,actionWorker.dayRate)&&sameNumber(nightRate,actionWorker.nightRate)){
       setMessage("Измените специальность или ставку.");return;
     }
@@ -283,11 +289,11 @@ function WorkerToday({state,day,shiftTime}:{state:ReturnType<typeof workerObject
   return <div className={`object-worker-current ${exceptional?"is-attention":""}`}><strong>{primary}</strong><small>{secondary}</small></div>;
 }
 function WorkerRate({row}:{row:WorkerRow}){
-  const hours=Number(row.paidHoursPerShift??0),day=row.dayRate==null?null:Number(row.dayRate),night=row.nightRate==null?null:Number(row.nightRate);
-  if(day!=null||night!=null){const main=day??night!;return <div className="object-worker-rate"><strong>{rub(main)}/ч</strong><small>{day!=null&&night!=null&&day!==night?`день ${rub(day)} · ночь ${rub(night)}`:hours>0?`${rub(main*hours)}/смена (${compactNumber(hours)} ч)`:"день / ночь"}</small></div>}
-  if(row.rate==null)return <>—</>;
-  const rate=Number(row.rate);
-  return <div className="object-worker-rate"><strong>{rub(row.rateUnit==="shift"&&hours>0?rate/hours:rate)}/ч</strong>{hours>0&&<small>{rub(row.rateUnit==="shift"?rate:rate*hours)}/смена ({compactNumber(hours)} ч)</small>}</div>;
+  const value=workerRatePresentation(row);
+  if(!value)return <>—</>;
+  const unitLabel=(unit:string)=>unit==="shift"?"/смену":"/ч";
+  const differentDayNight=row.dayRate!=null&&row.nightRate!=null&&Number(row.dayRate)!==Number(row.nightRate);
+  return <div className="object-worker-rate"><strong>{rub(value.amount)}{value.unit?unitLabel(value.unit):""}</strong>{!value.unit?<small>Единица не указана</small>:value.equivalent?<small>≈ {rub(value.equivalent.amount)}{unitLabel(value.equivalent.unit)} ({compactNumber(value.equivalent.hours)} оплач. ч)</small>:null}{differentDayNight&&<><small>День: {rub(row.dayRate)} · Ночь: {rub(row.nightRate)}</small><small>Единицы оплаты дня и ночи требуют уточнения</small></>}</div>;
 }
 function scheduleLabel(row:WorkerRow){const cycle=row.scheduleWorkDays!=null&&row.scheduleRestDays!=null?`${row.scheduleWorkDays}/${row.scheduleRestDays}`:"Индивидуальный";return `${cycle} · ${shiftLabels[row.scheduleShiftKind??"mixed"]??"День / ночь"}`}
 function adaptationLabel(row:WorkerRow,today:string){if(!row.startDate||!row.transitionDays||Number(row.transitionDays)<=0)return null;const end=new Date(row.startDate+"T00:00:00Z");end.setUTCDate(end.getUTCDate()+Number(row.transitionDays)-1);if(today>end.toISOString().slice(0,10))return null;return `Адаптация до ${shortDate(end.toISOString().slice(0,10))}`}

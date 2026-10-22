@@ -8,8 +8,9 @@ import { getHousingSnapshot,getInventorySnapshot,getObjectContacts,getOperations
 import { getObjectManagementOptions,listObjectHistory } from "@/lib/operations/object-management";
 import { listObjectOperationalFacts } from "@/lib/operations/object-facts";
 import { canReadRow,hasCapability } from "@/lib/core/access.mjs";
-import { Empty,EntityTabs,Metric,Section,Status } from "@/components/UI";
+import { Empty,Metric,Section,Status } from "@/components/UI";
 import { StaticDemoQueryTabsController } from "@/components/StaticDemoQueryTabsController";
+import { ObjectEntityTabs } from "@/components/ObjectEntityTabs";
 import { ObjectContactsWorkspace } from "@/components/ObjectContactsWorkspace";
 import { ObjectSettingsWorkspace } from "@/components/ObjectSettingsWorkspace";
 import { ObjectWorkforceWorkspace } from "@/components/ObjectWorkforceWorkspace";
@@ -87,6 +88,8 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const canProcurement=hasCapability(actor.access,"procurement.read");
   const canEditObject=canReadRow(actor.access,"operations.object.edit",object,actor);
   const canAssignObject=canReadRow(actor.access,"operations.object.assign",object,actor);
+  const failedModules = new Set<string>();
+  const safeObjectLoad = <T,>(objectId:string,module:string,load:()=>Promise<T>,fallback:T) => loadObjectModule(objectId,module,load,fallback,failedModules);
   const objectManagementOptions=canEditObject
     ?await safeObjectLoad(id,"object-management",()=>getObjectManagementOptions(actor,{includeAssignments:canAssignObject}),null)
     :null;
@@ -188,7 +191,7 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   const tabs=tabOrder.filter(key=>visibleLabels[key]).map(key=>({
     label:visibleLabels[key],
     href:`/objects/${id}?tab=${key}${month?`&month=${encodeURIComponent(month)}`:""}`,
-    count:key==="staffing"?objectForecast.filter(row=>row.projectedDeficit>0).length:key==="workforce"?objectWorkers.length:key==="shifts"?objectShifts.length:key==="quality"?openIncidents:undefined,
+    count:key==="workforce"?objectWorkers.length:key==="quality"?openIncidents:undefined,
   }));
   const panel=(key:string,content:ReactNode)=>{
     if(!visibleLabels[key]||(!staticDemo&&tab!==key))return null;
@@ -196,25 +199,28 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
   };
 
 
-  const workspaceClass="object-workspace-compare object-workspace-pilot";
+  const workspaceClass="object-workspace-compare object-workspace-pilot object-workspace-unified";
   const workspaceContent=<>
     <div className="object-pilot-breadcrumbs"><Link href="/objects">Объекты</Link><span>/</span><span>{object.code}</span></div>
     <div className="object-pilot-header">
       <div className="object-pilot-title">
-        <div><Status tone={operationalRisk==="critical"?"bad":operationalRisk==="high"?"warn":object.status==="active"?"good":"info"}>{objectStatusLabels[object.status]??"В работе"}</Status><span className="object-pilot-code">{object.code}</span></div>
+        <div><Status tone={object.status==="active"?"good":object.status==="paused"?"warn":"neutral"}>{objectStatusLabels[object.status]??"В работе"}</Status><span className="object-pilot-code">{object.code}</span></div>
         <h1>{object.name}</h1>
         <p>{object.client} · {object.address??object.region}</p>
-        {Boolean(object.missingFields?.length)&&<p className="object-profile-incomplete">Профиль требует заполнения: {object.missingFields!.join(" · ")} <Link href={`/objects/${object.id}?tab=settings`}>Дополнить профиль</Link></p>}
+
       </div>
-      <div className="object-pilot-health"><strong>{required?Math.round(working/required*100)+"%":"—"}</strong><span>укомплектованность</span><small>{working} из {required||"—"} работают</small></div>
+      <div className="object-pilot-health"><strong>{!canWorkers||failedModules.has("workers")?"—":objectWorkers.length}</strong><span>сотрудников назначено</span><small>Дефицит по специальностям — в комплектации</small></div>
       <div className="object-pilot-meta">
         <div><span>Менеджер</span><strong>{object.ownerName??"—"}{object.additionalManagers?.length?` +${object.additionalManagers.length}`:""}</strong></div>
         <div><span>Юрлицо</span><strong>{object.legalEntity??"Не указано"}</strong></div>
         <div><span>Старт</span><strong>{object.targetStart??"—"}</strong></div>
         <div><span>Риск</span><strong>{riskLabels[operationalRisk]??"Контроль"}</strong></div>
       </div>
-      <div className="object-primary-nav"><EntityTabs items={tabs} active={visibleLabels[tab]}/></div>
+      <div className="object-primary-nav"><ObjectEntityTabs items={tabs} active={visibleLabels[tab]}/></div>
     </div>
+
+    {Boolean(object.missingFields?.length)&&<details className="object-profile-notice"><summary>Профиль требует заполнения · {object.missingFields!.length}</summary><p>{object.missingFields!.join(" · ")}</p>{canEditObject&&<Link className="button" href={`/objects/${object.id}?tab=settings`}>Дополнить профиль</Link>}</details>}
+    {failedModules.size>0&&<div role="alert" className="object-load-warning">Часть данных не загрузилась. Пустые блоки ниже не подтверждают отсутствие отклонений. Обновите страницу, чтобы повторить загрузку.</div>}
 
     {panel("overview",<>
 
@@ -225,41 +231,39 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
             <div className="stack-list object-overview-attention">
               {noShows>0&&<div className="stack-item is-critical"><div><strong>Невыходы на смену</strong><small>Сегодня зафиксировано {noShows}</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Разобрать</Link></div>}
               {objectShifts.filter(row=>row.deficit>0).slice(0,2).map(row=><div className="stack-item" key={row.id}><div><strong>{row.date} · {shiftKindLabel(row.kind)} · {row.specialty}</strong><small>Назначено {row.assigned} из {row.demand} · не хватает {row.deficit}</small></div><Link className="button" href={"/objects/"+id+"?tab=shifts"}>Смены</Link></div>)}
-              {projectedDeficit>0&&<div className="stack-item"><div><strong>Прогнозный дефицит персонала</strong><small>{projectedDeficit} человек на горизонте 30 дней · закрыто {effectiveForecastCovered} из {required}</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Комплектация</Link></div>}
+              {projectedDeficit>0&&<div className="stack-item"><div><strong>Прогнозный дефицит персонала</strong><small>{projectedDeficit} человек на горизонте 30 дней</small></div><Link className="button" href={"/objects/"+id+"?tab=staffing"}>Комплектация</Link></div>}
               {unreconciledObjectPayments.length>0&&<div className="stack-item"><div><strong>Выплаты ожидают сверки</strong><small>{unreconciledObjectPayments.length} · {rub(unreconciledObjectAmount)}</small></div><Link className="button" href={"/objects/"+id+"?tab=finance"}>Финансы</Link></div>}
               {documentAttentionCount>0&&<div className="stack-item"><div><strong>Документы требуют внимания</strong><small>{documentAttentionCount} документов нужно проверить или обновить</small></div><Link className="button" href={"/objects/"+id+"?tab=documents"}>Документы</Link></div>}
               {openIncidents>0&&<div className="stack-item"><div><strong>Открытые инциденты</strong><small>{openIncidents} требуют контроля</small></div><Link className="button" href={"/objects/"+id+"?tab=quality"}>Инциденты</Link></div>}
               {lowStock.slice(0,2).map(row=><div className="stack-item" key={row.locationId+row.itemId+row.variant}><div><strong>Заканчивается {row.item}</strong><small>{row.location} · остаток {row.quantity} {row.unit} · минимум {row.minQuantity}</small></div><Link className="button" href={"/objects/"+id+"?tab=supply"}>Обеспечение</Link></div>)}
               {upcomingAbsences.length>0&&<div className="stack-item"><div><strong>Ближайшее отсутствие сотрудника</strong><small>{upcomingAbsences[0].fullName} · {absenceWindow(upcomingAbsences[0])}</small></div><Link className="button" href={"/objects/"+id+"?tab=workforce"}>Персонал</Link></div>}
               {showLaunch&&launchBlockers.slice(0,1).map(row=><div className="stack-item" key={row.id}><div><strong>Блокер запуска: {row.title}</strong><small>{row.owner} · прогресс {row.progress}%</small></div><Link className="button" href={"/objects/"+id+"?tab=launch"}>Запуск</Link></div>)}
-              {!projectedDeficit&&!upcomingAbsences.length&&!objectShifts.some(row=>row.deficit>0)&&!noShows&&!openIncidents&&!lowStock.length&&!unreconciledObjectPayments.length&&!documentAttentionCount&&(!showLaunch||!launchBlockers.length)&&<div className="empty-inline">Операционных исключений, требующих действия, нет</div>}
+              {!projectedDeficit&&!upcomingAbsences.length&&!objectShifts.some(row=>row.deficit>0)&&!noShows&&!openIncidents&&!lowStock.length&&!unreconciledObjectPayments.length&&!documentAttentionCount&&(!showLaunch||!launchBlockers.length)&&<div className="empty-inline">{failedModules.size?"Не удалось проверить все операционные отклонения":"Операционных исключений, требующих действия, нет"}</div>}
             </div>
           </Section>
 
           <Section title="Ближайшие смены" note="План и обеспеченность на ближайшие 7 дней">
-            <ShiftTable rows={upcomingShiftRows}/>
-            {!upcomingShiftRows.length&&<Empty title="Смен нет" text="На ближайшие 7 дней смены не запланированы."/>}
+            {upcomingShiftRows.length?<ShiftTable rows={upcomingShiftRows}/>:<div className="empty-inline">{failedModules.has("shifts")?"Не удалось загрузить смены":"На ближайшие 7 дней смены не запланированы."}{canShifts&&<Link className="button" href={"/objects/"+id+"?tab=shifts"}>Открыть планирование</Link>}</div>}
           </Section>
         </div>
 
         <div className="object-overview-side">
-          <Section title="Сегодня и ближайшие 7 дней" note="Что изменится в работе объекта">
+          <Section title="Изменения персонала" note="Выходы и отсутствия на ближайшие 7 дней">
             <div className="object-overview-timeline">
-              {upcomingShiftRows.slice(0,4).map(row=><div key={row.id}><span>{row.date}</span><div><strong>{shiftKindLabel(row.kind)} · {row.specialty}</strong><small>{row.time} · назначено {row.assigned} из {row.demand}{row.deficit?` · дефицит ${row.deficit}`:""}</small></div></div>)}
               {objectCandidates.filter(row=>row.plannedStartDate&&row.plannedStartDate>=todayIso&&row.plannedStartDate<=nextSevenEnd&&["preparation","first_shift"].includes(row.stage)).slice(0,3).map(row=><div key={row.applicationId}><span>{shortDateRu(row.plannedStartDate!)}</span><div><strong>Выход: {row.fullName}</strong><small>{row.need}{row.plannedShiftKind?` · ${shiftKindLabel(row.plannedShiftKind)}`:""}</small></div></div>)}
               {upcomingAbsences.filter(row=>row.absenceFrom&&row.absenceFrom<=nextSevenEnd).slice(0,2).map(row=><div key={"absence:"+row.id}><span>{row.absenceFrom?shortDateRu(row.absenceFrom):"—"}</span><div><strong>{row.fullName}</strong><small>{absenceWindow(row)}</small></div></div>)}
-              {!upcomingShiftRows.length&&!readyStarts7&&!upcomingAbsences.some(row=>row.absenceFrom&&row.absenceFrom<=nextSevenEnd)&&<div className="empty-inline">На ближайшие 7 дней изменений нет</div>}
+              {!readyStarts7&&!upcomingAbsences.some(row=>row.absenceFrom&&row.absenceFrom<=nextSevenEnd)&&<div className="empty-inline">{failedModules.has("workers")||failedModules.has("recruiting")?"Не удалось загрузить изменения персонала":"Выходы и отсутствия не запланированы"}</div>}
             </div>
           </Section>
 
           <Section title="Состояние объекта" note="Переходите только туда, где есть отклонение">
             <div className="object-overview-contours">
-              <Link href={"/objects/"+id+"?tab=staffing"}><span>Комплектация</span><strong className={projectedDeficit?"has-attention":""}>{projectedDeficit?`Дефицит ${projectedDeficit}`:"Без отклонений"}</strong></Link>
-              {canTimesheets&&<Link href={"/objects/"+id+"?tab=timesheets"}><span>Табель</span><strong>{objectTimesheet?timesheetStatusLabel(objectTimesheet.status):"Нет табеля"}</strong></Link>}
-              {(canAssets||canHousing||canProcurement)&&<Link href={"/objects/"+id+"?tab=supply"}><span>Обеспечение</span><strong className={lowStock.length||openSupply.length?"has-attention":""}>{lowStock.length?`Ниже минимума ${lowStock.length}`:openSupply.length?`Заявок в работе ${openSupply.length}`:"Без отклонений"}</strong></Link>}
-              {canFinance&&<Link href={"/objects/"+id+"?tab=finance"}><span>Финансы</span><strong className={unreconciledObjectPayments.length?"has-attention":""}>{unreconciledObjectPayments.length?`На сверке ${rub(unreconciledObjectAmount)}`:"Без отклонений"}</strong></Link>}
-              <Link href={"/objects/"+id+"?tab=documents"}><span>Документы</span><strong className={documentAttentionCount?"has-attention":""}>{documentAttentionCount?`Требуют внимания ${documentAttentionCount}`:"Без отклонений"}</strong></Link>
-              <Link href={"/objects/"+id+"?tab=quality"}><span>Инциденты</span><strong className={openIncidents?"has-attention":""}>{openIncidents?`Открыто ${openIncidents}`:"Нет открытых"}</strong></Link>
+              <Link href={"/objects/"+id+"?tab=staffing"}><span>Комплектация</span><strong className={projectedDeficit?"has-attention":""}>{failedModules.has("staffing-forecast")?"Не загружено":projectedDeficit?`Дефицит ${projectedDeficit}`:"По прогнозу дефицита нет"}</strong></Link>
+              {canTimesheets&&<Link href={"/objects/"+id+"?tab=timesheets"}><span>Табель</span><strong>{failedModules.has("timesheet")?"Не загружено":objectTimesheet?timesheetStatusLabel(objectTimesheet.status):"Нет табеля"}</strong></Link>}
+              {(canAssets||canHousing||canProcurement)&&<Link href={"/objects/"+id+"?tab=supply"}><span>Обеспечение</span><strong className={lowStock.length||openSupply.length?"has-attention":""}>{failedModules.has("inventory")||failedModules.has("supply-requests")?"Не загружено":lowStock.length?`Ниже минимума ${lowStock.length}`:openSupply.length?`Заявок в работе ${openSupply.length}`:"Нет записанных отклонений"}</strong></Link>}
+              {canFinance&&<Link href={"/objects/"+id+"?tab=finance"}><span>Финансы</span><strong className={unreconciledObjectPayments.length?"has-attention":""}>{failedModules.has("payments")?"Не загружено":unreconciledObjectPayments.length?`На сверке ${rub(unreconciledObjectAmount)}`:"Нет выплат на сверке"}</strong></Link>}
+              <Link href={"/objects/"+id+"?tab=documents"}><span>Документы</span><strong className={documentAttentionCount?"has-attention":""}>{failedModules.has("documents")?"Не загружено":documentAttentionCount?`Требуют внимания ${documentAttentionCount}`:"Нет записанных отклонений"}</strong></Link>
+              <Link href={"/objects/"+id+"?tab=quality"}><span>Инциденты</span><strong className={openIncidents?"has-attention":""}>{failedModules.has("incidents")?"Не загружено":openIncidents?`Открыто ${openIncidents}`:"Нет открытых"}</strong></Link>
             </div>
           </Section>
 
@@ -351,9 +355,10 @@ export default async function ObjectWorkspace({params,searchParams}:{params:Prom
     :<div className={workspaceClass}>{workspaceContent}</div>;
 }
 
-async function safeObjectLoad<T>(objectId:string,module:string,load:()=>Promise<T>,fallback:T):Promise<T>{
+async function loadObjectModule<T>(objectId:string,module:string,load:()=>Promise<T>,fallback:T,failedModules:Set<string>):Promise<T>{
   try{return await load()}
   catch(error){
+    failedModules.add(module);
     console.error("[object-workspace] module load failed",{
       objectId,
       module,
