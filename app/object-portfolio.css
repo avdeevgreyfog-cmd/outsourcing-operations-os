@@ -322,3 +322,11 @@
 .object-portfolio-page .object-risk-details ul{margin:8px 0;padding-left:16px}
 .object-portfolio-page .object-risk-details li+li{margin-top:5px}
 .object-portfolio-page .object-risk-details small{font-size:12px;color:var(--muted)}
+
+/* Saved objects use the same calm status marker in every runtime. */
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .status{display:inline-flex;align-items:center;gap:6px;min-height:0;height:auto;padding:0;border:0;border-radius:0;background:transparent;color:var(--muted);font-size:12px;font-weight:500;line-height:1.4}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .status i{display:inline-block;width:6px;height:6px;flex:0 0 6px;border-radius:50%;background:var(--muted)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .status-good i{background:var(--good)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .status-warn i{background:var(--warn)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .status-bad i{background:var(--bad)}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .status-info i{background:var(--info)}
