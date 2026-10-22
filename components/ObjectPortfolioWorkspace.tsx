@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
+import { HorizontalScrollDock } from "@/components/registry/HorizontalScrollDock";
 import { useRouter } from "next/navigation";
 import type { ObjectRow } from "@/lib/data/service";
 import type { OperationsAnalyticsRow } from "@/lib/operations/service";
@@ -19,7 +21,7 @@ function initialForm(options:ObjectManagementOptions):CreateForm{
   };
 }
 
-export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo}:{objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean}){
+export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,demo,forecastDeficits}:{forecastDeficits:Record<string,number>|null;objects:ObjectRow[];analytics:OperationsAnalyticsRow[];options:ObjectManagementOptions;canCreate:boolean;demo:boolean}){
   const router=useRouter();
   const [localRows,setLocalRows]=useState(objects);
   const analyticsByObject=useMemo(()=>new Map(analytics.map(row=>[row.objectId,row])),[analytics]);
@@ -30,6 +32,9 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
   const [legalEntity,setLegalEntity]=useState("");
   const [recruiter,setRecruiter]=useState("");
   const [attentionOnly,setAttentionOnly]=useState(false);
+  const [filtersOpen,setFiltersOpen]=useState(false);
+  const tableScrollRef=useRef<HTMLDivElement>(null);
+  const additionalFilterCount=[region,legalEntity,recruiter].filter(Boolean).length;
   const [createOpen,setCreateOpen]=useState(false);
   const [form,setForm]=useState<CreateForm>(()=>initialForm(options));
   const [busy,setBusy]=useState(false);
@@ -92,33 +97,41 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
 
   return <>
     <div className="object-portfolio-toolbar-row">
-      <div className="object-portfolio-toolbar">
-        <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск по объекту, клиенту, локации, юрлицу или ответственному"/>
-        <select value={region} onChange={e=>setRegion(e.target.value)}><option value="">Все регионы</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={legalEntity} onChange={e=>setLegalEntity(e.target.value)}><option value="">Все юрлица</option>{legalEntities.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={manager} onChange={e=>setManager(e.target.value)}><option value="">Все менеджеры</option>{managers.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Все рекрутеры</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select>
-        <select value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+      <div className="object-portfolio-actions">
+        {canCreate&&<button type="button" className="button primary object-create-button" onClick={()=>{setError("");setCreateOpen(true)}}>+ Добавить объект</button>}
       </div>
-      {canCreate&&<button className="button primary object-create-button" onClick={()=>{setError("");setCreateOpen(true)}}>+ Добавить объект</button>}
     </div>
+    <div className="object-portfolio-toolbar">
+      <div className="object-portfolio-search">
+        <Search size={16} aria-hidden="true"/>
+        <input aria-label="Поиск объектов" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Объект, клиент, адрес или ответственный"/>
+        {query&&<button type="button" aria-label="Очистить поиск" onClick={()=>setQuery("")}><X size={15}/></button>}
+      </div>
+      <select aria-label="Статус объекта" value={status} onChange={e=>setStatus(e.target.value)}><option value="">Все статусы</option>{Object.entries(statusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+      <select aria-label="Менеджер объекта" value={manager} onChange={e=>setManager(e.target.value)}><option value="">Все менеджеры</option>{managers.map(value=><option key={value} value={value}>{value}</option>)}</select>
+      <button type="button" className="button object-more-filters" aria-expanded={filtersOpen} aria-controls="object-portfolio-additional-filters" onClick={()=>setFiltersOpen(value=>!value)}><SlidersHorizontal size={16} aria-hidden="true"/>Фильтры{additionalFilterCount>0&&<span>{additionalFilterCount}</span>}</button>
+    </div>
+    {filtersOpen&&<div id="object-portfolio-additional-filters" className="object-portfolio-additional-filters">
+      <label>Регион<select value={region} onChange={e=>setRegion(e.target.value)}><option value="">Все регионы</option>{regions.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+      <label>Наше юрлицо<select value={legalEntity} onChange={e=>setLegalEntity(e.target.value)}><option value="">Все юрлица</option>{legalEntities.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+      <label>Рекрутер<select value={recruiter} onChange={e=>setRecruiter(e.target.value)}><option value="">Все рекрутеры</option>{recruiters.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+    </div>}
 
     <div className="object-portfolio-results">
-      <span>Показано {filtered.length} из {localRows.length}</span>
+      <span aria-live="polite">Показано {filtered.length} из {localRows.length}</span>
       <div className="object-portfolio-result-actions">
         <label className={"object-attention-filter"+(attentionOnly?" active":"")}><input type="checkbox" checked={attentionOnly} onChange={e=>setAttentionOnly(e.target.checked)}/>Только требующие внимания</label>
         {hasFilters&&<button className="object-filter-reset" onClick={reset}>Сбросить фильтры</button>}
       </div>
     </div>
     <section className="section section-flush">
-      <div className="request-table-wrap"><table className="data-table object-portfolio-table">
+      <div className="request-table-wrap" ref={tableScrollRef} role="region" aria-label="Реестр объектов" tabIndex={0}><table className="data-table object-portfolio-table">
         <thead><tr><th>Объект</th><th>Клиент</th><th>Наше юрлицо</th><th>Локация</th><th>Менеджер объекта</th><th>Подбор</th><th>Статус</th><th>Комплектация</th><th>Период</th><th>Внимание</th></tr></thead>
         <tbody>{filtered.map(row=>{
           const fact=analyticsByObject.get(row.id);
           const working=fact?.working??row.filled;
           const required=fact?.required??row.required;
-          const deficit=Math.max(required-working,0);
-          const coverage=required?Math.min(100,Math.round(working/required*100)):null;
+          const deficit=forecastDeficits?.[row.id]??null;
           return <tr key={row.id}>
             <td><Link className="cell-title" href={"/objects/"+row.id}>{row.name}</Link><span className="cell-sub">{row.code}</span></td>
             <td>{row.client}</td>
@@ -127,13 +140,15 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
             <td><PeopleCell primary={row.ownerName??fact?.manager??null} additional={row.additionalManagers??[]} empty="Не назначен"/></td>
             <td><RecruitingCell row={row}/></td>
             <td><ObjectStatus status={row.status}/></td>
-            <td><div className={"object-staffing-cell"+(required?"":" is-empty")}>{required?<><div><strong>{working} из {required}</strong><span>{coverage}%</span></div><div className="progress"><span style={{width:coverage+"%"}}/></div><small className={deficit?"object-staffing-deficit":""}>{deficit?`Нужно ещё ${deficit}`:"План закрыт"}</small></>:<><strong>План не задан</strong><small>Укажите потребность объекта</small></>}</div></td>
+            <td><div className="object-staffing-cell"><strong>{working} сотрудников</strong><small className={deficit?"object-staffing-deficit":""}>{deficit==null?"Прогноз недоступен":deficit?`Дефицит на 30 дней: ${deficit}`:"По прогнозу дефицита нет"}</small><Link className="cell-sub" href={`/objects/${row.id}?tab=staffing`} title={`Сводная потребность: ${required}. Подробный план по специальностям и сменам`}>План и условия</Link></div></td>
             <td><PeriodCell row={row}/></td>
             <td><AttentionCell row={row}/></td>
           </tr>
         })}</tbody>
       </table>{!filtered.length&&<div className="empty-inline">По выбранным фильтрам объектов нет</div>}</div>
     </section>
+
+    <HorizontalScrollDock scrollRef={tableScrollRef} disabled={createOpen} label="Горизонтальная прокрутка реестра объектов" revision={filtered.length}/>
 
     {createOpen&&<><div className="drawer-backdrop" onClick={()=>setCreateOpen(false)}/><aside className="drawer object-create-drawer"><button className="icon-button drawer-close" onClick={()=>setCreateOpen(false)}>×</button><span className="eyebrow">Операции</span><h2>Добавить объект</h2><p className="form-hint">Для уже действующего объекта или запуска вне коммерческой цепочки. Объекты из согласованного КП по-прежнему создаются через «Начать подготовку».</p>
       <div className="object-create-form">
@@ -222,7 +237,7 @@ function durationLabel(from:string,to:string){
 }
 
 function ObjectStatus({status}:{status:string}){
-  return <span className="object-status">{statusLabels[status]??"В работе"}</span>;
+  return <span className="object-status" data-status={status}>{statusLabels[status]??"В работе"}</span>;
 }
 
 function AttentionCell({row}:{row:ObjectRow}){
