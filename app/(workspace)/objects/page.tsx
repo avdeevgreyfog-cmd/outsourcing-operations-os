@@ -29,19 +29,18 @@ export default async function Objects(){
     if(!row.ownerUserId)signal.attention.push("Не назначен основной менеджер");
     return {...row,risk:signal.level,riskReasons:signal.reasons,attentionReasons:[...new Set(signal.attention)]};
   });
-  const required=analytics.reduce((sum,row)=>sum+row.required,0);
   const working=analytics.reduce((sum,row)=>sum+row.working,0);
-  const deficit=Math.max(required-working,0);
+  const deficit=forecast.reduce((sum,row)=>sum+row.projectedDeficit,0);
   const attention=enhancedRows.filter(row=>Boolean(row.attentionReasons?.length)).length;
   return <div className="object-portfolio-page">
     <PageHeader eyebrow="Операции → Управление объектами" title="Объекты" subtitle="Портфель объектов: юридические лица, ответственные, комплектация и объяснимые операционные сигналы." breadcrumbs={[{label:"Операции"},{label:"Управление объектами"},{label:"Объекты"}]}/>
     <div className="metrics-grid object-portfolio-metrics">
       <Metric label="Объекты в контуре" value={rows.length}/>
       <Metric label="Сотрудников на объектах" value={working}/>
-      <Metric label="Нужно найти" value={deficit}/>
+      <Metric label="Прогнозный дефицит · 30 дней" value={canForecast?deficit:"—"}/>
       <Metric label="Требуют внимания" value={attention}/>
     </div>
-    <ObjectPortfolioWorkspace objects={enhancedRows} analytics={analytics} options={options} canCreate={canCreate} demo={actor.demo}/>
+    <ObjectPortfolioWorkspace objects={enhancedRows} analytics={analytics} forecastDeficits={canForecast?Object.fromEntries(rows.map(row=>[row.id,forecastDeficitByObject.get(row.id)??0])):null} options={options} canCreate={canCreate} demo={actor.demo}/>
   </div>;
 }
 
