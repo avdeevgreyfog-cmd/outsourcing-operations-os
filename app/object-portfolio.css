@@ -2,6 +2,7 @@
 :root[data-operis-ui="new"] .main-canvas:has(.object-portfolio-page){background:var(--bg)}
 :root[data-operis-ui="new"] .main-canvas:has(.object-portfolio-page)::before{opacity:0;background:none}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .page-header{margin-bottom:20px}
+:root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .page-header h1{font-size:28px;line-height:1.22}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .page-header p{max-width:900px;color:var(--muted)}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-metrics{margin-bottom:16px;border-radius:8px;box-shadow:none}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-portfolio-page .object-portfolio-metrics .metric{min-height:66px;padding:10px 14px}
@@ -313,3 +314,11 @@
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .object-pilot-meta{grid-template-columns:repeat(2,minmax(0,1fr))}
 :root[data-operis-ui="new"] .sales-workspace.operations-workspace .object-workspace-unified .object-primary-nav .object-entity-tabs{gap:0 16px}
 .object-tabs-menu{right:auto;left:0;min-width:180px}}
+
+/* Attention is expanded on demand; invisible hover panels must not enlarge the table. */
+.object-portfolio-page .object-risk-cell > summary{list-style:none;cursor:pointer}
+.object-portfolio-page .object-risk-cell > summary::-webkit-details-marker{display:none}
+.object-portfolio-page .object-risk-details{max-width:260px;margin-top:8px;padding:10px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);font-size:12px;white-space:normal;overflow-wrap:anywhere}
+.object-portfolio-page .object-risk-details ul{margin:8px 0;padding-left:16px}
+.object-portfolio-page .object-risk-details li+li{margin-top:5px}
+.object-portfolio-page .object-risk-details small{font-size:12px;color:var(--muted)}
