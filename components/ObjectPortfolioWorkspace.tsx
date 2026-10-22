@@ -140,7 +140,7 @@ export function ObjectPortfolioWorkspace({objects,analytics,options,canCreate,de
             <td><PeopleCell primary={row.ownerName??fact?.manager??null} additional={row.additionalManagers??[]} empty="Не назначен"/></td>
             <td><RecruitingCell row={row}/></td>
             <td><ObjectStatus status={row.status}/></td>
-            <td><div className="object-staffing-cell"><strong>{working} сотрудников</strong><small className={deficit?"object-staffing-deficit":""}>{deficit==null?"Прогноз недоступен":deficit?`Дефицит на 30 дней: ${deficit}`:"По прогнозу дефицита нет"}</small><Link className="cell-sub" href={`/objects/${row.id}?tab=staffing`} title={`Сводная потребность: ${required}. Подробный план по специальностям и сменам`}>План и условия</Link></div></td>
+            <td><div className="object-staffing-cell"><strong>На объекте: {working}</strong><small className={deficit?"object-staffing-deficit":""}>{deficit==null?"Прогноз недоступен":deficit?`Дефицит на 30 дней: ${deficit}`:"По прогнозу дефицита нет"}</small><Link className="cell-sub" href={`/objects/${row.id}?tab=staffing`} title={`Сводная потребность: ${required}. Подробный план по специальностям и сменам`}>План и условия</Link></div></td>
             <td><PeriodCell row={row}/></td>
             <td><AttentionCell row={row}/></td>
           </tr>
@@ -250,14 +250,14 @@ function AttentionCell({row}:{row:ObjectRow}){
   const level=riskLabels[row.risk??"normal"]??"Контроль";
   const title=[...signals,...reasons.map(reason=>`${reason.label}: ${reason.detail}`)].join("; ");
 
-  return <div className="object-risk-cell">
-    <button type="button" className="object-attention-trigger" aria-label={`Требует внимания: ${title}`}>
+  return <details className="object-risk-cell">
+    <summary className="object-attention-trigger" aria-label={`Требует внимания: ${title}`}>
       <span>{primary}</span>{extra>0&&<b>+{extra}</b>}
-    </button>
-    <div className="object-risk-popover" role="tooltip">
+    </summary>
+    <div className="object-risk-details">
       <strong>Что требует внимания</strong>
       {signals.length?<ul>{signals.map((signal,index)=><li key={signal+index}><span>{signal}</span></li>)}</ul>:null}
       {reasons.length?<small>Уровень операционного контроля: {level.toLocaleLowerCase("ru")}.</small>:null}
     </div>
-  </div>;
+  </details>;
 }
